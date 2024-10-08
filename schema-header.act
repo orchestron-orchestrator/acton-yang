@@ -220,6 +220,27 @@ class DNode(object):
     reference: ?str
     exts: list[Ext]
 
+    def get(self, name: str) -> DNode:
+        """Get child node by name
+        """
+        if isinstance(self, DNodeInner):
+            for child in self.children:
+                if isinstance(child, DAnydata) and _safe_name(child.name) == name:
+                    return child
+                elif isinstance(child, DAnyxml) and _safe_name(child.name) == name:
+                    return child
+                elif isinstance(child, DContainer) and _safe_name(child.name) == name:
+                    return child
+                elif isinstance(child, DLeaf) and _safe_name(child.name) == name:
+                    return child
+                elif isinstance(child, DLeafList) and _safe_name(child.name) == name:
+                    return child
+                elif isinstance(child, DList) and _safe_name(child.name) == name:
+                    return child
+            raise ValueError("Child %s not found" % name)
+
+        raise ValueError("Unable to get child from non-inner node")
+
     def prdaclass(self, loose=False, top=True) -> str:
         """Print the data class for this schema node
         """
@@ -848,7 +869,7 @@ class SchemaNode(object):
         raise ValueError("No parent found")
 
     def get(self, name: str) -> SchemaNode:
-        """Get child node with name
+        """Get child node by name
         """
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
