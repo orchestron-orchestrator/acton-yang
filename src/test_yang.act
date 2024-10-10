@@ -1,6 +1,7 @@
 import testing
 import yang.parser
 import yang.schema
+import yang
 
 def print_snode(n: yang.schema.SchemaNode, indent: int):
     nparent = n.parent
@@ -1061,6 +1062,37 @@ def _test_resolve_type_union_of_string():
     if isinstance(l1, yang.schema.DLeaf):
         acton_type = yang.schema.yang_leaf_to_acton_type(l1)
         testing.assertEqual(acton_type, "?string")
+
+
+def _test_compile_bundle1():
+    ys_foo = """module foo {
+    yang-version "1.1";
+    typedef td1 {
+        type string;
+    }
+    container c1 {
+        leaf l1 {
+            type td1;
+        }
+    }
+}"""
+
+    ys_bar = """module bar {
+    yang-version "1.1";
+    import foo {
+        prefix "foo";
+    }
+
+    augment "/foo:c1" {
+        leaf l2 {
+            type foo:td1;
+        }
+    }
+}"""
+    # Compile in different order
+    root = yang.compile([ys_foo, ys_bar])
+    root = yang.compile([ys_bar, ys_foo])
+    # No exceptions thrown? OK, all good!
 
 
 def _test_tofrom_gdata():

@@ -1,0 +1,16 @@
+
+import yang.parser
+import yang.schema
+
+def compile(yang_sources: list[str]) -> yang.schema.DRoot:
+    ctx = yang.schema.Context()
+    for yang_source in yang_sources:
+        yang_module = yang.schema.stmt_to_smodule(yang.parser.parse(yang_source))
+        ctx.add_module(yang_module)
+
+    dnodes = []
+    for y in ctx.modules:
+        # TODO: huh, why isinstance? this is a Module so wtf
+        if isinstance(y, yang.schema.SchemaNode):
+            dnodes.append(y.compile(ctx).to_dnode())
+    return yang.schema.DRoot(dnodes)
