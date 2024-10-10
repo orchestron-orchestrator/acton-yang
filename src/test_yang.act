@@ -1064,6 +1064,74 @@ def _test_resolve_type_union_of_string():
         testing.assertEqual(acton_type, "?string")
 
 
+def _test_resolve_type_union_of_intX():
+    ys = """module foo {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+
+  leaf l1 {
+    type union {
+      type int8;
+      type int32;
+    }
+  }
+
+  leaf l2 {
+    type union {
+      type uint8;
+      type uint32;
+    }
+  }
+
+  leaf l3 {
+    type union {
+      type uint8;
+      type int16;
+    }
+  }
+
+  leaf l4 {
+    type union {
+      type uint32;
+      type int16;
+    }
+  }
+}
+"""
+    n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
+    ctx = yang.schema.Context()
+    nc = n.compile(ctx)
+    d = nc.to_dnode()
+    l1 = d.get("l1")
+    l2 = d.get("l2")
+    l3 = d.get("l3")
+    l4 = d.get("l4")
+
+    if isinstance(l1, yang.schema.DLeaf):
+        acton_type = yang.schema.yang_leaf_to_acton_type(l1)
+        # TODO: once we have integer subtyping, expect...
+        #testing.assertEqual(acton_type, "?i32")
+        testing.assertEqual(acton_type, "?int")
+
+    if isinstance(l2, yang.schema.DLeaf):
+        acton_type = yang.schema.yang_leaf_to_acton_type(l2)
+        # TODO: once we have integer subtyping, expect...
+        #testing.assertEqual(acton_type, "?u32")
+        testing.assertEqual(acton_type, "?int")
+
+    if isinstance(l3, yang.schema.DLeaf):
+        acton_type = yang.schema.yang_leaf_to_acton_type(l3)
+        # TODO: once we have integer subtyping, expect...
+        #testing.assertEqual(acton_type, "?i16")
+        testing.assertEqual(acton_type, "?int")
+
+    if isinstance(l4, yang.schema.DLeaf):
+        acton_type = yang.schema.yang_leaf_to_acton_type(l4)
+        # TODO: once we have integer subtyping, expect...
+        #testing.assertEqual(acton_type, "?i64")
+        testing.assertEqual(acton_type, "?int")
+
 def _test_compile_bundle1():
     ys_foo = """module foo {
     yang-version "1.1";

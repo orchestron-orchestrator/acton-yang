@@ -1361,9 +1361,8 @@ def yang_type_to_acton_type(t: ?Type) -> str:
         elif t.name == "string":
             return "str"
         elif t.name == "union":
-            # Recursively find unique base types, if they all map down to the
-            # same base type, we can just use that as the Acton type
             def get_unique_types(tys: list[Type]) -> set[str]:
+                """Recursively expand union to the base types"""
                 res = set()
                 for ty in tys:
                     if ty.name == "union":
@@ -1371,9 +1370,44 @@ def yang_type_to_acton_type(t: ?Type) -> str:
                     else:
                         res.add(ty.name)
                 return res
+
+            # Recursively find unique base types, if they all map down to the
+            # same base type, we can just use that as the Acton type
             unique_base_types = list(get_unique_types(t.type_))
             if len(unique_base_types) == 1:
                 return unique_base_types[0]
+
+            # TODO: should we map in union of say u32 and i32 into i64?
+            if all(map(lambda x: x in {"int8", "int16", "int32", "int64"}, unique_base_types)):
+                max_size = max(list(map(lambda x: int(x[3:]), unique_base_types)))
+                # TODO: once we have integer subtyping, return largest necessary iXX type
+                #return "i%d" % max_size
+                return "int"
+            elif all(map(lambda x: x in {"uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
+                max_size = max(list(map(lambda x: int(x[4:]), unique_base_types)))
+                # TODO: once we have integer subtyping, return largest necessary uXX type
+                #return "u%d" % max_size
+                return "int"
+            elif all(map(lambda x: x in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
+                # We have a union of a mix of signed and unsigned integers, so let's find the largest
+                int_sizes = filter(lambda x: x in {"int8", "int16", "int32", "int64"}, unique_base_types)
+                max_int_size = max(list(map(lambda x: int(x[3:]), int_sizes)))
+                uint_sizes = filter(lambda x: x in {"uint8", "uint16", "uint32", "uint64"}, unique_base_types)
+                max_uint_size = max(list(map(lambda x: int(x[4:]), uint_sizes)))
+                # To map a uint into an signed int, we need twice the number of
+                # bits, i.e. uint8 fits in int16 or uint32 fits in int64, so
+                # just double the max size...
+                max_int_mapped_uint_size = max_uint_size * 2
+                # Total max size is the max between signed int and
+                # integer-mapped-uint (which is already 2*uint max)
+                max_size = max([max_int_size, max_int_mapped_uint_size])
+                if max_size > 64:
+                    # Need to use our int (a.k.a. "bigint")
+                    return "int"
+                # TODO: once we have integer subtyping, return largest necessary iXX type
+                #return "i%d" % max_size
+                return "int"
+
             # TODO: use atom when union consists of types that we represent with Acton built-in types
             # TODO: use Acton union
             return "value"
