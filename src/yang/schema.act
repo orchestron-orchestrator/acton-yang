@@ -7,11 +7,17 @@
 # data validation, so it is possible to represent an invalid schema using this
 # model.
 #
-# There are two levels of object representation. The first level is that of
-# statements and is represented by the Statement class. Everything in a YANG
-# model is pretty much a statement, so this is a representation fairly close to
-# the YANG source code. For example, the order of all statements is preserved,
-# so this model:
+# - Statement: low level representation of a YANG schema as a tree of statements
+# - SchemaNode: higher level representation of a YANG schema as a tree of schema nodes
+# - DNode: the derived data node schema, similar to SchemaNode but for data
+#   - typedefs & leaf(-list) types are resolved to their base types
+#   - uses / groupings are expanded
+#   - augments are applied
+#
+# There are two "levels" of object representation where the first low level
+# representation is that of Statement. Everything in a YANG model is a
+# statement, so this representation is fairly close to the YANG source code.
+# For example, the order of all statements is preserved, so this model:
 #
 #    module foo {
 #      prefix "f";
@@ -32,20 +38,23 @@
 #
 # The second level is that of schema nodes and is represented by the SchemaNode
 # class. The SchemaNode class is a base class for all schema node types, such as
-# Module, Container, List, Leaf, etc. Different statements are modeled using
-# discrete classes and statements that relate to a particular statement are
-# attributes of that object class rather than being seen as just a tree of
-# statements. For example, the following model:
+# Module, Container, List, Leaf, etc. There is a broad division between
+# SchemaNodeInner, which are "inner" nodes in the schema that contain other
+# nodes, e.g. have children, and SchemaNodeOuter which are the "outer" / leaf
+# nodes of the tree that do not have any children. Different statements are
+# modeled using discrete classes and statements that relate to a particular
+# statement are attributes of that object class rather than being seen as just a
+# tree of statements. For example, the following model:
 #
-#    module foo {
-#      prefix "f";
-#      namespace "http://example.com/foo";
-#      container c1 {
-#        leaf l1 {
-#          type string;
-#        }
-#      }
-#    }
+#   module foo {
+#     prefix "f";
+#     namespace "http://example.com/foo";
+#     container c1 {
+#       leaf l1 {
+#         type string;
+#       }
+#     }
+#   }
 #
 # Would become:
 #
@@ -73,8 +82,14 @@
 # to keep statement order from the original source document (be aware that even
 # with the lower leve Statement representation, whitespace & comments are still
 # lost).
+#
+# Finally, the DNode representation is similar to the SchemaNode but focuses
+# solely on the data nodes. We can think of it as "data nodes" or the "derived"
+# schema (a term commonly used in the IETF to describe the result of compiling a
+# YANG module). We can convert a SchemaNode tree to DNode by first compiling it
+# and then running .to_dnode().
 
-RECURSION_LIMIT = 100
+RECURSION_LIMIT = 512
 
 def _yind(n):
     return "  " * n
@@ -164,16 +179,16 @@ class Statement(object):
         return res
 
 
-# Yang schema for data
+# YANG schema for data / the derived schema
 #
-# This module provides a concrete YANG schema representation of a data tree.
-# Unlike the yang.schema module, which has a focus on properly representing the
-# YANG schema document itself, including abstract concepts like imports, inherited
-# types, groupings and augments, this module focuses on the statements relevant
-# for representing a YANG modeled data tree. The data nodes in YANG are:
+# DNode provides a concrete YANG schema representation of a data tree. Unlike
+# SchemaNode, which has a focus on properly representing the YANG schema
+# document itself, including abstract concepts like imports, inherited types,
+# groupings and augments, this module focuses on the statements relevant for
+# representing a YANG modeled data tree. The data nodes in YANG are:
 # - container, list, leaf, leaf-list, anydata, anyxml and the module itself can be
 #   considered a form of container
-# A YANG schema can be expanded into these data nodes, for example by expanding
+# A YANG schema can be compiled into these data nodes, for example by expanding
 # uses statements with the relevant groupings into the actual nodes and by
 # applying augment statements to the relevant nodes.
 #
