@@ -1135,6 +1135,8 @@ def _test_resolve_type_union_of_intX():
 def _test_compile_bundle1():
     ys_foo = """module foo {
     yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
     typedef td1 {
         type string;
     }
@@ -1147,6 +1149,8 @@ def _test_compile_bundle1():
 
     ys_bar = """module bar {
     yang-version "1.1";
+    namespace "http://example.com/bar";
+    prefix "bar";
     import foo {
         prefix "foo";
     }
@@ -1158,9 +1162,11 @@ def _test_compile_bundle1():
     }
 }"""
     # Compile in different order
-    root = yang.compile([ys_foo, ys_bar])
-    root = yang.compile([ys_bar, ys_foo])
-    # No exceptions thrown? OK, all good!
+    root1 = yang.compile([ys_foo, ys_bar])
+    root2 = yang.compile([ys_bar, ys_foo])
+    src = root1.prdaclass()
+    if not any(map(lambda x: "    c1: foo__c1" == x, src.splitlines())):
+        testing.error("Expected c1 in foo namespace")
 
 
 def _test_tofrom_gdata():
@@ -1221,7 +1227,7 @@ myang3 = """container c1 {
 
 
 actor main(env):
-    _test_compile_choice()
+    _test_compile_bundle1()
     await async env.exit(0)
 
     try:
