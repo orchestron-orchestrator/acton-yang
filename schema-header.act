@@ -1310,6 +1310,37 @@ def yang_leaflist_to_acton_type(leaf: DLeafList) -> str:
     return "list[%s]" % t
 
 
+def yang_typename_to_acton_type(type_name: str) -> str:
+    if type_name == "binary":
+        return "bytes"
+    elif type_name == "bits":
+        raise NotImplementedError('bits not supported')
+    elif type_name == "boolean":
+        return "bool"
+    elif type_name == "decimal64":
+        # TODO: do something better
+        return "float"
+    elif type_name == "empty":
+        # TODO: is this right?
+        return "bool"
+    elif type_name == "enumeration":
+        # TODO: use acton unions of fixed strings!?
+        return "str"
+    elif type_name == "identityref":
+        return "str"
+    elif type_name == "instance-identifier":
+        return "str"
+    elif type_name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
+        return "int"
+    elif type_name == "leafref":
+        return "str"
+    elif type_name == "string":
+        return "str"
+    elif type_name == "union":
+        # You should use yang_type_to_acton_type which can expand the union type for you!
+        raise ValueError("Union type not supported")
+    raise ValueError("Unknown YANG type: " + type_name)
+
 def yang_type_to_acton_type(t: ?Type) -> str:
     # +---------------------+-------------------------------------+
     # | Name                | Description                         |
@@ -1335,32 +1366,7 @@ def yang_type_to_acton_type(t: ?Type) -> str:
     # | union               | Choice of member types              |
     # +---------------------+-------------------------------------+
     if t is not None:
-        if t.name == "binary":
-            return "bytes"
-        elif t.name == "bits":
-            raise NotImplementedError('bits not supported')
-        elif t.name == "boolean":
-            return "bool"
-        elif t.name == "decimal64":
-            # TODO: do something better
-            return "float"
-        elif t.name == "empty":
-            # TODO: is this right?
-            return "bool"
-        elif t.name == "enumeration":
-            # TODO: use acton unions of fixed strings!?
-            return "str"
-        elif t.name == "identityref":
-            return "str"
-        elif t.name == "instance-identifier":
-            return "str"
-        elif t.name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
-            return "int"
-        elif t.name == "leafref":
-            return "str"
-        elif t.name == "string":
-            return "str"
-        elif t.name == "union":
+        if t.name == "union":
             def get_unique_types(tys: list[Type]) -> set[str]:
                 """Recursively expand union to the base types"""
                 res = set()
@@ -1375,7 +1381,7 @@ def yang_type_to_acton_type(t: ?Type) -> str:
             # same base type, we can just use that as the Acton type
             unique_base_types = list(get_unique_types(t.type_))
             if len(unique_base_types) == 1:
-                return unique_base_types[0]
+                return yang_typename_to_acton_type(unique_base_types[0])
 
             # TODO: should we map in union of say u32 and i32 into i64?
             if all(map(lambda x: x in {"int8", "int16", "int32", "int64"}, unique_base_types)):
@@ -1412,7 +1418,7 @@ def yang_type_to_acton_type(t: ?Type) -> str:
             # TODO: use Acton union
             return "value"
         else:
-            raise ValueError("Unknown YANG type: " + t.name)
+            return yang_typename_to_acton_type(t.name)
     raise ValueError("type not defined")
 
 
