@@ -709,45 +709,54 @@ extension ModRev (Hashable):
 class Context(object):
     """Compilation context
     """
-    modules: dict[ModRev, Module]
+    modules_by_revision: dict[ModRev, Module]
+    modules: list[Module]
 
     def __init__(self, modules: list[Module]=[]):
-        self.modules = {}
+        self.modules_by_revision = {}
+        self.modules = []
         for module in modules:
             self.add_module(module)
 
     def add_module(self, module: Module):
         # TODO: handle revision
         latest_revision = module.get_revision()
-        self.modules[ModRev(module.name, latest_revision.date if latest_revision is not None else None)] = module
+        mod_rev = ModRev(module.name, latest_revision.date if latest_revision is not None else None)
+        if mod_rev not in self.modules_by_revision:
+            self.modules_by_revision[mod_rev] = module
+            self.modules.append(module)
+
         # Now also add the module itself without revision
         no_rev_mod = ModRev(module.name, None)
-        if no_rev_mod in self.modules:
-            existing_revision = self.modules[no_rev_mod].get_revision()
+        if no_rev_mod in self.modules_by_revision:
+            existing_revision = self.modules_by_revision[no_rev_mod].get_revision()
             if existing_revision is not None and latest_revision is not None:
                 if latest_revision.date > existing_revision.date:
                     # Currently added module has a revision that is newer, so it
                     # should replace the existing module
-                    self.modules[no_rev_mod] = module
+                    self.modules_by_revision[no_rev_mod] = module
                 # Otherwise, the existing module is newer, so we should keep it
                 return
             elif existing_revision is None and latest_revision is not None:
                 # Currently added module has a revision, but existing module does not
                 # so we presume that we're adding a newer version of the module
-                self.modules[no_rev_mod] = module
+                self.modules_by_revision[no_rev_mod] = module
             # Otherwise, both modules have no revision, so we keep the existing one
             return
         else: # No module with this name exists yet
-            self.modules[no_rev_mod] = module
+            self.modules_by_revision[no_rev_mod] = module
 
     def get_module(self, modname: str, rev: ?str) -> Module:
-        for mod in self.modules:
+        for mod in self.modules_by_revision:
             modrev = mod.rev
         try:
-            mod = self.modules[ModRev(modname, rev)]
+            mod = self.modules_by_revision[ModRev(modname, rev)]
             return mod
         except KeyError:
             raise ValueError("Module %s rev %s not found in compilation context" % (modname, rev if rev is not None else ""))
+
+    def get_modules(self) -> list[Module]:
+        return self.modules
 
 
 class SchemaNode(object):
