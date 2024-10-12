@@ -1137,6 +1137,10 @@ def _test_compile_bundle1():
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
+    revision 2019-01-01 {
+        description "test revision";
+        reference "ref1";
+    }
     typedef td1 {
         type string;
     }
@@ -1151,6 +1155,10 @@ def _test_compile_bundle1():
     yang-version "1.1";
     namespace "http://example.com/bar";
     prefix "bar";
+    revision 2020-01-01 {
+        description "bar revision";
+        reference "bar1";
+    }
     import foo {
         prefix "foo";
     }
@@ -1165,8 +1173,8 @@ def _test_compile_bundle1():
     root1 = yang.compile([ys_foo, ys_bar])
     root2 = yang.compile([ys_bar, ys_foo])
     src = root1.prdaclass()
-    if not any(map(lambda x: "    c1: foo__c1" == x, src.splitlines())):
-        testing.error("Expected c1 in foo namespace")
+    if not len(list(filter(lambda x: "    c1: foo__c1" == x, src.splitlines()))) == 1:
+        testing.error("Expected exactly one 'c1: foo__c1'")
 
 
 def _test_tofrom_gdata():
