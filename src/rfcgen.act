@@ -453,7 +453,8 @@ snode_methods = {
                    status=self.status,
                    type_=base_typedef.type_,
                    units=new_units,
-                   when=self.when)
+                   when=self.when,
+                   exts=self.exts)
         return new
 
 """,
@@ -497,7 +498,8 @@ snode_methods = {
                        status=self.status,
                        type_=base_typedef.type_,
                        units=new_units,
-                       when=self.when)
+                       when=self.when,
+                       exts=self.exts)
         return new
 
 """,
@@ -592,7 +594,8 @@ snode_methods = {
                       reference=self.reference,
                       status=self.status,
                       type_=base_typedef.type_,
-                      units=new_units)
+                      units=new_units,
+                      exts=self.exts)
         return new
 
 """,
@@ -801,28 +804,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             if arg_name is not None:
                 new_args += ["self." + _attr_name(arg_name)]
             new_args += list(map(lambda x: "%s=self.%s" % (_attr_name(x), _attr_name(x)), kwattrs))
-#            for substmt in stmt.substmts.values():
-#                if substmt.name == stmt.argument_name:
-#                    new_args.append("%s=self.%s" % (_attr_name(substmt.name), _attr_name(substmt.name)))
-#                else:
-#                    if substmt.name not in child_stmts:
-#                        if substmt.name in stmts: # Another statement (not a child)
-#                            if substmt.cardinality == "0..1":
-#                                res.append("        self_%s = self.%s" % (_attr_name(substmt.name), _attr_name(substmt.name)))
-#                                res.append("        new_%s = self_%s.compile(context) if self_%s is not None else None" % (_attr_name(substmt.name), _attr_name(substmt.name), _attr_name(substmt.name)))
-#                            elif substmt.cardinality == "1":
-#                                # TODO: should not be optional
-#                                res.append("        self_%s = self.%s" % (_attr_name(substmt.name), _attr_name(substmt.name)))
-#                                res.append("        new_%s = self_%s.compile(context) if self_%s is not None else None" % (_attr_name(substmt.name), _attr_name(substmt.name), _attr_name(substmt.name)))
-#                            elif substmt.cardinality == "0..n":
-#                                res.append("        new_%s: %s= []" % (_attr_name(substmt.name), _attr_type(substmt.name, stmt, stmts)))
-#                                res.append("        for n in self.%s:" % _attr_name(substmt.name))
-#                                res.append("            new_node = n.compile(context)")
-#                                res.append("            if isinstance(new_node, %s):" % (_class_name(substmt.name)))
-#                                res.append("                new_%s.append(new_node)" % (_attr_name(substmt.name)))
-#                            else:
-#                                raise ValueError("Unknown cardinality: %s" % substmt.cardinality)
-#                            new_args.append("%s=new_%s" % (_attr_name(substmt.name), _attr_name(substmt.name)))
+            new_args.append("exts=self.exts")
             if have_children:
                 new_args.append("children=self.expand_children(context)")
 

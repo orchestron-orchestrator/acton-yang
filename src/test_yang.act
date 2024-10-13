@@ -1176,6 +1176,38 @@ def _test_compile_bundle1():
     if not len(list(filter(lambda x: "    c1: foo__c1" == x, src.splitlines()))) == 1:
         testing.error("Expected exactly one 'c1: foo__c1'")
 
+def _test_compile_extension():
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    revision 2019-01-01 {
+        description "test revision";
+        reference "ref1";
+    }
+    container c1 {
+        list things {
+            key name;
+
+            some:exty foo.bar;
+
+            leaf name {
+                type string;
+            }
+            leaf id {
+                type string;
+            }
+        }
+    }
+}"""
+    y = yang.parser.parse(ys_foo)
+    n = yang.schema.stmt_to_snode(y)
+    things_slist = n.get("c1").get("things")
+    testing.assertEqual(things_slist.exts, [yang.schema.Ext("some", "exty", "foo.bar")])
+    root = yang.compile([ys_foo])
+    things_list = root.get("c1").get("things")
+    testing.assertEqual(things_list.exts, [yang.schema.Ext("some", "exty", "foo.bar")])
+
 
 def _test_tofrom_gdata():
     # TODO: hmm, how to test this? I guess we need to first generate some data
@@ -1235,7 +1267,7 @@ myang3 = """container c1 {
 
 
 actor main(env):
-    _test_compile_bundle1()
+    _test_compile_extension()
     await async env.exit(0)
 
     try:
