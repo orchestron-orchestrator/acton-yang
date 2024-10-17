@@ -352,7 +352,7 @@ class DNodeInner(DNode):
 
 #        # == .create_XXX() methods
 #        for child in self.children:
-#            if isinstance(child, Container_) and child.is_presence():
+#            if isinstance(child, Container) and child.is_presence():
 #                res.append("    def create_%s(self):" % (_safe_name(child.name)))
 #                res.append("        _%s = %s()" % (_safe_name(child.name), get_path_name(child)))
 #                res.append("        self.%s = _%s" % (_safe_name(child.name), _safe_name(child.name)))
@@ -390,7 +390,7 @@ class DNodeInner(DNode):
         res.append("")
 #
         # .from_gdata()
-        # TODO: should .from_gdata() not take a specific data node instead, like Container_ instead of yang.gdata.Node?
+        # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
         from_gdata_args_list = []
         from_xml_args_list = []
         for child in self.children:
@@ -468,7 +468,7 @@ class DNodeInner(DNode):
             res.append("")
 
 #            # .from_gdata()
-#            # TODO: should .from_gdata() not take a specific data node instead, like Container_ instead of yang.gdata.Node?
+#            # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
             from_gdata_args_list = []
             for child in self.children:
                 if isinstance(child, DLeaf):
@@ -527,7 +527,7 @@ class DContainer(DNodeInner):
 
     def __init__(self, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
         self.name = name
-        self.dname = "Container_"
+        self.dname = "Container"
         self.config = config
         self.description = description
         self.if_feature = if_feature
@@ -787,7 +787,7 @@ class SchemaNode(object):
             for child in self.children:
                 if isinstance(child, Grouping):
                     continue
-                if isinstance(child, Identity_):
+                if isinstance(child, Identity):
                     continue
                 if isinstance(child, Typedef):
                     continue
@@ -828,7 +828,7 @@ class SchemaNode(object):
         for i in range(RECURSION_LIMIT+1):
             if (isinstance(n, Anydata)
                 or isinstance(n, Anyxml)
-                or isinstance(n, Container_)
+                or isinstance(n, Container)
                 or isinstance(n, Module)
                 or isinstance(n, Leaf)
                 or isinstance(n, LeafList)
@@ -844,7 +844,7 @@ class SchemaNode(object):
                     if nconfig is not None:
                         return nconfig
                     found_config = False
-                elif isinstance(n, Container_):
+                elif isinstance(n, Container):
                     nconfig = n.config
                     if nconfig is not None:
                         return nconfig
@@ -898,7 +898,7 @@ class SchemaNode(object):
                     return child
                 elif isinstance(child, Anyxml) and _safe_name(child.name) == name:
                     return child
-                elif isinstance(child, Container_) and _safe_name(child.name) == name:
+                elif isinstance(child, Container) and _safe_name(child.name) == name:
                     return child
                 elif isinstance(child, Leaf) and _safe_name(child.name) == name:
                     return child
@@ -997,7 +997,7 @@ class SchemaNode(object):
                     for new_child in grouping_children:
                         new_child.parent = self
                     res.extend(grouping_children)
-                    dummy = Container_(name=grouping.name, children=res)
+                    dummy = Container(name=grouping.name, children=res)
                     child.expand_augments(context, dummy, in_uses=True)
                 else:
                     res.append(child.compile(context))
@@ -1486,7 +1486,7 @@ extension SchemaNode (Eq):
             return self.name == other.name and self.description == other.description and self.if_feature == other.if_feature and self.reference == other.reference and self.status == other.status and self.when == other.when
         elif isinstance(self, Choice) and isinstance(other, Choice):
             return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.mandatory == other.mandatory and self.reference == other.reference and self.status == other.status and self.when == other.when
-        elif isinstance(self, Container_) and isinstance(other, Container_):
+        elif isinstance(self, Container) and isinstance(other, Container):
             return self.name == other.name and self.config == other.config and self.description == other.description and self.if_feature == other.if_feature and self.must == other.must and self.presence == other.presence and self.reference == other.reference and self.status == other.status and self.when == other.when
         elif isinstance(self, Enum) and isinstance(other, Enum):
             return self.name == other.name and self.description == other.description and self.if_feature == other.if_feature and self.reference == other.reference and self.status == other.status and self.value == other.value
@@ -1496,7 +1496,7 @@ extension SchemaNode (Eq):
             return self.name == other.name and self.description == other.description and self.if_feature == other.if_feature and self.reference == other.reference and self.status == other.status
         elif isinstance(self, Grouping) and isinstance(other, Grouping):
             return self.name == other.name and self.description == other.description and self.reference == other.reference and self.status == other.status
-        elif isinstance(self, Identity_) and isinstance(other, Identity_):
+        elif isinstance(self, Identity) and isinstance(other, Identity):
             return self.name == other.name and self.base == other.base and self.description == other.description and self.if_feature == other.if_feature and self.reference == other.reference and self.status == other.status
         elif isinstance(self, Import) and isinstance(other, Import):
             return self.module == other.module and self.description == other.description and self.prefix == other.prefix and self.reference == other.reference and self.revision_date == other.revision_date
@@ -1557,7 +1557,7 @@ def snode_name(sn: SchemaNode) -> str:
         return sn.name
     if isinstance(sn, Choice):
         return sn.name
-    if isinstance(sn, Container_):
+    if isinstance(sn, Container):
         return sn.name
     if isinstance(sn, Enum):
         return sn.name
@@ -1567,7 +1567,7 @@ def snode_name(sn: SchemaNode) -> str:
         return sn.name
     if isinstance(sn, Grouping):
         return sn.name
-    if isinstance(sn, Identity_):
+    if isinstance(sn, Identity):
         return sn.name
     if isinstance(sn, Import):
         return sn.module
@@ -1624,8 +1624,8 @@ def snode_type_name(sn: SchemaNode) -> str:
         return "Case"
     if isinstance(sn, Choice):
         return "Choice"
-    if isinstance(sn, Container_):
-        return "Container_"
+    if isinstance(sn, Container):
+        return "Container"
     if isinstance(sn, Enum):
         return "Enum"
     if isinstance(sn, Extension):
@@ -1634,8 +1634,8 @@ def snode_type_name(sn: SchemaNode) -> str:
         return "Feature"
     if isinstance(sn, Grouping):
         return "Grouping"
-    if isinstance(sn, Identity_):
-        return "Identity_"
+    if isinstance(sn, Identity):
+        return "Identity"
     if isinstance(sn, Import):
         return "Import"
     if isinstance(sn, Include):
@@ -2320,7 +2320,7 @@ extension Choice (Ord):
     def __lt__(a, b):
         return a.name < b.name
 
-class Container_(SchemaNodeInner):
+class Container(SchemaNodeInner):
     """YANG container
 
     https://tools.ietf.org/html/rfc7950#section-7.5.2
@@ -2376,7 +2376,7 @@ class Container_(SchemaNodeInner):
         if len(self.children) > 0:
             args.append("children=[")
         args_text = ", ".join(args)
-        text_line = _ind(indent) + "Container_(" + args_text
+        text_line = _ind(indent) + "Container(" + args_text
         if len(self.children) == 0:
             text_line += ')'
         res.append(text_line)
@@ -2413,21 +2413,21 @@ class Container_(SchemaNodeInner):
         return new_dnode
 
     def compile(self, context: Context):
-        new = Container_(self.name,
-                         config=self.config,
-                         description=self.description,
-                         if_feature=self.if_feature,
-                         must=self.must,
-                         presence=self.presence,
-                         reference=self.reference,
-                         status=self.status,
-                         when=self.when,
-                         exts=self.exts,
-                         children=self.expand_children(context))
+        new = Container(self.name,
+                        config=self.config,
+                        description=self.description,
+                        if_feature=self.if_feature,
+                        must=self.must,
+                        presence=self.presence,
+                        reference=self.reference,
+                        status=self.status,
+                        when=self.when,
+                        exts=self.exts,
+                        children=self.expand_children(context))
         return new
 
     def __str__(self):
-        return "Container_ " + self.name
+        return "Container " + self.name
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -2435,8 +2435,8 @@ class Container_(SchemaNodeInner):
     def _get_arg(self) -> ?str:
         return self.name
 
-extension Container_ (Ord):
-    def __eq__(self, other: Container_):
+extension Container (Ord):
+    def __eq__(self, other: Container):
         return self.name == other.name and self.config == other.config and self.description == other.description and self.if_feature == other.if_feature and self.must == other.must and self.presence == other.presence and self.reference == other.reference and self.status == other.status and self.when == other.when
 
     def __lt__(a, b):
@@ -2720,7 +2720,7 @@ extension Grouping (Ord):
     def __lt__(a, b):
         return a.name < b.name
 
-class Identity_(SchemaNodeOuter):
+class Identity(SchemaNodeOuter):
     """YANG identity
 
     https://tools.ietf.org/html/rfc7950#section-7.18.1
@@ -2760,22 +2760,22 @@ class Identity_(SchemaNodeOuter):
         if len(attrs_text) > 0:
             args.append(_prsrc_attrs(indent, attrs))
         args_text = ", ".join(args)
-        text_line = _ind(indent) + "Identity_(" + args_text + ")"
+        text_line = _ind(indent) + "Identity(" + args_text + ")"
         res.append(text_line)
         return "\n".join(res)
 
     def compile(self, context: Context):
-        new = Identity_(self.name,
-                        base=self.base,
-                        description=self.description,
-                        if_feature=self.if_feature,
-                        reference=self.reference,
-                        status=self.status,
-                        exts=self.exts)
+        new = Identity(self.name,
+                       base=self.base,
+                       description=self.description,
+                       if_feature=self.if_feature,
+                       reference=self.reference,
+                       status=self.status,
+                       exts=self.exts)
         return new
 
     def __str__(self):
-        return "Identity_ " + self.name
+        return "Identity " + self.name
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -2783,8 +2783,8 @@ class Identity_(SchemaNodeOuter):
     def _get_arg(self) -> ?str:
         return self.name
 
-extension Identity_ (Ord):
-    def __eq__(self, other: Identity_):
+extension Identity (Ord):
+    def __eq__(self, other: Identity):
         return self.name == other.name and self.base == other.base and self.description == other.description and self.if_feature == other.if_feature and self.reference == other.reference and self.status == other.status
 
     def __lt__(a, b):
@@ -4804,21 +4804,21 @@ def take_choices(stmts: list[Statement]) -> list[Choice]:
             res.append(node)
     return res
 
-def take_opt_container(stmts: list[Statement]) -> ?Container_:
+def take_opt_container(stmts: list[Statement]) -> ?Container:
     for node in take_nodes(stmts, ["container"]):
-        if isinstance(node, Container_):
+        if isinstance(node, Container):
             return node
 
-def take_container(stmts: list[Statement]) -> Container_:
+def take_container(stmts: list[Statement]) -> Container:
     for node in take_nodes(stmts, ["container"]):
-        if isinstance(node, Container_):
+        if isinstance(node, Container):
             return node
     raise ValueError("No container in stmts")
 
-def take_containers(stmts: list[Statement]) -> list[Container_]:
+def take_containers(stmts: list[Statement]) -> list[Container]:
     res = []
     for node in take_nodes(stmts, ["container"]):
-        if isinstance(node, Container_):
+        if isinstance(node, Container):
             res.append(node)
     return res
 
@@ -4894,21 +4894,21 @@ def take_groupings(stmts: list[Statement]) -> list[Grouping]:
             res.append(node)
     return res
 
-def take_opt_identity(stmts: list[Statement]) -> ?Identity_:
+def take_opt_identity(stmts: list[Statement]) -> ?Identity:
     for node in take_nodes(stmts, ["identity"]):
-        if isinstance(node, Identity_):
+        if isinstance(node, Identity):
             return node
 
-def take_identity(stmts: list[Statement]) -> Identity_:
+def take_identity(stmts: list[Statement]) -> Identity:
     for node in take_nodes(stmts, ["identity"]):
-        if isinstance(node, Identity_):
+        if isinstance(node, Identity):
             return node
     raise ValueError("No identity in stmts")
 
-def take_identitys(stmts: list[Statement]) -> list[Identity_]:
+def take_identitys(stmts: list[Statement]) -> list[Identity]:
     res = []
     for node in take_nodes(stmts, ["identity"]):
-        if isinstance(node, Identity_):
+        if isinstance(node, Identity):
             res.append(node)
     return res
 
@@ -5407,7 +5407,7 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
             return n
     if stmt.kw == "container":
         if arg is not None:
-            n = Container_(arg,
+            n = Container(arg,
                           config=take_opt_bool(ss, "config"),
                           description=take_opt_str(ss, "description"),
                           if_feature=take_strlist(ss, "if-feature"),
@@ -5483,7 +5483,7 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
             return n
     if stmt.kw == "identity":
         if arg is not None:
-            n = Identity_(arg,
+            n = Identity(arg,
                          base=take_strlist(ss, "base"),
                          description=take_opt_str(ss, "description"),
                          if_feature=take_strlist(ss, "if-feature"),

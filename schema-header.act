@@ -355,7 +355,7 @@ class DNodeInner(DNode):
 
 #        # == .create_XXX() methods
 #        for child in self.children:
-#            if isinstance(child, Container_) and child.is_presence():
+#            if isinstance(child, Container) and child.is_presence():
 #                res.append("    def create_%s(self):" % (_safe_name(child.name)))
 #                res.append("        _%s = %s()" % (_safe_name(child.name), get_path_name(child)))
 #                res.append("        self.%s = _%s" % (_safe_name(child.name), _safe_name(child.name)))
@@ -393,7 +393,7 @@ class DNodeInner(DNode):
         res.append("")
 #
         # .from_gdata()
-        # TODO: should .from_gdata() not take a specific data node instead, like Container_ instead of yang.gdata.Node?
+        # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
         from_gdata_args_list = []
         from_xml_args_list = []
         for child in self.children:
@@ -471,7 +471,7 @@ class DNodeInner(DNode):
             res.append("")
 
 #            # .from_gdata()
-#            # TODO: should .from_gdata() not take a specific data node instead, like Container_ instead of yang.gdata.Node?
+#            # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
             from_gdata_args_list = []
             for child in self.children:
                 if isinstance(child, DLeaf):
@@ -530,7 +530,7 @@ class DContainer(DNodeInner):
 
     def __init__(self, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
         self.name = name
-        self.dname = "Container_"
+        self.dname = "Container"
         self.config = config
         self.description = description
         self.if_feature = if_feature
@@ -790,7 +790,7 @@ class SchemaNode(object):
             for child in self.children:
                 if isinstance(child, Grouping):
                     continue
-                if isinstance(child, Identity_):
+                if isinstance(child, Identity):
                     continue
                 if isinstance(child, Typedef):
                     continue
@@ -831,7 +831,7 @@ class SchemaNode(object):
         for i in range(RECURSION_LIMIT+1):
             if (isinstance(n, Anydata)
                 or isinstance(n, Anyxml)
-                or isinstance(n, Container_)
+                or isinstance(n, Container)
                 or isinstance(n, Module)
                 or isinstance(n, Leaf)
                 or isinstance(n, LeafList)
@@ -847,7 +847,7 @@ class SchemaNode(object):
                     if nconfig is not None:
                         return nconfig
                     found_config = False
-                elif isinstance(n, Container_):
+                elif isinstance(n, Container):
                     nconfig = n.config
                     if nconfig is not None:
                         return nconfig
@@ -901,7 +901,7 @@ class SchemaNode(object):
                     return child
                 elif isinstance(child, Anyxml) and _safe_name(child.name) == name:
                     return child
-                elif isinstance(child, Container_) and _safe_name(child.name) == name:
+                elif isinstance(child, Container) and _safe_name(child.name) == name:
                     return child
                 elif isinstance(child, Leaf) and _safe_name(child.name) == name:
                     return child
@@ -1000,7 +1000,7 @@ class SchemaNode(object):
                     for new_child in grouping_children:
                         new_child.parent = self
                     res.extend(grouping_children)
-                    dummy = Container_(name=grouping.name, children=res)
+                    dummy = Container(name=grouping.name, children=res)
                     child.expand_augments(context, dummy, in_uses=True)
                 else:
                     res.append(child.compile(context))
