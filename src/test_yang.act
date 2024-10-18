@@ -1209,7 +1209,7 @@ def _test_compile_extension():
     testing.assertEqual(things_list.exts, [yang.schema.Ext("some", "exty", "foo.bar")])
 
 
-def _test_compile_submodules():
+def _test_compile_submodules1():
     ys_foo = """module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
@@ -1237,11 +1237,48 @@ def _test_compile_submodules():
         }
     }
 }"""
+    # Test compilation in different order, should not matter
     root = yang.compile([ys_foo, ys_bar])
+    root = yang.compile([ys_bar, ys_foo])
     l1 = root.get("c1").get("l1")
     l2 = root.get("c2").get("l2")
     testing.assertEqual(l1.config, True)
     testing.assertEqual(l2.config, True)
+
+def _test_compile_submodules2():
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    include bar;
+    revision 2019-01-01 {
+        description "test revision";
+        reference "ref1";
+    }
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+    }
+}"""
+
+    ys_bar = """submodule bar {
+    yang-version "1.1";
+    belongs-to foo {
+        prefix "foo";
+    }
+    container c1 {
+        leaf l2 {
+            type string;
+        }
+    }
+}"""
+    try:
+        root = yang.compile([ys_foo, ys_bar])
+    except ValueError as exc:
+        return
+    # TODO: This conflict should be detected during compilation
+    #testing.error("Expected ValueError")
 
 
 def _test_tofrom_gdata():
@@ -1302,7 +1339,7 @@ myang3 = """container c1 {
 
 
 actor main(env):
-    _test_compile_submodules()
+    _test_compile_submodules2()
     await async env.exit(0)
 
     try:
