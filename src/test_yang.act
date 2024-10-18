@@ -289,7 +289,7 @@ def _test_prsrc_choice_case():
     }
   }
 }"""
-    expected = """Container_('transfer', children=[
+    expected = """Container('transfer', children=[
     Choice('how', default='interval', children=[
         Case('interval'),
         Case('daily'),
@@ -1209,6 +1209,41 @@ def _test_compile_extension():
     testing.assertEqual(things_list.exts, [yang.schema.Ext("some", "exty", "foo.bar")])
 
 
+def _test_compile_submodules():
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    include bar;
+    revision 2019-01-01 {
+        description "test revision";
+        reference "ref1";
+    }
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+    }
+}"""
+
+    ys_bar = """submodule bar {
+    yang-version "1.1";
+    belongs-to foo {
+        prefix "foo";
+    }
+    container c2 {
+        leaf l2 {
+            type string;
+        }
+    }
+}"""
+    root = yang.compile([ys_foo, ys_bar])
+    l1 = root.get("c1").get("l1")
+    l2 = root.get("c2").get("l2")
+    testing.assertEqual(l1.config, True)
+    testing.assertEqual(l2.config, True)
+
+
 def _test_tofrom_gdata():
     # TODO: hmm, how to test this? I guess we need to first generate some data
     # classes from a yang schema... so first generate support in compiler?
@@ -1267,7 +1302,7 @@ myang3 = """container c1 {
 
 
 actor main(env):
-    _test_compile_extension()
+    _test_compile_submodules()
     await async env.exit(0)
 
     try:

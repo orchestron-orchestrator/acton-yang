@@ -2,11 +2,39 @@
 import yang.parser
 import yang.schema
 
+
 def compile(yang_sources: list[str]) -> yang.schema.DRoot:
     ctx = yang.schema.Context()
     for yang_source in yang_sources:
-        yang_module = yang.schema.stmt_to_smodule(yang.parser.parse(yang_source))
-        ctx.add_module(yang_module)
+        yang_module = yang.schema.stmt_to_snode(yang.parser.parse(yang_source))
+        if isinstance(yang_module, yang.schema.Module):
+            ctx.add_module(yang_module)
+        elif isinstance(yang_module, yang.schema.Submodule):
+            ctx.add_submodule(yang_module)
+
+    # merge submodules into their main module
+    for y in ctx.get_modules():
+        if isinstance(y, yang.schema.Module):
+            for include in y.include:
+                submod = ctx.get_submodule(include.module, include.revision_date)
+                y.augment.extend(submod.augment)
+                # discard contact
+                # discard description
+                y.deviation.extend(submod.deviation)
+                y.extension_.extend(submod.extension_)
+                y.feature.extend(submod.feature)
+                y.import_.extend(submod.import_)
+                # ignore include
+                # TODO: we can safely ignore include, right? like the main module MUST list all submodules, riiiight?
+                # discard organization
+                # discard reference
+                # discard revision
+                y.exts.extend(submod.exts)
+                y.children.extend(submod.children)
+            y.include = []
+
+    # We need to compile all modules but should do so in order of dependencies,
+    # so let's start by getting a dependency-sorted list of modules.
 
     dnodes = []
     for y in ctx.get_modules():
