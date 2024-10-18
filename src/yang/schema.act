@@ -997,16 +997,26 @@ class SchemaNode(object):
             return current_node
 
         def expand_augment(augments: list[Augment], target_base, context: Context):
-            for aug in augments:
-                target = get_target(target_base, aug.target_node)
-                if isinstance(target, SchemaNodeInner):
-                    # Just move the child to the target
-                    new_children = aug.expand_children(context)
-                    target.children.extend(new_children)
-                    for new_child in new_children:
-                        new_child.parent = target
-                else:
-                    raise ValueError("Augment target is not an inner node")
+            augments_by_path_length: dict[int, list[Augment]] = {}
+            for augment in augments:
+                parts = augment.target_node.lstrip("/").split("/")
+                plen = len(parts)
+                if plen not in augments_by_path_length:
+                    augments_by_path_length[plen] = []
+                augments_by_path_length[plen].append(augment)
+
+            for plen in sorted(augments_by_path_length.keys()):
+                plen_augments = augments_by_path_length[plen]
+                for aug in plen_augments:
+                    target = get_target(target_base, aug.target_node)
+                    if isinstance(target, SchemaNodeInner):
+                        # Just move the child to the target
+                        new_children = aug.expand_children(context)
+                        target.children.extend(new_children)
+                        for new_child in new_children:
+                            new_child.parent = target
+                    else:
+                        raise ValueError("Augment target is not an inner node")
 
         # Look if node is of a type that has augment substatements
         if isinstance(self, Module):
