@@ -1208,6 +1208,41 @@ def _test_compile_extension():
     things_list = root.get("c1").get("things")
     testing.assertEqual(things_list.exts, [yang.schema.Ext("some", "exty", "foo.bar")])
 
+def _test_compile_augment_on_augment():
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    revision 2019-01-01 {
+        description "test revision";
+        reference "ref1";
+    }
+
+    augment "/c1/c2" {
+        leaf l3 {
+            type string;
+        }
+    }
+
+    augment "/c1" {
+        container c2 {
+            leaf l2 {
+                type string;
+            }
+        }
+    }
+
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+    }
+}"""
+
+    root = yang.compile([ys_foo])
+    l3 = root.get("c1").get("c2").get("l3")
+    testing.assertEqual(l3.config, True)
+
 
 def _test_compile_submodules1():
     ys_foo = """module foo {
