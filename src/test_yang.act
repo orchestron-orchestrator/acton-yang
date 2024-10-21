@@ -838,6 +838,8 @@ def _test_compile_imported_grouping():
 def _test_compile_augment():
     ys = """module foo {
   yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
   container c1 {
     leaf l1 {
       type string;
@@ -925,6 +927,8 @@ def _test_compile_augment_uses():
     """Augmenting a grouping"""
     ys = """module foo {
   yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
   grouping g1 {
     container c2 {
       leaf l1 {
@@ -1327,11 +1331,33 @@ def _test_compile_augment_on_augment_across_modules():
     }
 }"""
 
-    # Compile in different order to make sure we sort out the dependencies
+    # Compile in different order to make sure we sort out the dependencies, we
+    # would get some error if we didn't.
+    nc_baz = yang.schema.stmt_to_smodule(yang.parser.parse(ys_baz))
+    nc_baz_aug = nc_baz.augment[0]
+    nc_baz_l3 = nc_baz.augment[0].get("l3")
+    print(nc_baz_aug, "namespace: ", nc_baz_aug.namespace, nc_baz_aug.parent)
+    print(nc_baz_l3, "namespace: ", nc_baz_l3.namespace, nc_baz_l3.parent)
+    print("---")
+
+    nc_bar = yang.schema.stmt_to_smodule(yang.parser.parse(ys_bar))
+    nc_bar_c2 = nc_bar.augment[0].get("c2")
+    print("---")
+
     root = yang.compile([ys_foo, ys_bar, ys_baz])
     root = yang.compile([ys_baz, ys_bar, ys_foo])
+    l1 = root.get("c1").get("l1")
+    l2 = root.get("c1").get("c2").get("l2")
     l3 = root.get("c1").get("c2").get("l3")
+    print(l1.namespace)
+    print(l2.namespace)
+    print(l3.namespace)
+    testing.assertEqual(l1.config, True)
+    testing.assertEqual(l2.config, True)
     testing.assertEqual(l3.config, True)
+    testing.assertEqual(l1.namespace, "http://example.com/foo")
+    testing.assertEqual(l2.namespace, "http://example.com/bar")
+    testing.assertEqual(l3.namespace, "http://example.com/baz")
 
 
 def _test_compile_submodules1():
@@ -1464,7 +1490,7 @@ myang3 = """container c1 {
 
 
 actor main(env):
-    _test_ns()
+    _test_compile_augment_on_augment_across_modules()
     await async env.exit(0)
 
     try:
