@@ -1251,19 +1251,19 @@ def take_strlist(stmts: list[Statement], kw: str) -> list[str]:
         del stmts[d]
     return res
 
-def take_node(stmts: list[Statement], kw: str) -> ?SchemaNode:
+def take_node(stmts: list[Statement], kw: str, parent: ?SchemaNode=None) -> ?SchemaNode:
     for i in range(len(stmts)):
         if stmts[i].kw == kw:
-            n = stmt_to_snode(stmts[i])
+            n = stmt_to_snode(stmts[i], parent=parent)
             del stmts[i]
             return n
 
-def take_nodes(stmts: list[Statement], kw: list[str]) -> list[SchemaNode]:
+def take_nodes(stmts: list[Statement], kw: list[str], parent: ?SchemaNode=None) -> list[SchemaNode]:
     res = []
     todel = []
     for i in range(len(stmts)):
         if stmts[i].kw in kw:
-            res.append(stmt_to_snode(stmts[i]))
+            res.append(stmt_to_snode(stmts[i], parent=parent))
             todel.append(i)
     for i in reversed(todel):
         del stmts[i]
@@ -1739,8 +1739,8 @@ class Action(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         if input is not None:
             input.parent = self
         if output is not None:
@@ -1762,7 +1762,10 @@ class Action(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -1839,8 +1842,8 @@ class Anydata(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         self.name = name
@@ -1853,7 +1856,10 @@ class Anydata(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -1923,8 +1929,8 @@ class Anyxml(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         self.name = name
@@ -1937,7 +1943,10 @@ class Anyxml(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2004,8 +2013,8 @@ class Augment(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, target_node: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, target_node: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.target_node = target_node
         self.description = description
         self.if_feature = if_feature
@@ -2022,7 +2031,10 @@ class Augment(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2089,12 +2101,15 @@ class BelongsTo(SchemaNodeOuter):
     """
     module: str
 
-    def __init__(self, module: str, prefix: ?str=None, exts=[], namespace=None):
-        self.parent = None
+    def __init__(self, module: str, prefix: ?str=None, exts=[], namespace=None, parent=None):
+        self.parent = parent
         self.module = module
         self.prefix = prefix
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -2146,8 +2161,8 @@ class Bit(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], position: ?int=None, reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], position: ?int=None, reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2155,7 +2170,10 @@ class Bit(SchemaNodeOuter):
         self.reference = reference
         self.status = status
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2216,8 +2234,8 @@ class Case(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2234,7 +2252,10 @@ class Case(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2309,8 +2330,8 @@ class Choice(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.name = name
         self.config = config
         self.default = default
@@ -2330,7 +2351,10 @@ class Choice(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2411,8 +2435,8 @@ class Container(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], presence: ?str=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], presence: ?str=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         self.name = name
@@ -2434,7 +2458,10 @@ class Container(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2538,8 +2565,8 @@ class Enum(SchemaNodeOuter):
     status: ?str
     value: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, value: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, value: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2547,7 +2574,10 @@ class Enum(SchemaNodeOuter):
         self.status = status
         self.value = value
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2607,15 +2637,18 @@ class Extension(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, argument: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, argument: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.name = name
         self.argument = argument
         self.description = description
         self.reference = reference
         self.status = status
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2673,15 +2706,18 @@ class Feature(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.name = name
         self.description = description
         self.if_feature = if_feature
         self.reference = reference
         self.status = status
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2738,8 +2774,8 @@ class Grouping(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.name = name
         self.description = description
         self.reference = reference
@@ -2754,7 +2790,10 @@ class Grouping(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2822,8 +2861,8 @@ class Identity(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, base: list[str]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, base: list[str]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.name = name
         self.base = base
         self.description = description
@@ -2831,7 +2870,10 @@ class Identity(SchemaNodeOuter):
         self.reference = reference
         self.status = status
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -2890,15 +2932,18 @@ class Import(SchemaNodeOuter):
     reference: ?str
     revision_date: ?str
 
-    def __init__(self, module: str, prefix: ?str=None, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], namespace=None):
-        self.parent = None
+    def __init__(self, module: str, prefix: ?str=None, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], namespace=None, parent=None):
+        self.parent = parent
         self.module = module
         self.description = description
         self.prefix = prefix
         self.reference = reference
         self.revision_date = revision_date
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -2954,14 +2999,17 @@ class Include(SchemaNodeOuter):
     reference: ?str
     revision_date: ?str
 
-    def __init__(self, module: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, module: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.module = module
         self.description = description
         self.reference = reference
         self.revision_date = revision_date
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -3013,8 +3061,8 @@ class Input(SchemaNodeInner):
     """
     must: list[Must]
 
-    def __init__(self, must: list[Must]=[], exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, must: list[Must]=[], exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         self.must = must
@@ -3028,7 +3076,10 @@ class Input(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -3097,8 +3148,8 @@ class Leaf(SchemaNodeOuter):
     units: ?str
     when: ?str
 
-    def __init__(self, name: str, type_: Type, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, type_: Type, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         type_.parent = self
@@ -3115,7 +3166,10 @@ class Leaf(SchemaNodeOuter):
         self.units = units
         self.when = when
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -3224,8 +3278,8 @@ class LeafList(SchemaNodeOuter):
     units: ?str
     when: ?str
 
-    def __init__(self, name: str, type_: Type, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, type_: Type, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         type_.parent = self
@@ -3244,7 +3298,10 @@ class LeafList(SchemaNodeOuter):
         self.units = units
         self.when = when
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -3357,15 +3414,18 @@ class Length(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
         self.error_message = error_message
         self.reference = reference
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -3431,8 +3491,8 @@ class List(SchemaNodeInner):
     unique: list[str]
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], key: ?str=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, unique: list[str]=[], when: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], key: ?str=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, unique: list[str]=[], when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         self.name = name
@@ -3458,7 +3518,10 @@ class List(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -3591,8 +3654,8 @@ class Module(SchemaNodeInner):
     revision: list[Revision]
     yang_version: float
 
-    def __init__(self, name: str, namespace: ?str=None, prefix: ?str=None, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[]):
-        self.parent = None
+    def __init__(self, name: str, namespace: ?str=None, prefix: ?str=None, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None):
+        self.parent = parent
         for n in augment:
             n.parent = self
         for n in extension_:
@@ -3769,15 +3832,18 @@ class Must(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, condition: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, condition: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.condition = condition
         self.description = description
         self.error_app_tag = error_app_tag
         self.error_message = error_message
         self.reference = reference
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -3836,8 +3902,8 @@ class Notification(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         self.name = name
@@ -3856,7 +3922,10 @@ class Notification(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -3923,8 +3992,8 @@ class Output(SchemaNodeInner):
     """
     must: list[Must]
 
-    def __init__(self, must: list[Must]=[], exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, must: list[Must]=[], exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         self.must = must
@@ -3938,7 +4007,10 @@ class Output(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4001,8 +4073,8 @@ class Pattern(SchemaNodeOuter):
     modifier: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, modifier: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, modifier: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
@@ -4010,7 +4082,10 @@ class Pattern(SchemaNodeOuter):
         self.modifier = modifier
         self.reference = reference
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4070,15 +4145,18 @@ class Range(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
         self.error_message = error_message
         self.reference = reference
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4142,8 +4220,8 @@ class Refine(SchemaNodeOuter):
     presence: ?str
     reference: ?str
 
-    def __init__(self, target_node: str, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], presence: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, target_node: str, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], presence: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in must:
             n.parent = self
         self.target_node = target_node
@@ -4158,7 +4236,10 @@ class Refine(SchemaNodeOuter):
         self.presence = presence
         self.reference = reference
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4226,13 +4307,16 @@ class Revision(SchemaNodeOuter):
     description: ?str
     reference: ?str
 
-    def __init__(self, date: str, description: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, date: str, description: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         self.date = date
         self.description = description
         self.reference = reference
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4288,8 +4372,8 @@ class Rpc(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         if input is not None:
             input.parent = self
         if output is not None:
@@ -4311,7 +4395,10 @@ class Rpc(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4393,8 +4480,8 @@ class Submodule(SchemaNodeInner):
     revision: list[Revision]
     yang_version: float
 
-    def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in augment:
             n.parent = self
         belongs_to.parent = self
@@ -4432,7 +4519,10 @@ class Submodule(SchemaNodeInner):
             if n_prefix is None:
                 n.prefix = self.prefix
         self.children = children
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4538,8 +4628,8 @@ class Type(SchemaNodeOuter):
     require_instance: ?bool
     type_: list[Type]
 
-    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in bit:
             n.parent = self
         for n in enum:
@@ -4564,7 +4654,10 @@ class Type(SchemaNodeOuter):
         self.require_instance = require_instance
         self.type_ = type_
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4672,8 +4765,8 @@ class Typedef(SchemaNodeOuter):
     type_: Type
     units: ?str
 
-    def __init__(self, name: str, type_: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, type_: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         type_.parent = self
         self.name = name
         self.default = default
@@ -4683,7 +4776,10 @@ class Typedef(SchemaNodeOuter):
         self.type_ = type_
         self.units = units
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -4758,8 +4854,8 @@ class Uses(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, augment: list[Augment]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, refine: list[Refine]=[], status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None):
-        self.parent = None
+    def __init__(self, name: str, augment: list[Augment]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, refine: list[Refine]=[], status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+        self.parent = parent
         for n in augment:
             n.parent = self
         for n in refine:
@@ -4773,7 +4869,10 @@ class Uses(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
-        self.namespace = namespace
+        new_ns = namespace
+        if new_ns is None and parent is not None:
+            new_ns = parent.namespace
+        self.namespace = new_ns
         self.prefix = prefix
 
     def prsrc(self, indent=0):
@@ -5429,7 +5528,7 @@ def take_usess(stmts: list[Statement]) -> list[Uses]:
             res.append(node)
     return res
 
-def stmt_to_snode(stmt: Statement) -> SchemaNode:
+def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
     arg = stmt.arg
     ss = stmt.substatements.copy()
     if stmt.kw == "action":
@@ -5441,9 +5540,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                        output=take_opt_output(ss),
                        reference=take_opt_str(ss, "reference"),
                        status=take_opt_str(ss, "status"),
-                       children=take_nodes(ss, ["grouping", "typedef"]),
-                       exts=take_exts(ss)
+                       exts=take_exts(ss),
+                       parent=parent
                        )
+            n.children=take_nodes(ss, ["grouping", "typedef"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5460,7 +5560,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                         reference=take_opt_str(ss, "reference"),
                         status=take_opt_str(ss, "status"),
                         when=take_opt_str(ss, "when"),
-                        exts=take_exts(ss)
+                        exts=take_exts(ss),
+                        parent=parent
                         )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5478,7 +5579,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                        reference=take_opt_str(ss, "reference"),
                        status=take_opt_str(ss, "status"),
                        when=take_opt_str(ss, "when"),
-                       exts=take_exts(ss)
+                       exts=take_exts(ss),
+                       parent=parent
                        )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5493,9 +5595,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                         reference=take_opt_str(ss, "reference"),
                         status=take_opt_str(ss, "status"),
                         when=take_opt_str(ss, "when"),
-                        children=take_nodes(ss, ["action", "anydata", "anyxml", "case", "choice", "container", "leaf", "leaf-list", "list", "notification", "uses"]),
-                        exts=take_exts(ss)
+                        exts=take_exts(ss),
+                        parent=parent
                         )
+            n.children=take_nodes(ss, ["action", "anydata", "anyxml", "case", "choice", "container", "leaf", "leaf-list", "list", "notification", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5505,7 +5608,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
         if arg is not None:
             n = BelongsTo(arg,
                            prefix=take_opt_str(ss, "prefix"),
-                           exts=take_exts(ss)
+                           exts=take_exts(ss),
+                           parent=parent
                            )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5520,7 +5624,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                     position=take_opt_int(ss, "position"),
                     reference=take_opt_str(ss, "reference"),
                     status=take_opt_str(ss, "status"),
-                    exts=take_exts(ss)
+                    exts=take_exts(ss),
+                    parent=parent
                     )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5535,9 +5640,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                      reference=take_opt_str(ss, "reference"),
                      status=take_opt_str(ss, "status"),
                      when=take_opt_str(ss, "when"),
-                     children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "leaf", "leaf-list", "list", "uses"]),
-                     exts=take_exts(ss)
+                     exts=take_exts(ss),
+                     parent=parent
                      )
+            n.children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "leaf", "leaf-list", "list", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5554,9 +5660,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                        reference=take_opt_str(ss, "reference"),
                        status=take_opt_str(ss, "status"),
                        when=take_opt_str(ss, "when"),
-                       children=take_nodes(ss, ["anydata", "anyxml", "case", "choice", "container", "leaf", "leaf-list", "list"]),
-                       exts=take_exts(ss)
+                       exts=take_exts(ss),
+                       parent=parent
                        )
+            n.children=take_nodes(ss, ["anydata", "anyxml", "case", "choice", "container", "leaf", "leaf-list", "list"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5573,9 +5680,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                           reference=take_opt_str(ss, "reference"),
                           status=take_opt_str(ss, "status"),
                           when=take_opt_str(ss, "when"),
-                          children=take_nodes(ss, ["action", "anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "notification", "typedef", "uses"]),
-                          exts=take_exts(ss)
+                          exts=take_exts(ss),
+                          parent=parent
                           )
+            n.children=take_nodes(ss, ["action", "anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "notification", "typedef", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5589,7 +5697,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                      reference=take_opt_str(ss, "reference"),
                      status=take_opt_str(ss, "status"),
                      value=take_opt_str(ss, "value"),
-                     exts=take_exts(ss)
+                     exts=take_exts(ss),
+                     parent=parent
                      )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5603,7 +5712,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                           description=take_opt_str(ss, "description"),
                           reference=take_opt_str(ss, "reference"),
                           status=take_opt_str(ss, "status"),
-                          exts=take_exts(ss)
+                          exts=take_exts(ss),
+                          parent=parent
                           )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5617,7 +5727,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                         if_feature=take_strlist(ss, "if-feature"),
                         reference=take_opt_str(ss, "reference"),
                         status=take_opt_str(ss, "status"),
-                        exts=take_exts(ss)
+                        exts=take_exts(ss),
+                        parent=parent
                         )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5630,9 +5741,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                          description=take_opt_str(ss, "description"),
                          reference=take_opt_str(ss, "reference"),
                          status=take_opt_str(ss, "status"),
-                         children=take_nodes(ss, ["action", "anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "notification", "typedef", "uses"]),
-                         exts=take_exts(ss)
+                         exts=take_exts(ss),
+                         parent=parent
                          )
+            n.children=take_nodes(ss, ["action", "anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "notification", "typedef", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5646,7 +5758,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                          if_feature=take_strlist(ss, "if-feature"),
                          reference=take_opt_str(ss, "reference"),
                          status=take_opt_str(ss, "status"),
-                         exts=take_exts(ss)
+                         exts=take_exts(ss),
+                         parent=parent
                          )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5660,7 +5773,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                        prefix=take_opt_str(ss, "prefix"),
                        reference=take_opt_str(ss, "reference"),
                        revision_date=take_opt_str(ss, "revision-date"),
-                       exts=take_exts(ss)
+                       exts=take_exts(ss),
+                       parent=parent
                        )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5673,7 +5787,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                         description=take_opt_str(ss, "description"),
                         reference=take_opt_str(ss, "reference"),
                         revision_date=take_opt_str(ss, "revision-date"),
-                        exts=take_exts(ss)
+                        exts=take_exts(ss),
+                        parent=parent
                         )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5683,9 +5798,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
     if stmt.kw == "input":
         if arg is None:
             n = Input(must=take_musts(ss),
-                      children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "typedef", "uses"]),
-                      exts=take_exts(ss)
+                      exts=take_exts(ss),
+                      parent=parent
                       )
+            n.children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "typedef", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5705,7 +5821,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                      type_=take_type(ss),
                      units=take_opt_str(ss, "units"),
                      when=take_opt_str(ss, "when"),
-                     exts=take_exts(ss)
+                     exts=take_exts(ss),
+                     parent=parent
                      )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5728,7 +5845,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                           type_=take_type(ss),
                           units=take_opt_str(ss, "units"),
                           when=take_opt_str(ss, "when"),
-                          exts=take_exts(ss)
+                          exts=take_exts(ss),
+                          parent=parent
                           )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5742,7 +5860,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                        error_app_tag=take_opt_str(ss, "error-app-tag"),
                        error_message=take_opt_str(ss, "error-message"),
                        reference=take_opt_str(ss, "reference"),
-                       exts=take_exts(ss)
+                       exts=take_exts(ss),
+                       parent=parent
                        )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5764,9 +5883,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                      status=take_opt_str(ss, "status"),
                      unique=take_strlist(ss, "unique"),
                      when=take_opt_str(ss, "when"),
-                     children=take_nodes(ss, ["action", "anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "notification", "typedef", "uses"]),
-                     exts=take_exts(ss)
+                     exts=take_exts(ss),
+                     parent=parent
                      )
+            n.children=take_nodes(ss, ["action", "anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "notification", "typedef", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5789,9 +5909,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                        reference=take_opt_str(ss, "reference"),
                        revision=take_revisions(ss),
                        yang_version=take_yang_version(ss),
-                       children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "identity", "leaf", "leaf-list", "list", "notification", "rpc", "typedef", "uses"]),
-                       exts=take_exts(ss)
+                       exts=take_exts(ss),
+                       parent=parent
                        )
+            n.children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "identity", "leaf", "leaf-list", "list", "notification", "rpc", "typedef", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5804,7 +5925,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                      error_app_tag=take_opt_str(ss, "error-app-tag"),
                      error_message=take_opt_str(ss, "error-message"),
                      reference=take_opt_str(ss, "reference"),
-                     exts=take_exts(ss)
+                     exts=take_exts(ss),
+                     parent=parent
                      )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5819,9 +5941,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                              must=take_musts(ss),
                              reference=take_opt_str(ss, "reference"),
                              status=take_opt_str(ss, "status"),
-                             children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "typedef", "uses"]),
-                             exts=take_exts(ss)
+                             exts=take_exts(ss),
+                             parent=parent
                              )
+            n.children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "typedef", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5830,9 +5953,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
     if stmt.kw == "output":
         if arg is None:
             n = Output(must=take_musts(ss),
-                       children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "typedef", "uses"]),
-                       exts=take_exts(ss)
+                       exts=take_exts(ss),
+                       parent=parent
                        )
+            n.children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "leaf", "leaf-list", "list", "typedef", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5846,7 +5970,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                         error_message=take_opt_str(ss, "error-message"),
                         modifier=take_opt_str(ss, "modifier"),
                         reference=take_opt_str(ss, "reference"),
-                        exts=take_exts(ss)
+                        exts=take_exts(ss),
+                        parent=parent
                         )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5860,7 +5985,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                       error_app_tag=take_opt_str(ss, "error-app-tag"),
                       error_message=take_opt_str(ss, "error-message"),
                       reference=take_opt_str(ss, "reference"),
-                      exts=take_exts(ss)
+                      exts=take_exts(ss),
+                      parent=parent
                       )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5880,7 +6006,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                        must=take_musts(ss),
                        presence=take_opt_str(ss, "presence"),
                        reference=take_opt_str(ss, "reference"),
-                       exts=take_exts(ss)
+                       exts=take_exts(ss),
+                       parent=parent
                        )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5892,7 +6019,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
             n = Revision(arg,
                          description=take_opt_str(ss, "description"),
                          reference=take_opt_str(ss, "reference"),
-                         exts=take_exts(ss)
+                         exts=take_exts(ss),
+                         parent=parent
                          )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5908,9 +6036,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                     output=take_opt_output(ss),
                     reference=take_opt_str(ss, "reference"),
                     status=take_opt_str(ss, "status"),
-                    children=take_nodes(ss, ["grouping", "typedef"]),
-                    exts=take_exts(ss)
+                    exts=take_exts(ss),
+                    parent=parent
                     )
+            n.children=take_nodes(ss, ["grouping", "typedef"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5932,9 +6061,10 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                           reference=take_opt_str(ss, "reference"),
                           revision=take_revisions(ss),
                           yang_version=take_yang_version(ss),
-                          children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "identity", "leaf", "leaf-list", "list", "notification", "rpc", "typedef", "uses"]),
-                          exts=take_exts(ss)
+                          exts=take_exts(ss),
+                          parent=parent
                           )
+            n.children=take_nodes(ss, ["anydata", "anyxml", "choice", "container", "grouping", "identity", "leaf", "leaf-list", "list", "notification", "rpc", "typedef", "uses"], n)
             if len(ss) > 0:
                 name = ss[0].kw
                 prefix = ss[0].prefix
@@ -5953,7 +6083,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                      range_=take_opt_range(ss),
                      require_instance=take_opt_bool(ss, "require-instance"),
                      type_=take_types(ss),
-                     exts=take_exts(ss)
+                     exts=take_exts(ss),
+                     parent=parent
                      )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5969,7 +6100,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                         status=take_opt_str(ss, "status"),
                         type_=take_type(ss),
                         units=take_opt_str(ss, "units"),
-                        exts=take_exts(ss)
+                        exts=take_exts(ss),
+                        parent=parent
                         )
             if len(ss) > 0:
                 name = ss[0].kw
@@ -5986,7 +6118,8 @@ def stmt_to_snode(stmt: Statement) -> SchemaNode:
                      refine=take_refines(ss),
                      status=take_opt_str(ss, "status"),
                      when=take_opt_str(ss, "when"),
-                     exts=take_exts(ss)
+                     exts=take_exts(ss),
+                     parent=parent
                      )
             if len(ss) > 0:
                 name = ss[0].kw

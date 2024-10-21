@@ -733,8 +733,10 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             init_attrs.append("namespace=None")
         if "prefix" not in set(cattrs):
             init_attrs.append("prefix=None")
+        if "parent" not in set(cattrs):
+            init_attrs.append("parent=None")
         res.append("    def __init__(" + ", ".join(init_attrs) + "):")
-        res.append("        self.parent = None")
+        res.append("        self.parent = parent")
 #        res.append("        self.cname = \"%s\"" % _class_name(stmt_name))
 #        res.append("        self.yname = \"%s\"" % stmt_name)
 
@@ -773,7 +775,10 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("        self.children = children")
 
         if "namespace" not in set(cattrs):
-            res.append("        self.namespace = namespace")
+            res.append("        new_ns = namespace")
+            res.append("        if new_ns is None and parent is not None:")
+            res.append("            new_ns = parent.namespace")
+            res.append("        self.namespace = new_ns")
         if "prefix" not in set(cattrs):
             res.append("        self.prefix = prefix")
         res.append("")
@@ -918,7 +923,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("    return res")
         res.append("")
 
-    res.append("def stmt_to_snode(stmt: Statement) -> SchemaNode:")
+    res.append("def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:")
     res.append("    arg = stmt.arg")
     res.append("    ss = stmt.substatements.copy()")
     for stmt_name in sorted(stmts):
@@ -954,13 +959,14 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 attr_take = _attr_name(attr) + "=" + _attr_taker(attr, stmt, stmts)
             attrs_takers.append(attr_take)
 
-        if have_children:
-            valid_children_list = ", ".join(map(lambda x: "\"%s\"" % x, valid_children))
-            attrs_takers.append("children=take_nodes(ss, [%s])" % valid_children_list)
         attrs_takers.append("exts=take_exts(ss)")
+        attrs_takers.append("parent=parent")
         indent = " " * (17+len(stmt_name))
         joiner = ",\n" + indent
         res.append("            n = %s(%s\n" % (_class_name(stmt_name), joiner.join(attrs_takers)) + indent + ")")
+        if have_children:
+            valid_children_list = ", ".join(map(lambda x: "\"%s\"" % x, valid_children))
+            res.append("            n.children=take_nodes(ss, [%s], n)" % valid_children_list)
 
         res.append("            if len(ss) > 0:")
         res.append("                name = ss[0].kw")
