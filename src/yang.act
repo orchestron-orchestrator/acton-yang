@@ -33,10 +33,30 @@ def compile(yang_sources: list[str]) -> yang.schema.DRoot:
                 y.children.extend(submod.children)
             y.include = []
 
+    def deps_done(m: yang.schema.Module, ctx: yang.schema.Context, compiled: set[yang.schema.Module]) -> bool:
+        for imp in m.import_:
+            dep = ctx.get_module(imp.module, imp.revision_date)
+            # If the dependency is not yet compiled, the current module 'm'
+            # is not ready to be compiled... so continue
+            if dep not in compiled:
+                continue
+        return True
+
     # We need to compile all modules but should do so in order of dependencies,
-    # so let's start by getting a dependency-sorted list of modules.
+    # so we iteratively compile modules that have all their dependencies compiled
+    to_compile = set(ctx.get_modules())
+    compiled: set[yang.schema.Module] = set()
+    while len(to_compile) > 0:
+        for m in to_compile:
+            if deps_done(m, ctx, compiled):
+                mc = m.compile(ctx)
+                if isinstance(mc, yang.schema.Module):
+                    compiled.add(mc)
+                else:
+                    raise ValueError("Expected a Module, got a %s" % type(mc))
+                to_compile.discard(m)
 
     dnodes = []
-    for y in ctx.get_modules():
-        dnodes.append(y.compile(ctx).to_dnode())
+    for m in compiled:
+        dnodes.append(m.to_dnode())
     return yang.schema.DRoot(dnodes)

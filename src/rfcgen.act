@@ -344,6 +344,12 @@ snode_methods = {
         raise ValueError("No import with prefix %s in module %s" % (prefix, self.name))
 
 """,
+        "get_modrev": """    def get_modrev(self) -> ModRev:
+        rev = self.get_revision()
+        rev_date = rev.date if rev is not None else None
+        return ModRev(self.name, rev_date)
+
+""",
         "get_namespace": """    def get_namespace(self) -> str:
         selfnamespace = self.namespace
         if selfnamespace is not None:
@@ -847,10 +853,22 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             if substmt.name not in child_stmts:
                 attributes_to_compare.append(_attr_name(substmt.name))
 
-        res.append("extension %s (Ord):" % _class_name(stmt_name))
-        res.append("    def __eq__(self, other: %s):" % _class_name(stmt_name))
-        res.append("        return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))
-        res.append("")
+        if stmt_name == "module":
+            res.append("extension %s (Hashable):" % _class_name(stmt_name))
+            res.append("    def __hash__(self):")
+            res.append("        rev = self.get_revision()")
+            res.append("        rev_str = rev.date if rev is not None else \"\"")
+            res.append("        return hash(self.get_namespace() + self.get_prefix() + rev_str)")
+            res.append("")
+            res.append("    def __eq__(self, other: %s):" % _class_name(stmt_name))
+            res.append("        return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))
+            res.append("")
+            res.append("extension %s (Ord):" % _class_name(stmt_name))
+        else:
+            res.append("extension %s (Ord):" % _class_name(stmt_name))
+            res.append("    def __eq__(self, other: %s):" % _class_name(stmt_name))
+            res.append("        return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))
+            res.append("")
 
         res.append("    def __lt__(a, b):")
         if arg_name is not None:

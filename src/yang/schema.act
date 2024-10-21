@@ -798,6 +798,9 @@ class Context(object):
         except KeyError:
             raise ValueError("Module %s rev %s not found in compilation context" % (modname, rev if rev is not None else ""))
 
+    def get_submodules(self) -> list[Submodule]:
+        return self.submodules
+
 
 class SchemaNode(object):
     parent: ?SchemaNode
@@ -997,6 +1000,17 @@ class SchemaNode(object):
             return current_node
 
         def expand_augment(augments: list[Augment], target_base, context: Context):
+            # There can be multiple augments which might have dependencies on
+            # each other, for example:
+            # container c1 {}
+            # augment /c1/c2 { leaf l1 { type string; } }
+            # augment /c1 { container c2 {} }
+            #
+            # The first augment targets /c1/c2 which depends on the second
+            # augment below, so we must apply these augments in the right order.
+            # We do this by looking at the length of the target path and
+            # applying the augments in order of increasing path length.
+
             augments_by_path_length: dict[int, list[Augment]] = {}
             for augment in augments:
                 parts = augment.target_node.lstrip("/").split("/")
@@ -3617,6 +3631,11 @@ class Module(SchemaNodeInner):
                 return imp
         raise ValueError("No import with prefix %s in module %s" % (prefix, self.name))
 
+    def get_modrev(self) -> ModRev:
+        rev = self.get_revision()
+        rev_date = rev.date if rev is not None else None
+        return ModRev(self.name, rev_date)
+
     def get_namespace(self) -> str:
         selfnamespace = self.namespace
         if selfnamespace is not None:
@@ -3681,10 +3700,16 @@ class Module(SchemaNodeInner):
     def _get_arg(self) -> ?str:
         return self.name
 
-extension Module (Ord):
+extension Module (Hashable):
+    def __hash__(self):
+        rev = self.get_revision()
+        rev_str = rev.date if rev is not None else ""
+        return hash(self.get_namespace() + self.get_prefix() + rev_str)
+
     def __eq__(self, other: Module):
         return self.name == other.name and self.augment == other.augment and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension_ == other.extension_ and self.feature == other.feature and self.import_ == other.import_ and self.include == other.include and self.namespace == other.namespace and self.organization == other.organization and self.prefix == other.prefix and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
 
+extension Module (Ord):
     def __lt__(a, b):
         return a.name < b.name
 
