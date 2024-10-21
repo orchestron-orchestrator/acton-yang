@@ -668,6 +668,18 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
+class DNotification(DNodeInner):
+
+    def __init__(self, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
+        self.namespace = namespace
+        self.prefix = prefix
+        self.name = name
+        self.dname = "Notification"
+        self.description = description
+        self.reference = reference
+        self.exts = exts
+        self.children = children
+
 class DRoot(DNodeInner):
     def __init__(self, modules: list[DNode]=[]):
         self.namespace = ""
@@ -838,6 +850,7 @@ class SchemaNode(object):
                 or isinstance(n, Anyxml)
                 or isinstance(n, Container)
                 or isinstance(n, Module)
+                or isinstance(n, Notification)
                 or isinstance(n, Leaf)
                 or isinstance(n, LeafList)
                 or isinstance(n, List)):
@@ -859,6 +872,8 @@ class SchemaNode(object):
                     found_config = False
                 elif isinstance(n, Module):
                     return True
+                elif isinstance(n, Notification):
+                    return False
                 elif isinstance(n, Leaf):
                     nconfig = n.config
                     if nconfig is not None:
@@ -4093,6 +4108,22 @@ class Notification(SchemaNodeInner):
             res.append(",\n".join(child_res))
             res.append(_ind(indent) + "])")
         return "\n".join(res)
+
+    def to_dnode(self) -> DNotification:
+        new_dnode = DNotification(
+            namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
+            name=self.name,
+            description=self.description,
+            if_feature=self.if_feature,
+            reference=self.reference,
+            status=self.status,
+            exts=self.exts,
+            children=self.get_dnode_children()
+        )
+        for child in new_dnode.children:
+            child.parent = new_dnode
+        return new_dnode
 
     def compile(self, context: Context):
         new = Notification(self.name,
