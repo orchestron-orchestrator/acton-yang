@@ -223,6 +223,8 @@ def _attr_type(name, stmt, stmts) -> str:
         t = "float"
 
 
+    # TODO: change namespace and prefix cardinality to 1
+    #if cardinality == "0..1":
     if cardinality == "0..1" or name in {"namespace", "prefix"}:
         return "?" + t
     elif cardinality == "1":
@@ -318,6 +320,8 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DContainer:
         new_dnode = DContainer(
+            namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -374,9 +378,9 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DModule:
         new_dnode = DModule(
-            name=self.name,
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
+            name=self.name,
             description=self.description,
             revision=self.revision,
             reference=self.reference,
@@ -413,6 +417,8 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DList:
         new_dnode = DList(
+            namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             key=self.keys(),
             config=self.is_config(),
@@ -464,6 +470,8 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DLeaf:
         return DLeaf(
+            namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -523,6 +531,8 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DLeafList:
         return DLeafList(
+            namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -541,6 +551,12 @@ snode_methods = {
 """
     },
     "submodule": {
+        "get_modrev": """    def get_modrev(self) -> ModRev:
+        rev = self.get_revision()
+        rev_date = rev.date if rev is not None else None
+        return ModRev(self.name, rev_date)
+
+""",
         "get_revision": """    def get_revision(self) -> ?Revision:
         latest = None
         for rev in self.revision:
@@ -727,18 +743,33 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 continue
             elif substmt.name not in child_stmts: # Attribute
                 if substmt.name in stmts: # Another statement (not a child)
-                    # Set parent for substatement objects
+                    # Set parent for substatement objects & inherit namespace + prefix
                     if substmt.cardinality == "0..1":
                         res.append("        if %s is not None:" % _attr_name(substmt.name))
                         res.append("            %s.parent = self" % _attr_name(substmt.name))
+                        res.append("            n_namespace = %s.namespace " % _attr_name(substmt.name))
+                        res.append("            if n_namespace is None:")
+                        res.append("                %s.namespace = self.namespace" % _attr_name(substmt.name))
+                        res.append("            n_prefix = %s.prefix" % _attr_name(substmt.name))
+                        res.append("            if n_prefix is None:")
+                        res.append("                %s.prefix = self.prefix" % _attr_name(substmt.name))
                     elif substmt.cardinality == "1":
-                        # TODO: should not be optional
-                        #res.append("        %s.parent = self" % _attr_name(substmt.name))
-                        res.append("        if %s is not None:" % _attr_name(substmt.name))
-                        res.append("            %s.parent = self" % _attr_name(substmt.name))
+                        res.append("        %s.parent = self" % _attr_name(substmt.name))
+                        res.append("        n_namespace = %s.namespace " % _attr_name(substmt.name))
+                        res.append("        if n_namespace is None:")
+                        res.append("            %s.namespace = self.namespace" % _attr_name(substmt.name))
+                        res.append("        n_prefix = %s.prefix" % _attr_name(substmt.name))
+                        res.append("        if n_prefix is None:")
+                        res.append("            %s.prefix = self.prefix" % _attr_name(substmt.name))
                     elif substmt.cardinality == "0..n":
                         res.append("        for n in %s:" % _attr_name(substmt.name))
                         res.append("            n.parent = self")
+                        res.append("            n_namespace = n.namespace")
+                        res.append("            if n_namespace is None:")
+                        res.append("                n.namespace = self.namespace")
+                        res.append("            n_prefix = n.prefix")
+                        res.append("            if n_prefix is None:")
+                        res.append("                n.prefix = self.prefix")
                     else:
                         raise ValueError("Unknown cardinality: %s" % substmt.cardinality)
 

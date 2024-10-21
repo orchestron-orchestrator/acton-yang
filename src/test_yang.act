@@ -835,6 +835,8 @@ def _test_compile_augment():
 def _test_compile_augment_import():
     ys_foo = """module foo {
   yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
   container c1 {
     leaf l1 {
       type string;
@@ -844,6 +846,8 @@ def _test_compile_augment_import():
 }"""
     ys_bar = """module bar {
   yang-version "1.1";
+  namespace "http://example.com/bar";
+  prefix "bar";
   import foo {
     prefix "f";
   }
@@ -854,21 +858,17 @@ def _test_compile_augment_import():
     }
   }
 }"""
-    n_foo = yang.schema.stmt_to_smodule(yang.parser.parse(ys_foo))
-    n_bar = yang.schema.stmt_to_smodule(yang.parser.parse(ys_bar))
-    ctx = yang.schema.Context([])
-    nc_foo = n_foo.compile(ctx)
-    if isinstance(nc_foo, yang.schema.Module):
-        ctx.add_module(nc_foo)
-    nc_bar = n_bar.compile(ctx)
+    root = yang.compile([ys_foo, ys_bar])
 
-    testing.assertEqual(nc_foo.get("c1").get("l1").is_config(), True)
-    testing.assertEqual(nc_foo.get("c1").get("l2").is_config(), True)
+    testing.assertEqual(root.get("c1").get("l1").config, True)
+    testing.assertEqual(root.get("c1").get("l2").config, True)
 
 def _test_compile_uses_augment():
     """Augmenting a grouping"""
     ys = """module foo {
   yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
   grouping g1 {
     container c1 {
       leaf l1 {
@@ -886,12 +886,14 @@ def _test_compile_uses_augment():
     }
   }
 }"""
-    n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
-    ctx = yang.schema.Context([])
-    nc = n.compile(ctx)
+    #n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
+    #ctx = yang.schema.Context([])
+    #nc = n.compile(ctx)
+    #print(nc.prsrc())
+    root = yang.compile([ys])
 
-    testing.assertEqual(nc.get("c1").get("l1").is_config(), True)
-    testing.assertEqual(nc.get("c1").get("l2").is_config(), True)
+    testing.assertEqual(root.get("c1").get("l1").config, True)
+    testing.assertEqual(root.get("c1").get("l2").config, True)
 
 def _test_compile_augment_uses():
     """Augmenting a grouping"""
@@ -1244,6 +1246,68 @@ def _test_compile_augment_on_augment():
     testing.assertEqual(l3.config, True)
 
 
+def _test_compile_augment_on_augment_across_modules():
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    revision 2019-01-01 {
+        description "test revision";
+        reference "ref1";
+    }
+
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+    }
+}"""
+
+    ys_bar = """module bar {
+    yang-version "1.1";
+    namespace "http://example.com/bar";
+    prefix "bar";
+
+    import foo {
+        prefix "foo";
+    }
+
+    augment "/foo:c1" {
+        container c2 {
+            leaf l2 {
+                type string;
+            }
+        }
+    }
+}"""
+
+    ys_baz = """module baz {
+    yang-version "1.1";
+    namespace "http://example.com/baz";
+    prefix "baz";
+
+    import foo {
+        prefix "foo";
+    }
+
+    import bar {
+        prefix "bar";
+    }
+
+    augment "/foo:c1/bar:c2" {
+        leaf l3 {
+            type string;
+        }
+    }
+}"""
+
+    # Compile in different order to make sure we sort out the dependencies
+    root = yang.compile([ys_foo, ys_bar, ys_baz])
+    root = yang.compile([ys_baz, ys_bar, ys_foo])
+    l3 = root.get("c1").get("c2").get("l3")
+    testing.assertEqual(l3.config, True)
+
+
 def _test_compile_submodules1():
     ys_foo = """module foo {
     yang-version "1.1";
@@ -1374,7 +1438,7 @@ myang3 = """container c1 {
 
 
 actor main(env):
-    _test_compile_submodules2()
+    _test_compile_uses_augment()
     await async env.exit(0)
 
     try:

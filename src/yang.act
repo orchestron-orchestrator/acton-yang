@@ -5,58 +5,62 @@ import yang.schema
 
 def compile(yang_sources: list[str]) -> yang.schema.DRoot:
     ctx = yang.schema.Context()
+    modules: dict[yang.schema.ModRev, yang.schema.Module] = {}
+    submodules: dict[yang.schema.ModRev, yang.schema.Submodule] = {}
+
     for yang_source in yang_sources:
         yang_module = yang.schema.stmt_to_snode(yang.parser.parse(yang_source))
         if isinstance(yang_module, yang.schema.Module):
-            ctx.add_module(yang_module)
+            modules[yang_module.get_modrev()] = yang_module
+            #ctx.add_module(yang_module)
         elif isinstance(yang_module, yang.schema.Submodule):
-            ctx.add_submodule(yang_module)
+            submodules[yang_module.get_modrev()] = yang_module
+            #ctx.add_submodule(yang_module)
 
     # merge submodules into their main module
-    for y in ctx.get_modules():
-        if isinstance(y, yang.schema.Module):
-            for include in y.include:
-                submod = ctx.get_submodule(include.module, include.revision_date)
-                y.augment.extend(submod.augment)
-                # discard contact
-                # discard description
-                y.deviation.extend(submod.deviation)
-                y.extension_.extend(submod.extension_)
-                y.feature.extend(submod.feature)
-                y.import_.extend(submod.import_)
-                # ignore include
-                # TODO: we can safely ignore include, right? like the main module MUST list all submodules, riiiight?
-                # discard organization
-                # discard reference
-                # discard revision
-                y.exts.extend(submod.exts)
-                y.children.extend(submod.children)
-            y.include = []
+    for m in modules.values():
+        for include in m.include:
+            submodrev = yang.schema.ModRev(include.module, include.revision_date)
+            submod = submodules[submodrev]
+            m.augment.extend(submod.augment)
+            # discard contact
+            # discard description
+            m.deviation.extend(submod.deviation)
+            m.extension_.extend(submod.extension_)
+            m.feature.extend(submod.feature)
+            m.import_.extend(submod.import_)
+            # ignore include
+            # TODO: we can safely ignore include, right? like the main module MUST list all submodules, riiiight?
+            # discard organization
+            # discard reference
+            # discard revision
+            m.exts.extend(submod.exts)
+            m.children.extend(submod.children)
 
-    def deps_done(m: yang.schema.Module, ctx: yang.schema.Context, compiled: set[yang.schema.Module]) -> bool:
+    def deps_done(m: yang.schema.Module, ctx: yang.schema.Context) -> bool:
         for imp in m.import_:
-            dep = ctx.get_module(imp.module, imp.revision_date)
-            # If the dependency is not yet compiled, the current module 'm'
-            # is not ready to be compiled... so continue
-            if dep not in compiled:
-                continue
+            try:
+                dep = ctx.get_module(imp.module, imp.revision_date)
+            except ValueError:
+                return False
         return True
 
     # We need to compile all modules but should do so in order of dependencies,
     # so we iteratively compile modules that have all their dependencies compiled
-    to_compile = set(ctx.get_modules())
-    compiled: set[yang.schema.Module] = set()
+    to_compile = set(modules.values())
     while len(to_compile) > 0:
         for m in to_compile:
-            if deps_done(m, ctx, compiled):
+            if deps_done(m, ctx):
                 mc = m.compile(ctx)
                 if isinstance(mc, yang.schema.Module):
-                    compiled.add(mc)
+                    ctx.add_module(mc)
                 else:
                     raise ValueError("Expected a Module, got a %s" % type(mc))
                 to_compile.discard(m)
 
     dnodes = []
-    for m in compiled:
-        dnodes.append(m.to_dnode())
+    for mod_rev, m in ctx.modules.items():
+        mod_rev_rev = mod_rev.rev
+        if mod_rev_rev is None:
+            dnodes.append(m.to_dnode())
     return yang.schema.DRoot(dnodes)
