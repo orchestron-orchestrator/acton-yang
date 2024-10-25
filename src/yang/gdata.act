@@ -175,8 +175,8 @@ class Node(object):
     prefix: ?str
 
     def prsrc(self) -> str:
-        if isinstance(self, Container_):
-            return "Container_(" + self.name + ", " + str(self.children) + ")"
+        if isinstance(self, Container):
+            return "Container(" + self.name + ", " + str(self.children) + ")"
         if isinstance(self, List):
             return "List(" + self.name + ", " + str(self.keys) + ", " + str(self.elements) + ")"
         if isinstance(self, ListElement):
@@ -188,7 +188,7 @@ class Node(object):
     def to_xmlstr(self, indent=0) -> str:
         def _indent():
             return "  " * indent
-        if isinstance(self, Container_):
+        if isinstance(self, Container):
             xml = _indent() + "<" + self.name + ">\n"
             for child in self.children.values():
                 xml += child.to_xmlstr(indent + 1)
@@ -252,15 +252,15 @@ class Node(object):
 
     #--
 
-    def get_container(self, name) -> Container_:
+    def get_container(self, name) -> Container:
         if isinstance(self, Inner):
             for child in self.children.values():
-                if isinstance(child, Container_):
+                if isinstance(child, Container):
                     if child.name == name:
                         return child
         raise ValueError("Cannot find container child with name " + name)
 
-    def get_opt_container(self, name) -> ?Container_:
+    def get_opt_container(self, name) -> ?Container:
         """This is for P-container"""
         try:
             return self.get_container(name)
@@ -362,7 +362,7 @@ class Node(object):
 
 extension Node(Eq):
     def __eq__(self, other: Node) -> bool:
-        if isinstance(self, Container_) and isinstance(other, Container_):
+        if isinstance(self, Container) and isinstance(other, Container):
             if self.name != other.name:
                 return False
             if set(self.children.keys()) != set(other.children.keys()):
@@ -488,7 +488,7 @@ class Module(Inner):
             child.parent = self
 
 
-class Container_(Inner):
+class Container(Inner):
     name: str
 
     def __init__(self, name: str, children: dict[str, Node]={}, ns=None, prefix=None):
@@ -553,7 +553,7 @@ class LeafList(Node):
 
 
 def merge(a: Node, b: Node) -> Node:
-    if isinstance(a, Container_) and isinstance(b, Container_):
+    if isinstance(a, Container) and isinstance(b, Container):
         # Find overlapping children, which might need merging on their own
         overlapping = set(a.children.keys()) & set(b.children.keys())
         # Avoid comprehensions
@@ -565,7 +565,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return Container_(a.name, children=new_children)
+        return Container(a.name, children=new_children)
     elif isinstance(a, Module) and isinstance(b, Module):
         # Find overlapping children, which might need merging on their own
         overlapping = set(a.children.keys()) & set(b.children.keys())
@@ -874,7 +874,7 @@ def from_xml_opt_values(n: xml.Node, name: str) -> list[value]:
 
 
 def _test_merge1():
-    y1 = Container_("foo", {
+    y1 = Container("foo", {
         "a": Leaf("a", 1),
         "l1": List("l1", ["name"], [
             ListElement(["k1"], {
@@ -887,7 +887,7 @@ def _test_merge1():
         ])
     })
 
-    y2 = Container_("foo", {
+    y2 = Container("foo", {
         "b": Leaf("b", 2),
         "c": Leaf("c", 3),
         "l1": List("l1", ["name"], [
@@ -904,7 +904,7 @@ def _test_merge1():
     res = merge(y1, y2)
     print(res.to_xmlstr())
 
-    exp = Container_("foo", {
+    exp = Container("foo", {
         "l1": List("l1", ["name"], [
             ListElement(["k1"], {
                 "n1": Leaf("n1", 1),
