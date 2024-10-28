@@ -828,11 +828,19 @@ class SchemaNode(object):
         if isinstance(self, SchemaNodeInner):
             new_children = []
             for child in self.children:
+                if isinstance(child, Case):
+                    new_children.extend(child.get_dnode_children())
+                    continue
+                if isinstance(child, Choice):
+                    new_children.extend(child.get_dnode_children())
+                    continue
                 if isinstance(child, Grouping):
                     continue
                 if isinstance(child, Identity):
                     continue
                 if isinstance(child, Typedef):
+                    continue
+                if isinstance(child, Uses):
                     continue
                 new_children.append(child.to_dnode())
             return new_children
@@ -932,11 +940,19 @@ class SchemaNode(object):
             for child in self.children:
                 #child_namespace = child.ns
                 # TODO:
-                if isinstance(child, Anydata) and child.name == name:
+                if isinstance(child, Action) and child.name == name:
+                    return child
+                elif isinstance(child, Anydata) and child.name == name:
                     return child
                 elif isinstance(child, Anyxml) and child.name == name:
                     return child
+                elif isinstance(child, Case) and child.name == name:
+                    return child
+                elif isinstance(child, Choice) and child.name == name:
+                    return child
                 elif isinstance(child, Container) and child.name == name:
+                    return child
+                elif isinstance(child, Input) and name == 'input':
                     return child
                 elif isinstance(child, Leaf) and child.name == name:
                     return child
@@ -944,9 +960,20 @@ class SchemaNode(object):
                     return child
                 elif isinstance(child, List) and child.name == name:
                     return child
+                elif isinstance(child, Notification) and child.name == name:
+                    return child
+                elif isinstance(child, Output) and name == 'output':
+                    return child
+                elif isinstance(child, Rpc) and child.name == name:
+                    return child
+            # Check extension with argument
+            for ext in self.exts:
+                ext_arg = ext.arg
+                if ext_arg is not None and ext_arg == name:
+                    return ext
             raise ValueError("Child %s not found" % name)
 
-        raise ValueError("Unable to get child from non-inner node")
+        raise ValueError("Unable to get child %s from non-inner node" % name)
 
     def get_module(self) -> Module:
         """Get the Module for the local module
@@ -1038,13 +1065,9 @@ class SchemaNode(object):
                     target = get_target(target_base, aug.target_node)
                     if isinstance(target, SchemaNodeInner):
                         # Just move the child to the target
-                        new_children = aug.expand_children(context)
-                        target.children.extend(new_children)
-                        for new_child in new_children:
-                            new_child.ns = aug.get_namespace()
-                            new_child.parent = target
+                        aug.expand_children(context, target, new_ns=aug.get_namespace())
                     else:
-                        raise ValueError("Augment target is not an inner node")
+                        raise ValueError("Augment target " + str(target) + " is not an inner node")
 
         # Look if node is of a type that has augment substatements
         if isinstance(self, Module):
@@ -1056,34 +1079,23 @@ class SchemaNode(object):
         else:
             raise ValueError("Node type does not have augment substatements")
 
-    def expand_children(self, context: Context) -> list[SchemaNode]:
+    def expand_children(self, context: Context, target: SchemaNodeInner, new_ns: ?str = None):
         """Expand abstract children into concrete nodes
         """
         if isinstance(self, SchemaNodeInner):
-            res = []
             for child in self.children:
-                if isinstance(child, Case):
-                    new_children = child.expand_children(context)
-                    for new_child in new_children:
-                        new_child.parent = self
-                    res.extend(new_children)
-                elif isinstance(child, Choice):
-                    new_children = child.expand_children(context)
-                    for new_child in new_children:
-                        new_child.parent = self
-                    res.extend(new_children)
-                elif isinstance(child, Uses):
+                if isinstance(child, Uses):
                     grouping = child.get_grouping(_safe_name(child.name), context)
-                    grouping_children = grouping.expand_children(context)
-                    for new_child in grouping_children:
-                        new_child.parent = self
-                    res.extend(grouping_children)
-                    dummy = Container(name=grouping.name, children=res)
-                    child.expand_augments(context, dummy, in_uses=True)
+                    grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns)
+                    child.expand_augments(context, target, in_uses=True)
                 else:
-                    res.append(child.compile(context))
-            return res
-        raise ValueError("expand_children() called on non-inner node %s" % type(self))
+                    c_child = child.compile(context)
+                    c_child.parent = target
+                    if new_ns is not None:
+                        c_child.ns = new_ns
+                    target.children.append(c_child)
+        else:
+            raise ValueError("expand_children() called on non-inner node %s" % type(self))
 
     def get_module_by_prefix(self, prefix: str, context: Context) -> Module:
         """Get a Module from the import prefix in the local module"""
@@ -1166,6 +1178,7 @@ class Ext(SchemaNode):
     This is not the definition of an extension, e.g. the "extension" keyword,
     but an instance of an extension, like "foo:bar 'test';"
     """
+    prefix: str
     name: str
     arg: ?str
 
@@ -1202,6 +1215,10 @@ class Ext(SchemaNode):
         text_line = _ind(indent) + "Ext(" + args_text + ")"
         res.append(text_line)
         return "\n".join(res)
+
+    def __str__(self):
+        self_arg = self.arg
+        return "Ext " + self.name + ((" " + self_arg) if self_arg is not None else "")
 
 extension Ext (Ord):
     def __eq__(self, other: Ext) -> bool:
@@ -1848,17 +1865,40 @@ class Action(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
+    def get(self, name: str, ns: ?str=None) -> SchemaNode:
+        # TODO: support looking up qualified by namespace
+        #tns = ns if ns is not None else self.get_namespace()
+        if name == 'input':
+            _input = self.input
+            if _input is not None:
+                return _input
+        if name == 'output':
+            _output = self.output
+            if _output is not None:
+                return _output
+        return SchemaNode.get(self, name, ns)
+
     def compile(self, context: Context):
+        self_input = self.input
+        self_output = self.output
+        # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
+        new_input = None
+        if self_input is not None:
+            new_input = self_input.compile(context)
+        # new_output = self_output.compile(context) if self_output is not None else None # actonc codegen pre-evaluates before None-check
+        new_output = None
+        if self_output is not None:
+            new_output = self_output.compile(context)
         new = Action(self.name,
                      description=self.description,
                      if_feature=self.if_feature,
-                     input=self.input,
-                     output=self.output,
+                     input=new_input if new_input is not None and isinstance(new_input, Input) else Input(),
+                     output=new_output if new_output is not None and isinstance(new_output, Output) else Output(),
                      reference=self.reference,
                      status=self.status,
                      exts=self.exts,
-                     ns=self.ns,
-                     children=self.expand_children(context))
+                     ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -2127,8 +2167,8 @@ class Augment(SchemaNodeInner):
                       status=self.status,
                       when=self.when,
                       exts=self.exts,
-                      ns=self.ns,
-                      children=self.expand_children(context))
+                      ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -2347,8 +2387,8 @@ class Case(SchemaNodeInner):
                    status=self.status,
                    when=self.when,
                    exts=self.exts,
-                   ns=self.ns,
-                   children=self.expand_children(context))
+                   ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -2449,8 +2489,8 @@ class Choice(SchemaNodeInner):
                      status=self.status,
                      when=self.when,
                      exts=self.exts,
-                     ns=self.ns,
-                     children=self.expand_children(context))
+                     ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -2581,8 +2621,8 @@ class Container(SchemaNodeInner):
                         status=self.status,
                         when=self.when,
                         exts=self.exts,
-                        ns=self.ns,
-                        children=self.expand_children(context))
+                        ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -2874,8 +2914,8 @@ class Grouping(SchemaNodeInner):
                        reference=self.reference,
                        status=self.status,
                        exts=self.exts,
-                       ns=self.ns,
-                       children=self.expand_children(context))
+                       ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -3157,8 +3197,8 @@ class Input(SchemaNodeInner):
     def compile(self, context: Context):
         new = Input(must=self.must,
                     exts=self.exts,
-                    ns=self.ns,
-                    children=self.expand_children(context))
+                    ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -3671,8 +3711,8 @@ class List(SchemaNodeInner):
                    unique=self.unique,
                    when=self.when,
                    exts=self.exts,
-                   ns=self.ns,
-                   children=self.expand_children(context))
+                   ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -3868,8 +3908,8 @@ class Module(SchemaNodeInner):
                      reference=self.reference,
                      revision=self.revision,
                      yang_version=self.yang_version,
-                     exts=self.exts,
-                     children=self.expand_children(context))
+                     exts=self.exts)
+        self.expand_children(context, new)
         new.expand_augments(context)
         return new
 
@@ -4054,8 +4094,8 @@ class Notification(SchemaNodeInner):
                            reference=self.reference,
                            status=self.status,
                            exts=self.exts,
-                           ns=self.ns,
-                           children=self.expand_children(context))
+                           ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -4130,8 +4170,8 @@ class Output(SchemaNodeInner):
     def compile(self, context: Context):
         new = Output(must=self.must,
                      exts=self.exts,
-                     ns=self.ns,
-                     children=self.expand_children(context))
+                     ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -4526,17 +4566,40 @@ class Rpc(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
+    def get(self, name: str, ns: ?str=None) -> SchemaNode:
+        # TODO: support looking up qualified by namespace
+        #tns = ns if ns is not None else self.get_namespace()
+        if name == 'input':
+            _input = self.input
+            if _input is not None:
+                return _input
+        if name == 'output':
+            _output = self.output
+            if _output is not None:
+                return _output
+        return SchemaNode.get(self, name, ns)
+
     def compile(self, context: Context):
+        self_input = self.input
+        self_output = self.output
+        # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
+        new_input = None
+        if self_input is not None:
+            new_input = self_input.compile(context)
+        # new_output = self_output.compile(context) if self_output is not None else None # actonc codegen pre-evaluates before None-check
+        new_output = None
+        if self_output is not None:
+            new_output = self_output.compile(context)
         new = Rpc(self.name,
                   description=self.description,
                   if_feature=self.if_feature,
-                  input=self.input,
-                  output=self.output,
+                  input=new_input if new_input is not None and isinstance(new_input, Input) else Input(),
+                  output=new_output if new_output is not None and isinstance(new_output, Output) else Output(),
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  ns=self.ns,
-                  children=self.expand_children(context))
+                  ns=self.ns)
+        self.expand_children(context, new)
         return new
 
     def __str__(self):
@@ -4702,8 +4765,8 @@ class Submodule(SchemaNodeInner):
                         reference=self.reference,
                         revision=self.revision,
                         yang_version=self.yang_version,
-                        exts=self.exts,
-                        children=self.expand_children(context))
+                        exts=self.exts)
+        self.expand_children(context, new)
         new.expand_augments(context)
         return new
 
