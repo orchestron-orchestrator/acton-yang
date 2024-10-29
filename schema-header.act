@@ -230,7 +230,6 @@ class DNode(object):
     parent: ?DNode
     dname: str
     namespace: str
-    prefix: str
     name: str
     config: bool
     description: ?str
@@ -532,9 +531,8 @@ class DContainer(DNodeInner):
     must: list[Must]
     presence: bool
 
-    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "Container"
         self.config = config
@@ -548,6 +546,7 @@ class DContainer(DNodeInner):
         self.children = children
 
 class DModule(DNodeInner):
+    prefix: str
     augment: list[Augment]
     contact: ?str
     deviation: list[str]
@@ -595,9 +594,8 @@ class DList(DNodeInner):
     unique: list[str]
     when: ?str
 
-    def __init__(self, namespace: str, prefix: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
+    def __init__(self, namespace: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "List"
         self.key = key
@@ -619,9 +617,8 @@ class DLeaf(DNodeLeaf):
     default: ?str
     units: ?str
 
-    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "Leaf"
         self.config = config
@@ -651,9 +648,8 @@ class DLeafList(DNodeLeaf):
     ordered_by: str
     units: ?str
 
-    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=[], if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=[], if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "LeafList"
         self.config = config
@@ -673,9 +669,8 @@ class DLeafList(DNodeLeaf):
 
 class DNotification(DNodeInner):
 
-    def __init__(self, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
+    def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "Notification"
         self.description = description
@@ -686,7 +681,6 @@ class DNotification(DNodeInner):
 class DRoot(DNodeInner):
     def __init__(self, modules: list[DNode]=[]):
         self.namespace = ""
-        self.prefix = ""
         self.name = "root"
         self.dname = "Root"
         self.config = True
@@ -779,8 +773,7 @@ class Context(object):
 
 class SchemaNode(object):
     parent: ?SchemaNode
-    namespace: ?str
-    prefix: ?str
+    ns: ?str
     exts: list[Ext]
 
     def _get_argname(self) -> ?str:
@@ -819,7 +812,7 @@ class SchemaNode(object):
     def get_namespace(self) -> str:
         n = self
         for i in range(RECURSION_LIMIT+1):
-            nnamespace = n.namespace
+            nnamespace = n.ns
             if nnamespace is not None:
                 return nnamespace
             nparent = n.parent
@@ -828,20 +821,6 @@ class SchemaNode(object):
                 continue
             else:
                 raise ValueError("Unable to find namespace")
-            if i > RECURSION_LIMIT:
-                raise ValueError("Recursion limit reached")
-        raise ValueError("Unable to find namespace")
-
-    def get_prefix(self) -> str:
-        n = self
-        for i in range(RECURSION_LIMIT+1):
-            nprefix = n.prefix
-            if nprefix is not None:
-                return nprefix
-            nparent = n.parent
-            if nparent is not None:
-                n = nparent
-                continue
             if i > RECURSION_LIMIT:
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find namespace")
@@ -922,7 +901,7 @@ class SchemaNode(object):
         #tns = ns if ns is not None else self.get_namespace()
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
-                child_namespace = child.namespace
+                #child_namespace = child.ns
                 # TODO:
                 if isinstance(child, Anydata) and child.name == name:
                     return child
@@ -1033,7 +1012,7 @@ class SchemaNode(object):
                         new_children = aug.expand_children(context)
                         target.children.extend(new_children)
                         for new_child in new_children:
-                            new_child.namespace = aug.get_namespace()
+                            new_child.ns = aug.get_namespace()
                             new_child.parent = target
                     else:
                         raise ValueError("Augment target is not an inner node")

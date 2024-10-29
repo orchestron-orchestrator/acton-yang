@@ -225,7 +225,7 @@ def _attr_type(name, stmt, stmts) -> str:
 
     # TODO: change namespace and prefix cardinality to 1
     #if cardinality == "0..1":
-    if cardinality == "0..1" or name in {"namespace", "prefix"}:
+    if cardinality == "0..1":
         return "?" + t
     elif cardinality == "1":
         return t
@@ -258,7 +258,7 @@ def _attr_taker(name, stmt, stmts) -> str:
     elif name in {"fraction-digits", "length", "position"}:
         t = "int"
 
-    if cardinality == "0..1" or name in {"namespace", "prefix"}:
+    if cardinality == "0..1":
         if name in stmts:
             return "take_opt_%s(ss)" % t
         return "take_opt_%s(ss, \"%s\")" % (t, name)
@@ -277,7 +277,7 @@ def _attr_defval(name, stmt, stms) -> str:
     if name == stmt.argument_name:
         return ""
     cardinality = stmt.substmts[name].cardinality
-    if cardinality == "0..1" or name in {"namespace", "prefix"}:
+    if cardinality == "0..1":
         return "=None"
     elif name == "yang-version":
         return "=1.1"
@@ -321,7 +321,6 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DContainer:
         new_dnode = DContainer(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -355,17 +354,13 @@ snode_methods = {
 
 """,
         "get_namespace": """    def get_namespace(self) -> str:
+        self_ns = self.ns
+        if self_ns is not None:
+            return self_ns
         selfnamespace = self.namespace
         if selfnamespace is not None:
             return selfnamespace
         raise ValueError("Module %s has no namespace" % self.name)
-
-""",
-        "get_prefix": """    def get_prefix(self) -> str:
-        selfprefix = self.prefix
-        if selfprefix is not None:
-            return selfprefix
-        raise ValueError("Module %s has no prefix" % self.name)
 
 """,
         "get_revision": """    def get_revision(self) -> ?Revision:
@@ -379,7 +374,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DModule:
         new_dnode = DModule(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
+            prefix=self.prefix,
             name=self.name,
             description=self.description,
             revision=self.revision,
@@ -397,7 +392,6 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DNotification:
         new_dnode = DNotification(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
@@ -437,7 +431,6 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DList:
         new_dnode = DList(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             key=self.keys(),
             config=self.is_config(),
@@ -472,7 +465,6 @@ snode_methods = {
             new_units = base_typedef.units
 
         new = Leaf(self.name,
-                   namespace=self.namespace,
                    config=self.config,
                    default=new_default,
                    description=self.description,
@@ -484,14 +476,14 @@ snode_methods = {
                    type_=base_typedef.type_,
                    units=new_units,
                    when=self.when,
-                   exts=self.exts)
+                   exts=self.exts,
+                   ns=self.ns)
         return new
 
 """,
         "to_dnode": """    def to_dnode(self) -> DLeaf:
         return DLeaf(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -518,7 +510,6 @@ snode_methods = {
             new_units = base_typedef.units
 
         new = LeafList(self.name,
-                       namespace=self.namespace,
                        config=self.config,
                        default=self.default,
                        description=self.description,
@@ -532,7 +523,8 @@ snode_methods = {
                        type_=base_typedef.type_,
                        units=new_units,
                        when=self.when,
-                       exts=self.exts)
+                       exts=self.exts,
+                       ns=self.ns)
         return new
 
 """,
@@ -553,7 +545,6 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DLeafList:
         return DLeafList(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -725,8 +716,6 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("    \"\"\"")
 
         for attr in cattrs:
-            if attr in {"namespace", "prefix"}:
-                continue
             res.append("    %s: %s" % (_attr_name(attr), _attr_type(attr, stmt, stmts)))
 
 
@@ -750,19 +739,20 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         init_attrs.append("exts=[]")
         if have_children:
             init_attrs.append("children=[]")
-        if "namespace" not in set(cattrs):
-            init_attrs.append("namespace=None")
-        if "prefix" not in set(cattrs):
-            init_attrs.append("prefix=None")
         if "parent" not in set(cattrs):
             init_attrs.append("parent=None")
+        if "ns" not in set(cattrs):
+            init_attrs.append("ns=None")
         res.append("    def __init__(" + ", ".join(init_attrs) + "):")
         res.append("        self.parent = parent")
-        res.append("        new_ns = namespace")
-        res.append("        if new_ns is None and parent is not None:")
-        res.append("            new_ns = parent.namespace")
-        res.append("        self.namespace = new_ns")
-        res.append("        self.prefix = prefix")
+        res.append("        new_ns = ns")
+        if stmt_name == "module":
+            res.append("        if new_ns is None:")
+            res.append("            new_ns = namespace")
+        else:
+            res.append("        if new_ns is None and parent is not None:")
+            res.append("            new_ns = parent.ns")
+        res.append("        self.ns = new_ns")
 #        res.append("        self.cname = \"%s\"" % _class_name(stmt_name))
 #        res.append("        self.yname = \"%s\"" % stmt_name)
 
@@ -775,35 +765,24 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                     if substmt.cardinality == "0..1":
                         res.append("        if %s is not None:" % _attr_name(substmt.name))
                         res.append("            %s.parent = self" % _attr_name(substmt.name))
-                        res.append("            n_namespace = %s.namespace" % _attr_name(substmt.name))
-                        res.append("            if n_namespace is None:")
-                        res.append("                %s.namespace = self.namespace" % _attr_name(substmt.name))
-                        res.append("            n_prefix = %s.prefix" % _attr_name(substmt.name))
-                        res.append("            if n_prefix is None:")
-                        res.append("                %s.prefix = self.prefix" % _attr_name(substmt.name))
+                        res.append("            n_ns = %s.ns" % _attr_name(substmt.name))
+                        res.append("            if n_ns is None:")
+                        res.append("                %s.ns = self.ns" % _attr_name(substmt.name))
                     elif substmt.cardinality == "1":
                         res.append("        %s.parent = self" % _attr_name(substmt.name))
-                        res.append("        n_namespace = %s.namespace" % _attr_name(substmt.name))
-                        res.append("        if n_namespace is None:")
-                        res.append("            %s.namespace = self.namespace" % _attr_name(substmt.name))
-                        res.append("        n_prefix = %s.prefix" % _attr_name(substmt.name))
-                        res.append("        if n_prefix is None:")
-                        res.append("            %s.prefix = self.prefix" % _attr_name(substmt.name))
+                        res.append("        n_ns = %s.ns" % _attr_name(substmt.name))
+                        res.append("        if n_ns is None:")
+                        res.append("            %s.ns = self.ns" % _attr_name(substmt.name))
                     elif substmt.cardinality == "0..n":
                         res.append("        for n in %s:" % _attr_name(substmt.name))
                         res.append("            n.parent = self")
-                        res.append("            n_namespace = n.namespace")
-                        res.append("            if n_namespace is None:")
-                        res.append("                n.namespace = self.namespace")
-                        res.append("            n_prefix = n.prefix")
-                        res.append("            if n_prefix is None:")
-                        res.append("                n.prefix = self.prefix")
+                        res.append("            n_ns = n.ns")
+                        res.append("            if n_ns is None:")
+                        res.append("                n.ns = self.ns")
                     else:
                         raise ValueError("Unknown cardinality: %s" % substmt.cardinality)
 
         for substmt in stmt.substmts.values():
-            if substmt.name in {"namespace", "prefix"}:
-                continue
             if substmt.name not in child_stmts: # Attribute
                 res.append("        self.%s = %s" % (_attr_name(substmt.name), _attr_name(substmt.name)))
 
@@ -812,12 +791,9 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         if have_children:
             res.append("        for n in children:")
             res.append("            n.parent = self")
-            res.append("            n_namespace = n.namespace")
-            res.append("            if n_namespace is None:")
-            res.append("                n.namespace = self.namespace")
-            res.append("            n_prefix = n.prefix")
-            res.append("            if n_prefix is None:")
-            res.append("                n.prefix = self.prefix")
+            res.append("            n_ns = n.ns")
+            res.append("            if n_ns is None:")
+            res.append("                n.ns = self.ns")
             res.append("        self.children = children")
         res.append("")
 
@@ -880,8 +856,8 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 new_args += ["self." + _attr_name(arg_name)]
             new_args += list(map(lambda x: "%s=self.%s" % (_attr_name(x), _attr_name(x)), kwattrs))
             new_args.append("exts=self.exts")
-            if stmt_name != "module":
-                new_args.append("namespace=self.namespace")
+            if stmt_name not in {"module", "submodule"}:
+                new_args.append("ns=self.ns")
             if have_children:
                 new_args.append("children=self.expand_children(context)")
 
@@ -921,7 +897,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("    def __hash__(self):")
             res.append("        rev = self.get_revision()")
             res.append("        rev_str = rev.date if rev is not None else \"\"")
-            res.append("        return hash(self.get_namespace() + self.get_prefix() + rev_str)")
+            res.append("        return hash(self.get_namespace() + rev_str)")
             res.append("")
             res.append("    def __eq__(self, other: %s):" % _class_name(stmt_name))
             res.append("        return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))
