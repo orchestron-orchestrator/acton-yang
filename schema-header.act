@@ -345,6 +345,7 @@ class DNodeInner(DNode):
                     res.append("            self.%s = %s()" % (_safe_name(child.name), get_path_name(child)))
                 else:
                     res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
+                res.append("        self.%s._parent = self" % (_safe_name(child.name)))
             elif isinstance(child, DLeaf):
                 res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
             elif isinstance(child, DLeafList):
@@ -356,6 +357,7 @@ class DNodeInner(DNode):
                 res.append("            self.%s = []" % (_safe_name(child.name)))
             elif isinstance(child, DList):
                 res.append("        self.%s = %s(elements=%s)" % (_safe_name(child.name), get_path_name(child), _safe_name(child.name)))
+                res.append("        self.%s._parent = self" % (_safe_name(child.name)))
         if len(self.children) == 0:
             res.append("        pass")
         res.append("")
@@ -396,6 +398,8 @@ class DNodeInner(DNode):
                     res.append("            res.children['%s'] = self.%s.to_gdata()" % (child.name, _safe_name(child.name)))
                 elif isinstance(child, DList):
                     res.append("            res.children['%s'] = self.%s.to_gdata()" % (child.name, _safe_name(child.name)))
+        res.append("        for child in res.children.values():")
+        res.append("            child.parent = res")
         res.append("        return res")
         res.append("")
 #
