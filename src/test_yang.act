@@ -1453,6 +1453,33 @@ def _test_compile_submodules2():
     #testing.error("Expected ValueError")
 
 
+def _test_prdaclass_req_arg():
+    """Required arguments must come before optional arguments
+    """
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    list l1 {
+        key name;
+        leaf name {
+            type string;
+        }
+        leaf id {
+            type string;
+        }
+        container bar {
+            leaf hi {
+                type string;
+                mandatory true;
+            }
+        }
+    }
+}"""
+    root = yang.compile([ys_foo])
+    src = root.prdaclass(loose=True)
+    print(src)
+
 def _test_tofrom_gdata():
     # TODO: hmm, how to test this? I guess we need to first generate some data
     # classes from a yang schema... so first generate support in compiler?
@@ -1511,7 +1538,7 @@ myang3 = """container c1 {
 
 
 actor main(env):
-    _test_compile_augment_on_augment_across_modules()
+    _test_prdaclass_req_arg()
     await async env.exit(0)
 
     try:

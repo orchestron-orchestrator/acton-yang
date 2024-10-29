@@ -313,21 +313,26 @@ class DNodeInner(DNode):
             else:
                 raise ValueError("unreachable, unknown child type: " + str(type(child)))
         res.append("")
-        init_args = ["self"]
+        req_args = []
+        opt_args = []
         for child in self.children:
             if isinstance(child, DContainer):
                 if loose or child.presence or optional_subtree(child):
-                    init_args.append("%s: ?%s=None" % (_safe_name(child.name), get_path_name(child)))
+                    opt_args.append("%s: ?%s=None" % (_safe_name(child.name), get_path_name(child)))
                 else:
-                    init_args.append("%s: %s" % (_safe_name(child.name), get_path_name(child)))
+                    req_args.append("%s: %s" % (_safe_name(child.name), get_path_name(child)))
             elif isinstance(child, DLeaf):
-                init_args.append("%s: %s" % (_safe_name(child.name), yang_leaf_to_acton_type(child, loose)))
+                child_arg = "%s: %s" % (_safe_name(child.name), yang_leaf_to_acton_type(child, loose))
+                if is_optional_yang_leaf(child, loose):
+                    opt_args.append(child_arg)
+                else:
+                    req_args.append(child_arg)
             elif isinstance(child, DLeafList):
-                init_args.append("%s: ?%s=None" % (_safe_name(child.name), yang_leaflist_to_acton_type(child)))
+                opt_args.append("%s: ?%s=None" % (_safe_name(child.name), yang_leaflist_to_acton_type(child)))
             elif isinstance(child, DList):
-                init_args.append("%s: list[%s_entry]=[]" % (_safe_name(child.name), get_path_name(child)))
+                opt_args.append("%s: list[%s_entry]=[]" % (_safe_name(child.name), get_path_name(child)))
 
-        init_args_str = ", ".join(init_args)
+        init_args_str = ", ".join(["self"] + req_args + opt_args)
         res.append("    def __init__(%s):" % init_args_str)
 
         for child in self.children:
@@ -454,7 +459,7 @@ class DNodeInner(DNode):
                 if isinstance(child, DLeaf):
                     pass
                 elif isinstance(child, DContainer):
-                    if not (optional_subtree(child)):
+                    if not (loose or optional_subtree(child)):
                         list_key_args.append(_safe_name(child.name))
             list_create_args = ["self"] + list_key_args
             res.append("    def create(%s):" % (", ".join(list_create_args)))
@@ -1360,7 +1365,24 @@ def _prsrc_attrs(indent, attrs):
     return ", ".join(res)
 
 
+def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
+    optional = True
+    # Mandatory leaf in YANG model are non-optional in Acton
+    leafmandatory = leaf.mandatory
+    if leafmandatory is not None:
+        optional = not leafmandatory
+    # But with loose validation, even mandatory YANG leaves are optional!
+    if loose:
+        optional = True
+    # ... although being part of a key always makes it non-optional
+    parent = leaf.parent
+    if isinstance(parent, DList):
+        if leaf.name in parent.key:
+            optional = False
+    return optional
+
 def yang_leaf_to_acton_type(leaf: DNodeLeaf, loose: bool=False) -> str:
+    # TODO: use is_optiona_yang_leaf
     optional = True
     # Mandatory leaf in YANG model are non-optional in Acton
     leafmandatory = leaf.mandatory
@@ -1380,6 +1402,7 @@ def yang_leaf_to_acton_type(leaf: DNodeLeaf, loose: bool=False) -> str:
 
 def yang_leaf_to_getval(leaf: DNodeLeaf) -> str:
     # TODO: uh, do we need loose arg?
+    # TODO: use is_optiona_yang_leaf
     optional = True
     leafmandatory = leaf.mandatory
     if leafmandatory is not None:
