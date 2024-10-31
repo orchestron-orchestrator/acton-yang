@@ -227,7 +227,6 @@ class DNode(object):
     parent: ?DNode
     dname: str
     namespace: str
-    prefix: str
     name: str
     config: bool
     description: ?str
@@ -538,9 +537,8 @@ class DContainer(DNodeInner):
     must: list[Must]
     presence: bool
 
-    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "Container"
         self.config = config
@@ -554,6 +552,7 @@ class DContainer(DNodeInner):
         self.children = children
 
 class DModule(DNodeInner):
+    prefix: str
     augment: list[Augment]
     contact: ?str
     deviation: list[str]
@@ -601,9 +600,8 @@ class DList(DNodeInner):
     unique: list[str]
     when: ?str
 
-    def __init__(self, namespace: str, prefix: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
+    def __init__(self, namespace: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "List"
         self.key = key
@@ -625,9 +623,8 @@ class DLeaf(DNodeLeaf):
     default: ?str
     units: ?str
 
-    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "Leaf"
         self.config = config
@@ -657,9 +654,8 @@ class DLeafList(DNodeLeaf):
     ordered_by: str
     units: ?str
 
-    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=[], if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=[], if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "LeafList"
         self.config = config
@@ -679,9 +675,8 @@ class DLeafList(DNodeLeaf):
 
 class DNotification(DNodeInner):
 
-    def __init__(self, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
+    def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
-        self.prefix = prefix
         self.name = name
         self.dname = "Notification"
         self.description = description
@@ -692,7 +687,6 @@ class DNotification(DNodeInner):
 class DRoot(DNodeInner):
     def __init__(self, modules: list[DNode]=[]):
         self.namespace = ""
-        self.prefix = ""
         self.name = "root"
         self.dname = "Root"
         self.config = True
@@ -785,8 +779,7 @@ class Context(object):
 
 class SchemaNode(object):
     parent: ?SchemaNode
-    namespace: ?str
-    prefix: ?str
+    ns: ?str
     exts: list[Ext]
 
     def _get_argname(self) -> ?str:
@@ -825,7 +818,7 @@ class SchemaNode(object):
     def get_namespace(self) -> str:
         n = self
         for i in range(RECURSION_LIMIT+1):
-            nnamespace = n.namespace
+            nnamespace = n.ns
             if nnamespace is not None:
                 return nnamespace
             nparent = n.parent
@@ -834,20 +827,6 @@ class SchemaNode(object):
                 continue
             else:
                 raise ValueError("Unable to find namespace")
-            if i > RECURSION_LIMIT:
-                raise ValueError("Recursion limit reached")
-        raise ValueError("Unable to find namespace")
-
-    def get_prefix(self) -> str:
-        n = self
-        for i in range(RECURSION_LIMIT+1):
-            nprefix = n.prefix
-            if nprefix is not None:
-                return nprefix
-            nparent = n.parent
-            if nparent is not None:
-                n = nparent
-                continue
             if i > RECURSION_LIMIT:
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find namespace")
@@ -928,7 +907,7 @@ class SchemaNode(object):
         #tns = ns if ns is not None else self.get_namespace()
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
-                child_namespace = child.namespace
+                #child_namespace = child.ns
                 # TODO:
                 if isinstance(child, Anydata) and child.name == name:
                     return child
@@ -1039,7 +1018,7 @@ class SchemaNode(object):
                         new_children = aug.expand_children(context)
                         target.children.extend(new_children)
                         for new_child in new_children:
-                            new_child.namespace = aug.get_namespace()
+                            new_child.ns = aug.get_namespace()
                             new_child.parent = target
                     else:
                         raise ValueError("Augment target is not an inner node")
@@ -1784,29 +1763,22 @@ class Action(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         if input is not None:
             input.parent = self
-            n_namespace = input.namespace
-            if n_namespace is None:
-                input.namespace = self.namespace
-            n_prefix = input.prefix
-            if n_prefix is None:
-                input.prefix = self.prefix
+            n_ns = input.ns
+            if n_ns is None:
+                input.ns = self.ns
         if output is not None:
             output.parent = self
-            n_namespace = output.namespace
-            if n_namespace is None:
-                output.namespace = self.namespace
-            n_prefix = output.prefix
-            if n_prefix is None:
-                output.prefix = self.prefix
+            n_ns = output.ns
+            if n_ns is None:
+                output.ns = self.ns
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -1817,12 +1789,9 @@ class Action(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -1865,7 +1834,7 @@ class Action(SchemaNodeInner):
                      reference=self.reference,
                      status=self.status,
                      exts=self.exts,
-                     namespace=self.namespace,
+                     ns=self.ns,
                      children=self.expand_children(context))
         return new
 
@@ -1900,21 +1869,17 @@ class Anydata(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.config = config
         self.description = description
@@ -1960,7 +1925,7 @@ class Anydata(SchemaNodeOuter):
                       status=self.status,
                       when=self.when,
                       exts=self.exts,
-                      namespace=self.namespace)
+                      ns=self.ns)
         return new
 
     def __str__(self):
@@ -1994,21 +1959,17 @@ class Anyxml(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.config = config
         self.description = description
@@ -2054,7 +2015,7 @@ class Anyxml(SchemaNodeOuter):
                      status=self.status,
                      when=self.when,
                      exts=self.exts,
-                     namespace=self.namespace)
+                     ns=self.ns)
         return new
 
     def __str__(self):
@@ -2085,13 +2046,12 @@ class Augment(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, target_node: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, target_node: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.target_node = target_node
         self.description = description
         self.if_feature = if_feature
@@ -2101,12 +2061,9 @@ class Augment(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -2147,7 +2104,7 @@ class Augment(SchemaNodeInner):
                       status=self.status,
                       when=self.when,
                       exts=self.exts,
-                      namespace=self.namespace,
+                      ns=self.ns,
                       children=self.expand_children(context))
         return new
 
@@ -2173,15 +2130,16 @@ class BelongsTo(SchemaNodeOuter):
     https://tools.ietf.org/html/rfc7950#section-7.2.2
     """
     module: str
+    prefix: str
 
-    def __init__(self, module: str, prefix: ?str=None, exts=[], namespace=None, parent=None):
+    def __init__(self, module: str, prefix: str, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.module = module
+        self.prefix = prefix
         self.exts = exts
 
     def prsrc(self, indent=0):
@@ -2204,7 +2162,7 @@ class BelongsTo(SchemaNodeOuter):
         new = BelongsTo(self.module,
                         prefix=self.prefix,
                         exts=self.exts,
-                        namespace=self.namespace)
+                        ns=self.ns)
         return new
 
     def __str__(self):
@@ -2235,13 +2193,12 @@ class Bit(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], position: ?int=None, reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], position: ?int=None, reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2278,7 +2235,7 @@ class Bit(SchemaNodeOuter):
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  namespace=self.namespace)
+                  ns=self.ns)
         return new
 
     def __str__(self):
@@ -2309,13 +2266,12 @@ class Case(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2325,12 +2281,9 @@ class Case(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -2371,7 +2324,7 @@ class Case(SchemaNodeInner):
                    status=self.status,
                    when=self.when,
                    exts=self.exts,
-                   namespace=self.namespace,
+                   ns=self.ns,
                    children=self.expand_children(context))
         return new
 
@@ -2406,13 +2359,12 @@ class Choice(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.name = name
         self.config = config
         self.default = default
@@ -2425,12 +2377,9 @@ class Choice(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -2477,7 +2426,7 @@ class Choice(SchemaNodeInner):
                      status=self.status,
                      when=self.when,
                      exts=self.exts,
-                     namespace=self.namespace,
+                     ns=self.ns,
                      children=self.expand_children(context))
         return new
 
@@ -2512,21 +2461,17 @@ class Container(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], presence: ?str=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], presence: ?str=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.config = config
         self.description = description
@@ -2539,12 +2484,9 @@ class Container(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -2589,7 +2531,6 @@ class Container(SchemaNodeInner):
     def to_dnode(self) -> DContainer:
         new_dnode = DContainer(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -2617,7 +2558,7 @@ class Container(SchemaNodeInner):
                         status=self.status,
                         when=self.when,
                         exts=self.exts,
-                        namespace=self.namespace,
+                        ns=self.ns,
                         children=self.expand_children(context))
         return new
 
@@ -2649,13 +2590,12 @@ class Enum(SchemaNodeOuter):
     status: ?str
     value: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, value: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, value: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2692,7 +2632,7 @@ class Enum(SchemaNodeOuter):
                    status=self.status,
                    value=self.value,
                    exts=self.exts,
-                   namespace=self.namespace)
+                   ns=self.ns)
         return new
 
     def __str__(self):
@@ -2722,13 +2662,12 @@ class Extension(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, argument: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, argument: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.name = name
         self.argument = argument
         self.description = description
@@ -2762,7 +2701,7 @@ class Extension(SchemaNodeOuter):
                         reference=self.reference,
                         status=self.status,
                         exts=self.exts,
-                        namespace=self.namespace)
+                        ns=self.ns)
         return new
 
     def __str__(self):
@@ -2792,13 +2731,12 @@ class Feature(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2832,7 +2770,7 @@ class Feature(SchemaNodeOuter):
                       reference=self.reference,
                       status=self.status,
                       exts=self.exts,
-                      namespace=self.namespace)
+                      ns=self.ns)
         return new
 
     def __str__(self):
@@ -2861,13 +2799,12 @@ class Grouping(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.name = name
         self.description = description
         self.reference = reference
@@ -2875,12 +2812,9 @@ class Grouping(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -2917,7 +2851,7 @@ class Grouping(SchemaNodeInner):
                        reference=self.reference,
                        status=self.status,
                        exts=self.exts,
-                       namespace=self.namespace,
+                       ns=self.ns,
                        children=self.expand_children(context))
         return new
 
@@ -2949,13 +2883,12 @@ class Identity(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, base: list[str]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, base: list[str]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.name = name
         self.base = base
         self.description = description
@@ -2992,7 +2925,7 @@ class Identity(SchemaNodeOuter):
                        reference=self.reference,
                        status=self.status,
                        exts=self.exts,
-                       namespace=self.namespace)
+                       ns=self.ns)
         return new
 
     def __str__(self):
@@ -3018,18 +2951,19 @@ class Import(SchemaNodeOuter):
     """
     module: str
     description: ?str
+    prefix: str
     reference: ?str
     revision_date: ?str
 
-    def __init__(self, module: str, prefix: ?str=None, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], namespace=None, parent=None):
+    def __init__(self, module: str, prefix: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.module = module
         self.description = description
+        self.prefix = prefix
         self.reference = reference
         self.revision_date = revision_date
         self.exts = exts
@@ -3060,7 +2994,7 @@ class Import(SchemaNodeOuter):
                      reference=self.reference,
                      revision_date=self.revision_date,
                      exts=self.exts,
-                     namespace=self.namespace)
+                     ns=self.ns)
         return new
 
     def __str__(self):
@@ -3089,13 +3023,12 @@ class Include(SchemaNodeOuter):
     reference: ?str
     revision_date: ?str
 
-    def __init__(self, module: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, module: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.module = module
         self.description = description
         self.reference = reference
@@ -3126,7 +3059,7 @@ class Include(SchemaNodeOuter):
                       reference=self.reference,
                       revision_date=self.revision_date,
                       exts=self.exts,
-                      namespace=self.namespace)
+                      ns=self.ns)
         return new
 
     def __str__(self):
@@ -3152,31 +3085,24 @@ class Input(SchemaNodeInner):
     """
     must: list[Must]
 
-    def __init__(self, must: list[Must]=[], exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, must: list[Must]=[], exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.must = must
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -3208,7 +3134,7 @@ class Input(SchemaNodeInner):
     def compile(self, context: Context):
         new = Input(must=self.must,
                     exts=self.exts,
-                    namespace=self.namespace,
+                    ns=self.ns,
                     children=self.expand_children(context))
         return new
 
@@ -3246,28 +3172,21 @@ class Leaf(SchemaNodeOuter):
     units: ?str
     when: ?str
 
-    def __init__(self, name: str, type_: Type, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, type_: Type, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         type_.parent = self
-        n_namespace = type_.namespace
-        if n_namespace is None:
-            type_.namespace = self.namespace
-        n_prefix = type_.prefix
-        if n_prefix is None:
-            type_.prefix = self.prefix
+        n_ns = type_.ns
+        if n_ns is None:
+            type_.ns = self.ns
         self.name = name
         self.config = config
         self.default = default
@@ -3320,7 +3239,6 @@ class Leaf(SchemaNodeOuter):
             new_units = base_typedef.units
 
         new = Leaf(self.name,
-                   namespace=self.namespace,
                    config=self.config,
                    default=new_default,
                    description=self.description,
@@ -3332,13 +3250,13 @@ class Leaf(SchemaNodeOuter):
                    type_=base_typedef.type_,
                    units=new_units,
                    when=self.when,
-                   exts=self.exts)
+                   exts=self.exts,
+                   ns=self.ns)
         return new
 
     def to_dnode(self) -> DLeaf:
         return DLeaf(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -3389,28 +3307,21 @@ class LeafList(SchemaNodeOuter):
     units: ?str
     when: ?str
 
-    def __init__(self, name: str, type_: Type, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, type_: Type, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         type_.parent = self
-        n_namespace = type_.namespace
-        if n_namespace is None:
-            type_.namespace = self.namespace
-        n_prefix = type_.prefix
-        if n_prefix is None:
-            type_.prefix = self.prefix
+        n_ns = type_.ns
+        if n_ns is None:
+            type_.ns = self.ns
         self.name = name
         self.config = config
         self.default = default
@@ -3463,7 +3374,6 @@ class LeafList(SchemaNodeOuter):
             new_units = base_typedef.units
 
         new = LeafList(self.name,
-                       namespace=self.namespace,
                        config=self.config,
                        default=self.default,
                        description=self.description,
@@ -3477,7 +3387,8 @@ class LeafList(SchemaNodeOuter):
                        type_=base_typedef.type_,
                        units=new_units,
                        when=self.when,
-                       exts=self.exts)
+                       exts=self.exts,
+                       ns=self.ns)
         return new
 
     def get_max_elements(self) -> ?int:
@@ -3495,7 +3406,6 @@ class LeafList(SchemaNodeOuter):
     def to_dnode(self) -> DLeafList:
         return DLeafList(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -3538,13 +3448,12 @@ class Length(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
@@ -3578,7 +3487,7 @@ class Length(SchemaNodeOuter):
                      error_message=self.error_message,
                      reference=self.reference,
                      exts=self.exts,
-                     namespace=self.namespace)
+                     ns=self.ns)
         return new
 
     def __str__(self):
@@ -3616,21 +3525,17 @@ class List(SchemaNodeInner):
     unique: list[str]
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], key: ?str=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, unique: list[str]=[], when: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], key: ?str=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, unique: list[str]=[], when: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.config = config
         self.description = description
@@ -3647,12 +3552,9 @@ class List(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -3713,7 +3615,6 @@ class List(SchemaNodeInner):
     def to_dnode(self) -> DList:
         new_dnode = DList(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             key=self.keys(),
             config=self.is_config(),
@@ -3747,7 +3648,7 @@ class List(SchemaNodeInner):
                    unique=self.unique,
                    when=self.when,
                    exts=self.exts,
-                   namespace=self.namespace,
+                   ns=self.ns,
                    children=self.expand_children(context))
         return new
 
@@ -3781,66 +3682,49 @@ class Module(SchemaNodeInner):
     feature: list[Feature]
     import_: list[Import]
     include: list[Include]
+    namespace: str
     organization: ?str
+    prefix: str
     reference: ?str
     revision: list[Revision]
     yang_version: float
 
-    def __init__(self, name: str, namespace: ?str=None, prefix: ?str=None, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None):
+    def __init__(self, name: str, namespace: str, prefix: str, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
-        if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+        new_ns = ns
+        if new_ns is None:
+            new_ns = namespace
+        self.ns = new_ns
         for n in augment:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in extension_:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in feature:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in import_:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in include:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in revision:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.augment = augment
         self.contact = contact
@@ -3850,19 +3734,18 @@ class Module(SchemaNodeInner):
         self.feature = feature
         self.import_ = import_
         self.include = include
+        self.namespace = namespace
         self.organization = organization
+        self.prefix = prefix
         self.reference = reference
         self.revision = revision
         self.yang_version = yang_version
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -3916,16 +3799,13 @@ class Module(SchemaNodeInner):
         return ModRev(self.name, rev_date)
 
     def get_namespace(self) -> str:
+        self_ns = self.ns
+        if self_ns is not None:
+            return self_ns
         selfnamespace = self.namespace
         if selfnamespace is not None:
             return selfnamespace
         raise ValueError("Module %s has no namespace" % self.name)
-
-    def get_prefix(self) -> str:
-        selfprefix = self.prefix
-        if selfprefix is not None:
-            return selfprefix
-        raise ValueError("Module %s has no prefix" % self.name)
 
     def get_revision(self) -> ?Revision:
         latest = None
@@ -3937,7 +3817,7 @@ class Module(SchemaNodeInner):
     def to_dnode(self) -> DModule:
         new_dnode = DModule(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
+            prefix=self.prefix,
             name=self.name,
             description=self.description,
             revision=self.revision,
@@ -3983,7 +3863,7 @@ extension Module (Hashable):
     def __hash__(self):
         rev = self.get_revision()
         rev_str = rev.date if rev is not None else ""
-        return hash(self.get_namespace() + self.get_prefix() + rev_str)
+        return hash(self.get_namespace() + rev_str)
 
     def __eq__(self, other: Module):
         return self.name == other.name and self.augment == other.augment and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension_ == other.extension_ and self.feature == other.feature and self.import_ == other.import_ and self.include == other.include and self.namespace == other.namespace and self.organization == other.organization and self.prefix == other.prefix and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
@@ -4003,13 +3883,12 @@ class Must(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, condition: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, condition: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.condition = condition
         self.description = description
         self.error_app_tag = error_app_tag
@@ -4043,7 +3922,7 @@ class Must(SchemaNodeOuter):
                    error_message=self.error_message,
                    reference=self.reference,
                    exts=self.exts,
-                   namespace=self.namespace)
+                   ns=self.ns)
         return new
 
     def __str__(self):
@@ -4074,21 +3953,17 @@ class Notification(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -4098,12 +3973,9 @@ class Notification(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -4139,7 +4011,6 @@ class Notification(SchemaNodeInner):
     def to_dnode(self) -> DNotification:
         new_dnode = DNotification(
             namespace=self.get_namespace(),
-            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
@@ -4160,7 +4031,7 @@ class Notification(SchemaNodeInner):
                            reference=self.reference,
                            status=self.status,
                            exts=self.exts,
-                           namespace=self.namespace,
+                           ns=self.ns,
                            children=self.expand_children(context))
         return new
 
@@ -4187,31 +4058,24 @@ class Output(SchemaNodeInner):
     """
     must: list[Must]
 
-    def __init__(self, must: list[Must]=[], exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, must: list[Must]=[], exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.must = must
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -4243,7 +4107,7 @@ class Output(SchemaNodeInner):
     def compile(self, context: Context):
         new = Output(must=self.must,
                      exts=self.exts,
-                     namespace=self.namespace,
+                     ns=self.ns,
                      children=self.expand_children(context))
         return new
 
@@ -4275,13 +4139,12 @@ class Pattern(SchemaNodeOuter):
     modifier: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, modifier: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, modifier: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
@@ -4318,7 +4181,7 @@ class Pattern(SchemaNodeOuter):
                       modifier=self.modifier,
                       reference=self.reference,
                       exts=self.exts,
-                      namespace=self.namespace)
+                      ns=self.ns)
         return new
 
     def __str__(self):
@@ -4348,13 +4211,12 @@ class Range(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
@@ -4388,7 +4250,7 @@ class Range(SchemaNodeOuter):
                     error_message=self.error_message,
                     reference=self.reference,
                     exts=self.exts,
-                    namespace=self.namespace)
+                    ns=self.ns)
         return new
 
     def __str__(self):
@@ -4424,21 +4286,17 @@ class Refine(SchemaNodeOuter):
     presence: ?str
     reference: ?str
 
-    def __init__(self, target_node: str, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], presence: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, target_node: str, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], presence: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in must:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.target_node = target_node
         self.config = config
         self.default = default
@@ -4490,7 +4348,7 @@ class Refine(SchemaNodeOuter):
                      presence=self.presence,
                      reference=self.reference,
                      exts=self.exts,
-                     namespace=self.namespace)
+                     ns=self.ns)
         return new
 
     def __str__(self):
@@ -4518,13 +4376,12 @@ class Revision(SchemaNodeOuter):
     description: ?str
     reference: ?str
 
-    def __init__(self, date: str, description: ?str=None, reference: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, date: str, description: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         self.date = date
         self.description = description
         self.reference = reference
@@ -4552,7 +4409,7 @@ class Revision(SchemaNodeOuter):
                        description=self.description,
                        reference=self.reference,
                        exts=self.exts,
-                       namespace=self.namespace)
+                       ns=self.ns)
         return new
 
     def __str__(self):
@@ -4584,29 +4441,22 @@ class Rpc(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         if input is not None:
             input.parent = self
-            n_namespace = input.namespace
-            if n_namespace is None:
-                input.namespace = self.namespace
-            n_prefix = input.prefix
-            if n_prefix is None:
-                input.prefix = self.prefix
+            n_ns = input.ns
+            if n_ns is None:
+                input.ns = self.ns
         if output is not None:
             output.parent = self
-            n_namespace = output.namespace
-            if n_namespace is None:
-                output.namespace = self.namespace
-            n_prefix = output.prefix
-            if n_prefix is None:
-                output.prefix = self.prefix
+            n_ns = output.ns
+            if n_ns is None:
+                output.ns = self.ns
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -4617,12 +4467,9 @@ class Rpc(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -4665,7 +4512,7 @@ class Rpc(SchemaNodeInner):
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  namespace=self.namespace,
+                  ns=self.ns,
                   children=self.expand_children(context))
         return new
 
@@ -4705,68 +4552,46 @@ class Submodule(SchemaNodeInner):
     revision: list[Revision]
     yang_version: float
 
-    def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in augment:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         belongs_to.parent = self
-        n_namespace = belongs_to.namespace
-        if n_namespace is None:
-            belongs_to.namespace = self.namespace
-        n_prefix = belongs_to.prefix
-        if n_prefix is None:
-            belongs_to.prefix = self.prefix
+        n_ns = belongs_to.ns
+        if n_ns is None:
+            belongs_to.ns = self.ns
         for n in extension_:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in feature:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in import_:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in include:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in revision:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.augment = augment
         self.belongs_to = belongs_to
@@ -4784,12 +4609,9 @@ class Submodule(SchemaNodeInner):
         self.exts = exts
         for n in children:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.children = children
 
     def prsrc(self, indent=0):
@@ -4858,7 +4680,6 @@ class Submodule(SchemaNodeInner):
                         revision=self.revision,
                         yang_version=self.yang_version,
                         exts=self.exts,
-                        namespace=self.namespace,
                         children=self.expand_children(context))
         new.expand_augments(context)
         return new
@@ -4896,61 +4717,42 @@ class Type(SchemaNodeOuter):
     require_instance: ?bool
     type_: list[Type]
 
-    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in bit:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in enum:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         if length is not None:
             length.parent = self
-            n_namespace = length.namespace
-            if n_namespace is None:
-                length.namespace = self.namespace
-            n_prefix = length.prefix
-            if n_prefix is None:
-                length.prefix = self.prefix
+            n_ns = length.ns
+            if n_ns is None:
+                length.ns = self.ns
         for n in pattern:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         if range_ is not None:
             range_.parent = self
-            n_namespace = range_.namespace
-            if n_namespace is None:
-                range_.namespace = self.namespace
-            n_prefix = range_.prefix
-            if n_prefix is None:
-                range_.prefix = self.prefix
+            n_ns = range_.ns
+            if n_ns is None:
+                range_.ns = self.ns
         for n in type_:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.base = base
         self.bit = bit
@@ -5038,7 +4840,7 @@ class Type(SchemaNodeOuter):
                    require_instance=self.require_instance,
                    type_=self.type_,
                    exts=self.exts,
-                   namespace=self.namespace)
+                   ns=self.ns)
         return new
 
     def __str__(self):
@@ -5070,20 +4872,16 @@ class Typedef(SchemaNodeOuter):
     type_: Type
     units: ?str
 
-    def __init__(self, name: str, type_: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, type_: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         type_.parent = self
-        n_namespace = type_.namespace
-        if n_namespace is None:
-            type_.namespace = self.namespace
-        n_prefix = type_.prefix
-        if n_prefix is None:
-            type_.prefix = self.prefix
+        n_ns = type_.ns
+        if n_ns is None:
+            type_.ns = self.ns
         self.name = name
         self.default = default
         self.description = description
@@ -5165,29 +4963,22 @@ class Uses(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, augment: list[Augment]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, refine: list[Refine]=[], status: ?str=None, when: ?str=None, exts=[], namespace=None, prefix=None, parent=None):
+    def __init__(self, name: str, augment: list[Augment]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, refine: list[Refine]=[], status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
         self.parent = parent
-        new_ns = namespace
+        new_ns = ns
         if new_ns is None and parent is not None:
-            new_ns = parent.namespace
-        self.namespace = new_ns
-        self.prefix = prefix
+            new_ns = parent.ns
+        self.ns = new_ns
         for n in augment:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         for n in refine:
             n.parent = self
-            n_namespace = n.namespace
-            if n_namespace is None:
-                n.namespace = self.namespace
-            n_prefix = n.prefix
-            if n_prefix is None:
-                n.prefix = self.prefix
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
         self.name = name
         self.augment = augment
         self.description = description
@@ -5930,7 +5721,7 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
     if stmt.kw == "belongs-to":
         if arg is not None:
             n = BelongsTo(arg,
-                          prefix=take_opt_str(ss, "prefix"),
+                          prefix=take_str(ss, "prefix"),
                           exts=take_exts(ss),
                           parent=parent
                           )
@@ -6093,7 +5884,7 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
         if arg is not None:
             n = Import(arg,
                        description=take_opt_str(ss, "description"),
-                       prefix=take_opt_str(ss, "prefix"),
+                       prefix=take_str(ss, "prefix"),
                        reference=take_opt_str(ss, "reference"),
                        revision_date=take_opt_str(ss, "revision-date"),
                        exts=take_exts(ss),
@@ -6226,9 +6017,9 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
                        feature=take_features(ss),
                        import_=take_imports(ss),
                        include=take_includes(ss),
-                       namespace=take_opt_str(ss, "namespace"),
+                       namespace=take_str(ss, "namespace"),
                        organization=take_opt_str(ss, "organization"),
-                       prefix=take_opt_str(ss, "prefix"),
+                       prefix=take_str(ss, "prefix"),
                        reference=take_opt_str(ss, "reference"),
                        revision=take_revisions(ss),
                        yang_version=take_yang_version(ss),
