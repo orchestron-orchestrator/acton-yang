@@ -2,61 +2,165 @@
 import yang.parser
 import yang.schema
 
+def eq_optional[T(Eq)](a: ?T, b: ?T) -> bool:
+    return a is not None and b is not None and a == b or a is None and b is None
+
+def optional_str[T](v: ?T, default: str = "None") -> str:
+    return str(v) if v is not None else default
+
+class NameRevMap[T](object):
+    items: dict[str, (?str, T)]
+
+    def __init__(self):
+        self.items = {}
+
+    def add(self, name: str, revision: ?str, val: T):
+        try:
+            old_revision, old_val = self.items[name]
+        except KeyError:
+            pass
+        else:
+            if not eq_optional(revision, old_revision):
+                raise ValueError("Another revision of item " + name + "alread present, old: " + optional_str(old_revision) + ", new: " + optional_str(revision))
+        self.items[name] = (revision, val)
+
+    def get(self, name: str, revision: ?str = None) -> T:
+        actual_revision, val = self.items[name]
+        if revision is not None and revision != actual_revision:
+            raise ValueError("Mismatching revision requested: " + optional_str(revision) + ", actual: " + optional_str(actual_revision))
+        return val
+
+    def pop(self, name: str, revision: ?str = None) -> T:
+        val = self.get(name, revision)
+        del self.items[name]
+        return val
+
+    def pop_any(self) -> T:
+        _n, (_r, val) = self.items.popitem()
+        return val
+
+extension NameRevMap[T](Collection[(str, (?str, T))]):
+    def __iter__(self) -> Iterator[(str, (?str, T))]:
+        return self.items.items()
+
+    @staticmethod
+    def __fromiter__(iterable):
+        # actonc: mut must be a subclass of pure
+        # new = NameRevMap()
+        # for name, (revision, item) in iterable:
+        #     new.add(name, revision, item)
+        # return new
+        raise NotImplementedError()
+
+    def __len__(self) -> int:
+        return len(self.items)
 
 def compile(yang_sources: list[str]) -> yang.schema.DRoot:
     ctx = yang.schema.Context()
-    modules: dict[yang.schema.ModRev, yang.schema.Module] = {}
-    submodules: dict[yang.schema.ModRev, yang.schema.Submodule] = {}
+    modules: NameRevMap[yang.schema.Module] = NameRevMap()
+    submodules: NameRevMap[yang.schema.Submodule] = NameRevMap()
 
     for yang_source in yang_sources:
         yang_module = yang.schema.stmt_to_snode(yang.parser.parse(yang_source))
         if isinstance(yang_module, yang.schema.Module):
-            modules[yang_module.get_modrev()] = yang_module
-            #ctx.add_module(yang_module)
+            modrev = yang_module.get_modrev()
+            modules.add(modrev.modname, modrev.rev, yang_module)
         elif isinstance(yang_module, yang.schema.Submodule):
-            submodules[yang_module.get_modrev()] = yang_module
-            #ctx.add_submodule(yang_module)
+            modrev = yang_module.get_modrev()
+            submodules.add(modrev.modname, modrev.rev, yang_module)
 
     # merge submodules into their main module
-    for m in modules.values():
+    for _n, (_r, m) in modules:
+        combined_import_prefixes: NameRevMap[str] = NameRevMap()
+        print("Module: " + m.name)
+        for import_ in m.import_:
+            print("  Import: " + import_.module)
+            combined_import_prefixes.add(import_.module, import_.revision_date, import_.prefix)
+
         for include in m.include:
-            submodrev = yang.schema.ModRev(include.module, include.revision_date)
-            submod = submodules[submodrev]
-            m.augment.extend(submod.augment)
-            # discard contact
-            # discard description
-            m.deviation.extend(submod.deviation)
-            m.extension_.extend(submod.extension_)
-            m.feature.extend(submod.feature)
-            m.import_.extend(submod.import_)
-            # ignore include
-            # TODO: we can safely ignore include, right? like the main module MUST list all submodules, riiiight?
-            # discard organization
-            # discard reference
-            # discard revision
-            m.exts.extend(submod.exts)
-            m.children.extend(submod.children)
-
-    def deps_done(m: yang.schema.Module, ctx: yang.schema.Context) -> bool:
-        for imp in m.import_:
             try:
-                dep = ctx.get_module(imp.module, imp.revision_date)
-            except ValueError:
-                return False
-        return True
+                submod = submodules.get(include.module, include.revision_date)
+            except KeyError:
+                raise ValueError(m.name + " - submodule " + include.module + "not found.")
+            else:
+                if submod.belongs_to.prefix != m.prefix:
+                    # TODO: Remap submodule children to parent prefix, or shift to global namespace?
+                    raise NotImplementedError("Submodule alias to parent module prefix")
 
-    # We need to compile all modules but should do so in order of dependencies,
-    # so we iteratively compile modules that have all their dependencies compiled
-    to_compile = set(modules.values())
-    while len(to_compile) > 0:
-        for m in to_compile:
-            if deps_done(m, ctx):
-                mc = m.compile(ctx)
-                if isinstance(mc, yang.schema.Module):
-                    ctx.add_module(mc)
+                for sub_import in submod.import_:
+                    try:
+                        import_prefix = combined_import_prefixes.get(sub_import.module, sub_import.revision_date)
+                    except KeyError:
+                        # New import
+                        combined_import_prefixes.add(sub_import.module, sub_import.revision_date, sub_import.prefix)
+
+                        new_import = yang.schema.Import(sub_import.module,
+                                                        description=sub_import.description,
+                                                        prefix=sub_import.prefix,
+                                                        reference=sub_import.reference,
+                                                        revision_date=sub_import.revision_date,
+                                                        exts=sub_import.exts,
+                                                        ns=sub_import.ns,
+                                                        parent=m)
+
+                        m.import_.append(new_import)
+                    else:
+                        if sub_import.prefix != import_prefix:
+                            # TODO: Handle import of same module under different prefixes by combined module/submodules
+                            #       E.g. remap submodule children to parent prefix, or shift to global namespace?
+                            raise NotImplementedError("Module/submodule with multiple import prefix to same module")
+                        # else: # Duplicate import. We're fine!
+
+                for c in submod.children:
+                    # TODO: Align submodule-local import prefixes to parent module imports
+                    # Attach subtree to parent module
+                    c.parent = m
+                    c.ns = m.get_namespace()
+                    m.children.append(c)
+
+                m.augment.extend(submod.augment)
+                # discard contact
+                # discard description
+                m.deviation.extend(submod.deviation)
+                m.extension_.extend(submod.extension_)
+                # discard organization
+                # discard reference
+                # discard revision
+                m.feature.extend(submod.feature)
+                m.exts.extend(submod.exts)
+
+        m.include = []
+
+        # Compile in dependency by import depth-first search
+        build_stack: list[(yang.schema.Module, list[yang.schema.Import])] = []
+        while True:
+            if len(build_stack) > 0:
+                m, unresolved_imports = build_stack.pop()
+                if len(unresolved_imports) > 0:
+                    # Push first remaining import to build stack
+                    m_import = unresolved_imports.pop()
+                    build_stack.append((m, unresolved_imports))
+                    try:
+                        imported_module = modules.pop(m_import.module, m_import.revision_date)
+                    except KeyError:
+                        pass # Import either already processed, missing or cyclic
+                    else:
+                        build_stack.append((imported_module, list(imported_module.import_)))
                 else:
-                    raise ValueError("Expected a Module, got a %s" % type(mc))
-                to_compile.discard(m)
+                    try:
+                        mc = m.compile(ctx)
+                    except Exception as ex:
+                        raise ValueError(m.name + " - Compile - Failed: " + ex.error_message)
+                    else:
+                        if isinstance(mc, yang.schema.Module):
+                            ctx.add_module(mc)
+                        else:
+                            raise ValueError(m.name + " - Compile - Failed: not a module")
+            elif len(modules) > 0:
+                m = modules.pop_any()
+                build_stack.append((m, list(m.import_)))
+            else:
+                break
 
     dnodes = []
     for mod_rev, m in ctx.modules.items():
