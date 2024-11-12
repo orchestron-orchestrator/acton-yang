@@ -374,15 +374,24 @@ class DNodeInner(DNode):
             res.append("        pass")
         res.append("")
 
-#        # == .create_XXX() methods
-#        for child in self.children:
-#            if isinstance(child, Container) and child.is_presence():
-#                res.append("    def create_%s(self):" % (_safe_name(child.name)))
-#                res.append("        _%s = %s()" % (_safe_name(child.name), get_path_name(child)))
-#                res.append("        self.%s = _%s" % (_safe_name(child.name), _safe_name(child.name)))
-#                res.append("        return _%s" % (_safe_name(child.name)))
-#                res.append("")
-#        res.append("")
+        # Handle all P-container children, we want a .create_XXX() method
+        # for each that takes as arguments the mandatory children of the
+        # container
+        for child in self.children:
+            if isinstance(child, DContainer) and child.presence:
+                pc_args = ["self"]
+                for cchild in child.children:
+                    if isinstance(cchild, DLeaf):
+                        if cchild.mandatory:
+                            pc_args.append(_safe_name(cchild.name))
+                    elif isinstance(cchild, DContainer):
+                        if not (loose or optional_subtree(cchild)):
+                            pc_args.append(_safe_name(cchild.name))
+                res.append("    def create_%s(%s):" % (_safe_name(child.name), ", ".join(pc_args)))
+                res.append("        res = %s(%s)" % (get_path_name(child), ", ".join(pc_args[1:])))
+                res.append("        self.%s = res" % (_safe_name(child.name)))
+                res.append("        return res")
+                res.append("")
 
         # .to_gdata()
         res.append("    def to_gdata(self) -> yang.gdata.Node:")
