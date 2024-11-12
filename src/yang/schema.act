@@ -299,11 +299,17 @@ class DNodeInner(DNode):
             res.append("class %s_entry(yang.adata.MNode):" % get_path_name(self))
         else:
             res.append("class %s(yang.adata.MNode):" % get_path_name(self))
+
         for child in self.children:
             if isinstance(child, DLeaf):
                 res.append("    %s: %s" % (_safe_name(child.name), yang_leaf_to_acton_type(child, loose)))
             elif isinstance(child, DLeafList):
                 res.append("    %s: %s" % (_safe_name(child.name), yang_leaflist_to_acton_type(child)))
+            elif isinstance(child, DContainer):
+                if child.presence:
+                    res.append("    %s: ?%s" % (_safe_name(child.name), get_path_name(child)))
+                else:
+                    res.append("    %s: %s" % (_safe_name(child.name), get_path_name(child)))
             elif isinstance(child, DNodeInner):
                 res.append("    %s: %s" % (_safe_name(child.name), get_path_name(child)))
             else:
@@ -333,15 +339,21 @@ class DNodeInner(DNode):
 
         for child in self.children:
             if isinstance(child, DContainer):
-                # TODO: presence?
-                if loose or child.presence or optional_subtree(child):
+                if loose or optional_subtree(child):
                     res.append("        if %s is not None:" % (_safe_name(child.name)))
                     res.append("            self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
                     res.append("        else:")
                     res.append("            self.%s = %s()" % (_safe_name(child.name), get_path_name(child)))
                 else:
+                    # NOTE: the default argument for P-container is None, so
+                    # although unconditionally set here, it can be None
                     res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
-                res.append("        self.%s._parent = self" % (_safe_name(child.name)))
+                if loose or child.presence or optional_subtree(child):
+                    res.append("        self_%s = self.%s" % (_safe_name(child.name), _safe_name(child.name)))
+                    res.append("        if self_%s is not None:" % (_safe_name(child.name)))
+                    res.append("            self_%s._parent = self" % (_safe_name(child.name)))
+                else:
+                    res.append("        self.%s._parent = self" % (_safe_name(child.name)))
             elif isinstance(child, DLeaf):
                 res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
             elif isinstance(child, DLeafList):
@@ -391,9 +403,9 @@ class DNodeInner(DNode):
                 if isinstance(child, DLeaf):
                     res.append("            res.children['%s'] = yang.gdata.Leaf('%s', _%s)" % (child.name, child.name, _safe_name(child.name)))
                 elif isinstance(child, DContainer):
-                    res.append("            res.children['%s'] = self.%s.to_gdata()" % (child.name, _safe_name(child.name)))
+                    res.append("            res.children['%s'] = _%s.to_gdata()" % (child.name, _safe_name(child.name)))
                 elif isinstance(child, DList):
-                    res.append("            res.children['%s'] = self.%s.to_gdata()" % (child.name, _safe_name(child.name)))
+                    res.append("            res.children['%s'] = _%s.to_gdata()" % (child.name, _safe_name(child.name)))
         res.append("        for child in res.children.values():")
         res.append("            child.parent = res")
         res.append("        return res")

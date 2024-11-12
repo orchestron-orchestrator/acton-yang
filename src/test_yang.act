@@ -1481,6 +1481,12 @@ def _test_compile_submodules2():
 
 def _test_prdaclass_req_arg():
     """Required arguments must come before optional arguments
+
+    For list l1 we generate a create() that takes some args, primarily the list
+    key but also other args. The default argument ordering is based on the
+    lexical ordering. Since the bar container has a mandatory leaf, it is
+    mandatory and needs to be a required argument which should all go before the
+    optional args that have a default value.
     """
     ys_foo = """module foo {
     yang-version "1.1";
@@ -1504,7 +1510,48 @@ def _test_prdaclass_req_arg():
 }"""
     root = yang.compile([ys_foo])
     src = root.prdaclass(loose=True)
-    print(src)
+    return src
+
+def _test_prdaclass_loose_p_container_with_mandatory_leaf():
+    ys = """module foo {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+  container foo {
+    presence "foo presence";
+    container bar {
+      presence "bar presence";
+      leaf l1 {
+        type string;
+        mandatory true;
+      }
+    }
+  }
+}"""
+    root = yang.compile([ys])
+    bar = root.get("foo")
+    src = bar.prdaclass(loose=True, top=False)
+    return src
+
+def _test_prdaclass_loose_container_in_container():
+    ys = """module foo {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+  container foo {
+    container bar {
+      leaf l1 {
+        type string;
+        mandatory true;
+      }
+    }
+  }
+}"""
+    root = yang.compile([ys])
+    bar = root.get("foo")
+    src = bar.prdaclass(loose=True, top=False)
+    return src
+
 
 def _test_tofrom_gdata():
     # TODO: hmm, how to test this? I guess we need to first generate some data
@@ -1564,7 +1611,6 @@ myang3 = """container c1 {
 
 
 actor main(env):
-    _test_prdaclass_req_arg()
     await async env.exit(0)
 
     try:
