@@ -189,11 +189,18 @@ class Node(object):
         def _indent():
             return "  " * indent
         if isinstance(self, Container):
-            xml = _indent() + "<" + self.name + ">\n"
+            if len(self.children) == 0:
+                return ""
+            child_xml = ""
             for child in self.children.values():
-                xml += child.to_xmlstr(indent + 1)
+                child_xml += child.to_xmlstr(indent + 1)
+            if child_xml == "":
+                return child_xml
+            xml = _indent() + "<" + self.name + ">\n"
+            xml += child_xml
             xml += _indent() + "</" + self.name + ">\n"
             return xml
+
         elif isinstance(self, Module):
             xml = ""
             for child in self.children.values():
