@@ -310,6 +310,46 @@ class SchemaNode(object):
 """
 
 snode_methods = {
+    "action": {
+        "get": """    def get(self, name: str, ns: ?str=None) -> SchemaNode:
+        # TODO: support looking up qualified by namespace
+        #tns = ns if ns is not None else self.get_namespace()
+        if name == 'input':
+            _input = self.input
+            if _input is not None:
+                return _input
+        if name == 'output':
+            _output = self.output
+            if _output is not None:
+                return _output
+        return SchemaNode.get(self, name, ns)
+
+""",
+        "compile": """    def compile(self, context: Context):
+        self_input = self.input
+        self_output = self.output
+        # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
+        new_input = None
+        if self_input is not None:
+            new_input = self_input.compile(context)
+        # new_output = self_output.compile(context) if self_output is not None else None # actonc codegen pre-evaluates before None-check
+        new_output = None
+        if self_output is not None:
+            new_output = self_output.compile(context)
+        new = Action(self.name,
+                     description=self.description,
+                     if_feature=self.if_feature,
+                     input=new_input if new_input is not None and isinstance(new_input, Input) else Input(),
+                     output=new_output if new_output is not None and isinstance(new_output, Output) else Output(),
+                     reference=self.reference,
+                     status=self.status,
+                     exts=self.exts,
+                     ns=self.ns)
+        self.expand_children(context, new)
+        return new
+
+"""
+    },
     "container": {
         "is_presence": """    def is_presence(self) -> bool:
         selfpresence = self.presence
@@ -559,6 +599,46 @@ snode_methods = {
             when=self.when,
             exts=self.exts
         )
+
+"""
+    },
+    "rpc": {
+        "get": """    def get(self, name: str, ns: ?str=None) -> SchemaNode:
+        # TODO: support looking up qualified by namespace
+        #tns = ns if ns is not None else self.get_namespace()
+        if name == 'input':
+            _input = self.input
+            if _input is not None:
+                return _input
+        if name == 'output':
+            _output = self.output
+            if _output is not None:
+                return _output
+        return SchemaNode.get(self, name, ns)
+
+""",
+        "compile": """    def compile(self, context: Context):
+        self_input = self.input
+        self_output = self.output
+        # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
+        new_input = None
+        if self_input is not None:
+            new_input = self_input.compile(context)
+        # new_output = self_output.compile(context) if self_output is not None else None # actonc codegen pre-evaluates before None-check
+        new_output = None
+        if self_output is not None:
+            new_output = self_output.compile(context)
+        new = Rpc(self.name,
+                  description=self.description,
+                  if_feature=self.if_feature,
+                  input=new_input if new_input is not None and isinstance(new_input, Input) else Input(),
+                  output=new_output if new_output is not None and isinstance(new_output, Output) else Output(),
+                  reference=self.reference,
+                  status=self.status,
+                  exts=self.exts,
+                  ns=self.ns)
+        self.expand_children(context, new)
+        return new
 
 """
     },
@@ -858,10 +938,10 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             new_args.append("exts=self.exts")
             if stmt_name not in {"module", "submodule"}:
                 new_args.append("ns=self.ns")
-            if have_children:
-                new_args.append("children=self.expand_children(context)")
 
             res.append("        new = %s(%s)" % (_class_name(stmt_name), (",\n               " + " " * len(_class_name(stmt_name))).join(new_args)))
+            if have_children:
+                res.append("        self.expand_children(context, new)")
             for substmt in stmt.substmts.values():
                 if substmt.name == "augment":
                     res.append("        new.expand_augments(context)")
