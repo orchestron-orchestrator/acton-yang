@@ -181,38 +181,10 @@ class Node(object):
 
     def prsrc(self, indent=0) -> str:
         res = []
-        if isinstance(self, Container):
-            args = ["'" + str(self.name) + "'"]
-            if len(self.children) > 0:
-                args.append("children=[")
-            args_text = ", ".join(args)
-            text_line = _ind(indent) + "Container(" + args_text
-            if len(self.children) == 0:
-                text_line += ')'
-            res.append(text_line)
-            if len(self.children) > 0:
-                child_res = []
-                for child in self.children.values():
-                    child_res.append(child.prsrc(indent+1))
-                res.append(",\n".join(child_res))
-                res.append(_ind(indent) + "])")
-            return "\n".join(res)
-        elif isinstance(self, Module):
-            args = ["'" + str(self.name) + "'"]
-            if len(self.children) > 0:
-                args.append("children=[")
-            args_text = ", ".join(args)
-            text_line = _ind(indent) + "Module(" + args_text
-            if len(self.children) == 0:
-                text_line += ')'
-            res.append(text_line)
-            if len(self.children) > 0:
-                child_res = []
-                for child in self.children.values():
-                    child_res.append(child.prsrc(indent+1))
-                res.append(",\n".join(child_res))
-                res.append(_ind(indent) + "])")
-            return "\n".join(res)
+        if isinstance(self, Leaf):
+            return _ind(indent) + "Leaf('" + self.name + "', " + str(self.val) + ")"
+        elif isinstance(self, LeafList):
+            return _ind(indent) + "LeafList('" + self.name + "', " + str(self.vals) + ")"
         elif isinstance(self, List):
             args = ["'" + str(self.name) + "'", str(self.keys)]
             if len(self.elements) > 0:
@@ -229,32 +201,24 @@ class Node(object):
                 res.append(",\n".join(child_res))
                 res.append(_ind(indent) + "])")
             return "\n".join(res)
-        elif isinstance(self, ListElement):
-            args = [str(self.key_vals)]
-            if len(self.children) > 0:
-                args.append("children=[")
-            args_text = ", ".join(args)
-            text_line = _ind(indent) + "ListElement(" + args_text
-            if len(self.children) == 0:
-                text_line += ')'
-            res.append(text_line)
-            if len(self.children) > 0:
-                child_res = []
-                for child in self.children.values():
-                    child_res.append(child.prsrc(indent+1))
-                res.append(",\n".join(child_res))
-                res.append(_ind(indent) + "])")
-            return "\n".join(res)
-        elif isinstance(self, Leaf):
-            return _ind(indent) + "Leaf('" + self.name + "', " + str(self.val) + ")"
-        elif isinstance(self, LeafList):
-            return _ind(indent) + "LeafList('" + self.name + "', " + str(self.vals) + ")"
-        elif isinstance(self, Root):
+        elif isinstance(self, Inner):
             args = []
+            sname = ""
+            if isinstance(self, Container):
+                args.append("'" + str(self.name) + "'")
+                sname = "Container"
+            elif isinstance(self, ListElement):
+                args.append(str(self.key_vals))
+                sname = "ListElement"
+            elif isinstance(self, Module):
+                args.append("'" + str(self.name) + "'")
+                sname = "Module"
+            elif isinstance(self, Root):
+                sname = "Root"
+
             if len(self.children) > 0:
                 args.append("children=[")
-            args_text = ", ".join(args)
-            text_line = _ind(indent) + "Root(" + args_text
+            text_line = _ind(indent) + sname + "(" + ", ".join(args)
             if len(self.children) == 0:
                 text_line += ')'
             res.append(text_line)
