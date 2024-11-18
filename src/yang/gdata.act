@@ -171,21 +171,102 @@ RECURSION_LIMIT=512
 # complete ACE from ACL1 and merge it with the incomplete ACE from ACL2 to
 # produce a complete output.
 
+def _ind(n):
+    return "  " * n
+
 class Node(object):
     parent: ?Node
     _ns: ?str
     prefix: ?str
 
-    def prsrc(self) -> str:
+    def prsrc(self, indent=0) -> str:
+        res = []
         if isinstance(self, Container):
-            return "Container(" + self.name + ", " + str(self.children) + ")"
-        if isinstance(self, List):
-            return "List(" + self.name + ", " + str(self.keys) + ", " + str(self.elements) + ")"
-        if isinstance(self, ListElement):
-            return "ListElement(" + str(self.key_vals) + ", " + str(self.children) + ")"
-        if isinstance(self, Leaf):
-            return "Leaf(" + self.name + ", " + str(self.val) + ")"
-        return "Node()"
+            args = ["'" + str(self.name) + "'"]
+            if len(self.children) > 0:
+                args.append("children=[")
+            args_text = ", ".join(args)
+            text_line = _ind(indent) + "Container(" + args_text
+            if len(self.children) == 0:
+                text_line += ')'
+            res.append(text_line)
+            if len(self.children) > 0:
+                child_res = []
+                for child in self.children.values():
+                    child_res.append(child.prsrc(indent+1))
+                res.append(",\n".join(child_res))
+                res.append(_ind(indent) + "])")
+            return "\n".join(res)
+        elif isinstance(self, Module):
+            args = ["'" + str(self.name) + "'"]
+            if len(self.children) > 0:
+                args.append("children=[")
+            args_text = ", ".join(args)
+            text_line = _ind(indent) + "Module(" + args_text
+            if len(self.children) == 0:
+                text_line += ')'
+            res.append(text_line)
+            if len(self.children) > 0:
+                child_res = []
+                for child in self.children.values():
+                    child_res.append(child.prsrc(indent+1))
+                res.append(",\n".join(child_res))
+                res.append(_ind(indent) + "])")
+            return "\n".join(res)
+        elif isinstance(self, List):
+            args = ["'" + str(self.name) + "'", str(self.keys)]
+            if len(self.elements) > 0:
+                args.append("elements=[")
+            args_text = ", ".join(args)
+            text_line = _ind(indent) + "List(" + args_text
+            if len(self.elements) == 0:
+                text_line += ')'
+            res.append(text_line)
+            if len(self.elements) > 0:
+                child_res = []
+                for elem in self.elements:
+                    child_res.append(elem.prsrc(indent+1))
+                res.append(",\n".join(child_res))
+                res.append(_ind(indent) + "])")
+            return "\n".join(res)
+        elif isinstance(self, ListElement):
+            args = [str(self.key_vals)]
+            if len(self.children) > 0:
+                args.append("children=[")
+            args_text = ", ".join(args)
+            text_line = _ind(indent) + "ListElement(" + args_text
+            if len(self.children) == 0:
+                text_line += ')'
+            res.append(text_line)
+            if len(self.children) > 0:
+                child_res = []
+                for child in self.children.values():
+                    child_res.append(child.prsrc(indent+1))
+                res.append(",\n".join(child_res))
+                res.append(_ind(indent) + "])")
+            return "\n".join(res)
+        elif isinstance(self, Leaf):
+            return _ind(indent) + "Leaf('" + self.name + "', " + str(self.val) + ")"
+        elif isinstance(self, LeafList):
+            return _ind(indent) + "LeafList('" + self.name + "', " + str(self.vals) + ")"
+        elif isinstance(self, Root):
+            args = []
+            if len(self.children) > 0:
+                args.append("children=[")
+            args_text = ", ".join(args)
+            text_line = _ind(indent) + "Root(" + args_text
+            if len(self.children) == 0:
+                text_line += ')'
+            res.append(text_line)
+            if len(self.children) > 0:
+                child_res = []
+                for child in self.children.values():
+                    child_res.append(child.prsrc(indent+1))
+                res.append(",\n".join(child_res))
+                res.append(_ind(indent) + "])")
+            return "\n".join(res)
+        else:
+            raise ValueError("Unsupported node type in prsrc")
 
     def get_name(self) -> str:
         if isinstance(self, Container):
@@ -1108,3 +1189,31 @@ def _test_yang_data():
 #<l>c</l>
 #""")
 #    tc = TestClass(strs)
+
+def _test_prsrc():
+    y1 = Module("moo", {
+        "foo": Container("foo", {
+            "a": Leaf("a", 1),
+            "l1": List("l1", ["name"], [
+                ListElement(["k1"], {
+                    "n1": Leaf("n1", 1),
+                    "n2": Leaf("n2", 2)
+                }),
+                ListElement(["k4"], {
+                    "n4": Leaf("n4", 4),
+                }),
+            ])
+        }, ns="http://example.com/acme")
+    })
+
+    return y1.prsrc()
+
+def _test_prsrc_root():
+    y1 = Root({
+        "foo": Container("foo", {
+            "a": Leaf("a", 1),
+            "b": LeafList("b", ["a", "b", "c"]),
+        }, ns="http://example.com/acme")
+    })
+
+    return y1.prsrc()
