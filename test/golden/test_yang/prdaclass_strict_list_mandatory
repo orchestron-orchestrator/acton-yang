@@ -3,6 +3,7 @@ class foo__l1_entry(yang.adata.MNode):
     id: str
 
     def __init__(self, name: str, id: str):
+        self._ns = "http://example.com/foo"
         self.name = name
         self.id = id
 
@@ -11,9 +12,9 @@ class foo__l1_entry(yang.adata.MNode):
         _name = self.name
         _id = self.id
         if _name is not None:
-            res.children['name'] = yang.gdata.Leaf('name', _name)
+            res.children['name'] = yang.gdata.Leaf('name', _name, ns=self._ns)
         if _id is not None:
-            res.children['id'] = yang.gdata.Leaf('id', _id)
+            res.children['id'] = yang.gdata.Leaf('id', _id, ns=self._ns)
         for child in res.children.values():
             child.parent = res
         return res
@@ -38,7 +39,7 @@ class foo__l1(yang.adata.MNode):
         return res
 
     def to_gdata(self):
-        res = yang.gdata.List('l1', ['name'])
+        res = yang.gdata.List('l1', ['name'], ns=self._ns)
         for e in self.elements:
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.ListElement):

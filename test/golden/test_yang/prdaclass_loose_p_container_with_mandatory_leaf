@@ -2,13 +2,14 @@ class foo__foo__bar(yang.adata.MNode):
     l1: ?str
 
     def __init__(self, l1: ?str):
+        self._ns = "http://example.com/foo"
         self.l1 = l1
 
     def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Container('bar')
+        res = yang.gdata.Container('bar', ns=self._ns)
         _l1 = self.l1
         if _l1 is not None:
-            res.children['l1'] = yang.gdata.Leaf('l1', _l1)
+            res.children['l1'] = yang.gdata.Leaf('l1', _l1, ns=self._ns)
         for child in res.children.values():
             child.parent = res
         return res
@@ -26,6 +27,7 @@ class foo__foo(yang.adata.MNode):
     bar: ?foo__foo__bar
 
     def __init__(self, bar: ?foo__foo__bar=None):
+        self._ns = "http://example.com/foo"
         if bar is not None:
             self.bar = bar
         else:
@@ -40,7 +42,7 @@ class foo__foo(yang.adata.MNode):
         return res
 
     def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Container('foo')
+        res = yang.gdata.Container('foo', ns=self._ns)
         _bar = self.bar
         if _bar is not None:
             res.children['bar'] = _bar.to_gdata()

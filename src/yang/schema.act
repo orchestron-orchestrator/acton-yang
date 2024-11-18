@@ -357,6 +357,8 @@ class DNodeInner(DNode):
 
         init_args_str = ", ".join(["self"] + req_args + opt_args)
         res.append("    def __init__(%s):" % init_args_str)
+        # Set namespace from us
+        res.append("        self._ns = \"%s\"" % self.namespace)
 
         for child in self.children:
             if isinstance(child, DContainer):
@@ -418,20 +420,20 @@ class DNodeInner(DNode):
             list_keys_str = ", ".join(map(lambda x: "str(self.%s)" % _safe_name(x), self.key))
             res.append("        res = yang.gdata.ListElement([%s])" % (list_keys_str))
         elif isinstance(self, DRoot):
-            res.append("        res = yang.gdata.%s()" % (self.dname))
+            res.append("        res = yang.gdata.%s(ns=self._ns)" % (self.dname))
         else:
-            res.append("        res = yang.gdata.%s('%s')" % (self.dname, self.name))
+            res.append("        res = yang.gdata.%s('%s', ns=self._ns)" % (self.dname, self.name))
 
         for child in self.children:
             if not isinstance(child, DLeafList):
                 res.append("        _%s = self.%s" % (_safe_name(child.name), _safe_name(child.name)))
         for child in self.children:
             if isinstance(child, DLeafList):
-                res.append("        res.children['%s'] = yang.gdata.LeafList('%s', self.%s)" % (child.name, child.name, _safe_name(child.name)))
+                res.append("        res.children['%s'] = yang.gdata.LeafList('%s', self.%s, ns=self._ns)" % (child.name, child.name, _safe_name(child.name)))
             else:
                 res.append("        if _%s is not None:" % _safe_name(child.name))
                 if isinstance(child, DLeaf):
-                    res.append("            res.children['%s'] = yang.gdata.Leaf('%s', _%s)" % (child.name, child.name, _safe_name(child.name)))
+                    res.append("            res.children['%s'] = yang.gdata.Leaf('%s', _%s, ns=self._ns)" % (child.name, child.name, _safe_name(child.name)))
                 elif isinstance(child, DContainer):
                     res.append("            res.children['%s'] = _%s.to_gdata()" % (child.name, _safe_name(child.name)))
                 elif isinstance(child, DList):
@@ -512,7 +514,7 @@ class DNodeInner(DNode):
             res.append("")
 
             res.append("    def to_gdata(self):" % ())
-            res.append("        res = yang.gdata.List('%s', %s)" % (self.name, repr(self.key)))
+            res.append("        res = yang.gdata.List('%s', %s, ns=self._ns)" % (self.name, repr(self.key)))
             res.append("        for e in self.elements:")
             res.append("            e_gdata = e.to_gdata()")
             res.append("            if isinstance(e_gdata, yang.gdata.ListElement):")

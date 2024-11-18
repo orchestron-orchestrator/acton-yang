@@ -7,6 +7,8 @@ This module defines classes for YANG data nodes. It can represent a YANG data
 tree, and can be used to serialize and deserialize YANG data.
 """
 
+RECURSION_LIMIT=512
+
 # kinds of things?
 # - container
 # - list
@@ -171,7 +173,7 @@ tree, and can be used to serialize and deserialize YANG data.
 
 class Node(object):
     parent: ?Node
-    ns: ?str
+    _ns: ?str
     prefix: ?str
 
     def prsrc(self) -> str:
@@ -185,6 +187,54 @@ class Node(object):
             return "Leaf(" + self.name + ", " + str(self.val) + ")"
         return "Node()"
 
+    def get_name(self) -> str:
+        if isinstance(self, Container):
+            return self.name
+        elif isinstance(self, Module):
+            return self.name
+        elif isinstance(self, Root):
+            return self.name
+        elif isinstance(self, List):
+            return self.name
+        elif isinstance(self, ListElement):
+            return self.key_str()
+        elif isinstance(self, Leaf):
+            return self.name
+        elif isinstance(self, LeafList):
+            return self.name
+        raise ValueError("Unsupported node type in get_name: " + type(self))
+
+    def ns(self) -> str:
+        n = self
+        for i in range(RECURSION_LIMIT+1):
+            nns = n._ns
+            if nns is not None:
+                return nns
+            nparent = n.parent
+            if nparent is not None:
+                n = nparent
+                continue
+            else:
+                raise ValueError("Unable to find namespace for %s %s, parent not set" % (str(self), self.get_name()))
+            if i > RECURSION_LIMIT:
+                raise ValueError("Recursion limit reached")
+        raise ValueError("Unable to find namespace")
+
+    def set_ns(self, ns: str):
+        self._ns = ns
+
+    def fmt_tag(self):
+        ns_str = ""
+        parent = self.parent
+        if parent is not None:
+            pns = parent.ns()
+            sns = self.ns()
+            if pns is not None and sns is not None and pns != sns or pns is None:
+                ns_str = " xmlns=\"" + sns + "\""
+        else:
+            ns_str = " xmlns=\"" + self.ns() + "\""
+        return "<" + self.get_name() + ns_str + ">\n"
+
     def to_xmlstr(self, indent=0) -> str:
         def _indent():
             return "  " * indent
@@ -196,7 +246,7 @@ class Node(object):
                 child_xml += child.to_xmlstr(indent + 1)
             if child_xml == "":
                 return child_xml
-            xml = _indent() + "<" + self.name + ">\n"
+            xml = _indent() + self.fmt_tag()
             xml += child_xml
             xml += _indent() + "</" + self.name + ">\n"
             return xml
@@ -474,14 +524,21 @@ extension Node(Eq):
 class Inner(Node):
     children: dict[str, Node]
 
+    def set_ns(self, ns: str):
+        self._ns = ns
+        for child in self.children.values():
+            child.set_ns(ns)
+
 class Root(Inner):
     name: str
 
     def __init__(self, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
         self.name = ""
         self.children = children
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
+        if ns is not None:
+            self.set_ns(ns)
 
 class Module(Inner):
     name: str
@@ -489,10 +546,12 @@ class Module(Inner):
     def __init__(self, name: str, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
         self.name = name
         self.children = children
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
         for child in self.children.values():
             child.parent = self
+        if ns is not None:
+            self.set_ns(ns)
 
 
 class Container(Inner):
@@ -501,10 +560,12 @@ class Container(Inner):
     def __init__(self, name: str, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
         self.name = name
         self.children = children
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
         for child in self.children.values():
             child.parent = self
+        if ns is not None:
+            self.set_ns(ns)
 
 class List(Node):
     name: str
@@ -517,10 +578,17 @@ class List(Node):
         self.keys = keys
         self.elements = elements
         self.user_order = user_order
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
         for elem in self.elements:
             elem.parent = self
+        if ns is not None:
+            self.set_ns(ns)
+
+    def set_ns(self, ns: str):
+        self._ns = ns
+        for elem in self.elements:
+            elem.set_ns(ns)
 
 class ListElement(Inner):
     #_list: List
@@ -544,7 +612,7 @@ class Leaf(Node):
     def __init__(self, name: str, val: value, ns: ?str=None, prefix: ?str=None):
         self.name = name
         self.val = val
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
 
 class LeafList(Node):
@@ -553,7 +621,7 @@ class LeafList(Node):
 
     def __init__(self, name: str, vals: ?value, ns: ?str=None, prefix: ?str=None):
         self.name = name
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
         if isinstance(vals, list) and len(vals) > 0 and isinstance(vals[0], value):
             self.vals = vals
@@ -574,7 +642,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return Container(a.name, children=new_children)
+        return Container(a.name, children=new_children, ns=a.ns())
     elif isinstance(a, Module) and isinstance(b, Module):
         # Find overlapping children, which might need merging on their own
         overlapping = set(a.children.keys()) & set(b.children.keys())
@@ -587,7 +655,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return Module(a.name, children=new_children)
+        return Module(a.name, children=new_children, ns=a.ns())
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.name != b.name:
             raise ValueError("Cannot merge leaves with different names")
@@ -705,7 +773,7 @@ def merge(a: Node, b: Node) -> Node:
                 else:
                     raise ValueError("unreachable, new_elem should always be a ListElement")
 
-        return List(a.name, a.keys, new_elements)
+        return List(a.name, a.keys, new_elements, ns=a.ns())
 
     elif isinstance(a, List) and isinstance(b, List):
         if a.name != b.name:
@@ -732,7 +800,7 @@ def merge(a: Node, b: Node) -> Node:
                     break
             if not found:
                 new_elements.append(b_elem)
-        return List(a.name, a.keys, new_elements)
+        return List(a.name, a.keys, new_elements, ns=a.ns())
 
     elif isinstance(a, ListElement) and isinstance(b, ListElement):
         if a.key_vals != b.key_vals:
@@ -761,7 +829,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return Root(children=new_children)
+        return Root(children=new_children, ns=a.ns())
     elif type(a) != type(b):
         raise ValueError("Cannot merge nodes of different types, type(a) = " + type(a) + ", type(b) = " + type(b))
     else:
@@ -894,7 +962,7 @@ def _test_merge1():
                 "n4": Leaf("n4", 4),
             }),
         ])
-    })
+    }, ns="http://example.com/acme")
 
     y2 = Container("foo", {
         "b": Leaf("b", 2),
@@ -906,12 +974,9 @@ def _test_merge1():
             }),
         ]),
         "d": LeafList("d", ["a", "b", "c"])
-    })
+    }, ns="http://example.com/acme")
 
-    print(y1.to_xmlstr())
-    print(y2.to_xmlstr())
     res = merge(y1, y2)
-    print(res.to_xmlstr())
 
     exp = Container("foo", {
         "l1": List("l1", ["name"], [
@@ -931,9 +996,9 @@ def _test_merge1():
         "b": Leaf("b", 2),
         "c": Leaf("c", 3),
         "d": LeafList("d", ["a", "b", "c"])
-    })
-    print(exp.to_xmlstr())
-    testing.assertEqual(merge(y1, y2), exp)
+    }, ns="http://example.com/acme")
+
+    testing.assertEqual(res, exp)
 
 def _test_merge_list1():
     y1 = List("l1", ["name"], [
@@ -952,7 +1017,7 @@ def _test_merge_list1():
         ListElement(["last"], {
             "n1": Leaf("n1", 1)
         }),
-    ], user_order=True)
+    ], user_order=True, ns="http://example.com/acme")
 
     y2 = List("l1", ["name"], [
         ListElement(["breaker"]),
@@ -1043,11 +1108,3 @@ def _test_yang_data():
 #<l>c</l>
 #""")
 #    tc = TestClass(strs)
-
-actor main(env):
-    try:
-        _test_merge_list1()
-    except Exception as e:
-        print(e)
-        env.exit(1)
-    env.exit(0)
