@@ -242,17 +242,25 @@ class DNode(object):
         """
         if isinstance(self, DNodeInner):
             for child in self.children:
-                if isinstance(child, DAnydata) and _safe_name(child.name) == name:
+                if isinstance(child, DAction) and _safe_name(child.name) == name:
+                    return child
+                elif isinstance(child, DAnydata) and _safe_name(child.name) == name:
                     return child
                 elif isinstance(child, DAnyxml) and _safe_name(child.name) == name:
                     return child
                 elif isinstance(child, DContainer) and _safe_name(child.name) == name:
+                    return child
+                elif isinstance(child, DInput) and name == 'input':
                     return child
                 elif isinstance(child, DLeaf) and _safe_name(child.name) == name:
                     return child
                 elif isinstance(child, DLeafList) and _safe_name(child.name) == name:
                     return child
                 elif isinstance(child, DList) and _safe_name(child.name) == name:
+                    return child
+                elif isinstance(child, DOutput) and name == 'output':
+                    return child
+                elif isinstance(child, DRpc) and _safe_name(child.name) == name:
                     return child
             raise ValueError("Child %s not found" % name)
 
@@ -316,6 +324,18 @@ class DNodeInner(DNode):
                     res.append("    %s: %s" % (_safe_name(child.name), get_path_name(child)))
             elif isinstance(child, DNodeInner):
                 res.append("    %s: %s" % (_safe_name(child.name), get_path_name(child)))
+            elif isinstance(child, DAnydata):
+                pass # TODO
+            elif isinstance(child, DAnyxml):
+                pass # TODO
+            elif isinstance(child, DAction):
+                pass # TODO
+            elif isinstance(child, DRpc):
+                pass # TODO
+            elif isinstance(child, DInput):
+                pass # TODO
+            elif isinstance(child, DOutput):
+                pass # TODO
             else:
                 raise ValueError("unreachable, unknown child type: " + str(type(child)))
         res.append("")
@@ -550,18 +570,70 @@ class DNodeLeaf(DNode):
     type_: Type
     when: ?str
 
-class DAnydata(DNodeLeaf):
-    pass
-    # TODO: implement!
+class DAction(DNodeInner):
+    if_feature: list[str]
+    must: list[Must]
+    status: ?str
 
-class DAnyxml(DNodeLeaf):
-    pass
-    # TODO: implement!
+    def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
+        self.namespace = namespace
+        self.name = name
+        self.dname = "Action"
+        self.config = False
+        self.description = description
+        self.if_feature = if_feature
+        self.reference = reference
+        self.status = status
+        self.exts = exts
+        self.children = children
+
+class DAnydata(DNode):
+    if_feature: list[str]
+    mandatory: ?bool
+    must: list[Must]
+    status: ?str
+    when: ?str
+
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+        self.namespace = namespace
+        self.name = name
+        self.dname = "Anydata"
+        self.config = config
+        self.description = description
+        self.if_feature = if_feature
+        self.mandatory = mandatory
+        self.must = must
+        self.reference = reference
+        self.status = status
+        self.when = when
+        self.exts = exts
+
+class DAnyxml(DNode):
+    if_feature: list[str]
+    mandatory: ?bool
+    must: list[Must]
+    status: ?str
+    when: ?str
+
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+        self.namespace = namespace
+        self.name = name
+        self.dname = "Anyxml"
+        self.config = config
+        self.description = description
+        self.if_feature = if_feature
+        self.mandatory = mandatory
+        self.must = must
+        self.reference = reference
+        self.status = status
+        self.when = when
+        self.exts = exts
 
 class DContainer(DNodeInner):
     if_feature: list[str]
     must: list[Must]
     presence: bool
+    status: ?str
 
     def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
         self.namespace = namespace
@@ -574,6 +646,18 @@ class DContainer(DNodeInner):
         self.presence = presence
         self.reference = reference
         self.status = status
+        self.exts = exts
+        self.children = children
+
+class DInput(DNodeInner):
+    must: list[Must]
+
+    def __init__(self, namespace: str, must=[], exts=[], children=[]):
+        self.namespace = namespace
+        self.name = "input"
+        self.dname = "Input"
+        self.config = False
+        self.must = must
         self.exts = exts
         self.children = children
 
@@ -700,6 +784,7 @@ class DLeafList(DNodeLeaf):
         self.exts = exts
 
 class DNotification(DNodeInner):
+    status: ?str
 
     def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
@@ -707,6 +792,19 @@ class DNotification(DNodeInner):
         self.dname = "Notification"
         self.description = description
         self.reference = reference
+        self.status = status
+        self.exts = exts
+        self.children = children
+
+class DOutput(DNodeInner):
+    must: list[Must]
+
+    def __init__(self, namespace: str, must=[], exts=[], children=[]):
+        self.namespace = namespace
+        self.name = "output"
+        self.dname = "Output"
+        self.config = False
+        self.must = must
         self.exts = exts
         self.children = children
 
@@ -724,8 +822,22 @@ class DRoot(DNodeInner):
             else:
                 raise ValueError("DRoot can only contain DModule")
 
+class DRpc(DNodeInner):
+    if_feature: list[str]
+    must: list[Must]
+    status: ?str
 
-# TODO: how to work with input / output for RPCs and actions?
+    def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
+        self.namespace = namespace
+        self.name = name
+        self.dname = "Rpc"
+        self.config = False
+        self.description = description
+        self.if_feature = if_feature
+        self.reference = reference
+        self.status = status
+        self.exts = exts
+        self.children = children
 
 # -------------------------------------------------------------------------------
 
