@@ -1,15 +1,8 @@
 import testing
+
 import yang.parser
 import yang.schema
 import yang
-
-def print_snode(n: yang.schema.SchemaNode, indent: int):
-    nparent = n.parent
-    par = nparent if nparent is not None else "NO PARENT"
-    print("  " * indent + str(n) + "    parent: " + str(par))
-    if isinstance(n, yang.schema.SchemaNodeInner):
-        for child in n.children:
-            print_snode(child, indent + 1)
 
 
 test_yang = """module test_yang {
@@ -187,30 +180,25 @@ def mwrap(s):
 """
     return header + s + footer
 
-def _test_yang():
+def _test_parse_pryang():
     original = test_yang
     y = yang.parser.parse(original)
     yang_out = y.pryang()
     testing.assertEqual(original, yang_out, "YANG round trip failed\n" + original + "\n===\n" + yang_out)
 
-def _test_submodule():
+def _test_parse_pryang_submodule():
     original = test_submodule
     y = yang.parser.parse(original)
     yang_out = y.pryang()
     testing.assertEqual(original, yang_out, "YANG round trip failed\n" + original + "\n===\n" + yang_out)
 
 def _test_prsrc():
-    y = yang.parser.parse(test_yang)
-    n = yang.schema.stmt_to_snode(y)
-    src_out = n.prsrc()
-
-def _test_schema_node():
-    y = yang.parser.parse(test_yang)
-    n = yang.schema.stmt_to_snode(y)
+    s = yang.schema_from_src(test_yang)
+    return s.prsrc()
 
 def _test_schema_node_submodule():
-    y = yang.parser.parse(test_submodule)
-    n = yang.schema.stmt_to_snode(y)
+    s = yang.schema_from_src(test_submodule)
+    return s.prsrc()
 
 def _test_fail_leaf_invalid():
     """Invalid statement under leaf"""
@@ -519,12 +507,11 @@ def _test_is_config1():
     }
   }
 }"""
-    y = yang.parser.parse(ys)
-    n = yang.schema.stmt_to_snode(y)
+    s = yang.schema_from_src(ys)
 
-    testing.assertEqual(n.get("c1").is_config(), True)
-    testing.assertEqual(n.get("c1").get("c2").is_config(), True)
-    testing.assertEqual(n.get("c1").get("c2").get("l1").is_config(), True)
+    testing.assertEqual(s.get("c1").is_config(), True)
+    testing.assertEqual(s.get("c1").get("c2").is_config(), True)
+    testing.assertEqual(s.get("c1").get("c2").get("l1").is_config(), True)
 
 def _test_is_config2():
     ys = """module foo {
@@ -541,12 +528,11 @@ def _test_is_config2():
     }
   }
 }"""
-    y = yang.parser.parse(ys)
-    n = yang.schema.stmt_to_snode(y)
+    s = yang.schema_from_src(ys)
 
-    testing.assertEqual(n.get("c1").is_config(), True)
-    testing.assertEqual(n.get("c1").get("c2").is_config(), False)
-    testing.assertEqual(n.get("c1").get("c2").get("l1").is_config(), False)
+    testing.assertEqual(s.get("c1").is_config(), True)
+    testing.assertEqual(s.get("c1").get("c2").is_config(), False)
+    testing.assertEqual(s.get("c1").get("c2").get("l1").is_config(), False)
 
 def _test_ns():
     ys = """module foo {
@@ -767,12 +753,8 @@ def _test_compile_uses():
   }
   uses g2;
 }"""
-    n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
-    ctx = yang.schema.Context([])
-    nc = n.compile(ctx)
-
-    #testing.assertEqual(n1, n2.compile())
-    testing.assertEqual(nc.get("c1").get("li1").get("l1").is_config(), True)
+    root = yang.compile([ys])
+    testing.assertEqual(root.get("c1").get("li1").get("l1").config, True)
 
 
 def _test_compile_imported_grouping():
@@ -807,14 +789,9 @@ def _test_compile_imported_grouping():
   }
   uses g1;
 }"""
-    y_foo = yang.parser.parse(ys_foo)
-    y_bar = yang.parser.parse(ys_bar)
-    n_foo = yang.schema.stmt_to_smodule(y_foo)
-    n_bar = yang.schema.stmt_to_smodule(y_bar)
-    ctx = yang.schema.Context([n_foo, n_bar])
-    nc_bar = n_bar.compile(ctx)
+    root = yang.compile([ys_foo, ys_bar])
 
-    testing.assertEqual(nc_bar.get("c1").get("li1").get("l1").is_config(), True)
+    testing.assertEqual(root.get("c1").get("li1").get("l1").config, True)
 
 
 def _test_compile_augment():
@@ -835,12 +812,10 @@ def _test_compile_augment():
     }
   }
 }"""
-    n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
-    ctx = yang.schema.Context([])
-    nc = n.compile(ctx)
+    root = yang.compile([ys])
 
-    testing.assertEqual(nc.get("c1").get("l1").is_config(), True)
-    testing.assertEqual(nc.get("c1").get("l2").is_config(), True)
+    testing.assertEqual(root.get("c1").get("l1").config, True)
+    testing.assertEqual(root.get("c1").get("l2").config, True)
 
 def _test_compile_augment_import():
     ys_foo = """module foo {
@@ -929,6 +904,7 @@ def _test_compile_augment_uses():
     n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
     ctx = yang.schema.Context([])
     nc = n.compile(ctx)
+    root = yang.compile([ys])
 
     c1 = nc.get("c1")
     c2 = c1.get("c2")
@@ -964,10 +940,8 @@ def _test_compile_augment_absolute_path_under_uses():
     }
   }
 }"""
-    n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
-    ctx = yang.schema.Context([])
     try:
-        nc = n.compile(ctx)
+        root = yang.compile([ys])
     except ValueError as exc:
         # We expect an error here, because the augment path is absolute which is
         # not allowed under a uses statement
@@ -995,10 +969,8 @@ def _test_compile_augment_relative_path_under_module():
     }
   }
 }"""
-    n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
-    ctx = yang.schema.Context([])
     try:
-        nc = n.compile(ctx)
+        root = yang.compile([ys])
     except ValueError as exc:
         # We expect an error here, because the augment path is absolute which is
         # not allowed under a uses statement
@@ -1100,11 +1072,8 @@ def _test_resolve_type_union_of_string():
   }
 }
 """
-    n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
-    ctx = yang.schema.Context([])
-    nc = n.compile(ctx)
-    d = nc.to_dnode()
-    l1 = d.get("l1")
+    root = yang.compile([ys])
+    l1 = root.get("l1")
 
     if isinstance(l1, yang.schema.DLeaf):
         acton_type = yang.schema.yang_leaf_to_acton_type(l1)
@@ -1146,14 +1115,11 @@ def _test_resolve_type_union_of_intX():
   }
 }
 """
-    n = yang.schema.stmt_to_snode(yang.parser.parse(ys))
-    ctx = yang.schema.Context()
-    nc = n.compile(ctx)
-    d = nc.to_dnode()
-    l1 = d.get("l1")
-    l2 = d.get("l2")
-    l3 = d.get("l3")
-    l4 = d.get("l4")
+    root = yang.compile([ys])
+    l1 = root.get("l1")
+    l2 = root.get("l2")
+    l3 = root.get("l3")
+    l4 = root.get("l4")
 
     if isinstance(l1, yang.schema.DLeaf):
         acton_type = yang.schema.yang_leaf_to_acton_type(l1)
@@ -1224,7 +1190,7 @@ def _test_compile_bundle1():
         testing.error("Expected exactly one 'c1: foo__c1'")
 
 def _test_compile_extension():
-    ys_foo = """module foo {
+    ys = """module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1247,11 +1213,10 @@ def _test_compile_extension():
         }
     }
 }"""
-    y = yang.parser.parse(ys_foo)
-    n = yang.schema.stmt_to_snode(y)
-    things_slist = n.get("c1").get("things")
+    s = yang.schema_from_src(ys)
+    things_slist = s.get("c1").get("things")
     testing.assertEqual(things_slist.exts, [yang.schema.Ext("some", "exty", "foo.bar")])
-    root = yang.compile([ys_foo])
+    root = yang.compile([ys])
     things_list = root.get("c1").get("things")
     testing.assertEqual(things_list.exts, [yang.schema.Ext("some", "exty", "foo.bar")])
 
@@ -1564,60 +1529,3 @@ def _test_prdaclass_strict_list_p_container_with_mandatory_leaf():
     l1 = root.get("l1")
     src = l1.prdaclass(top=False)
     return src
-
-
-def _test_tofrom_gdata():
-    # TODO: hmm, how to test this? I guess we need to first generate some data
-    # classes from a yang schema... so first generate support in compiler?
-    pass
-
-
-
-myang = """input {
-  must 'foo' {
-    description "bar";
-    error-app-tag "baz";
-    error-message "bax";
-    reference "qux";
-  }
-  leaf l1 {
-    type string;
-    description "leaf 1";
-    if-feature baz;
-    reference "ref1";
-    status current;
-  }
-  leaf l2 {
-    type string;
-    description "leaf 2";
-  }
-}"""
-myang2 = """uses g1 {
-  description "uses g1";
-  if-feature baz;
-  reference "ref1";
-  status current;
-  when 'derived-from-or-self(if:type, "mymod:some-new-iftype")';
-  augment "gl2" {
-    leaf al1 {
-      type string;
-    }
-  }
-  refine "gl2" {
-    if-feature "foo";
-    description "refined description for gl2";
-  }
-}"""
-
-myang3 = """container c1 {
-    description "container 1";
-    leaf l1 {
-      type string;
-      description "leaf 1";
-      if-feature "fe1 or fe2";
-    }
-    leaf l2 {
-      type string;
-      description "leaf 2";
-    }
-}"""
