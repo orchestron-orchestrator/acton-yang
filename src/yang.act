@@ -56,6 +56,8 @@ extension NameRevMap[T](Collection[(str, (?str, T))]):
         return len(self.items)
 
 def compile(yang_sources: list[str]) -> yang.schema.DRoot:
+    """Parse and compile a set of YANG modules and submodules into a schema tree
+    """
     ctx = yang.schema.Context()
     modules: NameRevMap[yang.schema.Module] = NameRevMap()
     submodules: NameRevMap[yang.schema.Submodule] = NameRevMap()
@@ -168,3 +170,9 @@ def compile(yang_sources: list[str]) -> yang.schema.DRoot:
         if mod_rev_rev is None:
             dnodes.append(m.to_dnode())
     return yang.schema.DRoot(dnodes)
+
+
+def schema_from_src(src: str) -> yang.schema.SchemaNode:
+    """Parse a single YANG schema from source code into the SchemaNode representation
+    """
+    return yang.schema.stmt_to_snode(yang.parser.parse(src))
