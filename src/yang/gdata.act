@@ -589,13 +589,11 @@ class Inner(Node):
 class Root(Inner):
     name: str
 
-    def __init__(self, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, children: dict[str, Node]={}, prefix: ?str=None):
         self.name = ""
         self.children = children
-        self._ns = ns
+        self._ns = ""
         self.prefix = prefix
-        if ns is not None:
-            self.set_ns(ns)
 
 class Module(Inner):
     name: str
@@ -886,7 +884,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return Root(children=new_children, ns=a.ns())
+        return Root(children=new_children)
     elif type(a) != type(b):
         raise ValueError("Cannot merge nodes of different types, type(a) = " + type(a) + ", type(b) = " + type(b))
     else:
@@ -1243,3 +1241,19 @@ def _test_to_xmlstr_mixed():
     })
 
     return y1.to_xmlstr()
+
+def _test_to_xmlstr_root_merge():
+    y1 = Root({
+        "foo": Container("foo", {
+            "a": Leaf("a", 1),
+            "b": LeafList("b", ["a", "b", "c"]),
+        }, ns="http://example.com/acme")
+    })
+    y2 = Root({
+        "bar": Container("bar", {
+            "b": Leaf("b", 42),
+        }, ns="http://example.com/bar")
+    })
+    ym = merge(y1, y2)
+
+    return ym.to_xmlstr()
