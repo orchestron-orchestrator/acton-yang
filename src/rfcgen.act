@@ -348,6 +348,62 @@ snode_methods = {
         self.expand_children(context, new)
         return new
 
+""",
+        "to_dnode": """    def to_dnode(self) -> DAction:
+        new_dnode = DAction(
+            namespace=self.get_namespace(),
+            name=self.name,
+            description=self.description,
+            if_feature=self.if_feature,
+            reference=self.reference,
+            status=self.status,
+            exts=self.exts,
+            children=self.get_dnode_children()
+        )
+        for child in new_dnode.children:
+            child.parent = new_dnode
+        return new_dnode
+
+""",
+        "is_config": """    def is_config(self) -> bool:
+        return False
+
+"""
+    },
+    "anydata": {
+        "to_dnode": """    def to_dnode(self) -> DAnydata:
+        return DAnydata(
+            namespace=self.get_namespace(),
+            name=self.name,
+            config=self.is_config(),
+            description=self.description,
+            if_feature=self.if_feature,
+            mandatory=self.mandatory,
+            must=self.must,
+            reference=self.reference,
+            status=self.status,
+            when=self.when,
+            exts=self.exts
+        )
+
+"""
+    },
+    "anyxml": {
+        "to_dnode": """    def to_dnode(self) -> DAnyxml:
+        return DAnyxml(
+            namespace=self.get_namespace(),
+            name=self.name,
+            config=self.is_config(),
+            description=self.description,
+            if_feature=self.if_feature,
+            mandatory=self.mandatory,
+            must=self.must,
+            reference=self.reference,
+            status=self.status,
+            when=self.when,
+            exts=self.exts
+        )
+
 """
     },
     "container": {
@@ -370,6 +426,20 @@ snode_methods = {
             reference=self.reference,
             status=self.status,
             when=self.when,
+            exts=self.exts,
+            children=self.get_dnode_children()
+        )
+        for child in new_dnode.children:
+            child.parent = new_dnode
+        return new_dnode
+
+"""
+    },
+    "input": {
+        "to_dnode": """    def to_dnode(self) -> DInput:
+        new_dnode = DInput(
+            namespace=self.get_namespace(),
+            must=self.must,
             exts=self.exts,
             children=self.get_dnode_children()
         )
@@ -426,6 +496,10 @@ snode_methods = {
             child.parent = new_dnode
         return new_dnode
 
+""",
+        "is_config": """    def is_config(self) -> bool:
+        return False
+
 """
     },
     "notification": {
@@ -445,6 +519,10 @@ snode_methods = {
         return new_dnode
 
 """,
+        "is_config": """    def is_config(self) -> bool:
+        return False
+
+"""
     },
     "list": {
         "keys": """    def keys(self) -> list[str]:
@@ -602,6 +680,24 @@ snode_methods = {
 
 """
     },
+    "output": {
+        "to_dnode": """    def to_dnode(self) -> DOutput:
+        new_dnode = DOutput(
+            namespace=self.get_namespace(),
+            must=self.must,
+            exts=self.exts,
+            children=self.get_dnode_children()
+        )
+        for child in new_dnode.children:
+            child.parent = new_dnode
+        return new_dnode
+
+""",
+        "is_config": """    def is_config(self) -> bool:
+        return False
+
+"""
+    },
     "rpc": {
         "get": """    def get(self, name: str, ns: ?str=None) -> SchemaNode:
         # TODO: support looking up qualified by namespace
@@ -639,6 +735,26 @@ snode_methods = {
                   ns=self.ns)
         self.expand_children(context, new)
         return new
+
+""",
+        "to_dnode": """    def to_dnode(self) -> DRpc:
+        new_dnode = DRpc(
+            namespace=self.get_namespace(),
+            name=self.name,
+            description=self.description,
+            if_feature=self.if_feature,
+            reference=self.reference,
+            status=self.status,
+            exts=self.exts,
+            children=self.get_dnode_children()
+        )
+        for child in new_dnode.children:
+            child.parent = new_dnode
+        return new_dnode
+
+""",
+        "is_config": """    def is_config(self) -> bool:
+        return False
 
 """
     },
