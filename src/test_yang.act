@@ -214,6 +214,29 @@ def _test_fail_leaf_invalid():
         testing.assertEqual("Invalid statement under leaf", str(exc), "Expected ValueError")
         return
 
+def _test_prsrc_action_1():
+    ys = """action action1 {
+  description "action 1";
+  input {
+    leaf rli1 {
+      type string;
+      description "action input leaf 1";
+    }
+  }
+  output {
+    leaf rlo1 {
+      type string;
+      description "action output leaf 1";
+    }
+    leaf rlo2 {
+      type string;
+      description "action output leaf 2";
+    }
+  }
+}"""
+    root = yang.schema_from_src(ys)
+    return root.prsrc()
+
 def _test_prsrc_augment_1():
     ys = """augment "/if:interfaces/if:interface" {
   if-feature "iffy";
@@ -976,6 +999,51 @@ def _test_compile_augment_relative_path_under_module():
         # not allowed under a uses statement
         return
     testing.error("Expected ValueError")
+
+def _test_compile_augment_implicit_input_output():
+    """Augmenting under implicit input/output of action/rpc"""
+    ys = """module foo {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+
+  container c1 {
+    action a1 {
+    }
+  }
+
+  rpc r1 {
+  }
+
+  augment "/c1/a1/input" {
+    leaf l1 {
+      type string;
+    }
+  }
+
+  augment "/c1/a1/output" {
+    container c2 {
+      leaf l2 {
+        type string;
+      }
+    }
+  }
+
+  augment "/r1/input" {
+    container c3 {
+      leaf l3 {
+        type string;
+      }
+    }
+  }
+
+  augment "/r1/output" {
+    leaf l4 {
+        type string;
+    }
+  }
+}"""
+    root = yang.compile([ys])
 
 def _test_compile_refine():
     """Augmenting a grouping"""
