@@ -324,14 +324,13 @@ class Node(object):
                     xml += le_child.to_xmlstr(indent + 1, self.ns())
                 xml += _indent() + "</" + self.name + ">\n"
             return xml
-        elif isinstance(self, ListElement): # printing of ListElement is folded into List
+        elif isinstance(self, ListElement):
             xml = ""
             for child in self.children.values():
                 xml += child.to_xmlstr(indent, self.ns())
             if cns == "":
                 cns = self.ns()
             return xml
-            raise ValueError("ListElement should not be printed directly")
         elif isinstance(self, Leaf):
             xml = _indent() + self.fmt_tag(cns) + str(self.val) + self.fmt_tag(cns, close=True) + "\n"
             if cns == "":
@@ -649,11 +648,14 @@ class ListElement(Inner):
     #_list: List
     key_vals: list[str] # values of the key leafs
 
-    def __init__(self, key_vals: list[str], children: dict[str, Node]={}):
+    def __init__(self, key_vals: list[str], children: dict[str, Node]={}, ns: ?str=None):
         self.key_vals = key_vals
         self.children = children
         for child in self.children.values():
             child.parent = self
+        self._ns = ns
+        if ns is not None:
+            self.set_ns(ns)
 
     def key_str(self) -> str:
         def escape_keys(key_val):
@@ -871,7 +873,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return ListElement(a.key_vals, children=new_children)
+        return ListElement(a.key_vals, children=new_children, ns=a.ns())
     elif isinstance(a, Root) and isinstance(b, Root):
         # Find overlapping children, which might need merging on their own
         overlapping = set(a.children.keys()) & set(b.children.keys())
