@@ -4,11 +4,14 @@
 all: src/yang/schema.act
 	acton build
 
-src/yang/schema.act: schema-header.act out/bin/rfcgen schema-footer.act
-	(tail -n +4 schema-header.act && out/bin/rfcgen && cat schema-footer.act) > src/yang/schema.act
+.PHONY: gen
+gen: src/yang/schema.act
 
-out/bin/rfcgen: src/rfcgen.act
-	acton src/rfcgen.act
+src/yang/schema.act: gen/schema-header.act gen/schema-footer.act gen/out/bin/rfcgen
+	cd gen && out/bin/rfcgen > ../src/yang/schema.act
+
+gen/out/bin/rfcgen: gen/src/rfcgen.act
+	cd gen && acton build
 
 .PHONY: clean
 clean:

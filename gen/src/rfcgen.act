@@ -1,3 +1,4 @@
+import file
 import re
 
 import rfc
@@ -1211,6 +1212,17 @@ rfc7950bis = """
 """
 
 actor main(env):
-    y = gen(parse_stmts(rfc.rfc7950 + rfc7950bis))
-    print("\n".join(y))
+    file_cap = file.FileCap(env.cap)
+    fs = file.FS(file_cap)
+    projpath = fs.exepath()[0:-len("out/bin/rfcgen")]
+
+    schema_header = file.ReadFile(
+        file.ReadFileCap(file_cap),
+        file.join_path([projpath, "schema-header.act"])).read().decode()
+    schema_footer = file.ReadFile(
+        file.ReadFileCap(file_cap),
+        file.join_path([projpath, "schema-footer.act"])).read().decode()
+
+    yang = "\n".join(schema_header.splitlines()[4:]) + "\n".join(gen(parse_stmts(rfc.rfc7950 + rfc7950bis))) + schema_footer
+    print(yang)
     env.exit(0)
