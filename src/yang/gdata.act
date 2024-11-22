@@ -281,21 +281,28 @@ class Node(object):
             ns_str = " xmlns=\"" + ns + "\""
         return "<" + ("/" if close else "") + self.get_name() + ("" if close else ns_str) + ">"
 
-    def to_xmlstr(self, indent=0, cns="") -> str:
+    def to_xmlstr(self, pretty=True, indent=0, cns="") -> str:
         def _indent():
-            return "  " * indent
+            if pretty:
+                return "  " * indent
+            return ""
+
+        def _nl():
+            if pretty:
+                return "\n"
+            return ""
 
         if isinstance(self, Container):
             if len(self.children) == 0:
                 return ""
             child_xml = ""
             for child in self.children.values():
-                child_xml += child.to_xmlstr(indent + 1, self.ns())
+                child_xml += child.to_xmlstr(pretty, indent + 1, self.ns())
             if child_xml == "":
                 return child_xml
-            xml = _indent() + self.fmt_tag(cns) + "\n"
+            xml = _indent() + self.fmt_tag(cns) + _nl()
             xml += child_xml
-            xml += _indent() + self.fmt_tag(cns, close=True) + "\n"
+            xml += _indent() + self.fmt_tag(cns, close=True) + _nl()
             if cns == "":
                 cns = self.ns()
             return xml
@@ -303,43 +310,43 @@ class Node(object):
         elif isinstance(self, Module):
             xml = ""
             for child in self.children.values():
-                xml += child.to_xmlstr(indent)
+                xml += child.to_xmlstr(pretty, indent)
             return xml
         elif isinstance(self, Root):
             xml = ""
             for child in self.children.values():
-                xml += child.to_xmlstr(indent)
+                xml += child.to_xmlstr(pretty, indent)
             return xml
         elif isinstance(self, List):
             xml = ""
             for elem in self.elements:
-                xml += _indent() + self.fmt_tag(cns) + "\n"
+                xml += _indent() + self.fmt_tag(cns) + _nl()
                 # Print key leafs first
                 for key_idx, key_name in enumerate(self.keys):
-                    xml += _indent() + "  <" + key_name + ">" + str(elem.key_vals[key_idx]) + "</" + key_name + ">\n"
+                    xml += _indent() + "  <" + key_name + ">" + str(elem.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
                 for le_childkey, le_child in elem.children.items():
                     # Skip key leafs
                     if le_childkey in self.keys:
                         continue
-                    xml += le_child.to_xmlstr(indent + 1, self.ns())
-                xml += _indent() + "</" + self.name + ">\n"
+                    xml += le_child.to_xmlstr(pretty, indent + 1, self.ns())
+                xml += _indent() + self.fmt_tag(cns, close=True) + _nl()
             return xml
         elif isinstance(self, ListElement):
             xml = ""
             for child in self.children.values():
-                xml += child.to_xmlstr(indent, self.ns())
+                xml += child.to_xmlstr(pretty, indent, self.ns())
             if cns == "":
                 cns = self.ns()
             return xml
         elif isinstance(self, Leaf):
-            xml = _indent() + self.fmt_tag(cns) + str(self.val) + self.fmt_tag(cns, close=True) + "\n"
+            xml = _indent() + self.fmt_tag(cns) + str(self.val) + self.fmt_tag(cns, close=True) + _nl()
             if cns == "":
                 cns = self.ns()
             return xml
         elif isinstance(self, LeafList):
             xml = ""
             for val in self.vals:
-                xml += _indent() + self.fmt_tag(cns) + str(val) + self.fmt_tag(cns, close=True) + "\n"
+                xml += _indent() + self.fmt_tag(cns) + str(val) + self.fmt_tag(cns, close=True) + _nl()
             if cns == "":
                 cns = self.ns()
             return xml
