@@ -2,13 +2,14 @@ class foo__l1__bar(yang.adata.MNode):
     hi: str
 
     def __init__(self, hi: str):
+        self._ns = "http://example.com/foo"
         self.hi = hi
 
     def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Container('bar')
+        res = yang.gdata.Container('bar', ns=self._ns)
         _hi = self.hi
         if _hi is not None:
-            res.children['hi'] = yang.gdata.Leaf('hi', _hi)
+            res.children['hi'] = yang.gdata.Leaf('hi', _hi, ns=self._ns)
         for child in res.children.values():
             child.parent = res
         return res
@@ -27,6 +28,7 @@ class foo__l1_entry(yang.adata.MNode):
     bar: ?foo__l1__bar
 
     def __init__(self, name: str, bar: ?foo__l1__bar=None):
+        self._ns = "http://example.com/foo"
         self.name = name
         self.bar = bar
         self_bar = self.bar
@@ -39,11 +41,11 @@ class foo__l1_entry(yang.adata.MNode):
         return res
 
     def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.ListElement([str(self.name)])
+        res = yang.gdata.ListElement([str(self.name)], ns=self._ns)
         _name = self.name
         _bar = self.bar
         if _name is not None:
-            res.children['name'] = yang.gdata.Leaf('name', _name)
+            res.children['name'] = yang.gdata.Leaf('name', _name, ns=self._ns)
         if _bar is not None:
             res.children['bar'] = _bar.to_gdata()
         for child in res.children.values():
@@ -61,6 +63,7 @@ class foo__l1_entry(yang.adata.MNode):
 class foo__l1(yang.adata.MNode):
     elements: list[foo__l1_entry]
     def __init__(self, elements=[]):
+        self._ns = "http://example.com/foo"
         self._name = 'l1'
         self.elements = elements
 
@@ -70,7 +73,7 @@ class foo__l1(yang.adata.MNode):
         return res
 
     def to_gdata(self):
-        res = yang.gdata.List('l1', ['name'])
+        res = yang.gdata.List('l1', ['name'], ns=self._ns)
         for e in self.elements:
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.ListElement):

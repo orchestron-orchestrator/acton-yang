@@ -3,17 +3,18 @@ class foo__l1_entry(yang.adata.MNode):
     id: str
 
     def __init__(self, name: str, id: str):
+        self._ns = "http://example.com/foo"
         self.name = name
         self.id = id
 
     def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.ListElement([str(self.name)])
+        res = yang.gdata.ListElement([str(self.name)], ns=self._ns)
         _name = self.name
         _id = self.id
         if _name is not None:
-            res.children['name'] = yang.gdata.Leaf('name', _name)
+            res.children['name'] = yang.gdata.Leaf('name', _name, ns=self._ns)
         if _id is not None:
-            res.children['id'] = yang.gdata.Leaf('id', _id)
+            res.children['id'] = yang.gdata.Leaf('id', _id, ns=self._ns)
         for child in res.children.values():
             child.parent = res
         return res
@@ -29,6 +30,7 @@ class foo__l1_entry(yang.adata.MNode):
 class foo__l1(yang.adata.MNode):
     elements: list[foo__l1_entry]
     def __init__(self, elements=[]):
+        self._ns = "http://example.com/foo"
         self._name = 'l1'
         self.elements = elements
 
@@ -38,7 +40,7 @@ class foo__l1(yang.adata.MNode):
         return res
 
     def to_gdata(self):
-        res = yang.gdata.List('l1', ['name'])
+        res = yang.gdata.List('l1', ['name'], ns=self._ns)
         for e in self.elements:
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.ListElement):

@@ -7,6 +7,8 @@ This module defines classes for YANG data nodes. It can represent a YANG data
 tree, and can be used to serialize and deserialize YANG data.
 """
 
+RECURSION_LIMIT=512
+
 # kinds of things?
 # - container
 # - list
@@ -169,36 +171,133 @@ tree, and can be used to serialize and deserialize YANG data.
 # complete ACE from ACL1 and merge it with the incomplete ACE from ACL2 to
 # produce a complete output.
 
+def _ind(n):
+    return "  " * n
+
 class Node(object):
     parent: ?Node
-    ns: ?str
+    _ns: ?str
     prefix: ?str
 
-    def prsrc(self) -> str:
-        if isinstance(self, Container):
-            return "Container(" + self.name + ", " + str(self.children) + ")"
-        if isinstance(self, List):
-            return "List(" + self.name + ", " + str(self.keys) + ", " + str(self.elements) + ")"
-        if isinstance(self, ListElement):
-            return "ListElement(" + str(self.key_vals) + ", " + str(self.children) + ")"
+    def prsrc(self, indent=0) -> str:
+        sns = self._ns
+        ns_str = sns if sns is not None else ""
+        ns_str_arg = "ns='" + ns_str + "', "
+        res = []
         if isinstance(self, Leaf):
-            return "Leaf(" + self.name + ", " + str(self.val) + ")"
-        return "Node()"
+            return _ind(indent) + "Leaf('" + self.name + "', " + ns_str_arg + str(self.val) + ")"
+        elif isinstance(self, LeafList):
+            return _ind(indent) + "LeafList('" + self.name + "', " + ns_str_arg + str(self.vals) + ")"
+        elif isinstance(self, List):
+            args = ["'" + str(self.name) + "'", str(self.keys), "ns='" + ns_str + "'"]
+            if len(self.elements) > 0:
+                args.append("elements=[")
+            args_text = ", ".join(args)
+            text_line = _ind(indent) + "List(" + args_text
+            if len(self.elements) == 0:
+                text_line += ')'
+            res.append(text_line)
+            if len(self.elements) > 0:
+                child_res = []
+                for elem in self.elements:
+                    child_res.append(elem.prsrc(indent+1))
+                res.append(",\n".join(child_res))
+                res.append(_ind(indent) + "])")
+            return "\n".join(res)
+        elif isinstance(self, Inner):
+            args = []
+            sname = ""
+            if isinstance(self, Container):
+                args.append("'" + str(self.name) + "'")
+                sname = "Container"
+            elif isinstance(self, ListElement):
+                args.append(str(self.key_vals))
+                sname = "ListElement"
+            elif isinstance(self, Module):
+                args.append("'" + str(self.name) + "'")
+                sname = "Module"
+            elif isinstance(self, Root):
+                sname = "Root"
 
-    def to_xmlstr(self, indent=0) -> str:
+            if not isinstance(self, Root): # a pseudo-Root doesn't have its own namespace
+                args.append("ns='" + ns_str + "'")
+
+            if len(self.children) > 0:
+                args.append("children=[")
+            text_line = _ind(indent) + sname + "(" + ", ".join(args)
+            if len(self.children) == 0:
+                text_line += ')'
+            res.append(text_line)
+            if len(self.children) > 0:
+                child_res = []
+                for child in self.children.values():
+                    child_res.append(child.prsrc(indent+1))
+                res.append(",\n".join(child_res))
+                res.append(_ind(indent) + "])")
+            return "\n".join(res)
+        else:
+            raise ValueError("Unsupported node type in prsrc")
+
+    def get_name(self) -> str:
+        if isinstance(self, Container):
+            return self.name
+        elif isinstance(self, Module):
+            return self.name
+        elif isinstance(self, Root):
+            return self.name
+        elif isinstance(self, List):
+            return self.name
+        elif isinstance(self, ListElement):
+            return self.key_str()
+        elif isinstance(self, Leaf):
+            return self.name
+        elif isinstance(self, LeafList):
+            return self.name
+        raise ValueError("Unsupported node type in get_name: " + type(self))
+
+    def ns(self) -> str:
+        n = self
+        for i in range(RECURSION_LIMIT+1):
+            nns = n._ns
+            if nns is not None:
+                return nns
+            nparent = n.parent
+            if nparent is not None:
+                n = nparent
+                continue
+            else:
+                raise ValueError("Unable to find namespace for %s %s, parent not set" % (str(self), self.get_name()))
+            if i > RECURSION_LIMIT:
+                raise ValueError("Recursion limit reached")
+        raise ValueError("Unable to find namespace")
+
+    def set_ns(self, ns: str):
+        self._ns = ns
+
+    def fmt_tag(self, cns, close=False):
+        ns_str = ""
+        ns = self.ns()
+        if cns != ns:
+            ns_str = " xmlns=\"" + ns + "\""
+        return "<" + ("/" if close else "") + self.get_name() + ("" if close else ns_str) + ">"
+
+    def to_xmlstr(self, indent=0, cns="") -> str:
         def _indent():
             return "  " * indent
+
         if isinstance(self, Container):
             if len(self.children) == 0:
                 return ""
             child_xml = ""
             for child in self.children.values():
-                child_xml += child.to_xmlstr(indent + 1)
+                child_xml += child.to_xmlstr(indent + 1, self.ns())
             if child_xml == "":
                 return child_xml
-            xml = _indent() + "<" + self.name + ">\n"
+            xml = _indent() + self.fmt_tag(cns) + "\n"
             xml += child_xml
-            xml += _indent() + "</" + self.name + ">\n"
+            xml += _indent() + self.fmt_tag(cns, close=True) + "\n"
+            if cns == "":
+                cns = self.ns()
             return xml
 
         elif isinstance(self, Module):
@@ -214,7 +313,7 @@ class Node(object):
         elif isinstance(self, List):
             xml = ""
             for elem in self.elements:
-                xml += _indent() + "<" + self.name + ">\n"
+                xml += _indent() + self.fmt_tag(cns) + "\n"
                 # Print key leafs first
                 for key_idx, key_name in enumerate(self.keys):
                     xml += _indent() + "  <" + key_name + ">" + str(elem.key_vals[key_idx]) + "</" + key_name + ">\n"
@@ -222,21 +321,27 @@ class Node(object):
                     # Skip key leafs
                     if le_childkey in self.keys:
                         continue
-                    xml += le_child.to_xmlstr(indent + 1)
+                    xml += le_child.to_xmlstr(indent + 1, self.ns())
                 xml += _indent() + "</" + self.name + ">\n"
             return xml
-        elif isinstance(self, ListElement): # printing of ListElement is folded into List
+        elif isinstance(self, ListElement):
             xml = ""
             for child in self.children.values():
-                xml += child.to_xmlstr(indent)
+                xml += child.to_xmlstr(indent, self.ns())
+            if cns == "":
+                cns = self.ns()
             return xml
-            raise ValueError("ListElement should not be printed directly")
         elif isinstance(self, Leaf):
-            return _indent() + "<" + self.name + ">" + str(self.val) + "</" + self.name + ">\n"
+            xml = _indent() + self.fmt_tag(cns) + str(self.val) + self.fmt_tag(cns, close=True) + "\n"
+            if cns == "":
+                cns = self.ns()
+            return xml
         elif isinstance(self, LeafList):
             xml = ""
             for val in self.vals:
-                xml += _indent() + "<" + self.name + ">" + str(val) + "</" + self.name + ">\n"
+                xml += _indent() + self.fmt_tag(cns) + str(val) + self.fmt_tag(cns, close=True) + "\n"
+            if cns == "":
+                cns = self.ns()
             return xml
         raise ValueError("Unsupported node type in to_xml: " + type(self))
 
@@ -474,13 +579,19 @@ extension Node(Eq):
 class Inner(Node):
     children: dict[str, Node]
 
+    def set_ns(self, ns: str):
+        if self._ns == None:
+            self._ns = ns
+        for child in self.children.values():
+            child.set_ns(self.ns())
+
 class Root(Inner):
     name: str
 
-    def __init__(self, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, children: dict[str, Node]={}, prefix: ?str=None):
         self.name = ""
         self.children = children
-        self.ns = ns
+        self._ns = ""
         self.prefix = prefix
 
 class Module(Inner):
@@ -489,10 +600,12 @@ class Module(Inner):
     def __init__(self, name: str, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
         self.name = name
         self.children = children
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
         for child in self.children.values():
             child.parent = self
+        if ns is not None:
+            self.set_ns(ns)
 
 
 class Container(Inner):
@@ -501,10 +614,12 @@ class Container(Inner):
     def __init__(self, name: str, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
         self.name = name
         self.children = children
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
         for child in self.children.values():
             child.parent = self
+        if ns is not None:
+            self.set_ns(ns)
 
 class List(Node):
     name: str
@@ -517,20 +632,30 @@ class List(Node):
         self.keys = keys
         self.elements = elements
         self.user_order = user_order
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
         for elem in self.elements:
             elem.parent = self
+        if ns is not None:
+            self.set_ns(ns)
+
+    def set_ns(self, ns: str):
+        self._ns = ns
+        for elem in self.elements:
+            elem.set_ns(ns)
 
 class ListElement(Inner):
     #_list: List
     key_vals: list[str] # values of the key leafs
 
-    def __init__(self, key_vals: list[str], children: dict[str, Node]={}):
+    def __init__(self, key_vals: list[str], children: dict[str, Node]={}, ns: ?str=None):
         self.key_vals = key_vals
         self.children = children
         for child in self.children.values():
             child.parent = self
+        self._ns = ns
+        if ns is not None:
+            self.set_ns(ns)
 
     def key_str(self) -> str:
         def escape_keys(key_val):
@@ -544,7 +669,7 @@ class Leaf(Node):
     def __init__(self, name: str, val: value, ns: ?str=None, prefix: ?str=None):
         self.name = name
         self.val = val
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
 
 class LeafList(Node):
@@ -553,7 +678,7 @@ class LeafList(Node):
 
     def __init__(self, name: str, vals: ?value, ns: ?str=None, prefix: ?str=None):
         self.name = name
-        self.ns = ns
+        self._ns = ns
         self.prefix = prefix
         if isinstance(vals, list) and len(vals) > 0 and isinstance(vals[0], value):
             self.vals = vals
@@ -574,7 +699,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return Container(a.name, children=new_children)
+        return Container(a.name, children=new_children, ns=a.ns())
     elif isinstance(a, Module) and isinstance(b, Module):
         # Find overlapping children, which might need merging on their own
         overlapping = set(a.children.keys()) & set(b.children.keys())
@@ -587,7 +712,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return Module(a.name, children=new_children)
+        return Module(a.name, children=new_children, ns=a.ns())
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.name != b.name:
             raise ValueError("Cannot merge leaves with different names")
@@ -705,7 +830,7 @@ def merge(a: Node, b: Node) -> Node:
                 else:
                     raise ValueError("unreachable, new_elem should always be a ListElement")
 
-        return List(a.name, a.keys, new_elements)
+        return List(a.name, a.keys, new_elements, ns=a.ns())
 
     elif isinstance(a, List) and isinstance(b, List):
         if a.name != b.name:
@@ -732,7 +857,7 @@ def merge(a: Node, b: Node) -> Node:
                     break
             if not found:
                 new_elements.append(b_elem)
-        return List(a.name, a.keys, new_elements)
+        return List(a.name, a.keys, new_elements, ns=a.ns())
 
     elif isinstance(a, ListElement) and isinstance(b, ListElement):
         if a.key_vals != b.key_vals:
@@ -748,7 +873,7 @@ def merge(a: Node, b: Node) -> Node:
             new_children[key] = a.children[key]
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
-        return ListElement(a.key_vals, children=new_children)
+        return ListElement(a.key_vals, children=new_children, ns=a.ns())
     elif isinstance(a, Root) and isinstance(b, Root):
         # Find overlapping children, which might need merging on their own
         overlapping = set(a.children.keys()) & set(b.children.keys())
@@ -894,7 +1019,7 @@ def _test_merge1():
                 "n4": Leaf("n4", 4),
             }),
         ])
-    })
+    }, ns="http://example.com/acme")
 
     y2 = Container("foo", {
         "b": Leaf("b", 2),
@@ -906,12 +1031,9 @@ def _test_merge1():
             }),
         ]),
         "d": LeafList("d", ["a", "b", "c"])
-    })
+    }, ns="http://example.com/acme")
 
-    print(y1.to_xmlstr())
-    print(y2.to_xmlstr())
     res = merge(y1, y2)
-    print(res.to_xmlstr())
 
     exp = Container("foo", {
         "l1": List("l1", ["name"], [
@@ -931,9 +1053,9 @@ def _test_merge1():
         "b": Leaf("b", 2),
         "c": Leaf("c", 3),
         "d": LeafList("d", ["a", "b", "c"])
-    })
-    print(exp.to_xmlstr())
-    testing.assertEqual(merge(y1, y2), exp)
+    }, ns="http://example.com/acme")
+
+    testing.assertEqual(res, exp)
 
 def _test_merge_list1():
     y1 = List("l1", ["name"], [
@@ -952,7 +1074,7 @@ def _test_merge_list1():
         ListElement(["last"], {
             "n1": Leaf("n1", 1)
         }),
-    ], user_order=True)
+    ], user_order=True, ns="http://example.com/acme")
 
     y2 = List("l1", ["name"], [
         ListElement(["breaker"]),
@@ -1044,10 +1166,96 @@ def _test_yang_data():
 #""")
 #    tc = TestClass(strs)
 
-actor main(env):
-    try:
-        _test_merge_list1()
-    except Exception as e:
-        print(e)
-        env.exit(1)
-    env.exit(0)
+def _test_prsrc():
+    y1 = Module("moo", {
+        "foo": Container("foo", {
+            "a": Leaf("a", 1),
+            "l1": List("l1", ["name"], [
+                ListElement(["k1"], {
+                    "n1": Leaf("n1", 1),
+                    "n2": Leaf("n2", 2)
+                }),
+                ListElement(["k4"], {
+                    "n4": Leaf("n4", 4),
+                }),
+            ])
+        })
+    }, ns="http://example.com/acme")
+
+    return y1.prsrc()
+
+def _test_prsrc_root():
+    y1 = Root({
+        "foo": Container("foo", {
+            "a": Leaf("a", 1),
+            "b": LeafList("b", ["a", "b", "c"]),
+        }, ns="http://example.com/acme")
+    })
+
+    return y1.prsrc()
+
+def _test_to_xmlstr():
+    y1 = Module("moo", {
+        "foo": Container("foo", {
+            "a": Leaf("a", 1),
+            "l1": List("l1", ["name"], [
+                ListElement(["k1"], {
+                    "n1": Leaf("n1", 1),
+                    "n2": Leaf("n2", 2)
+                }),
+                ListElement(["k4"], {
+                    "n4": Leaf("n4", 4),
+                }),
+            ])
+        })
+    }, ns="http://example.com/acme")
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_root():
+    y1 = Root({
+        "foo": Container("foo", {
+            "a": Leaf("a", 1),
+            "b": LeafList("b", ["a", "b", "c"]),
+        }, ns="http://example.com/acme")
+    })
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_mixed():
+    y1 = Root({
+        "device": List("device", ["name"], [
+            ListElement(["dev1"], {
+                "config": Container("config", {
+                    "hostname": Container("hostname", {
+                        "system-network-name": Leaf("system-network-name", "dev1")
+                    }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
+                }),
+            }),
+            ListElement(["dev2"], {
+                "config": Container("config", {
+                    "hostname": Container("hostname", {
+                        "system-network-name": Leaf("system-network-name", "dev2")
+                    }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
+                }),
+            }),
+        ], ns="http://orchestron.org/yang/orchestron-device.yang")
+    })
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_root_merge():
+    y1 = Root({
+        "foo": Container("foo", {
+            "a": Leaf("a", 1),
+            "b": LeafList("b", ["a", "b", "c"]),
+        }, ns="http://example.com/acme")
+    })
+    y2 = Root({
+        "bar": Container("bar", {
+            "b": Leaf("b", 42),
+        }, ns="http://example.com/bar")
+    })
+    ym = merge(y1, y2)
+
+    return ym.to_xmlstr()
