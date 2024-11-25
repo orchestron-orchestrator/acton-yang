@@ -986,6 +986,8 @@ class SchemaNode(object):
         for i in range(RECURSION_LIMIT+1):
             if (isinstance(n, Anydata)
                 or isinstance(n, Anyxml)
+                or isinstance(n, Case)
+                or isinstance(n, Choice)
                 or isinstance(n, Container)
                 or isinstance(n, Module)
                 or isinstance(n, Notification)
@@ -999,6 +1001,13 @@ class SchemaNode(object):
                         return nconfig
                     found_config = False
                 elif isinstance(n, Anyxml):
+                    nconfig = n.config
+                    if nconfig is not None:
+                        return nconfig
+                    found_config = False
+                elif isinstance(n, Case):
+                    found_config = False
+                elif isinstance(n, Choice):
                     nconfig = n.config
                     if nconfig is not None:
                         return nconfig
