@@ -278,7 +278,7 @@ class YangParser(object):
             self.tokenizer = YangTokenizer(text, self.pos, strict_quoting=strict_quoting)
             self.top = self._parse_statement(None)
         except EOF:
-            pass
+            raise ValueError("Unexpected end of file")
 
     def _parse_statement(self, parent):
         keywd = self.tokenizer.get_keyword()
@@ -327,6 +327,4 @@ class YangParser(object):
 
 def parse(text: str, strict_quoting: bool=True) -> yang.schema.Statement:
     parser = YangParser(text, strict_quoting=strict_quoting)
-    if parser is not None:
-        return parser.top
-    raise ValueError("Parse error")
+    return parser.top
