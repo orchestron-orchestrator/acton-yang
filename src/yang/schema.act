@@ -225,7 +225,7 @@ def optional_subtree(node: DNodeInner) -> bool:
 
 class DNode(object):
     parent: ?DNode
-    dname: str
+    gname: str       # The name of the GData class, e.g. "Container" for yang.gdata.Container
     namespace: str
     name: str
     config: bool
@@ -419,9 +419,9 @@ class DNodeInner(DNode):
             list_keys_str = ", ".join(map(lambda x: "str(self.%s)" % _safe_name(x), self.key))
             res.append("        res = yang.gdata.ListElement([%s], ns=self._ns)" % (list_keys_str))
         elif isinstance(self, DRoot):
-            res.append("        res = yang.gdata.%s()" % (self.dname))
+            res.append("        res = yang.gdata.%s()" % (self.gname))
         else:
-            res.append("        res = yang.gdata.%s('%s', ns=self._ns)" % (self.dname, self.name))
+            res.append("        res = yang.gdata.%s('%s', ns=self._ns)" % (self.gname, self.name))
 
         for child in self.children:
             if not isinstance(child, DLeafList):
@@ -578,7 +578,7 @@ class DAction(DNodeInner):
     def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "Action"
+        self.gname = "Action"
         self.config = False
         self.description = description
         self.if_feature = if_feature
@@ -597,7 +597,7 @@ class DAnydata(DNode):
     def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "Anydata"
+        self.gname = "Anydata"
         self.config = config
         self.description = description
         self.if_feature = if_feature
@@ -618,7 +618,7 @@ class DAnyxml(DNode):
     def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "Anyxml"
+        self.gname = "Anyxml"
         self.config = config
         self.description = description
         self.if_feature = if_feature
@@ -638,7 +638,7 @@ class DContainer(DNodeInner):
     def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "Container"
+        self.gname = "Container"
         self.config = config
         self.description = description
         self.if_feature = if_feature
@@ -655,7 +655,7 @@ class DInput(DNodeInner):
     def __init__(self, namespace: str, must=[], exts=[], children=[]):
         self.namespace = namespace
         self.name = "input"
-        self.dname = "Input"
+        self.gname = "Input"
         self.config = False
         self.must = must
         self.exts = exts
@@ -676,7 +676,7 @@ class DModule(DNodeInner):
 
     def __init__(self, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension_=[], feature=[], import_=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
         self.name = name
-        self.dname = "Module"
+        self.gname = "Module"
         self.namespace = namespace
         self.prefix = prefix
         if yang_version is not None:
@@ -713,7 +713,7 @@ class DList(DNodeInner):
     def __init__(self, namespace: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "List"
+        self.gname = "List"
         self.key = key
         self.config = config
         self.description = description
@@ -736,7 +736,7 @@ class DLeaf(DNodeLeaf):
     def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "Leaf"
+        self.gname = "Leaf"
         self.config = config
         self.description = description
         self.default = default
@@ -767,7 +767,7 @@ class DLeafList(DNodeLeaf):
     def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=[], if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "LeafList"
+        self.gname = "LeafList"
         self.config = config
         self.description = description
         self.default = default
@@ -789,7 +789,7 @@ class DNotification(DNodeInner):
     def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "Notification"
+        self.gname = "Notification"
         self.description = description
         self.reference = reference
         self.status = status
@@ -802,7 +802,7 @@ class DOutput(DNodeInner):
     def __init__(self, namespace: str, must=[], exts=[], children=[]):
         self.namespace = namespace
         self.name = "output"
-        self.dname = "Output"
+        self.gname = "Output"
         self.config = False
         self.must = must
         self.exts = exts
@@ -812,7 +812,7 @@ class DRoot(DNodeInner):
     def __init__(self, modules: list[DNode]=[]):
         self.namespace = ""
         self.name = "root"
-        self.dname = "Root"
+        self.gname = "Root"
         self.config = True
         self.children=[]
         for module in modules:
@@ -830,7 +830,7 @@ class DRpc(DNodeInner):
     def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
         self.name = name
-        self.dname = "Rpc"
+        self.gname = "Rpc"
         self.config = False
         self.description = description
         self.if_feature = if_feature
