@@ -1,0 +1,58 @@
+class foo__l1_entry(yang.adata.MNode):
+    name: str
+
+    def __init__(self, name: str):
+        self._ns = "http://example.com/foo"
+        self.name = name
+
+    def to_gdata(self) -> yang.gdata.Node:
+        res = yang.gdata.ListElement([str(self.name)], ns=self._ns)
+        _name = self.name
+        if _name is not None:
+            res.children['name'] = yang.gdata.Leaf('name', _name, ns=self._ns)
+        for child in res.children.values():
+            child.parent = res
+        return res
+
+    @staticmethod
+    def from_gdata(n: yang.gdata.Node) -> foo__l1_entry:
+        return foo__l1_entry(name=n.get_str("name"))
+
+    @staticmethod
+    def from_xml(n: xml.Node) -> foo__l1_entry:
+        return foo__l1_entry(name=yang.gdata.from_xml_str(n, "name"))
+
+class foo__l1(yang.adata.MNode):
+    elements: list[foo__l1_entry]
+    def __init__(self, elements=[]):
+        self._ns = "http://example.com/foo"
+        self._name = 'l1'
+        self.elements = elements
+
+    def create(self, name):
+        res = foo__l1_entry(name)
+        self.elements.append(res)
+        return res
+
+    def to_gdata(self):
+        res = yang.gdata.List('l1', ['name'], ns=self._ns)
+        for e in self.elements:
+            e_gdata = e.to_gdata()
+            if isinstance(e_gdata, yang.gdata.ListElement):
+                res.elements.append(e_gdata)
+        return res
+
+    @staticmethod
+    def from_gdata(n: yang.gdata.List) -> list[foo__l1_entry]:
+        res = []
+        for e in n.elements:
+            res.append(foo__l1_entry.from_gdata(e))
+        return res
+
+    @staticmethod
+    def from_xml(nodes: list[xml.Node]) -> list[foo__l1_entry]:
+        res = []
+        for node in nodes:
+            res.append(foo__l1_entry.from_xml(node))
+        return res
+
