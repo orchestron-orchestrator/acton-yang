@@ -17,3 +17,12 @@ gen/out/bin/rfcgen: gen/src/rfcgen.act
 clean:
 	rm -rf out
 
+.PHONY: test
+test:
+	acton test
+	$(MAKE) test-daclass
+
+.PHONY: test-daclass
+test-daclass:
+	cd test/test_data_classes_gen && acton build && out/bin/gen
+	cd test/test_data_classes && acton test
