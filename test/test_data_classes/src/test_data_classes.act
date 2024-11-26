@@ -1,0 +1,75 @@
+
+import testing
+import xml
+
+import yang.adata
+import yang.gdata
+
+from yang_foo import root as yang_foo_root
+
+# YANG model used to generate yang_foo
+#
+# module foo {
+#     yang-version "1.1";
+#     namespace "http://example.com/foo";
+#     prefix "foo";
+#     container c1 {
+#         leaf l1 {
+#             type string;
+#         }
+#     }
+#     container pc1 {
+#         presence "p";
+#         container foo {
+#             leaf l1 {
+#                 type string;
+#             }
+#         }
+#     }
+# }
+
+
+def _test_foo_from_xml_full():
+    xml_text = """<data>
+<c1 xmlns="http://example.com/foo">
+  <l1>foo</l1>
+</c1>
+<pc1 xmlns="http://example.com/foo">
+  <foo>
+    <l1>bar</l1>
+  </foo>
+</pc1>
+</data>"""
+    xml_in = xml.decode(xml_text)
+    d = yang_foo_root.from_xml(xml_in)
+    xml_out_text = d.to_gdata().to_xmlstr()
+    xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
+    testing.assertEqual(xml_in.encode(), xml_out.encode())
+
+def _test_foo_from_xml1():
+    """"""
+    xml_text = """<data>
+<pc1 xmlns="http://example.com/foo">
+  <foo>
+    <l1>bar</l1>
+  </foo>
+</pc1>
+</data>"""
+    xml_in = xml.decode(xml_text)
+    d = yang_foo_root.from_xml(xml_in)
+    xml_out_text = d.to_gdata().to_xmlstr()
+    xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
+    testing.assertEqual(xml_in.encode(), xml_out.encode())
+
+def _test_foo_from_xml2():
+    """"""
+    xml_text = """<data>
+<c1 xmlns="http://example.com/foo">
+  <l1>foo</l1>
+</c1>
+</data>"""
+    xml_in = xml.decode(xml_text)
+    d = yang_foo_root.from_xml(xml_in)
+    xml_out_text = d.to_gdata().to_xmlstr()
+    xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
+    testing.assertEqual(xml_in.encode(), xml_out.encode())
