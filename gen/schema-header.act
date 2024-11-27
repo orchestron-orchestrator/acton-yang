@@ -527,6 +527,15 @@ class DNodeInner(DNode):
                         list_key_args.append(_safe_name(child.name))
             list_create_args = ["self"] + list_key_args
             res.append("    def create(%s):" % (", ".join(list_create_args)))
+            res.append("        for e in self.elements:")
+            res.append("            match = True")
+            for key in self.key:
+                res.append("            if e.%s != %s:" % (_safe_name(key), _safe_name(key)))
+                res.append("                match = False")
+                res.append("                break")
+            res.append("            if match:")
+            res.append("                return e")
+            res.append("")
             res.append("        res = %s_entry(%s)" % (get_path_name(self), ", ".join(list_key_args)))
             res.append("        self.elements.append(res)")
             res.append("        return res")
