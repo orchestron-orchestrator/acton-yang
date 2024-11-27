@@ -355,11 +355,16 @@ class Node(object):
 
     # --
     def get_leaf(self, name) -> Leaf:
+        l = self.get_opt_leaf(name)
+        if l != None:
+            return l
+        raise ValueError("Cannot find leaf child with name: " + name)
+
+    def get_opt_leaf(self, name) -> ?Leaf:
         if isinstance(self, Inner):
             for child in self.children.values():
                 if isinstance(child, Leaf) and child.name == name:
                     return child
-        raise ValueError("Cannot find leaf child with name: " + name)
 
     def get_leafs(self, name) -> list[Leaf]:
         if isinstance(self, Inner):
@@ -396,61 +401,60 @@ class Node(object):
         raise ValueError("Cannot find list child with name " + name)
 
     def get_bool(self, name) -> bool:
-        s = self.get_str(name)
-        return bool(s)
+        child = self.get_leaf(name)
+        childval = child.val
+        if isinstance(childval, bool):
+            return childval
+        raise ValueError("Leaf %s is not of type bool" % name)
 
     def get_opt_bool(self, name) -> ?bool:
-        try:
-            return self.get_bool(name)
-        except ValueError:
-            return None
+        child = self.get_opt_leaf(name)
+        if child != None:
+            childval = child.val
+            if isinstance(childval, bool):
+                return childval
 
     def get_float(self, name) -> float:
-        s = self.get_str(name)
-        return float(s)
+        child = self.get_leaf(name)
+        childval = child.val
+        if isinstance(childval, float):
+            return childval
+        raise ValueError("Leaf %s is not of type float" % name)
 
     def get_opt_float(self, name) -> ?float:
-        try:
-            return self.get_float(name)
-        except ValueError:
-            return None
+        child = self.get_opt_leaf(name)
+        if child != None:
+            childval = child.val
+            if isinstance(childval, float):
+                return childval
 
     def get_int(self, name) -> int:
-        s = self.get_str(name)
-        return int(s)
+        child = self.get_leaf(name)
+        childval = child.val
+        if isinstance(childval, int):
+            return childval
+        raise ValueError("Leaf %s is not of type int" % name)
 
     def get_opt_int(self, name) -> ?int:
-        try:
-            return self.get_int(name)
-        except ValueError:
-            return None
+        child = self.get_opt_leaf(name)
+        if child != None:
+            childval = child.val
+            if isinstance(childval, int):
+                return childval
 
     def get_str(self, name) -> str:
-        if isinstance(self, Inner):
-            for child in self.children.values():
-                if isinstance(child, Leaf) and child.name == name:
-                    childval = child.val
-                    if isinstance(childval, str):
-                        return childval
-        raise ValueError("Cannot find leaf child with name: " + name)
+        child = self.get_leaf(name)
+        childval = child.val
+        if isinstance(childval, str):
+            return childval
+        raise ValueError("Leaf %s value is not type str" % name)
 
     def get_opt_str(self, name) -> ?str:
-        try:
-            return self.get_str(name)
-        except ValueError:
-            return None
-
-    def get_value(self, name) -> value:
-        s = self.get_str(name)
-        if isinstance(s, value):
-            return s
-        raise ValueError("unreachable, all strings are values")
-
-    def get_opt_value(self, name) -> ?value:
-        try:
-            return self.get_value(name)
-        except ValueError:
-            return None
+        child = self.get_opt_leaf(name)
+        if child != None:
+            childval = child.val
+            if isinstance(childval, str):
+                return childval
 
     def get_strs(self, name) -> list[str]:
         if isinstance(self, Inner):
@@ -461,22 +465,10 @@ class Node(object):
                         return cvals
         raise ValueError("Cannot find leaf-list child with name " + name)
 
-    def get_values(self, name) -> list[value]:
-        res = []
-        for leaf in self.get_leafs(name):
-            res.append(leaf.val)
-        return res
-
     # plural opts
     def get_opt_strs(self, name) -> list[str]:
         try:
             return self.get_strs(name)
-        except ValueError:
-            return []
-
-    def get_opt_values(self, name) -> list[value]:
-        try:
-            return self.get_values(name)
         except ValueError:
             return []
 
