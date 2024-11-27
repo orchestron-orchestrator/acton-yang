@@ -10,13 +10,16 @@ class foo__l1__bar(yang.adata.MNode):
 
     def __init__(self, hi: ?str):
         self._ns = "http://example.com/foo"
+        self._children_ns = {
+            "hi": "http://example.com/foo",
+        }
         self.hi = hi
 
     def to_gdata(self) -> yang.gdata.Node:
         res = yang.gdata.Container('bar', ns=self._ns)
         _hi = self.hi
         if _hi is not None:
-            res.children['hi'] = yang.gdata.Leaf('hi', _hi, ns=self._ns)
+            res.children['hi'] = yang.gdata.Leaf('hi', _hi, ns='http://example.com/foo')
         for child in res.children.values():
             child.parent = res
         return res
@@ -41,6 +44,11 @@ class foo__l1_entry(yang.adata.MNode):
 
     def __init__(self, name: str, id: ?str, bar: ?foo__l1__bar=None):
         self._ns = "http://example.com/foo"
+        self._children_ns = {
+            "name": "http://example.com/foo",
+            "id": "http://example.com/foo",
+            "bar": "http://example.com/foo",
+        }
         self.name = name
         self.id = id
         if bar is not None:
@@ -57,9 +65,9 @@ class foo__l1_entry(yang.adata.MNode):
         _id = self.id
         _bar = self.bar
         if _name is not None:
-            res.children['name'] = yang.gdata.Leaf('name', _name, ns=self._ns)
+            res.children['name'] = yang.gdata.Leaf('name', _name, ns='http://example.com/foo')
         if _id is not None:
-            res.children['id'] = yang.gdata.Leaf('id', _id, ns=self._ns)
+            res.children['id'] = yang.gdata.Leaf('id', _id, ns='http://example.com/foo')
         if _bar is not None:
             res.children['bar'] = _bar.to_gdata()
         for child in res.children.values():
@@ -114,6 +122,9 @@ class root(yang.adata.MNode):
 
     def __init__(self, l1: list[foo__l1_entry]=[]):
         self._ns = ""
+        self._children_ns = {
+            "l1": "http://example.com/foo",
+        }
         self.l1 = foo__l1(elements=l1)
         self.l1._parent = self
 
