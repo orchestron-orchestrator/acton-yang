@@ -272,7 +272,8 @@ class Node(object):
         raise ValueError("Unable to find namespace")
 
     def set_ns(self, ns: str):
-        self._ns = ns
+        if self._ns == None:
+            self._ns = ns
 
     def fmt_tag(self, cns, close=False):
         ns_str = ""
@@ -1224,6 +1225,16 @@ def _test_to_xmlstr_root():
         "foo": Container("foo", {
             "a": Leaf("a", 1),
             "b": LeafList("b", ["a", "b", "c"]),
+        }, ns="http://example.com/acme")
+    })
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_leaf_ns():
+    y1 = Root({
+        "foo": Container("foo", {
+            "a": Leaf("a", 1, ns="http://example.com/foo"),
+            "b": Leaf("b", 2)
         }, ns="http://example.com/acme")
     })
 
