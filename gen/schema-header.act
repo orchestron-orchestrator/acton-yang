@@ -1616,9 +1616,13 @@ def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, loose: bool=False) -> str:
 def yang_leaf_to_getval(leaf: DNodeLeaf) -> str:
     # TODO: uh, do we need loose arg?
     optional = is_optional_arg_yang_leaf(leaf)
-    optional_str = "opt_" if optional else ""
-    t = yang_type_to_acton_type(leaf.type_)
-    return optional_str + t
+    getval_str = "opt_" if optional else ""
+    type_name: str = leaf.type_.name
+    if type_name == "bits":
+        getval_str += "bits"
+    else:
+        getval_str += yang_type_to_acton_type(leaf.type_)
+    return getval_str
 
 def yang_leaflist_to_acton_type(leaf: DLeafList) -> str:
     t = yang_type_to_acton_type(leaf.type_)
@@ -1629,7 +1633,8 @@ def yang_typename_to_acton_type(type_name: str) -> str:
     if type_name == "binary":
         return "bytes"
     elif type_name == "bits":
-        raise NotImplementedError('bits not supported')
+        # TODO: make custom bits type?
+        return "set[str]"
     elif type_name == "boolean":
         return "bool"
     elif type_name == "decimal64":

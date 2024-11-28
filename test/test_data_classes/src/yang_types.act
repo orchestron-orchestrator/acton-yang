@@ -1,0 +1,35 @@
+import xml
+import yang.adata
+import yang.gdata
+
+# == This file is generated ==
+
+
+class root(yang.adata.MNode):
+    l1: ?set[str]
+
+    def __init__(self, l1: ?set[str]):
+        self._ns = ""
+        self.l1 = l1
+
+    def to_gdata(self) -> yang.gdata.Node:
+        res = yang.gdata.Root()
+        _l1 = self.l1
+        if _l1 is not None:
+            res.children['l1'] = yang.gdata.Leaf('l1', 'bits', _l1, ns='http://example.com/types')
+        for child in res.children.values():
+            child.parent = res
+        return res
+
+    @staticmethod
+    def from_gdata(n: ?yang.gdata.Node) -> root:
+        if n != None:
+            return root(l1=n.get_opt_bits("l1"))
+        return root()
+
+    @staticmethod
+    def from_xml(n: ?xml.Node) -> root:
+        if n != None:
+            return root(l1=yang.gdata.from_xml_opt_bits(n, "l1"))
+        return root()
+

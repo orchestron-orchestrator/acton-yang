@@ -353,6 +353,12 @@ class Node(object):
                         xml += self.fmt_tag(cns, end=True)
                     else:
                         xml += self.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')], end=True)
+            elif self.t == "bits":
+                v = self.val
+                if v == None:
+                    return ""
+                elif isinstance(v, set):
+                    xml += self.fmt_tag(cns) + " ".join(v) + self.fmt_tag(cns, close=True)
             else:
                 xml += self.fmt_tag(cns) + str(self.val) + self.fmt_tag(cns, close=True)
             xml += _nl()
@@ -486,6 +492,20 @@ class Node(object):
         except ValueError:
             return []
 
+    def get_bits(self, name) -> set[str]:
+        child = self.get_leaf(name)
+        childval = child.val
+        if isinstance(childval, set):
+            return childval
+        raise ValueError("Leaf %s is not of type bits" % name)
+
+    def get_opt_bits(self, name) -> ?set[str]:
+        child = self.get_opt_leaf(name)
+        if child != None:
+            childval = child.val
+            if isinstance(childval, set):
+                return childval
+
     def get_value(self, name) -> value:
         child = self.get_leaf(name)
         return child.val
@@ -531,6 +551,8 @@ extension Node(Eq):
             if isinstance(selfval, i32) and isinstance(otherval, i32):
                 return self.name == other.name and selfval == otherval
             if isinstance(selfval, i64) and isinstance(otherval, i64):
+                return self.name == other.name and selfval == otherval
+            if isinstance(selfval, set) and isinstance(otherval, set):
                 return self.name == other.name and selfval == otherval
             if type(selfval) != type(otherval):
                 raise ValueError("Cannot compare Leaf nodes with different value types")
@@ -789,6 +811,10 @@ def merge(a: Node, b: Node) -> Node:
             if aval == bval:
                 return a
             raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
+        if isinstance(aval, set) and isinstance(bval, set):
+            if aval == bval:
+                return a
+            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
         raise ValueError("Unsupported value type in Leaf node comparison: " + type(aval) + " != " + type(bval))
     elif isinstance(a, List) and isinstance(b, List):
         if a.name != b.name:
@@ -1003,6 +1029,22 @@ def from_xml_opt_str(n: xml.Node, name: str) -> ?str:
 
 def from_xml_str(n: xml.Node, name: str) -> str:
     r = from_xml_opt_str(n, name)
+    if r is not None:
+        return r
+    raise ValueError("Cannot find xml child with name " + name)
+
+def from_xml_opt_bits(n: xml.Node, name: str) -> ?set[str]:
+    try:
+        text = get_xml_child(n, name).text
+    except ValueError:
+        return None
+    else:
+        # How about whitespace other than space?
+        # RFC7950 9.7.2 says "... space-separated list ..."
+        return set(filter(lambda x: len(x) > 0, text.split(" ")) if text is not None else None)
+
+def from_xml_bits(n: xml.Node, name: str) -> ?set[str]:
+    r = from_xml_opt_bits(n, name)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name " + name)
