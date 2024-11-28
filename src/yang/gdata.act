@@ -275,12 +275,15 @@ class Node(object):
         if self._ns == None:
             self._ns = ns
 
-    def fmt_tag(self, cns, close=False):
+    def fmt_tag(self, cns, attrs: list[(str, str)]=[], close=False, end=False):
         ns_str = ""
         ns = self.ns()
         if cns != ns:
             ns_str = " xmlns=\"" + ns + "\""
-        return "<" + ("/" if close else "") + self.get_name() + ("" if close else ns_str) + ">"
+        attr_str = " ".join(map(lambda x: x.0 + "=" + x.1, attrs))
+        if attr_str != "":
+            attr_str = " " + attr_str
+        return "<" + ("/" if close else "") + self.get_name() + ("" if close else ns_str) + attr_str + ("/" if end else "") + ">"
 
     def to_xmlstr(self, pretty=True, indent=0, cns="") -> str:
         def _indent():
@@ -340,7 +343,19 @@ class Node(object):
                 cns = self.ns()
             return xml
         elif isinstance(self, Leaf):
-            xml = _indent() + self.fmt_tag(cns) + str(self.val) + self.fmt_tag(cns, close=True) + _nl()
+            xml = _indent()
+            if self.t == "empty":
+                v = self.val
+                if v == None:
+                    return ""
+                if isinstance(v, bool):
+                    if v == True:
+                        xml += self.fmt_tag(cns, end=True)
+                    else:
+                        xml += self.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')], end=True)
+            else:
+                xml += self.fmt_tag(cns) + str(self.val) + self.fmt_tag(cns, close=True)
+            xml += _nl()
             if cns == "":
                 cns = self.ns()
             return xml
@@ -664,10 +679,12 @@ class ListElement(Inner):
 
 class Leaf(Node):
     name: str
+    t: str
     val: value
 
-    def __init__(self, name: str, val: value, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, name: str, t: str, val: value, ns: ?str=None, prefix: ?str=None):
         self.name = name
+        self.t = t
         self.val = val
         self._ns = ns
         self.prefix = prefix
@@ -716,8 +733,12 @@ def merge(a: Node, b: Node) -> Node:
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.name != b.name:
             raise ValueError("Cannot merge leaves with different names")
+        if a.t != b.t:
+            raise ValueError("Cannot merge leaves with different types")
         aval = a.val
         bval = b.val
+        if aval == None and bval == None:
+            return a
         if isinstance(aval, int) and isinstance(bval, int):
             if aval == bval:
                 return a
@@ -1009,25 +1030,25 @@ def from_xml_opt_values(n: xml.Node, name: str) -> list[value]:
 
 def _test_merge1():
     y1 = Container("foo", {
-        "a": Leaf("a", 1),
+        "a": Leaf("a", "int", 1),
         "l1": List("l1", ["name"], [
             ListElement(["k1"], {
-                "n1": Leaf("n1", 1),
-                "n2": Leaf("n2", 2)
+                "n1": Leaf("n1", "int", 1),
+                "n2": Leaf("n2", "int", 2)
             }),
             ListElement(["k4"], {
-                "n4": Leaf("n4", 4),
+                "n4": Leaf("n4", "int", 4),
             }),
         ])
     }, ns="http://example.com/acme")
 
     y2 = Container("foo", {
-        "b": Leaf("b", 2),
-        "c": Leaf("c", 3),
+        "b": Leaf("b", "int", 2),
+        "c": Leaf("c", "int", 3),
         "l1": List("l1", ["name"], [
             ListElement(["k2"], {
-                "n1": Leaf("n1", 1),
-                "n3": Leaf("n3", 3)
+                "n1": Leaf("n1", "int", 1),
+                "n3": Leaf("n3", "int", 3)
             }),
         ]),
         "d": LeafList("d", ["a", "b", "c"])
@@ -1038,20 +1059,20 @@ def _test_merge1():
     exp = Container("foo", {
         "l1": List("l1", ["name"], [
             ListElement(["k1"], {
-                "n1": Leaf("n1", 1),
-                "n2": Leaf("n2", 2)
+                "n1": Leaf("n1", "int", 1),
+                "n2": Leaf("n2", "int", 2)
             }),
             ListElement(["k2"], {
-                "n1": Leaf("n1", 1),
-                "n3": Leaf("n3", 3)
+                "n1": Leaf("n1", "int", 1),
+                "n3": Leaf("n3", "int", 3)
             }),
             ListElement(["k4"], {
-                "n4": Leaf("n4", 4),
+                "n4": Leaf("n4", "int", 4),
             }),
         ]),
-        "a": Leaf("a", 1),
-        "b": Leaf("b", 2),
-        "c": Leaf("c", 3),
+        "a": Leaf("a", "int", 1),
+        "b": Leaf("b", "int", 2),
+        "c": Leaf("c", "int", 3),
         "d": LeafList("d", ["a", "b", "c"])
     }, ns="http://example.com/acme")
 
@@ -1060,57 +1081,57 @@ def _test_merge1():
 def _test_merge_list1():
     y1 = List("l1", ["name"], [
         ListElement(["first"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["breaker"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["fourth"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["common"], {
-            "n2": Leaf("n2", 2)
+            "n2": Leaf("n2", "int", 2)
         }),
         ListElement(["last"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
     ], user_order=True, ns="http://example.com/acme")
 
     y2 = List("l1", ["name"], [
         ListElement(["breaker"]),
         ListElement(["second"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["third"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["common"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["last"])
     ], user_order=True)
 
     exp = List("l1", ["name"], [
         ListElement(["first"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["breaker"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["third"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["second"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["fourth"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["common"], {
-            "n2": Leaf("n2", 2)
+            "n2": Leaf("n2", "int", 2)
         }),
         ListElement(["last"], {
-            "n1": Leaf("n1", 1)
+            "n1": Leaf("n1", "int", 1)
         }),
     ])
     print(merge(y1, y2).to_xmlstr())
@@ -1169,14 +1190,14 @@ def _test_yang_data():
 def _test_prsrc():
     y1 = Module("moo", {
         "foo": Container("foo", {
-            "a": Leaf("a", 1),
+            "a": Leaf("a", "int", 1),
             "l1": List("l1", ["name"], [
                 ListElement(["k1"], {
-                    "n1": Leaf("n1", 1),
-                    "n2": Leaf("n2", 2)
+                    "n1": Leaf("n1", "int", 1),
+                    "n2": Leaf("n2", "int", 2)
                 }),
                 ListElement(["k4"], {
-                    "n4": Leaf("n4", 4),
+                    "n4": Leaf("n4", "int", 4),
                 }),
             ])
         })
@@ -1187,7 +1208,7 @@ def _test_prsrc():
 def _test_prsrc_root():
     y1 = Root({
         "foo": Container("foo", {
-            "a": Leaf("a", 1),
+            "a": Leaf("a", "int", 1),
             "b": LeafList("b", ["a", "b", "c"]),
         }, ns="http://example.com/acme")
     })
@@ -1197,14 +1218,14 @@ def _test_prsrc_root():
 def _test_to_xmlstr():
     y1 = Module("moo", {
         "foo": Container("foo", {
-            "a": Leaf("a", 1),
+            "a": Leaf("a", "int", 1),
             "l1": List("l1", ["name"], [
                 ListElement(["k1"], {
-                    "n1": Leaf("n1", 1),
-                    "n2": Leaf("n2", 2)
+                    "n1": Leaf("n1", "int", 1),
+                    "n2": Leaf("n2", "int", 2)
                 }),
                 ListElement(["k4"], {
-                    "n4": Leaf("n4", 4),
+                    "n4": Leaf("n4", "int", 4),
                 }),
             ])
         })
@@ -1215,7 +1236,7 @@ def _test_to_xmlstr():
 def _test_to_xmlstr_root():
     y1 = Root({
         "foo": Container("foo", {
-            "a": Leaf("a", 1),
+            "a": Leaf("a", "int", 1),
             "b": LeafList("b", ["a", "b", "c"]),
         }, ns="http://example.com/acme")
     })
@@ -1225,8 +1246,8 @@ def _test_to_xmlstr_root():
 def _test_to_xmlstr_leaf_ns():
     y1 = Root({
         "foo": Container("foo", {
-            "a": Leaf("a", 1, ns="http://example.com/foo"),
-            "b": Leaf("b", 2)
+            "a": Leaf("a", "int", 1, ns="http://example.com/foo"),
+            "b": Leaf("b", "int", 2)
         }, ns="http://example.com/acme")
     })
 
@@ -1238,14 +1259,14 @@ def _test_to_xmlstr_mixed():
             ListElement(["dev1"], {
                 "config": Container("config", {
                     "hostname": Container("hostname", {
-                        "system-network-name": Leaf("system-network-name", "dev1")
+                        "system-network-name": Leaf("system-network-name", "str", "dev1")
                     }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
                 }),
             }),
             ListElement(["dev2"], {
                 "config": Container("config", {
                     "hostname": Container("hostname", {
-                        "system-network-name": Leaf("system-network-name", "dev2")
+                        "system-network-name": Leaf("system-network-name", "str", "dev2")
                     }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
                 }),
             }),
@@ -1257,13 +1278,13 @@ def _test_to_xmlstr_mixed():
 def _test_to_xmlstr_root_merge():
     y1 = Root({
         "foo": Container("foo", {
-            "a": Leaf("a", 1),
+            "a": Leaf("a", "int", 1),
             "b": LeafList("b", ["a", "b", "c"]),
         }, ns="http://example.com/acme")
     })
     y2 = Root({
         "bar": Container("bar", {
-            "b": Leaf("b", 42),
+            "b": Leaf("b", "int", 42),
         }, ns="http://example.com/bar")
     })
     ym = merge(y1, y2)
