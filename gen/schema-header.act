@@ -348,7 +348,11 @@ class DNodeInner(DNode):
                 else:
                     req_args.append("%s: %s" % (_safe_name(child.name), get_path_name(child)))
             elif isinstance(child, DLeaf):
-                child_arg = "%s: %s" % (_safe_name(child.name), yang_leaf_to_acton_type(child, loose))
+                defval = ""
+                child_default = child.default
+                if child_default != None:
+                    defval = "=None"
+                child_arg = "%s: %s%s" % (_safe_name(child.name), yang_leaf_to_acton_arg_type(child, loose), defval)
                 if is_optional_yang_leaf(child, loose):
                     opt_args.append(child_arg)
                 else:
@@ -381,7 +385,14 @@ class DNodeInner(DNode):
                 else:
                     res.append("        self.%s._parent = self" % (_safe_name(child.name)))
             elif isinstance(child, DLeaf):
-                res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
+                child_default = child.default
+                if child_default != None:
+                    res.append("        if %s != None:" % (_safe_name(child.name)))
+                    res.append("            self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
+                    res.append("        else:")
+                    res.append("            self.%s = %s" % (_safe_name(child.name), prsrc_literal(child.type_.name, child_default)))
+                else:
+                    res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
             elif isinstance(child, DLeafList):
                 #res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
                 res.append("        if %s is not None:" % (_safe_name(child.name)))
@@ -785,13 +796,13 @@ class DLeaf(DNodeLeaf):
         return False
 
 class DLeafList(DNodeLeaf):
-    default: list[str]
+    default: ?list[str]
     max_elements: ?int
     min_elements: int
     ordered_by: str
     units: ?str
 
-    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=[], if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
         self.name = name
         self.gname = "LeafList"
@@ -1538,10 +1549,19 @@ def _prsrc_attrs(indent, attrs):
 
 def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
     optional = True
+
     # Mandatory leaf in YANG model are non-optional in Acton
+    mandatory = False
     leafmandatory = leaf.mandatory
-    if leafmandatory is not None:
-        optional = not leafmandatory
+    if leafmandatory != None:
+        mandatory = leafmandatory
+
+    has_default = False
+    if isinstance(leaf, DLeaf):
+        if leaf.default != None:
+            has_default = True
+
+    optional = not (mandatory or has_default)
     # But with loose validation, even mandatory YANG leaves are optional!
     if loose:
         optional = True
@@ -1553,35 +1573,23 @@ def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
     return optional
 
 def yang_leaf_to_acton_type(leaf: DNodeLeaf, loose: bool=False) -> str:
-    # TODO: use is_optiona_yang_leaf
-    optional = True
-    # Mandatory leaf in YANG model are non-optional in Acton
-    leafmandatory = leaf.mandatory
-    if leafmandatory is not None:
-        optional = not leafmandatory
-    # But with loose validation, even mandatory YANG leaves are optional!
-    if loose:
-        optional = True
-    # ... although being part of a key always makes it non-optional
-    parent = leaf.parent
-    if isinstance(parent, DList):
-        if leaf.name in parent.key:
-            optional = False
+    optional = is_optional_yang_leaf(leaf, loose)
+    optional_str = "?" if optional else ""
+    t = yang_type_to_acton_type(leaf.type_)
+    return optional_str + t
+
+def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, loose: bool=False) -> str:
+    optional = is_optional_yang_leaf(leaf, loose)
+    if isinstance(leaf, DLeaf):
+        if leaf.default != None:
+            optional = True
     optional_str = "?" if optional else ""
     t = yang_type_to_acton_type(leaf.type_)
     return optional_str + t
 
 def yang_leaf_to_getval(leaf: DNodeLeaf) -> str:
     # TODO: uh, do we need loose arg?
-    # TODO: use is_optiona_yang_leaf
-    optional = True
-    leafmandatory = leaf.mandatory
-    if leafmandatory is not None:
-        optional = not leafmandatory
-    parent = leaf.parent
-    if isinstance(parent, DList):
-        if leaf.name in parent.key:
-            optional = False
+    optional = is_optional_yang_leaf(leaf)
     optional_str = "opt_" if optional else ""
     t = yang_type_to_acton_type(leaf.type_)
     return optional_str + t
@@ -1702,6 +1710,10 @@ def yang_type_to_acton_type(t: ?Type) -> str:
             return yang_typename_to_acton_type(t.name)
     raise ValueError("type not defined")
 
+def prsrc_literal(ytype: str, value: str) -> str:
+    if ytype == "string":
+        return '"' + value + '"'
+    return value
 
 def _safe_name(name: str) -> str:
     new = name.replace("-", "_")
