@@ -1719,3 +1719,24 @@ def _test_prdaclass_top_container_from_xml_opt():
     root = yang.compile([ys_base])
     src = root.prdaclass()
     return src
+
+
+def _test_leaf_defaults():
+    ys_base = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    container c {
+        leaf l_str_def {
+            type string;
+            default "foo";
+        }
+    }
+}"""
+    root = yang.compile([ys_base])
+
+    l_str_def = root.get("c").get("l_str_def")
+    if isinstance(l_str_def, yang.schema.DLeaf):
+        testing.assertEqual(l_str_def.default, "foo")
+    else:
+        testing.error("Expected Leaf instance")
