@@ -10,6 +10,37 @@ def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str) -> No
     wf.write(src.encode())
     await async wf.close()
 
+ys_one = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    container tc1 {
+        leaf l1 {
+            type string;
+            mandatory true;
+        }
+        leaf l2 {
+            type string;
+        }
+    }
+    list li {
+        key name;
+        leaf name {
+            type string;
+        }
+
+        container c1 {
+            leaf l1 {
+                type string;
+                mandatory true;
+            }
+            leaf l2 {
+                type string;
+            }
+        }
+    }
+}"""
+
 ys_foo = """module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
@@ -77,6 +108,7 @@ ys_basics = """module basics {
 
 actor main(env: Env):
     wfcap = file.WriteFileCap(file.FileCap(env.cap))
+    yang_to_act(wfcap, yangs=[ys_one], filename="../test_data_classes/src/yang_one.act")
     yang_to_act(wfcap, yangs=[ys_foo, ys_bar], filename="../test_data_classes/src/yang_foo.act")
     yang_to_act(wfcap, yangs=[ys_basics], filename="../test_data_classes/src/yang_basics.act")
     env.exit(0)
