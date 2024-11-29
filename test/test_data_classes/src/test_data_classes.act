@@ -5,8 +5,29 @@ import xml
 import yang.adata
 import yang.gdata
 
+import yang_one
 from yang_foo import root as yang_foo_root
 import yang_basics
+
+def _test_mandatory1():
+    xml_text = """<data><tc1><l1>foo</l1></tc1></data>"""
+    # This should work, because we provide a value for the mandatory leaf l1
+    r = yang_one.root.from_xml(xml.decode(xml_text))
+    # This should not work
+    try:
+        r = yang_one.root.from_xml(xml.decode(xml_text))
+    except ValueError as e:
+        pass
+
+def _test_mandatory2():
+    # This should work, because we provide a value for the mandatory leaf l1
+    xml_text = """<data><tc1><l1>foo</l1></tc1><li><name>foo</name><c1><l1>foo</l1></c1></li></data>"""
+    r = yang_one.root.from_xml(xml.decode(xml_text))
+    # This should not work
+    try:
+        r = yang_one.root.from_xml(xml.decode(xml_text))
+    except ValueError as e:
+        pass
 
 # YANG model used to generate yang_foo
 #
@@ -28,7 +49,6 @@ import yang_basics
 #         }
 #     }
 # }
-
 
 def _test_foo_from_xml_full():
     xml_text = """<data>
@@ -121,7 +141,6 @@ def _test_empty_false():
     r = yang_foo_root()
     r.c1.l_empty = False
     return r.to_gdata().to_xmlstr()
-
 
 def _test_leaf_defaults():
     r = yang_basics.root()
