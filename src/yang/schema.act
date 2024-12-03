@@ -349,7 +349,7 @@ class DNodeInner(DNode):
                 if child_default != None:
                     defval = "=None"
                 child_arg = "%s: %s%s" % (_safe_name(child.name), yang_leaf_to_acton_arg_type(child, loose), defval)
-                if is_optional_yang_leaf(child, loose):
+                if is_optional_arg_yang_leaf(child, loose):
                     opt_args.append(child_arg)
                 else:
                     req_args.append(child_arg)
@@ -1544,6 +1544,8 @@ def _prsrc_attrs(indent, attrs):
 
 
 def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
+    """Maps YANG leaf optionality to Acton type
+    """
     optional = True
 
     # Mandatory leaf in YANG model are non-optional in Acton
@@ -1566,6 +1568,30 @@ def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
     if isinstance(parent, DList):
         if leaf.name in parent.key:
             optional = False
+    return optional
+
+def is_optional_arg_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
+    """Maps YANG leaf optionality to Acton type for object constructro arg
+
+    This is different from the is_optional_yang_leaf because for YANG leafs with
+    a default value, we require a difference depending on where the type is used.
+
+    leaf foo {
+      type string;
+      default "banana";
+    }
+
+    the type is str, since even if we do not provide a value, it will get its
+    default 'banana', so it is never optional. However, in the constructor
+    argument, it is optional. This method is used to determine if the argument
+    type should be optional.
+    """
+    optional = is_optional_yang_leaf(leaf, loose)
+
+    if isinstance(leaf, DLeaf):
+        if leaf.default != None:
+            optional = True
+
     return optional
 
 def yang_leaf_to_acton_type(leaf: DNodeLeaf, loose: bool=False) -> str:
@@ -1707,7 +1733,13 @@ def yang_type_to_acton_type(t: ?Type) -> str:
     raise ValueError("type not defined")
 
 def prsrc_literal(ytype: str, value: str) -> str:
-    if ytype == "string":
+    if ytype == "boolean":
+        if value.lower() == "true":
+            return "True"
+        return "False"
+    elif ytype == "identityref":
+        return '"' + value + '"'
+    elif ytype == "string":
         return '"' + value + '"'
     return value
 
