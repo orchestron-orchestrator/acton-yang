@@ -1761,3 +1761,36 @@ def _test_prdaclass_max_elements_unbounded():
     root = yang.compile([ys_base])
     src = root.prdaclass()
     return src
+
+def _test_mixed_req_args():
+    ys_base = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    container c {
+        list li {
+            key name;
+            leaf name {
+                type string;
+            }
+
+            leaf foo {
+                description "Since this has a default value, it should be an optional object argument";
+                type string;
+                default "banana";
+            }
+
+            container bar {
+                leaf man {
+                    type string;
+                    mandatory true;
+                }
+            }
+        }
+    }
+}"""
+    root = yang.compile([ys_base])
+
+    li = root.get("c").get("li")
+    src = li.prdaclass(top=False)
+    return src
