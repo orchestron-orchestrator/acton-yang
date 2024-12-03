@@ -1741,11 +1741,15 @@ def prsrc_literal(ytype: str, value: str) -> str:
         if value.lower() == "true":
             return "True"
         return "False"
+    elif ytype == "enumeration":
+        return '"' + value + '"'
     elif ytype == "identityref":
         return '"' + value + '"'
+    elif ytype in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
+        return value
     elif ytype == "string":
         return '"' + value + '"'
-    return value
+    raise ValueError("Unhandled prsrc literal of type " + ytype)
 
 def _safe_name(name: str) -> str:
     new = name.replace("-", "_")
