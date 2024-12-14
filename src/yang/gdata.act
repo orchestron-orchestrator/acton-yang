@@ -330,31 +330,41 @@ class Node(object):
             return xml
         elif isinstance(self, AbsentListElement):
             parent = self.parent
-            if isinstance(parent, List):
-                xml = _indent() + parent.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')]) + _nl()
-                for key_idx, key_name in enumerate(parent.keys):
-                    xml += _indent(1) + "<" + key_name + ">" + str(self.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
-                xml += _indent() + parent.fmt_tag(cns, close=True) + _nl()
-                return xml
+            if parent != None:
+                if isinstance(parent, List):
+                    xml = _indent() + parent.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')]) + _nl()
+                    if parent.keys == None:
+                        raise ValueError("AbsentListElement must have a parent List with keys")
+                    for key_idx, key_name in enumerate(parent.keys):
+                        xml += _indent(1) + "<" + key_name + ">" + str(self.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
+                    xml += _indent() + parent.fmt_tag(cns, close=True) + _nl()
+                    return xml
+                else:
+                    raise ValueError("AbsentListElement must have a parent List")
             else:
-                raise ValueError("AbsentListElement must have a parent List")
+                raise ValueError("AbsentListElement must have a parent List != None")
         elif isinstance(self, ListElement):
             parent = self.parent
-            if isinstance(parent, List):
-                xml = _indent() + parent.fmt_tag(cns) + _nl()
-                # Print key leafs first
-                for key_idx, key_name in enumerate(parent.keys):
-                    xml += _indent() + "  <" + key_name + ">" + str(self.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
-                for key, child in self.children.items():
-                    if key in parent.keys:
-                        continue
-                    xml += child.to_xmlstr(pretty, indent+1, self.ns())
-                xml += _indent() + parent.fmt_tag(cns, close=True) + _nl()
-                if cns == "":
-                    cns = self.ns()
-                return xml
+            if parent != None:
+                if isinstance(parent, List):
+                    xml = _indent() + parent.fmt_tag(cns) + _nl()
+                    # Print key leafs first
+                    if parent.keys == None:
+                        raise ValueError("ListElement must have a parent List with keys")
+                    for key_idx, key_name in enumerate(parent.keys):
+                        xml += _indent() + "  <" + key_name + ">" + str(self.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
+                    for key, child in self.children.items():
+                        if key in parent.keys:
+                            continue
+                        xml += child.to_xmlstr(pretty, indent+1, self.ns())
+                    xml += _indent() + parent.fmt_tag(cns, close=True) + _nl()
+                    if cns == "":
+                        cns = self.ns()
+                    return xml
+                else:
+                    raise ValueError("ListElement must have a parent List")
             else:
-                raise ValueError("ListElement must have a parent List")
+                raise ValueError("ListElement must have a parent List != None")
         elif isinstance(self, Leaf):
             xml = _indent()
             if self.t == "empty":
