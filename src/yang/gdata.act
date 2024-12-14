@@ -775,146 +775,247 @@ class Absent(Node):
         self._ns = ns
         self.prefix = prefix
 
+
+def vals_equal(a: value, b: value) -> bool:
+    # Compare known leaf value types
+    if isinstance(a, int) and isinstance(b, int):
+        return a == b
+    if isinstance(a, bool) and isinstance(b, bool):
+        return a == b
+    if isinstance(a, float) and isinstance(b, float):
+        return a == b
+    if isinstance(a, str) and isinstance(b, str):
+        return a == b
+    # TODO: Add support for u8 and i8
+    #if isinstance(a, u8) and isinstance(b, u8):
+    #    return a == b
+    if isinstance(a, u16) and isinstance(b, u16):
+        return a == b
+    if isinstance(a, u32) and isinstance(b, u32):
+        return a == b
+    if isinstance(a, u64) and isinstance(b, u64):
+        return a == b
+    # TODO: Add support for u8 and i8
+    #if isinstance(a, i8) and isinstance(b, i8):
+    #    return a == b
+    if isinstance(a, i16) and isinstance(b, i16):
+        return a == b
+    if isinstance(a, i32) and isinstance(b, i32):
+        return a == b
+    if isinstance(a, i64) and isinstance(b, i64):
+        return a == b
+
+    # Unhandled or mismatched types are considered not equal
+    return False
+
+# For leaf-lists we need to compare a list of values
+def vals_list_equal(a: list[value], b: list[value]) -> bool:
+    if len(a) != len(b):
+        return False
+    for i in range(len(a)):
+        if not vals_equal(a[i], b[i]):
+            return False
+    return True
+
 def merge(a: Node, b: Node) -> Node:
+    if type(a) != type(b):
+        raise ValueError("Cannot merge nodes of different types, type(a) = %s, type(b) = %s" % (str(type(a)), str(type(b))))
+
+    # Helper to merge keyed children (used by Container, Module, Root, and ListElement)
+    def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node], ns: ?str) -> dict[str, Node]:
+        result: dict[str, Node] = {}
+
+        a_keys = []
+        for k in a_children:
+            a_keys.append(k)
+        b_keys = []
+        for k in b_children:
+            b_keys.append(k)
+
+        i = 0
+        j = 0
+        # Two-pointer approach over a_keys and b_keys
+        while i < len(a_keys) and j < len(b_keys):
+            ak = a_keys[i]
+            bk = b_keys[j]
+            if ak == bk:
+                # Overlapping key
+                merged_child = merge(a_children[ak], b_children[bk])
+                result[ak] = merged_child
+                i += 1
+                j += 1
+            else:
+                # Keys differ
+                ak_in_b = (ak in b_children)
+                bk_in_a = (bk in a_children)
+                if not ak_in_b:
+                    # Child only in a
+                    result[ak] = a_children[ak]
+                    i += 1
+                elif not bk_in_a:
+                    # Child only in b
+                    # We append it now right after we handle old nodes to keep order of a
+                    # In merging, we decided to maintain 'a' order as baseline
+                    # So we handle all a_nodes that appear before first
+                    # If we want strictly all 'a' first, we can first go through a_keys that are not in b.
+                    # But let's insert b node here to keep somewhat stable merging.
+                    result[bk] = b_children[bk]
+                    j += 1
+                else:
+                    # Both appear in both sets at different positions, reorder scenario
+                    # For simplicity, handle old's node first since we want to keep a's order.
+                    merged_child = merge(a_children[ak], b_children[ak])
+                    result[ak] = merged_child
+                    i += 1
+                    # We don't advance j here because we haven't handled bk yet.
+                    # We'll hit bk again in next iteration and handle it normally.
+
+        # If a still has items
+        while i < len(a_keys):
+            ak = a_keys[i]
+            # If ak also in b but we haven't handled it yet, merge it now.
+            # Otherwise just take it from a.
+            if ak in b_children:
+                merged_child = merge(a_children[ak], b_children[ak])
+                result[ak] = merged_child
+            else:
+                result[ak] = a_children[ak]
+            i += 1
+
+        # If b still has items
+        while j < len(b_keys):
+            bk = b_keys[j]
+            if bk not in a_children:
+                # New child from b
+                result[bk] = b_children[bk]
+            else:
+                # Already handled overlap above, but if we got here, let's be safe:
+                merged_child = merge(a_children[bk], b_children[bk])
+                result[bk] = merged_child
+            j += 1
+
+        return result
+
     if isinstance(a, Container) and isinstance(b, Container):
-        # Find overlapping children, which might need merging on their own
-        overlapping = set(a.children.keys()) & set(b.children.keys())
-        # Avoid comprehensions
-        new_children: dict[str, Node] = {}
-        for key in overlapping:
-            new_children[key] = merge(a.children[key], b.children[key])
-        # Add children that are not in the other node
-        for key in set(a.children.keys()) - set(b.children.keys()):
-            new_children[key] = a.children[key]
-        for key in set(b.children.keys()) - set(a.children.keys()):
-            new_children[key] = b.children[key]
+        if a.name != b.name:
+            raise ValueError("Cannot merge containers with different names: %s vs %s" % (a.name, b.name))
+        new_children = merge_keyed_children(a.children, b.children, a.ns())
         return Container(a.name, children=new_children, ns=a.ns())
+
     elif isinstance(a, Module) and isinstance(b, Module):
-        # Find overlapping children, which might need merging on their own
-        overlapping = set(a.children.keys()) & set(b.children.keys())
-        # Avoid comprehensions
-        new_children: dict[str, Node] = {}
-        for key in overlapping:
-            new_children[key] = merge(a.children[key], b.children[key])
-        # Add children that are not in the other node
-        for key in set(a.children.keys()) - set(b.children.keys()):
-            new_children[key] = a.children[key]
-        for key in set(b.children.keys()) - set(a.children.keys()):
-            new_children[key] = b.children[key]
+        if a.name != b.name:
+            raise ValueError("Cannot merge modules with different names: %s vs %s" % (a.name, b.name))
+        new_children = merge_keyed_children(a.children, b.children, a.ns())
         return Module(a.name, children=new_children, ns=a.ns())
+
+    elif isinstance(a, Root) and isinstance(b, Root):
+        new_children = merge_keyed_children(a.children, b.children, a.ns())
+        return Root(children=new_children)
+
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.name != b.name:
-            raise ValueError("Cannot merge leaves with different names")
+            raise ValueError("Cannot merge leaves with different names: %s vs %s" % (a.name, b.name))
         if a.t != b.t:
             raise ValueError("Cannot merge leaves with different types")
         aval = a.val
         bval = b.val
-        if aval == None and bval == None:
+        if vals_equal(aval, bval):
             return a
-        if isinstance(aval, int) and isinstance(bval, int):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        if isinstance(aval, str) and isinstance(bval, str):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        if isinstance(aval, bool) and isinstance(bval, bool):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        if isinstance(aval, float) and isinstance(bval, float):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        # YANG uint8 is stored as u16 since we don't have u8.
-        if isinstance(aval, u16) and isinstance(bval, u16):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        if isinstance(aval, u32) and isinstance(bval, u32):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        if isinstance(aval, u64) and isinstance(bval, u64):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        # YANG int8 is stored as i16 since we don't have i8.
-        if isinstance(aval, i16) and isinstance(bval, i16):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        if isinstance(aval, i32) and isinstance(bval, i32):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        if isinstance(aval, i64) and isinstance(bval, i64):
-            if aval == bval:
-                return a
-            raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
-        raise ValueError("Unsupported value type in Leaf node comparison: " + type(aval) + " != " + type(bval))
+        raise ValueError("Cannot merge leaves with different values: %s != %s" % (str(aval), str(bval)))
+
+    elif isinstance(a, LeafList) and isinstance(b, LeafList):
+        if a.name != b.name:
+            raise ValueError("Cannot merge leaf-lists with different names: %s vs %s" % (a.name, b.name))
+        if vals_list_equal(a.vals, b.vals):
+            return a
+        raise ValueError("Cannot merge leaf-lists with different values")
 
     elif isinstance(a, List) and isinstance(b, List):
         if a.name != b.name:
-            raise ValueError("Cannot merge lists with different names")
+            raise ValueError("Cannot merge lists with different names: %s vs %s" % (a.name, b.name))
         if a.keys != b.keys:
-            raise ValueError("Cannot merge lists with different keys")
+            raise ValueError("Cannot merge lists with different keys: %s vs %s" % (str(a.keys), str(b.keys)))
         if a.user_order != b.user_order:
             raise ValueError("Cannot merge lists with different user_order")
 
-        new_elements: list[ListElement] = []
-
         if a.user_order:
-            # Create a new list with elements from a, also merging elements that are
-            # present in both lists
+            # user_order = True
+            # Two-pointer approach for merging list elements
+            # This preserves the order from 'a' as baseline and inserts 'b' elements accordingly.
+            new_elements: list[ListElement] = []
+
+            # Map by keys for quick lookup
+            def key_str(elem: ListElement) -> str:
+                def escape_keys(k: str) -> str:
+                    return k.replace(",", "\\,")
+                parts = []
+                for kv in elem.key_vals:
+                    parts.append(escape_keys(kv))
+                return ",".join(parts)
+
+            old_map = {}
+            for e in a.elements:
+                old_map[key_str(e)] = e
+
+            # Start with elements from a, merge if present in b
             for a_elem in a.elements:
+                k = key_str(a_elem)
                 found = False
                 for b_elem in b.elements:
-                    if a_elem.key_vals == b_elem.key_vals:
-                        new_element = merge(a_elem, b_elem)
-                        if isinstance(new_element, ListElement):
-                            new_elements.append(new_element)
+                    if b_elem.key_vals == a_elem.key_vals:
+                        merged_elem = merge(a_elem, b_elem)
+                        if isinstance(merged_elem, ListElement):
+                            new_elements.append(merged_elem)
+                        else:
+                            raise ValueError("merge did not return a ListElement where one was expected")
                         found = True
                         break
                 if not found:
+                    # not in b, just add a_elem
                     new_elements.append(a_elem)
+
             # Add elements from b that are not in a
-            insertion_index = 0
+            # Insert them in a stable manner at the end to preserve 'a' order
+            # If we want a more sophisticated merging of order, we could try to insert them
+            # relative to keys present in both.
+            # For now, we just append them at the end.
+            existing_keys = {}
+            for e in new_elements:
+                existing_keys[key_str(e)] = True
             for b_elem in b.elements:
-                # Check if the element is already in the list. If it is, we should
-                # insert the next element after it, so grab the index.
-                found = False
-                for idx, a_elem in enumerate(new_elements[insertion_index:]):
-                    if a_elem.key_vals == b_elem.key_vals:
-                        found = True
-                        insertion_index = idx + 1
-                        break
-                if found:
-                    continue
-                new_elements.insert(insertion_index, b_elem)
-                insertion_index += 1
+                bk = key_str(b_elem)
+                if bk not in existing_keys:
+                    new_elements.append(b_elem)
+                    existing_keys[bk] = True
+
+            return List(a.name, a.keys, new_elements, user_order=a.user_order, ns=a.ns(), prefix=a.prefix)
         else:
+            # user_order = False
+            # Keep the original merging logic since it sorts by keys, not order
             all_elements: dict[str, list[ListElement]] = {}
 
             def escape_keys(key_val):
                 return key_val.replace(",", "\\,")
             for elem in a.elements:
-                escaped_keys = map(escape_keys, elem.key_vals)
                 key_str = ",".join(elem.key_vals)
                 if key_str not in all_elements:
                     all_elements[key_str] = []
                 all_elements[key_str].append(elem)
             for elem in b.elements:
-                escaped_keys = map(escape_keys, elem.key_vals)
                 key_str = ",".join(elem.key_vals)
                 if key_str not in all_elements:
                     all_elements[key_str] = []
                 all_elements[key_str].append(elem)
 
-            for key_str in sorted(all_elements.keys()):
-                # merge all elements with the same key values
-                elems: list[ListElement] = all_elements[key_str]
+            new_elements: list[ListElement] = []
+            # sort keys lex order as before
+            unsorted_keys = []
+            for k in all_elements:
+                unsorted_keys.append(k)
+            sorted_keys = sorted(unsorted_keys)
+
+            for key_str in sorted_keys:
+                elems = all_elements[key_str]
                 new_elem = elems[0]
                 if len(elems) > 1:
                     for elem in elems[1:]:
@@ -924,97 +1025,24 @@ def merge(a: Node, b: Node) -> Node:
                 else:
                     raise ValueError("unreachable, new_elem should always be a ListElement")
 
-        return List(a.name, a.keys, new_elements, ns=a.ns())
-
-    elif isinstance(a, List) and isinstance(b, List):
-        if a.name != b.name:
-            raise ValueError("Cannot merge lists with different names")
-        if a.keys != b.keys:
-            raise ValueError("Cannot merge lists with different keys")
-        new_elements: list[ListElement] = []
-        for a_elem in a.elements:
-            found = False
-            for b_elem in b.elements:
-                if a_elem.key_vals == b_elem.key_vals:
-                    new_element = merge(a_elem, b_elem)
-                    if isinstance(new_element, ListElement):
-                        new_elements.append(new_element)
-                    found = True
-                    break
-            if not found:
-                new_elements.append(a_elem)
-        for b_elem in b.elements:
-            found = False
-            for a_elem in a.elements:
-                if a_elem.key_vals == b_elem.key_vals:
-                    found = True
-                    break
-            if not found:
-                new_elements.append(b_elem)
-        return List(a.name, a.keys, new_elements, ns=a.ns())
+            return List(a.name, a.keys, new_elements, ns=a.ns())
 
     elif isinstance(a, ListElement) and isinstance(b, ListElement):
         if a.key_vals != b.key_vals:
-            raise ValueError("Cannot merge list elements with different keys")
-        # Find overlapping children, which might need merging on their own
-        overlapping = set(a.children.keys()) & set(b.children.keys())
-        # Avoid comprehensions
-        new_children: dict[str, Node] = {}
-        for key in overlapping:
-            new_children[key] = merge(a.children[key], b.children[key])
-        # Add children that are not in the other node
-        for key in set(a.children.keys()) - set(b.children.keys()):
-            new_children[key] = a.children[key]
-        for key in set(b.children.keys()) - set(a.children.keys()):
-            new_children[key] = b.children[key]
+            raise ValueError("Cannot merge list elements with different keys: %s vs %s" % (str(a.key_vals), str(b.key_vals)))
+        # Merge keyed children similarly to Container
+        new_children = merge_keyed_children(a.children, b.children, a.ns())
         return ListElement(a.key_vals, children=new_children, ns=a.ns())
 
-    elif isinstance(a, Root) and isinstance(b, Root):
-        # Find overlapping children, which might need merging on their own
-        overlapping = set(a.children.keys()) & set(b.children.keys())
-        # Avoid comprehensions
-        new_children: dict[str, Node] = {}
-        for key in overlapping:
-            new_children[key] = merge(a.children[key], b.children[key])
-        # Add children that are not in the other node
-        for key in set(a.children.keys()) - set(b.children.keys()):
-            new_children[key] = a.children[key]
-        for key in set(b.children.keys()) - set(a.children.keys()):
-            new_children[key] = b.children[key]
-        return Root(children=new_children)
-    elif type(a) != type(b):
-        raise ValueError("Cannot merge nodes of different types, type(a) = " + type(a) + ", type(b) = " + type(b))
+    elif isinstance(a, Absent) and isinstance(b, Absent):
+        # Both absent is odd in a merge scenario, but let's just return absent
+        return a
+
     else:
-        raise ValueError("Unsupported node type in merge: " + type(a))
+        raise ValueError("Unsupported node type in merge: %s" % str(type(a)))
 
 
 def diff(old: Node, new: Node) -> ?Node:
-    def vals_equal(ov: value, nv: value) -> bool:
-        # Compare known leaf value types
-        if isinstance(ov, int) and isinstance(nv, int):
-            return ov == nv
-        if isinstance(ov, bool) and isinstance(nv, bool):
-            return ov == nv
-        if isinstance(ov, float) and isinstance(nv, float):
-            return ov == nv
-        if isinstance(ov, str) and isinstance(nv, str):
-            return ov == nv
-        if isinstance(ov, u16) and isinstance(nv, u16):
-            return ov == nv
-        if isinstance(ov, u32) and isinstance(nv, u32):
-            return ov == nv
-        if isinstance(ov, u64) and isinstance(nv, u64):
-            return ov == nv
-        if isinstance(ov, i16) and isinstance(nv, i16):
-            return ov == nv
-        if isinstance(ov, i32) and isinstance(nv, i32):
-            return ov == nv
-        if isinstance(ov, i64) and isinstance(nv, i64):
-            return ov == nv
-
-        # Unhandled or mismatched types are considered not equal
-        return False
-
     if type(old) != type(new):
         raise ValueError("diff called with nodes of different types: %s vs %s" % (str(type(old)), str(type(new))))
 
@@ -1231,16 +1259,8 @@ def diff(old: Node, new: Node) -> ?Node:
     elif isinstance(old, LeafList) and isinstance(new, LeafList):
         if old.name != new.name:
             raise ValueError("LeafList names differ: %s vs %s" % (old.name, new.name))
-        if len(old.vals) == len(new.vals):
-            lists_same = True
-            i = 0
-            while i < len(old.vals):
-                if not vals_equal(old.vals[i], new.vals[i]):
-                    lists_same = False
-                    break
-                i += 1
-            if lists_same:
-                return None
+        if vals_list_equal(old.vals, new.vals):
+            return None
         return new
 
     elif isinstance(old, Absent) and isinstance(new, Absent):
@@ -1630,6 +1650,9 @@ def _test_merge1():
     res = merge(y1, y2)
 
     exp = Container("foo", {
+        "a": Leaf("a", "int", 1),
+        "b": Leaf("b", "int", 2),
+        "c": Leaf("c", "int", 3),
         "l1": List("l1", ["name"], [
             ListElement(["k1"], {
                 "n1": Leaf("n1", "int", 1),
@@ -1643,13 +1666,10 @@ def _test_merge1():
                 "n4": Leaf("n4", "int", 4),
             }),
         ]),
-        "a": Leaf("a", "int", 1),
-        "b": Leaf("b", "int", 2),
-        "c": Leaf("c", "int", 3),
         "d": LeafList("d", ["a", "b", "c"])
     }, ns="http://example.com/acme")
 
-    testing.assertEqual(res, exp)
+    testing.assertEqual(res.prsrc(), exp.prsrc())
 
 def _test_merge_list1():
     y1 = List("l1", ["name"], [
