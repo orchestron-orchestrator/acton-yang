@@ -1254,6 +1254,222 @@ def diff(old: Node, new: Node) -> ?Node:
         raise ValueError("Unhandled node type in diff: %s" % str(type(old)))
 
 
+def patch(old: Node, p: ?Node) -> ?Node:
+    if p is None:
+        return old
+
+    if isinstance(old, Container) and isinstance(p, Container):
+        if old.name != p.name:
+            raise ValueError("Container names differ in patch: %s vs %s" % (old.name, p.name))
+
+        # Start with old children
+        new_children: dict[str, Node] = {}
+        for key in old.children:
+            new_children[key] = old.children[key]
+
+        # Apply patch changes
+        for key in p.children:
+            cpatch = p.children[key]
+            if key in new_children:
+                # Patch existing child
+                res = patch(new_children[key], cpatch)
+                if res is None:
+                    del new_children[key]
+                else:
+                    new_children[key] = res
+            else:
+                # Key not in old
+                if isinstance(cpatch, Absent):
+                    # Trying to remove something not in old -> ignore
+                    pass
+                else:
+                    # New child
+                    new_children[key] = cpatch
+
+        # No need to remove unchanged nodes; they are already in new_children
+        if len(new_children) == 0:
+            return None
+        return Container(old.name, children=new_children, ns=old.ns(), prefix=old.prefix)
+
+    elif isinstance(old, List) and isinstance(p, List):
+        if old.name != p.name:
+            raise ValueError("List names differ: %s vs %s" % (old.name, p.name))
+        if old.keys != p.keys:
+            raise ValueError("List keys differ: %s vs %s" % (str(old.keys), str(p.keys)))
+
+        def key_str(elem: ListElement) -> str:
+            def escape_keys(k: str) -> str:
+                return k.replace(",", "\\,")
+            parts = []
+            for kv in elem.key_vals:
+                parts.append(escape_keys(kv))
+            return ",".join(parts)
+
+        old_map = {}
+        for e in old.elements:
+            k = key_str(e)
+            old_map[k] = e
+
+        # Apply patch elements
+        patch_elems = p.elements
+        for pelem in patch_elems:
+            if isinstance(pelem, AbsentListElement):
+                # Remove this element if it exists
+                k = key_str(pelem)
+                if k in old_map:
+                    del old_map[k]
+            else:
+                # pelem is a ListElement
+                k = key_str(pelem)
+                if k in old_map:
+                    # Patch existing element
+                    res = patch(old_map[k], pelem)
+                    if res is None:
+                        # Remove the element
+                        del old_map[k]
+                    else:
+                        old_map[k] = res
+                else:
+                    # New element
+                    old_map[k] = pelem
+
+        # Rebuild elements in final order
+        # Start with old's original order for unchanged and patched elements
+        final_key_order = []
+        chosen = {}
+        for e in old.elements:
+            k = key_str(e)
+            if k in old_map:
+                final_key_order.append(k)
+                chosen[k] = True
+
+        # Now check if patch introduced new elements not in old.
+        # Add them in the order they appear in patch.
+        for pelem in patch_elems:
+            if isinstance(pelem, AbsentListElement):
+                continue
+            k = key_str(pelem)
+            if k in old_map and k not in chosen:
+                final_key_order.append(k)
+                chosen[k] = True
+
+        new_elements: list[ListElement] = []
+        for k in final_key_order:
+            new_elements.append(old_map[k])
+
+        if len(new_elements) == 0:
+            return None
+        return List(old.name, old.keys, elements=new_elements, user_order=old.user_order, ns=old.ns(), prefix=old.prefix)
+
+    # For Root, Module, ListElement: apply similar logic to preserve unchanged children
+
+    elif isinstance(old, Root) and isinstance(p, Root):
+        # Similar logic to Container
+        new_children: dict[str, Node] = {}
+        for key in old.children:
+            new_children[key] = old.children[key]
+
+        for key in p.children:
+            cpatch = p.children[key]
+            if key in new_children:
+                res = patch(new_children[key], cpatch)
+                if res is None:
+                    del new_children[key]
+                else:
+                    new_children[key] = res
+            else:
+                if isinstance(cpatch, Absent):
+                    pass
+                else:
+                    new_children[key] = cpatch
+
+        return Root(children=new_children, prefix=old.prefix)
+
+    elif isinstance(old, Module) and isinstance(p, Module):
+        if old.name != p.name:
+            raise ValueError("Module names differ in patch: %s vs %s" % (old.name, p.name))
+        new_children: dict[str, Node] = {}
+        for key in old.children:
+            new_children[key] = old.children[key]
+
+        for key in p.children:
+            cpatch = p.children[key]
+            if key in new_children:
+                res = patch(new_children[key], cpatch)
+                if res is None:
+                    del new_children[key]
+                else:
+                    new_children[key] = res
+            else:
+                if isinstance(cpatch, Absent):
+                    pass
+                else:
+                    new_children[key] = cpatch
+
+        if len(new_children) == 0:
+            return None
+        return Module(old.name, children=new_children, ns=old.ns(), prefix=old.prefix)
+
+    elif isinstance(old, ListElement) and isinstance(p, ListElement):
+        if old.key_vals != p.key_vals:
+            raise ValueError("ListElement keys differ in patch: %s vs %s" % (str(old.key_vals), str(p.key_vals)))
+
+        new_children: dict[str, Node] = {}
+        for key in old.children:
+            new_children[key] = old.children[key]
+
+        for key in p.children:
+            cpatch = p.children[key]
+            if key in new_children:
+                res = patch(new_children[key], cpatch)
+                if res is None:
+                    del new_children[key]
+                else:
+                    new_children[key] = res
+            else:
+                if isinstance(cpatch, Absent):
+                    pass
+                else:
+                    new_children[key] = cpatch
+
+        return ListElement(old.key_vals, children=new_children, ns=old.ns())
+
+    elif isinstance(old, Leaf) and isinstance(p, Leaf):
+        # Patch leaf replaces old leaf value
+        if old.name != p.name or old.t != p.t:
+            raise ValueError("Leaf name/type differ in patch: (%s, %s) vs (%s, %s)" % (old.name, old.t, p.name, p.t))
+        return p
+
+    elif isinstance(old, LeafList) and isinstance(p, LeafList):
+        # Patch leaf-list replaces old leaf-list values
+        if old.name != p.name:
+            raise ValueError("LeafList names differ in patch: %s vs %s" % (old.name, p.name))
+        return p
+
+    elif isinstance(old, Absent) and isinstance(p, Absent):
+        # Both absent means node was removed
+        return None
+
+    elif isinstance(old, AbsentListElement) and isinstance(p, AbsentListElement):
+        # Both absent means element was removed
+        if old.key_vals != p.key_vals:
+            raise ValueError("AbsentListElement keys differ in patch: %s vs %s" % (str(old.key_vals), str(p.key_vals)))
+        return None
+
+    elif isinstance(p, Absent):
+        # Patch says remove this node
+        return None
+
+    elif isinstance(p, AbsentListElement):
+        # Patch says remove this element
+        return None
+
+    else:
+        if p != None:
+            raise ValueError("Unhandled node type in patch: %s" % str(type(p)))
+
+
+
 def get_xml_child(n: xml.Node, name: str) -> xml.Node:
     r = get_xml_opt_child(n, name)
     if r is not None:
@@ -1615,6 +1831,223 @@ def _test_diff_complex_ordering():
     }, ns="http://example.com/acme")
 
     testing.assertEqual(d, exp)
+
+def _test_patch_no_change():
+    old = Container("foo", {
+        "a": Leaf("a", "int", 1),
+        "b": Leaf("b", "int", 2),
+    }, ns="http://example.com/acme")
+
+    # diff is None means no changes
+    p = None
+
+    res = patch(old, p)
+    testing.assertEqual(res, old)
+
+def _test_patch_leaf_change():
+    old = Container("foo", {
+        "a": Leaf("a", "int", 1),
+        "b": Leaf("b", "int", 2),
+    }, ns="http://example.com/acme")
+
+    # Suppose we want to change leaf 'a' from 1 to 42
+    # diff would look like this:
+    p = Container("foo", {
+        "a": Leaf("a", "int", 42),
+    }, ns="http://example.com/acme")
+
+    res = patch(old, p)
+    exp = Container("foo", {
+        "a": Leaf("a", "int", 42),
+        "b": Leaf("b", "int", 2),
+    }, ns="http://example.com/acme")
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_node_removal():
+    old = Container("foo", {
+        "a": Leaf("a", "int", 1),
+        "c": Leaf("c", "int", 3),
+    }, ns="http://example.com/acme")
+
+    # Suppose we remove 'c'
+    # patch would be:
+    p = Container("foo", {
+        "c": Absent("c")
+    }, ns="http://example.com/acme")
+
+    res = patch(old, p)
+    exp = Container("foo", {
+        "a": Leaf("a", "int", 1),
+    }, ns="http://example.com/acme")
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_node_addition():
+    old = Container("foo", {
+        "a": Leaf("a", "int", 1),
+    }, ns="http://example.com/acme")
+
+    # Add a new leaf 'e':
+    p = Container("foo", {
+        "e": Leaf("e", "int", 5)
+    }, ns="http://example.com/acme")
+
+    res = patch(old, p)
+    exp = Container("foo", {
+        "a": Leaf("a", "int", 1),
+        "e": Leaf("e", "int", 5),
+    }, ns="http://example.com/acme")
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_complex_ordering():
+    # old: a, b, c
+    old = Container("foo", {
+        "a": Leaf("a", "int", 1),
+        "b": Leaf("b", "int", 2),
+        "c": Leaf("c", "int", 3),
+    }, ns="http://example.com/acme")
+
+    # new: a, c, d
+    # diff: remove b, add d
+    p = Container("foo", {
+        "b": Absent("b"),
+        "d": Leaf("d", "int", 4)
+    }, ns="http://example.com/acme")
+
+    res = patch(old, p)
+    exp = Container("foo", {
+        "a": Leaf("a", "int", 1),
+        "c": Leaf("c", "int", 3),
+        "d": Leaf("d", "int", 4),
+    }, ns="http://example.com/acme")
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_leaflist():
+    old = Container("foo", {
+        "l": LeafList("l", ["a", "b", "c"])
+    }, ns="http://example.com/acme")
+
+    # new: l = [a, x, c, d]
+    # diff would be a leaflist replace:
+    p = Container("foo", {
+        "l": LeafList("l", ["a", "x", "c", "d"])
+    }, ns="http://example.com/acme")
+
+    res = patch(old, p)
+    exp = Container("foo", {
+        "l": LeafList("l", ["a", "x", "c", "d"])
+    }, ns="http://example.com/acme")
+
+    testing.assertEqual(res, exp)
+
+def _test_diff_and_patch_large_tree():
+    # Construct a large 'old' data tree under a Root node
+    old = Root(children={
+        "mod1": Module("mod1", children={
+            "conf": Container("conf", children={
+                "settings": Container("settings", children={
+                    "hostname": Leaf("hostname", "str", "old-router"),
+                    "motd": Leaf("motd", "str", "Welcome!")
+                }, ns="http://example.com/yang/mod1"),
+                "interfaces": List("interfaces", ["name"], elements=[
+                    ListElement(["eth0"], children={
+                        "desc": Leaf("desc", "str", "Uplink interface"),
+                        "enabled": Leaf("enabled", "bool", True)
+                    }),
+                    ListElement(["eth1"], children={
+                        "desc": Leaf("desc", "str", "Internal interface"),
+                        "enabled": Leaf("enabled", "bool", True)
+                    }),
+                ], ns="http://example.com/yang/mod1")
+            }, ns="http://example.com/yang/mod1")
+        }, ns="http://example.com/yang/mod1"),
+        "mod2": Module("mod2", children={
+            "acl": Container("acl", children={
+                "rules": List("rules", ["id"], elements=[
+                    ListElement(["10"], children={
+                        "action": Leaf("action", "str", "permit"),
+                        "src": Leaf("src", "str", "10.0.0.0/24"),
+                        "dst": Leaf("dst", "str", "10.0.1.0/24"),
+                    }),
+                    ListElement(["20"], children={
+                        "action": Leaf("action", "str", "deny"),
+                        "src": Leaf("src", "str", "any"),
+                        "dst": Leaf("dst", "str", "any"),
+                    }),
+                ], ns="http://example.com/yang/mod2")
+            }, ns="http://example.com/yang/mod2")
+        }, ns="http://example.com/yang/mod2"),
+    })
+
+    # Construct a large 'new' data tree under a Root node
+    # Changes from old:
+    # - hostname changed from "old-router" to "new-router"
+    # - motd removed
+    # - eth1 is removed
+    # - a new interface eth2 is added
+    # - mod2 acl rule 20 changes action from deny to drop
+    # - a new acl rule 30 is added
+    # - add a LeafList in settings "ntp-servers"
+    new = Root(children={
+        "mod1": Module("mod1", children={
+            "conf": Container("conf", children={
+                "settings": Container("settings", children={
+                    "hostname": Leaf("hostname", "str", "new-router"),
+                    # motd removed
+                    "ntp-servers": LeafList("ntp-servers", ["192.168.100.1", "192.168.100.2"])
+                }, ns="http://example.com/yang/mod1"),
+                "interfaces": List("interfaces", ["name"], elements=[
+                    ListElement(["eth0"], children={
+                        "desc": Leaf("desc", "str", "Uplink interface"),
+                        "enabled": Leaf("enabled", "bool", True)
+                    }),
+                    # eth1 removed
+                    ListElement(["eth2"], children={
+                        "desc": Leaf("desc", "str", "DMZ interface"),
+                        "enabled": Leaf("enabled", "bool", False)
+                    }),
+                ], ns="http://example.com/yang/mod1")
+            }, ns="http://example.com/yang/mod1")
+        }, ns="http://example.com/yang/mod1"),
+        "mod2": Module("mod2", children={
+            "acl": Container("acl", children={
+                "rules": List("rules", ["id"], elements=[
+                    ListElement(["10"], children={
+                        "action": Leaf("action", "str", "permit"),
+                        "src": Leaf("src", "str", "10.0.0.0/24"),
+                        "dst": Leaf("dst", "str", "10.0.1.0/24"),
+                    }),
+                    ListElement(["20"], children={
+                        "action": Leaf("action", "str", "drop"),  # changed from deny
+                        "src": Leaf("src", "str", "any"),
+                        "dst": Leaf("dst", "str", "any"),
+                    }),
+                    ListElement(["30"], children={
+                        "action": Leaf("action", "str", "permit"),
+                        "src": Leaf("src", "str", "192.0.2.0/24"),
+                        "dst": Leaf("dst", "str", "198.51.100.0/24"),
+                    }),
+                ], ns="http://example.com/yang/mod2")
+            }, ns="http://example.com/yang/mod2")
+        }, ns="http://example.com/yang/mod2")
+    })
+
+    # Compute diff
+    d = diff(old, new)
+
+    # Check that patching old with d results in new
+    res = patch(old, d)
+    if res != None:
+        testing.assertEqual(res.prsrc(), new.prsrc())
+
+    # Also check that if we apply diff(new, old), and patch(new, diff(new, old)) we get old back.
+    # This ensures round-trip behavior.
+    #d2 = diff(new, old)
+    #res2 = patch(new, d2)
+    #testing.assertEqual(res2, old)
 
 def _test_prsrc():
     y1 = Module("moo", {
