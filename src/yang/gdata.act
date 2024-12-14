@@ -239,7 +239,9 @@ class Node(object):
             raise ValueError("Unsupported node type in prsrc")
 
     def get_name(self) -> str:
-        if isinstance(self, Container):
+        if isinstance(self, Absent):
+            return self.name
+        elif isinstance(self, Container):
             return self.name
         elif isinstance(self, Module):
             return self.name
@@ -286,9 +288,9 @@ class Node(object):
         return "<" + ("/" if close else "") + self.get_name() + ("" if close else ns_str) + attr_str + ("/" if end else "") + ">"
 
     def to_xmlstr(self, pretty=True, indent=0, cns="") -> str:
-        def _indent():
+        def _indent(extra=0):
             if pretty:
-                return "  " * indent
+                return "  " * (indent+extra)
             return ""
 
         def _nl():
@@ -324,24 +326,35 @@ class Node(object):
         elif isinstance(self, List):
             xml = ""
             for elem in self.elements:
-                xml += _indent() + self.fmt_tag(cns) + _nl()
-                # Print key leafs first
-                for key_idx, key_name in enumerate(self.keys):
-                    xml += _indent() + "  <" + key_name + ">" + str(elem.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
-                for le_childkey, le_child in elem.children.items():
-                    # Skip key leafs
-                    if le_childkey in self.keys:
-                        continue
-                    xml += le_child.to_xmlstr(pretty, indent + 1, self.ns())
-                xml += _indent() + self.fmt_tag(cns, close=True) + _nl()
+                xml += elem.to_xmlstr(pretty, indent, cns)
             return xml
+        elif isinstance(self, AbsentListElement):
+            parent = self.parent
+            if isinstance(parent, List):
+                xml = _indent() + parent.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')]) + _nl()
+                for key_idx, key_name in enumerate(parent.keys):
+                    xml += _indent(1) + "<" + key_name + ">" + str(self.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
+                xml += _indent() + parent.fmt_tag(cns, close=True) + _nl()
+                return xml
+            else:
+                raise ValueError("AbsentListElement must have a parent List")
         elif isinstance(self, ListElement):
-            xml = ""
-            for child in self.children.values():
-                xml += child.to_xmlstr(pretty, indent, self.ns())
-            if cns == "":
-                cns = self.ns()
-            return xml
+            parent = self.parent
+            if isinstance(parent, List):
+                xml = _indent() + parent.fmt_tag(cns) + _nl()
+                # Print key leafs first
+                for key_idx, key_name in enumerate(parent.keys):
+                    xml += _indent() + "  <" + key_name + ">" + str(self.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
+                for key, child in self.children.items():
+                    if key in parent.keys:
+                        continue
+                    xml += child.to_xmlstr(pretty, indent+1, self.ns())
+                xml += _indent() + parent.fmt_tag(cns, close=True) + _nl()
+                if cns == "":
+                    cns = self.ns()
+                return xml
+            else:
+                raise ValueError("ListElement must have a parent List")
         elif isinstance(self, Leaf):
             xml = _indent()
             if self.t == "empty":
@@ -366,6 +379,8 @@ class Node(object):
             if cns == "":
                 cns = self.ns()
             return xml
+        elif isinstance(self, Absent):
+            return _indent() + self.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')], end=True) + _nl()
         raise ValueError("Unsupported node type in to_xml: " + type(self))
 
     # --
@@ -587,6 +602,9 @@ extension Node(Eq):
                 raise ValueError("unreachable at List.__eq__")
             return True
 
+        if isinstance(self, AbsentListElement) and isinstance(other, AbsentListElement):
+            return self.key_vals == other.key_vals
+
         if isinstance(self, ListElement) and isinstance(other, ListElement):
             if self.key_vals != other.key_vals:
                 return False
@@ -596,6 +614,9 @@ extension Node(Eq):
                 if self.children[key] != other.children[key]:
                     return False
             return True
+
+        if isinstance(self, Absent) and isinstance(other, Absent):
+            return self.name == other.name
 
         raise ValueError("Cannot compare nodes of different types" + str(self) + " " + str(other))
 
@@ -685,6 +706,14 @@ class ListElement(Inner):
             return key_val.replace(",", "\\,")
         return ",".join(map(escape_keys, self.key_vals))
 
+class AbsentListElement(ListElement):
+    def __init__(self, key_vals: list[str], ns: ?str=None):
+        self.key_vals = key_vals
+        self.children = {}
+        self._ns = ns
+        if ns is not None:
+            self.set_ns(ns)
+
 class Leaf(Node):
     name: str
     t: str
@@ -710,6 +739,13 @@ class LeafList(Node):
         else:
             self.vals = []
 
+class Absent(Node):
+    name: str
+
+    def __init__(self, name: str, ns: ?str=None, prefix: ?str=None):
+        self.name = name
+        self._ns = ns
+        self.prefix = prefix
 
 def merge(a: Node, b: Node) -> Node:
     if isinstance(a, Container) and isinstance(b, Container):
@@ -790,6 +826,7 @@ def merge(a: Node, b: Node) -> Node:
                 return a
             raise ValueError("Cannot merge leaves with different values, " + str(aval) + " != " + str(bval))
         raise ValueError("Unsupported value type in Leaf node comparison: " + type(aval) + " != " + type(bval))
+
     elif isinstance(a, List) and isinstance(b, List):
         if a.name != b.name:
             raise ValueError("Cannot merge lists with different names")
@@ -903,6 +940,7 @@ def merge(a: Node, b: Node) -> Node:
         for key in set(b.children.keys()) - set(a.children.keys()):
             new_children[key] = b.children[key]
         return ListElement(a.key_vals, children=new_children, ns=a.ns())
+
     elif isinstance(a, Root) and isinstance(b, Root):
         # Find overlapping children, which might need merging on their own
         overlapping = set(a.children.keys()) & set(b.children.keys())
