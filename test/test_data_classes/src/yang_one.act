@@ -1,0 +1,184 @@
+import xml
+import yang.adata
+import yang.gdata
+
+# == This file is generated ==
+
+
+class foo__tc1(yang.adata.MNode):
+    l1: str
+    l2: ?str
+
+    def __init__(self, l1: str, l2: ?str):
+        self._ns = "http://example.com/foo"
+        self.l1 = l1
+        self.l2 = l2
+
+    def to_gdata(self) -> yang.gdata.Node:
+        res = yang.gdata.Container('tc1', ns=self._ns)
+        _l1 = self.l1
+        _l2 = self.l2
+        if _l1 is not None:
+            res.children['l1'] = yang.gdata.Leaf('l1', 'string', _l1, ns='http://example.com/foo')
+        if _l2 is not None:
+            res.children['l2'] = yang.gdata.Leaf('l2', 'string', _l2, ns='http://example.com/foo')
+        for child in res.children.values():
+            child.parent = res
+        return res
+
+    @staticmethod
+    def from_gdata(n: ?yang.gdata.Node) -> foo__tc1:
+        if n != None:
+            return foo__tc1(l1=n.get_str("l1"), l2=n.get_opt_str("l2"))
+        raise ValueError("Missing required subtree foo__tc1")
+
+    @staticmethod
+    def from_xml(n: ?xml.Node) -> foo__tc1:
+        if n != None:
+            return foo__tc1(l1=yang.gdata.from_xml_str(n, "l1"), l2=yang.gdata.from_xml_opt_str(n, "l2"))
+        raise ValueError("Missing required subtree foo__tc1")
+
+
+class foo__li__c1(yang.adata.MNode):
+    l1: str
+    l2: ?str
+
+    def __init__(self, l1: str, l2: ?str):
+        self._ns = "http://example.com/foo"
+        self.l1 = l1
+        self.l2 = l2
+
+    def to_gdata(self) -> yang.gdata.Node:
+        res = yang.gdata.Container('c1', ns=self._ns)
+        _l1 = self.l1
+        _l2 = self.l2
+        if _l1 is not None:
+            res.children['l1'] = yang.gdata.Leaf('l1', 'string', _l1, ns='http://example.com/foo')
+        if _l2 is not None:
+            res.children['l2'] = yang.gdata.Leaf('l2', 'string', _l2, ns='http://example.com/foo')
+        for child in res.children.values():
+            child.parent = res
+        return res
+
+    @staticmethod
+    def from_gdata(n: ?yang.gdata.Node) -> foo__li__c1:
+        if n != None:
+            return foo__li__c1(l1=n.get_str("l1"), l2=n.get_opt_str("l2"))
+        raise ValueError("Missing required subtree foo__li__c1")
+
+    @staticmethod
+    def from_xml(n: ?xml.Node) -> foo__li__c1:
+        if n != None:
+            return foo__li__c1(l1=yang.gdata.from_xml_str(n, "l1"), l2=yang.gdata.from_xml_opt_str(n, "l2"))
+        raise ValueError("Missing required subtree foo__li__c1")
+
+
+class foo__li_entry(yang.adata.MNode):
+    name: str
+    c1: foo__li__c1
+
+    def __init__(self, name: str, c1: foo__li__c1):
+        self._ns = "http://example.com/foo"
+        self.name = name
+        self.c1 = c1
+        self.c1._parent = self
+
+    def to_gdata(self) -> yang.gdata.Node:
+        res = yang.gdata.ListElement([str(self.name)], ns=self._ns)
+        _name = self.name
+        _c1 = self.c1
+        if _name is not None:
+            res.children['name'] = yang.gdata.Leaf('name', 'string', _name, ns='http://example.com/foo')
+        if _c1 is not None:
+            res.children['c1'] = _c1.to_gdata()
+        for child in res.children.values():
+            child.parent = res
+        return res
+
+    @staticmethod
+    def from_gdata(n: yang.gdata.Node) -> foo__li_entry:
+        return foo__li_entry(name=n.get_str("name"), c1=foo__li__c1.from_gdata(n.get_container("c1")))
+
+    @staticmethod
+    def from_xml(n: xml.Node) -> foo__li_entry:
+        return foo__li_entry(name=yang.gdata.from_xml_str(n, "name"), c1=foo__li__c1.from_xml(yang.gdata.get_xml_child(n, "c1")))
+
+class foo__li(yang.adata.MNode):
+    elements: list[foo__li_entry]
+    def __init__(self, elements=[]):
+        self._ns = "http://example.com/foo"
+        self._name = 'li'
+        self.elements = elements
+
+    def create(self, name, c1):
+        for e in self.elements:
+            match = True
+            if e.name != name:
+                match = False
+                break
+            if match:
+                return e
+
+        res = foo__li_entry(name, c1)
+        self.elements.append(res)
+        return res
+
+    def to_gdata(self):
+        res = yang.gdata.List('li', ['name'], ns=self._ns)
+        for e in self.elements:
+            e_gdata = e.to_gdata()
+            e_gdata.parent = res
+            if isinstance(e_gdata, yang.gdata.ListElement):
+                res.elements.append(e_gdata)
+        return res
+
+    @staticmethod
+    def from_gdata(n: yang.gdata.List) -> list[foo__li_entry]:
+        res = []
+        for e in n.elements:
+            res.append(foo__li_entry.from_gdata(e))
+        return res
+
+    @staticmethod
+    def from_xml(nodes: list[xml.Node]) -> list[foo__li_entry]:
+        res = []
+        for node in nodes:
+            res.append(foo__li_entry.from_xml(node))
+        return res
+
+
+class root(yang.adata.MNode):
+    tc1: foo__tc1
+    li: foo__li
+
+    def __init__(self, tc1: foo__tc1, li: list[foo__li_entry]=[]):
+        self._ns = ""
+        self.tc1 = tc1
+        self.tc1._parent = self
+        self.li = foo__li(elements=li)
+        self.li._parent = self
+
+    def to_gdata(self) -> yang.gdata.Node:
+        res = yang.gdata.Root()
+        _tc1 = self.tc1
+        _li = self.li
+        if _tc1 is not None:
+            res.children['tc1'] = _tc1.to_gdata()
+        if _li is not None:
+            res.children['li'] = _li.to_gdata()
+        for child in res.children.values():
+            child.parent = res
+        return res
+
+    @staticmethod
+    def from_gdata(n: ?yang.gdata.Node) -> root:
+        if n != None:
+            return root(tc1=foo__tc1.from_gdata(n.get_container("tc1")), li=foo__li.from_gdata(n.get_list("li")))
+        raise ValueError("Missing required subtree root")
+
+    @staticmethod
+    def from_xml(n: ?xml.Node) -> root:
+        if n != None:
+            return root(tc1=foo__tc1.from_xml(yang.gdata.get_xml_child(n, "tc1")), li=foo__li.from_xml(yang.gdata.get_xml_children(n, "li")))
+        raise ValueError("Missing required subtree root")
+
