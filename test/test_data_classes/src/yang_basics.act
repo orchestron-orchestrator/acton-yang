@@ -7,14 +7,19 @@ import yang.gdata
 
 class basics__c(yang.adata.MNode):
     l_str_def: str
+    l_str_def_quoted: str
     l_uint64_def: int
 
-    mut def __init__(self, l_str_def: ?str=None, l_uint64_def: ?int=None):
+    mut def __init__(self, l_str_def: ?str=None, l_str_def_quoted: ?str=None, l_uint64_def: ?int=None):
         self._ns = "http://example.com/basics"
         if l_str_def != None:
             self.l_str_def = l_str_def
         else:
             self.l_str_def = "foo"
+        if l_str_def_quoted != None:
+            self.l_str_def_quoted = l_str_def_quoted
+        else:
+            self.l_str_def_quoted = "\"foo\""
         if l_uint64_def != None:
             self.l_uint64_def = l_uint64_def
         else:
@@ -23,9 +28,12 @@ class basics__c(yang.adata.MNode):
     mut def to_gdata(self) -> yang.gdata.Node:
         res = yang.gdata.Container('c', ns=self._ns)
         _l_str_def = self.l_str_def
+        _l_str_def_quoted = self.l_str_def_quoted
         _l_uint64_def = self.l_uint64_def
         if _l_str_def is not None:
             res.children['l_str_def'] = yang.gdata.Leaf('l_str_def', 'string', _l_str_def, ns='http://example.com/basics')
+        if _l_str_def_quoted is not None:
+            res.children['l_str_def_quoted'] = yang.gdata.Leaf('l_str_def_quoted', 'string', _l_str_def_quoted, ns='http://example.com/basics')
         if _l_uint64_def is not None:
             res.children['l_uint64_def'] = yang.gdata.Leaf('l_uint64_def', 'uint64', _l_uint64_def, ns='http://example.com/basics')
         for child in res.children.values():
@@ -35,13 +43,13 @@ class basics__c(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> basics__c:
         if n != None:
-            return basics__c(l_str_def=n.get_opt_str("l_str_def"), l_uint64_def=n.get_opt_int("l_uint64_def"))
+            return basics__c(l_str_def=n.get_opt_str("l_str_def"), l_str_def_quoted=n.get_opt_str("l_str_def_quoted"), l_uint64_def=n.get_opt_int("l_uint64_def"))
         return basics__c()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> basics__c:
         if n != None:
-            return basics__c(l_str_def=yang.gdata.from_xml_opt_str(n, "l_str_def"), l_uint64_def=yang.gdata.from_xml_opt_int(n, "l_uint64_def"))
+            return basics__c(l_str_def=yang.gdata.from_xml_opt_str(n, "l_str_def"), l_str_def_quoted=yang.gdata.from_xml_opt_str(n, "l_str_def_quoted"), l_uint64_def=yang.gdata.from_xml_opt_int(n, "l_uint64_def"))
         return basics__c()
 
 
