@@ -237,6 +237,17 @@ def _test_snode_to_statement():
     yy = n.to_statement()
     return yy.pryang()
 
+def _test_parse_snode_pryang_twice():
+    # YANG -> Statement -> SchemaNode -> Statement -> YANG -> Statement -> SchemaNode -> Statement -> YANG
+    original = test_yang
+    n1 = yang.schema_from_src(original)
+    ys1 = n1.to_statement()
+    yy1 = ys1.pryang()
+    n2 = yang.schema_from_src(yy1)
+    ys2 = n2.to_statement()
+    yy2 = ys2.pryang()
+    testing.assertEqual(yy1, yy2, "YANG round trip^2 failed\n" + yy1 + "\n===\n" + yy2)
+
 def _test_prsrc():
     s = yang.schema_from_src(test_yang)
     return s.prsrc()
