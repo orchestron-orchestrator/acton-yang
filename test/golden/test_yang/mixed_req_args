@@ -1,11 +1,11 @@
 class foo__c__li__bar(yang.adata.MNode):
     man: str
 
-    def __init__(self, man: str):
+    mut def __init__(self, man: str):
         self._ns = "http://example.com/foo"
         self.man = man
 
-    def to_gdata(self) -> yang.gdata.Node:
+    mut def to_gdata(self) -> yang.gdata.Node:
         res = yang.gdata.Container('bar', ns=self._ns)
         _man = self.man
         if _man is not None:
@@ -15,13 +15,13 @@ class foo__c__li__bar(yang.adata.MNode):
         return res
 
     @staticmethod
-    def from_gdata(n: ?yang.gdata.Node) -> foo__c__li__bar:
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__c__li__bar:
         if n != None:
             return foo__c__li__bar(man=n.get_str("man"))
         raise ValueError("Missing required subtree foo__c__li__bar")
 
     @staticmethod
-    def from_xml(n: ?xml.Node) -> foo__c__li__bar:
+    mut def from_xml(n: ?xml.Node) -> foo__c__li__bar:
         if n != None:
             return foo__c__li__bar(man=yang.gdata.from_xml_str(n, "man"))
         raise ValueError("Missing required subtree foo__c__li__bar")
@@ -32,7 +32,7 @@ class foo__c__li_entry(yang.adata.MNode):
     foo: str
     bar: foo__c__li__bar
 
-    def __init__(self, name: str, bar: foo__c__li__bar, foo: ?str=None):
+    mut def __init__(self, name: str, bar: foo__c__li__bar, foo: ?str=None):
         self._ns = "http://example.com/foo"
         self.name = name
         if foo != None:
@@ -42,7 +42,7 @@ class foo__c__li_entry(yang.adata.MNode):
         self.bar = bar
         self.bar._parent = self
 
-    def to_gdata(self) -> yang.gdata.Node:
+    mut def to_gdata(self) -> yang.gdata.Node:
         res = yang.gdata.ListElement([str(self.name)], ns=self._ns)
         _name = self.name
         _foo = self.foo
@@ -58,21 +58,21 @@ class foo__c__li_entry(yang.adata.MNode):
         return res
 
     @staticmethod
-    def from_gdata(n: yang.gdata.Node) -> foo__c__li_entry:
+    mut def from_gdata(n: yang.gdata.Node) -> foo__c__li_entry:
         return foo__c__li_entry(name=n.get_str("name"), foo=n.get_opt_str("foo"), bar=foo__c__li__bar.from_gdata(n.get_container("bar")))
 
     @staticmethod
-    def from_xml(n: xml.Node) -> foo__c__li_entry:
+    mut def from_xml(n: xml.Node) -> foo__c__li_entry:
         return foo__c__li_entry(name=yang.gdata.from_xml_str(n, "name"), foo=yang.gdata.from_xml_opt_str(n, "foo"), bar=foo__c__li__bar.from_xml(yang.gdata.get_xml_child(n, "bar")))
 
 class foo__c__li(yang.adata.MNode):
     elements: list[foo__c__li_entry]
-    def __init__(self, elements=[]):
+    mut def __init__(self, elements=[]):
         self._ns = "http://example.com/foo"
         self._name = 'li'
         self.elements = elements
 
-    def create(self, name, bar):
+    mut def create(self, name, bar):
         for e in self.elements:
             match = True
             if e.name != name:
@@ -85,7 +85,7 @@ class foo__c__li(yang.adata.MNode):
         self.elements.append(res)
         return res
 
-    def to_gdata(self):
+    mut def to_gdata(self):
         res = yang.gdata.List('li', ['name'], ns=self._ns)
         for e in self.elements:
             e_gdata = e.to_gdata()
@@ -95,14 +95,14 @@ class foo__c__li(yang.adata.MNode):
         return res
 
     @staticmethod
-    def from_gdata(n: yang.gdata.List) -> list[foo__c__li_entry]:
+    mut def from_gdata(n: yang.gdata.List) -> list[foo__c__li_entry]:
         res = []
         for e in n.elements:
             res.append(foo__c__li_entry.from_gdata(e))
         return res
 
     @staticmethod
-    def from_xml(nodes: list[xml.Node]) -> list[foo__c__li_entry]:
+    mut def from_xml(nodes: list[xml.Node]) -> list[foo__c__li_entry]:
         res = []
         for node in nodes:
             res.append(foo__c__li_entry.from_xml(node))

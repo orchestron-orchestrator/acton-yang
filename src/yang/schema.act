@@ -359,7 +359,7 @@ class DNodeInner(DNode):
                 opt_args.append("%s: list[%s_entry]=[]" % (_safe_name(child.name), get_path_name(child)))
 
         init_args_str = ", ".join(["self"] + req_args + opt_args)
-        res.append("    def __init__(%s):" % init_args_str)
+        res.append("    mut def __init__(%s):" % init_args_str)
         # Set namespace from us
         res.append("        self._ns = \"%s\"" % self.namespace)
 
@@ -416,14 +416,14 @@ class DNodeInner(DNode):
                     elif isinstance(cchild, DContainer):
                         if not (loose or optional_subtree(cchild)):
                             pc_args.append(_safe_name(cchild.name))
-                res.append("    def create_%s(%s):" % (_safe_name(child.name), ", ".join(pc_args)))
+                res.append("    mut def create_%s(%s):" % (_safe_name(child.name), ", ".join(pc_args)))
                 res.append("        res = %s(%s)" % (get_path_name(child), ", ".join(pc_args[1:])))
                 res.append("        self.%s = res" % (_safe_name(child.name)))
                 res.append("        return res")
                 res.append("")
 
         # .to_gdata()
-        res.append("    def to_gdata(self) -> yang.gdata.Node:")
+        res.append("    mut def to_gdata(self) -> yang.gdata.Node:")
         if isinstance(self, DList):
             # keys contains a yang spec of the keys, like "k1 k2"
             # which are modeled as attributes of the list entry class and accessed via self.k1, self.k2
@@ -478,10 +478,10 @@ class DNodeInner(DNode):
         from_xml_args = ", ".join(from_xml_args_list)
         res.append("    @staticmethod")
         if isinstance(self, DList):
-            res.append("    def from_gdata(n: yang.gdata.Node) -> %s_entry:" % get_path_name(self))
+            res.append("    mut def from_gdata(n: yang.gdata.Node) -> %s_entry:" % get_path_name(self))
             res.append("        return %s_entry(%s)" % (get_path_name(self), from_gdata_args))
         else:
-            res.append("    def from_gdata(n: ?yang.gdata.Node) -> %s:" % get_path_name(self))
+            res.append("    mut def from_gdata(n: ?yang.gdata.Node) -> %s:" % get_path_name(self))
             res.append("        if n != None:")
             res.append("            return %s(%s)" % (get_path_name(self), from_gdata_args))
             if optional_subtree(self):
@@ -492,10 +492,10 @@ class DNodeInner(DNode):
 
         res.append("    @staticmethod")
         if isinstance(self, DList):
-            res.append("    def from_xml(n: xml.Node) -> %s_entry:" % get_path_name(self))
+            res.append("    mut def from_xml(n: xml.Node) -> %s_entry:" % get_path_name(self))
             res.append("        return %s_entry(%s)" % (get_path_name(self), from_xml_args))
         else:
-            res.append("    def from_xml(n: ?xml.Node) -> %s:" % get_path_name(self))
+            res.append("    mut def from_xml(n: ?xml.Node) -> %s:" % get_path_name(self))
             res.append("        if n != None:")
             res.append("            return %s(%s)" % (get_path_name(self), from_xml_args))
             if optional_subtree(self):
@@ -515,7 +515,7 @@ class DNodeInner(DNode):
             init_args = ["self"]
             init_args.append("elements=[]")
             init_args_str: str = ", ".join(init_args)
-            res.append("    def __init__(%s):" % init_args_str)
+            res.append("    mut def __init__(%s):" % init_args_str)
             # Set namespace from us
             res.append("        self._ns = \"%s\"" % self.namespace)
             res.append("        self._name = " + repr(self.name))
@@ -533,7 +533,7 @@ class DNodeInner(DNode):
                     if not (loose or optional_subtree(child)):
                         list_key_args.append(_safe_name(child.name))
             list_create_args = ["self"] + list_key_args
-            res.append("    def create(%s):" % (", ".join(list_create_args)))
+            res.append("    mut def create(%s):" % (", ".join(list_create_args)))
             res.append("        for e in self.elements:")
             res.append("            match = True")
             for key in self.key:
@@ -548,7 +548,7 @@ class DNodeInner(DNode):
             res.append("        return res")
             res.append("")
 
-            res.append("    def to_gdata(self):" % ())
+            res.append("    mut def to_gdata(self):" % ())
             res.append("        res = yang.gdata.List('%s', %s, ns=self._ns)" % (self.name, repr(self.key)))
             res.append("        for e in self.elements:")
             res.append("            e_gdata = e.to_gdata()")
@@ -572,7 +572,7 @@ class DNodeInner(DNode):
 #                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
             from_gdata_args = ", ".join(from_gdata_args_list)
             res.append("    @staticmethod")
-            res.append("    def from_gdata(n: yang.gdata.List) -> list[%s_entry]:" % get_path_name(self))
+            res.append("    mut def from_gdata(n: yang.gdata.List) -> list[%s_entry]:" % get_path_name(self))
             res.append("        res = []")
             res.append("        for e in n.elements:")
             res.append("            res.append(%s_entry.from_gdata(e))" % get_path_name(self))
@@ -580,7 +580,7 @@ class DNodeInner(DNode):
             #res.append("        return list(map(lambda x: %s_entry.from_gdata(x), n.elements))" % get_path_name(self))
             res.append("")
             res.append("    @staticmethod")
-            res.append("    def from_xml(nodes: list[xml.Node]) -> list[%s_entry]:" % get_path_name(self))
+            res.append("    mut def from_xml(nodes: list[xml.Node]) -> list[%s_entry]:" % get_path_name(self))
             res.append("        res = []")
             res.append("        for node in nodes:")
             res.append("            res.append(%s_entry.from_xml(node))" % get_path_name(self))
