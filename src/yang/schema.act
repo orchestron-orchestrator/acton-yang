@@ -968,6 +968,7 @@ class SchemaNode(object):
     parent: ?SchemaNode
     ns: ?str
     exts: list[Ext]
+    _yname: str
 
     def _get_argname(self) -> ?str:
         raise NotImplementedError('SchemaNode _get_argname')
@@ -1341,6 +1342,32 @@ class SchemaNode(object):
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find typedef '%s'" % name)
 
+    def to_statement(self) -> Statement:
+        """Convert this schema node to a Statement
+        """
+        stmt = Statement(self._yname, self._get_arg())
+        for attr_name, attr_value in self.get_attrs():
+            if attr_value is not None:
+                if isinstance(attr_value, SchemaNode):
+                    stmt.substatements.append(attr_value.to_statement())
+                elif isinstance(attr_value, list):
+                    for av in attr_value:
+                        if isinstance(av, str):
+                            stmt.substatements.append(Statement(attr_name, av))
+                        elif isinstance(av, SchemaNode):
+                            stmt.substatements.append(av.to_statement())
+                        else:
+                            raise ValueError("Unexpected type in list: %s" % type(av))
+                elif isinstance(attr_value, bool):
+                    stmt.substatements.append(Statement(attr_name, "true" if attr_value else "false"))
+                else:
+                    stmt.substatements.append(Statement(attr_name, str(attr_value)))
+
+        if isinstance(self, SchemaNodeInner):
+            for c in self.children:
+                stmt.substatements.append(c.to_statement())
+
+        return stmt
 
 class SchemaNodeInner(SchemaNode):
     children: list[SchemaNode]
@@ -1391,6 +1418,12 @@ class Ext(SchemaNode):
         text_line = _ind(indent) + "Ext(" + args_text + ")"
         res.append(text_line)
         return "\n".join(res)
+
+    def to_statement(self) -> Statement:
+        res = Statement(self.name, self.arg, self.prefix)
+        for ext in self.exts:
+            res.substatements.append(ext.to_statement())
+        return res
 
     def __str__(self):
         self_arg = self.arg
@@ -2026,6 +2059,7 @@ class Action(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "action"
         if input is not None:
             input.parent = self
             n_ns = input.ns
@@ -2184,6 +2218,7 @@ class Anydata(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "anydata"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -2302,6 +2337,7 @@ class Anyxml(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "anyxml"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -2417,6 +2453,7 @@ class Augment(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "augment"
         self.target_node = target_node
         self.description = description
         self.if_feature = if_feature
@@ -2513,6 +2550,7 @@ class BelongsTo(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "belongs-to"
         self.module = module
         self.prefix = prefix
         self.exts = exts
@@ -2580,6 +2618,7 @@ class Bit(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "bit"
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2663,6 +2702,7 @@ class Case(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "case"
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2766,6 +2806,7 @@ class Choice(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "choice"
         self.name = name
         self.config = config
         self.default = default
@@ -2881,6 +2922,7 @@ class Container(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "container"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -3023,6 +3065,7 @@ class Enum(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "enum"
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -3105,6 +3148,7 @@ class Extension(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "extension"
         self.name = name
         self.argument = argument
         self.description = description
@@ -3183,6 +3227,7 @@ class Feature(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "feature"
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -3260,6 +3305,7 @@ class Grouping(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "grouping"
         self.name = name
         self.description = description
         self.reference = reference
@@ -3352,6 +3398,7 @@ class Identity(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "identity"
         self.name = name
         self.base = base
         self.description = description
@@ -3423,8 +3470,8 @@ class Import(SchemaNodeOuter):
     https://tools.ietf.org/html/rfc7950#section-7.1.5
     """
     module: str
-    description: ?str
     prefix: str
+    description: ?str
     reference: ?str
     revision_date: ?str
 
@@ -3434,6 +3481,7 @@ class Import(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "import"
         self.module = module
         self.description = description
         self.prefix = prefix
@@ -3454,8 +3502,8 @@ class Import(SchemaNodeOuter):
         """Print Acton source of this node"""
         res = []
         attrs: list[(str, ?value)] = [
-            ("description", self.description),
             ("prefix", self.prefix),
+            ("description", self.description),
             ("reference", self.reference),
             ("revision-date", self.revision_date),
             ("exts", self.exts),
@@ -3471,8 +3519,8 @@ class Import(SchemaNodeOuter):
 
     def compile(self, context: Context):
         new = Import(self.module,
-                     description=self.description,
                      prefix=self.prefix,
+                     description=self.description,
                      reference=self.reference,
                      revision_date=self.revision_date,
                      exts=self.exts,
@@ -3511,6 +3559,7 @@ class Include(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "include"
         self.module = module
         self.description = description
         self.reference = reference
@@ -3581,6 +3630,7 @@ class Input(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "input"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -3667,6 +3717,7 @@ class Leaf(SchemaNodeOuter):
     https://tools.ietf.org/html/rfc7950#section-7.6.2
     """
     name: str
+    type_: Type
     config: ?bool
     default: ?str
     description: ?str
@@ -3675,7 +3726,6 @@ class Leaf(SchemaNodeOuter):
     must: list[Must]
     reference: ?str
     status: ?str
-    type_: Type
     units: ?str
     when: ?str
 
@@ -3685,6 +3735,7 @@ class Leaf(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "leaf"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -3728,6 +3779,7 @@ class Leaf(SchemaNodeOuter):
         """Print Acton source of this node"""
         res = []
         attrs: list[(str, ?value)] = [
+            ("type", self.type_),
             ("config", self.config),
             ("default", self.default),
             ("description", self.description),
@@ -3736,7 +3788,6 @@ class Leaf(SchemaNodeOuter):
             ("must", self.must),
             ("reference", self.reference),
             ("status", self.status),
-            ("type", self.type_),
             ("units", self.units),
             ("when", self.when),
             ("exts", self.exts),
@@ -3817,6 +3868,7 @@ class LeafList(SchemaNodeOuter):
     https://tools.ietf.org/html/rfc7950#section-7.7.3
     """
     name: str
+    type_: Type
     config: ?bool
     default: list[str]
     description: ?str
@@ -3827,7 +3879,6 @@ class LeafList(SchemaNodeOuter):
     ordered_by: ?str
     reference: ?str
     status: ?str
-    type_: Type
     units: ?str
     when: ?str
 
@@ -3837,6 +3888,7 @@ class LeafList(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "leaf-list"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -3884,6 +3936,7 @@ class LeafList(SchemaNodeOuter):
         """Print Acton source of this node"""
         res = []
         attrs: list[(str, ?value)] = [
+            ("type", self.type_),
             ("config", self.config),
             ("default", self.default),
             ("description", self.description),
@@ -3894,7 +3947,6 @@ class LeafList(SchemaNodeOuter):
             ("ordered-by", self.ordered_by),
             ("reference", self.reference),
             ("status", self.status),
-            ("type", self.type_),
             ("units", self.units),
             ("when", self.when),
             ("exts", self.exts),
@@ -3996,6 +4048,7 @@ class Length(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "length"
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
@@ -4082,6 +4135,7 @@ class List(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "list"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -4242,6 +4296,9 @@ class Module(SchemaNodeInner):
     https://tools.ietf.org/html/rfc7950#section-7.1.1
     """
     name: str
+    namespace: str
+    prefix: str
+    yang_version: float
     augment: list[Augment]
     contact: ?str
     description: ?str
@@ -4250,12 +4307,9 @@ class Module(SchemaNodeInner):
     feature: list[Feature]
     import_: list[Import]
     include: list[Include]
-    namespace: str
     organization: ?str
-    prefix: str
     reference: ?str
     revision: list[Revision]
-    yang_version: float
 
     def __init__(self, name: str, namespace: str, prefix: str, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, ns=None):
         self.parent = parent
@@ -4263,6 +4317,7 @@ class Module(SchemaNodeInner):
         if new_ns is None:
             new_ns = namespace
         self.ns = new_ns
+        self._yname = "module"
         for n in augment:
             n.parent = self
             n_ns = n.ns
@@ -4339,6 +4394,9 @@ class Module(SchemaNodeInner):
         """Print Acton source of this node"""
         res = []
         attrs: list[(str, ?value)] = [
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("yang-version", self.yang_version),
             ("augment", self.augment),
             ("contact", self.contact),
             ("description", self.description),
@@ -4347,12 +4405,9 @@ class Module(SchemaNodeInner):
             ("feature", self.feature),
             ("import", self.import_),
             ("include", self.include),
-            ("namespace", self.namespace),
             ("organization", self.organization),
-            ("prefix", self.prefix),
             ("reference", self.reference),
             ("revision", self.revision),
-            ("yang-version", self.yang_version),
             ("exts", self.exts),
         ]
         args = ["'" + str(self.name) + "'"]
@@ -4421,6 +4476,9 @@ class Module(SchemaNodeInner):
 
     def compile(self, context: Context):
         new = Module(self.name,
+                     namespace=self.namespace,
+                     prefix=self.prefix,
+                     yang_version=self.yang_version,
                      augment=self.augment,
                      contact=self.contact,
                      description=self.description,
@@ -4429,12 +4487,9 @@ class Module(SchemaNodeInner):
                      feature=self.feature,
                      import_=self.import_,
                      include=self.include,
-                     namespace=self.namespace,
                      organization=self.organization,
-                     prefix=self.prefix,
                      reference=self.reference,
                      revision=self.revision,
-                     yang_version=self.yang_version,
                      exts=self.exts)
         self.expand_children(context, new)
         new.expand_augments(context)
@@ -4479,6 +4534,7 @@ class Must(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "must"
         self.condition = condition
         self.description = description
         self.error_app_tag = error_app_tag
@@ -4558,6 +4614,7 @@ class Notification(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "notification"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -4676,6 +4733,7 @@ class Output(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "output"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -4777,6 +4835,7 @@ class Pattern(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "pattern"
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
@@ -4859,6 +4918,7 @@ class Range(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "range"
         self.value = value
         self.description = description
         self.error_app_tag = error_app_tag
@@ -4943,6 +5003,7 @@ class Refine(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "refine"
         for n in must:
             n.parent = self
             n_ns = n.ns
@@ -5048,6 +5109,7 @@ class Revision(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "revision"
         self.date = date
         self.description = description
         self.reference = reference
@@ -5120,6 +5182,7 @@ class Rpc(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "rpc"
         if input is not None:
             input.parent = self
             n_ns = input.ns
@@ -5263,8 +5326,9 @@ class Submodule(SchemaNodeInner):
     https://tools.ietf.org/html/rfc7950#section-7.2.1
     """
     name: str
-    augment: list[Augment]
     belongs_to: BelongsTo
+    yang_version: float
+    augment: list[Augment]
     contact: ?str
     description: ?str
     deviation: list[str]
@@ -5275,7 +5339,6 @@ class Submodule(SchemaNodeInner):
     organization: ?str
     reference: ?str
     revision: list[Revision]
-    yang_version: float
 
     def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, ns=None):
         self.parent = parent
@@ -5283,6 +5346,7 @@ class Submodule(SchemaNodeInner):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "submodule"
         for n in augment:
             n.parent = self
             n_ns = n.ns
@@ -5361,8 +5425,9 @@ class Submodule(SchemaNodeInner):
         """Print Acton source of this node"""
         res = []
         attrs: list[(str, ?value)] = [
-            ("augment", self.augment),
             ("belongs-to", self.belongs_to),
+            ("yang-version", self.yang_version),
+            ("augment", self.augment),
             ("contact", self.contact),
             ("description", self.description),
             ("deviation", self.deviation),
@@ -5373,7 +5438,6 @@ class Submodule(SchemaNodeInner):
             ("organization", self.organization),
             ("reference", self.reference),
             ("revision", self.revision),
-            ("yang-version", self.yang_version),
             ("exts", self.exts),
         ]
         args = ["'" + str(self.name) + "'"]
@@ -5409,8 +5473,9 @@ class Submodule(SchemaNodeInner):
 
     def compile(self, context: Context):
         new = Submodule(self.name,
-                        augment=self.augment,
                         belongs_to=self.belongs_to,
+                        yang_version=self.yang_version,
+                        augment=self.augment,
                         contact=self.contact,
                         description=self.description,
                         deviation=self.deviation,
@@ -5421,7 +5486,6 @@ class Submodule(SchemaNodeInner):
                         organization=self.organization,
                         reference=self.reference,
                         revision=self.revision,
-                        yang_version=self.yang_version,
                         exts=self.exts)
         self.expand_children(context, new)
         new.expand_augments(context)
@@ -5466,6 +5530,7 @@ class Type(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "type"
         for n in bit:
             n.parent = self
             n_ns = n.ns
@@ -5623,11 +5688,11 @@ class Typedef(SchemaNodeOuter):
     https://tools.ietf.org/html/rfc7950#section-7.3.1
     """
     name: str
+    type_: Type
     default: ?str
     description: ?str
     reference: ?str
     status: ?str
-    type_: Type
     units: ?str
 
     def __init__(self, name: str, type_: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], parent=None, ns=None):
@@ -5636,6 +5701,7 @@ class Typedef(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "typedef"
         type_.parent = self
         n_ns = type_.ns
         if n_ns is None:
@@ -5664,11 +5730,11 @@ class Typedef(SchemaNodeOuter):
         """Print Acton source of this node"""
         res = []
         attrs: list[(str, ?value)] = [
+            ("type", self.type_),
             ("default", self.default),
             ("description", self.description),
             ("reference", self.reference),
             ("status", self.status),
-            ("type", self.type_),
             ("units", self.units),
             ("exts", self.exts),
         ]
@@ -5738,6 +5804,7 @@ class Uses(SchemaNodeOuter):
         if new_ns is None and parent is not None:
             new_ns = parent.ns
         self.ns = new_ns
+        self._yname = "uses"
         for n in augment:
             n.parent = self
             n_ns = n.ns
@@ -7022,6 +7089,7 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
                 raise ValueError("Invalid statement under uses: %s" % (name))
             return n
     raise ValueError("Unknown statement:" + stmt.kw)
+
 
 def stmt_to_smodule(stmt):
     m = stmt_to_snode(stmt)

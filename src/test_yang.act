@@ -81,6 +81,7 @@ test_yang = """module test_yang {
     }
   }
   container c3 {
+    ext1:bob "Robert Johansson";
     action a1 {
       description "action 1";
     }
@@ -229,6 +230,12 @@ def _test_parse_pryang_submodule():
     y = yang.parser.parse(original)
     yang_out = y.pryang()
     testing.assertEqual(original, yang_out, "YANG round trip failed\n" + original + "\n===\n" + yang_out)
+
+def _test_snode_to_statement():
+    original = test_yang
+    n = yang.schema_from_src(original)
+    yy = n.to_statement()
+    return yy.pryang()
 
 def _test_prsrc():
     s = yang.schema_from_src(test_yang)

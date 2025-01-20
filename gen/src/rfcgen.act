@@ -899,11 +899,16 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         arg_name = stmt.argument_name
         have_children = False
         cattrs = []
+        pos_attr_idx = 0
         for substmt in stmt.substmts.values():
             if substmt.name in child_stmts:
                 have_children = True
             else:
-                cattrs.append(substmt.name)
+                if substmt.cardinality == "1":
+                    cattrs.insert(pos_attr_idx, substmt.name)
+                    pos_attr_idx += 1
+                else:
+                    cattrs.append(substmt.name)
         kwattrs = cattrs if arg_name is None else cattrs[1:]
 
         parent_class = "SchemaNodeInner" if have_children else "SchemaNodeOuter"
@@ -915,7 +920,6 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
 
         for attr in cattrs:
             res.append("    %s: %s" % (_attr_name(attr), _attr_type(attr, stmt, stmts)))
-
 
         res.append("")
         init_attrs = ["self"]
@@ -952,7 +956,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("            new_ns = parent.ns")
         res.append("        self.ns = new_ns")
 #        res.append("        self.cname = \"%s\"" % _class_name(stmt_name))
-#        res.append("        self.yname = \"%s\"" % stmt_name)
+        res.append("        self._yname = \"%s\"" % stmt_name)
 
         for substmt in stmt.substmts.values():
             if substmt.name == stmt.argument_name:
@@ -1197,6 +1201,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("                raise ValueError(\"Invalid statement under %s: %%s\" %% (name))" % stmt_name)
         res.append("            return n")
     res.append("    raise ValueError(\"Unknown statement:\" + stmt.kw)")
+    res.append("")
 
     return res
 
