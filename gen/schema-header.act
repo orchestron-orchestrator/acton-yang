@@ -92,6 +92,8 @@
 # YANG module). We can convert a SchemaNode tree to DNode by first compiling it
 # and then running .to_dnode().
 
+import re
+
 RECURSION_LIMIT = 512
 
 def _yind(n):
@@ -122,6 +124,9 @@ _builtin_types = {
     "union"
 }
 
+# We always quote the arguments to these keywords regardless of the content.
+# This is not a strict requirement but a preference of the authors, for example
+# the argument "foo" is perfectly valid with out quotes.
 _quoted_arg_keywords = set([
     "argument",
     "augment",
@@ -140,15 +145,6 @@ _quoted_arg_keywords = set([
     "refine",
     "when",
     "yang-version",
-])
-
-# A set of keywords where the argument looks better unquoted in the authors
-# opinion :). Quoting it then depending on the presence of whitespace or other
-# characters that require quoting in the argument.
-_maybe_quoted_arg_keywords = set([
-    "key",
-    "presence",
-    "units",
 ])
 
 class Statement(object):
@@ -180,12 +176,12 @@ class Statement(object):
         res = _yind(indent) + self.kw
         arg = self.arg
         if arg is not None:
-            # TODO: this check is a bit naive in that it only checks for
-            # whitespace. A more comprehensive check would be to check for any
-            # character or sequence of characters that requires quoting, like
-            # ";", "{", "}", "//", "/*" and I don't know what else ...
-            quoted_arg = True if self.kw in _quoted_arg_keywords or self.kw in _maybe_quoted_arg_keywords and " " in arg else False
+            # Always quote the argument if the keyword "looks better" with the
+            # argument quoted, or if the argument contains any character that
+            # require quoting to make it valid YANG:
             res += " "
+            m = re.match(r"[^A-Za-z0-9_-]", arg)
+            quoted_arg = True if self.kw in _quoted_arg_keywords or m != None else False
             if quoted_arg:
                 res += '"' + arg.replace('"', '\\"') + '"'
             else:
