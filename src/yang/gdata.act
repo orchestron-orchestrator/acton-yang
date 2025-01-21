@@ -475,12 +475,27 @@ class Node(object):
             return childval
         raise ValueError("Leaf %s is not of type int" % name)
 
+    def get_ints(self, name) -> list[int]:
+        if isinstance(self, Inner):
+            for child in self.children.values():
+                if isinstance(child, LeafList) and child.name == name:
+                    cvals = child.vals
+                    if isinstance(cvals, list) and len(cvals) > 0 and isinstance(cvals[0], int):
+                        return cvals
+        raise ValueError("Cannot find leaf-list child with name " + name)
+
     def get_opt_int(self, name) -> ?int:
         child = self.get_opt_leaf(name)
         if child != None:
             childval = child.val
             if isinstance(childval, int):
                 return childval
+
+    def get_opt_ints(self, name) -> list[int]:
+        try:
+            return self.get_ints(name)
+        except ValueError:
+            return []
 
     def get_str(self, name) -> str:
         child = self.get_leaf(name)
@@ -1608,6 +1623,14 @@ def from_xml_opt_values(n: xml.Node, name: str) -> list[value]:
         ctext = child.text
         if isinstance(ctext, value):
             res.append(ctext)
+    return res
+
+def from_xml_opt_ints(n: xml.Node, name: str) -> list[int]:
+    res = []
+    for child in get_xml_children(n, name):
+        ctext = child.text
+        if ctext is not None:
+            res.append(int(ctext))
     return res
 
 #def from_xml_opt_u16(n: xml.Node, name: str) -> ?u16:
