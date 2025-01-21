@@ -995,6 +995,15 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("        self.children = children")
         res.append("")
 
+        # -- get_attrs
+        res.append("    def get_attrs(self) -> list[(str, ?value)]:")
+        res.append("        return [")
+        for attr in kwattrs:
+            res.append("            (\"%s\", self.%s)," % (attr, _attr_name(attr)))
+        res.append("            (\"exts\", self.exts),")
+        res.append("        ]")
+        res.append("")
+
         # -- prsrc
         res.append("    def prsrc(self, indent=0):")
         res.append('        """Print Acton source of this node"""')
@@ -1011,9 +1020,9 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("        args = [\"'\" + str(self.%s) + \"'\"]" % _attr_name(arg_name))
         else:
             res.append("        args = []")
-        res.append("        attrs_text = _prsrc_attrs(indent, attrs)")
+        res.append("        attrs_text = _prsrc_attrs(indent, self.get_attrs())")
         res.append("        if len(attrs_text) > 0:")
-        res.append("            args.append(_prsrc_attrs(indent, attrs))")
+        res.append("            args.append(_prsrc_attrs(indent, self.get_attrs()))")
         if have_children:
             res.append("        if len(self.children) > 0:")
             res.append("            args.append(\"children=[\")")
