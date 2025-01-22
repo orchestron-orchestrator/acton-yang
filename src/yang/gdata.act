@@ -7,8 +7,6 @@ This module defines classes for YANG data nodes. It can represent a YANG data
 tree, and can be used to serialize and deserialize YANG data.
 """
 
-RECURSION_LIMIT=512
-
 # kinds of things?
 # - container
 # - list
@@ -174,13 +172,20 @@ RECURSION_LIMIT=512
 def _ind(n):
     return "  " * n
 
+remove_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')]
+
+def either(a: ?str, b: ?str):
+    if a is not None:
+        return a
+    else:
+        return b
+
 class Node(object):
-    parent: ?Node
-    _ns: ?str
+    ns: ?str
     prefix: ?str
 
-    def prsrc(self, indent=0) -> str:
-        sns = self._ns
+    def prsrc(self, indent=0, name="") -> str:
+        sns = self.ns
         ns_str = sns if sns is not None else ""
         ns_str_arg = "ns='" + ns_str + "', "
         res = []
@@ -230,8 +235,8 @@ class Node(object):
             res.append(text_line)
             if len(self.children) > 0:
                 child_res = []
-                for child in self.children.values():
-                    child_res.append(child.prsrc(indent+1))
+                for nm,child in self.children.items():
+                    child_res.append(child.prsrc(indent+1, nm))
                 res.append(",\n".join(child_res))
                 res.append(_ind(indent) + "])")
             return "\n".join(res)
@@ -257,37 +262,15 @@ class Node(object):
             return self.name
         raise ValueError("Unsupported node type in get_name: " + type(self))
 
-    def ns(self) -> str:
-        n = self
-        for i in range(RECURSION_LIMIT+1):
-            nns = n._ns
-            if nns is not None:
-                return nns
-            nparent = n.parent
-            if nparent is not None:
-                n = nparent
-                continue
-            else:
-                raise ValueError("Unable to find namespace for %s %s, parent not set" % (str(self), self.get_name()))
-            if i > RECURSION_LIMIT:
-                raise ValueError("Recursion limit reached")
-        raise ValueError("Unable to find namespace")
+    def fmt_tag2(self, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
+        nodename = [self.get_name()]
+        ns_attr = [("xmlns", '"'+ns+'"')] if ns is not None and not close else []
+        attr_strs = list(map(lambda x: x.0 + "=" + x.1, ns_attr + attrs))
+        left = "</" if close else "<"
+        right = "/>" if end else ">"
+        return left + " ".join(nodename + attr_strs) + right
 
-    def set_ns(self, ns: str):
-        if self._ns == None:
-            self._ns = ns
-
-    def fmt_tag(self, cns, attrs: list[(str, str)]=[], close=False, end=False):
-        ns_str = ""
-        ns = self.ns()
-        if cns != ns:
-            ns_str = " xmlns=\"" + ns + "\""
-        attr_str = " ".join(map(lambda x: x.0 + "=" + x.1, attrs))
-        if attr_str != "":
-            attr_str = " " + attr_str
-        return "<" + ("/" if close else "") + self.get_name() + ("" if close else ns_str) + attr_str + ("/" if end else "") + ">"
-
-    def to_xmlstr(self, pretty=True, indent=0, cns="") -> str:
+    def to_xmlstr(self, name="top", pretty=True, indent=0, cns:?str=None) -> str:
         def _indent(extra=0):
             if pretty:
                 return "  " * (indent+extra)
@@ -302,69 +285,39 @@ class Node(object):
             if len(self.children) == 0:
                 return ""
             child_xml = ""
-            for child in self.children.values():
-                child_xml += child.to_xmlstr(pretty, indent + 1, self.ns())
+            for nm,child in self.children.items():
+                child_xml += child.to_xmlstr(nm, pretty, indent + 1)
             if child_xml == "":
                 return child_xml
-            xml = _indent() + self.fmt_tag(cns) + _nl()
+            xml = _indent() + self.fmt_tag2(either(self.ns, cns)) + _nl()
             xml += child_xml
-            xml += _indent() + self.fmt_tag(cns, close=True) + _nl()
-            if cns == "":
-                cns = self.ns()
+            xml += _indent() + self.fmt_tag2(close=True) + _nl()
             return xml
 
         elif isinstance(self, Module):
             xml = ""
-            for child in self.children.values():
-                xml += child.to_xmlstr(pretty, indent)
+            for nm,child in self.children.items():
+                xml += child.to_xmlstr(nm, pretty, indent, either(self.ns, cns))
             return xml
         elif isinstance(self, Root):
             xml = ""
-            for child in self.children.values():
-                xml += child.to_xmlstr(pretty, indent)
+            for nm,child in self.children.items():
+                xml += child.to_xmlstr(nm, pretty, indent, either(self.ns, cns))
             return xml
         elif isinstance(self, List):
             xml = ""
             for elem in self.elements:
-                xml += elem.to_xmlstr(pretty, indent, cns)
+                remove = isinstance(elem, AbsentListElement)
+                xml += _indent() + self.fmt_tag2(either(self.ns, cns), attrs=remove_op if remove else []) + _nl()
+                # Print key leafs first
+                for key_idx, key_name in enumerate(self.keys):
+                    xml += _indent(1) + "<" + key_name + ">" + str(elem.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
+                for nm,child in elem.children.items():
+                    if nm in self.keys or remove:
+                        continue
+                    xml += child.to_xmlstr(nm, pretty, indent+1)
+                xml += _indent() + self.fmt_tag2(close=True) + _nl()
             return xml
-        elif isinstance(self, AbsentListElement):
-            parent = self.parent
-            if parent != None:
-                if isinstance(parent, List):
-                    xml = _indent() + parent.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')]) + _nl()
-                    if parent.keys == None:
-                        raise ValueError("AbsentListElement must have a parent List with keys")
-                    for key_idx, key_name in enumerate(parent.keys):
-                        xml += _indent(1) + "<" + key_name + ">" + str(self.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
-                    xml += _indent() + parent.fmt_tag(cns, close=True) + _nl()
-                    return xml
-                else:
-                    raise ValueError("AbsentListElement must have a parent List")
-            else:
-                raise ValueError("AbsentListElement must have a parent List != None")
-        elif isinstance(self, ListElement):
-            parent = self.parent
-            if parent != None:
-                if isinstance(parent, List):
-                    xml = _indent() + parent.fmt_tag(cns) + _nl()
-                    # Print key leafs first
-                    if parent.keys == None:
-                        raise ValueError("ListElement must have a parent List with keys")
-                    for key_idx, key_name in enumerate(parent.keys):
-                        xml += _indent() + "  <" + key_name + ">" + str(self.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
-                    for key, child in self.children.items():
-                        if key in parent.keys:
-                            continue
-                        xml += child.to_xmlstr(pretty, indent+1, self.ns())
-                    xml += _indent() + parent.fmt_tag(cns, close=True) + _nl()
-                    if cns == "":
-                        cns = self.ns()
-                    return xml
-                else:
-                    raise ValueError("ListElement must have a parent List")
-            else:
-                raise ValueError("ListElement must have a parent List != None")
         elif isinstance(self, Leaf):
             xml = _indent()
             if self.t == "empty":
@@ -373,24 +326,20 @@ class Node(object):
                     return ""
                 if isinstance(v, bool):
                     if v == True:
-                        xml += self.fmt_tag(cns, end=True)
+                        xml += self.fmt_tag2(either(self.ns, cns), end=True)
                     else:
-                        xml += self.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')], end=True)
+                        xml += self.fmt_tag2(either(self.ns, cns), attrs=remove_op, end=True)
             else:
-                xml += self.fmt_tag(cns) + str(self.val) + self.fmt_tag(cns, close=True)
+                xml += self.fmt_tag2(either(self.ns, cns)) + str(self.val) + self.fmt_tag2(close=True)
             xml += _nl()
-            if cns == "":
-                cns = self.ns()
             return xml
         elif isinstance(self, LeafList):
             xml = ""
             for val in self.vals:
-                xml += _indent() + self.fmt_tag(cns) + str(val) + self.fmt_tag(cns, close=True) + _nl()
-            if cns == "":
-                cns = self.ns()
+                xml += _indent() + self.fmt_tag2(either(self.ns, cns)) + str(val) + self.fmt_tag2(close=True) + _nl()
             return xml
         elif isinstance(self, Absent):
-            return _indent() + self.fmt_tag(cns, attrs=[("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')], end=True) + _nl()
+            return _indent() + self.fmt_tag2(either(self.ns, cns), attrs=remove_op, end=True) + _nl()
         raise ValueError("Unsupported node type in to_xml: " + type(self))
 
     # --
@@ -537,6 +486,9 @@ class Node(object):
 
 extension Node(Eq):
     def __eq__(self, other: Node) -> bool:
+        if self.ns != other.ns:
+            return False
+
         if isinstance(self, Root) and isinstance(other, Root):
             if set(self.children.keys()) != set(other.children.keys()):
                 return False
@@ -666,33 +618,23 @@ extension Node(Eq):
 class Inner(Node):
     children: dict[str, Node]
 
-    def set_ns(self, ns: str):
-        if self._ns == None:
-            self._ns = ns
-        for child in self.children.values():
-            child.set_ns(self.ns())
-
 class Root(Inner):
     name: str
 
     def __init__(self, children: dict[str, Node]={}, prefix: ?str=None):
         self.name = ""
         self.children = children
-        self._ns = ""
+        self.ns = None
         self.prefix = prefix
 
 class Module(Inner):
     name: str
 
-    def __init__(self, name: str, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, name: str, children: dict[str, Node]={}, ns: str, prefix: ?str=None):
         self.name = name
         self.children = children
-        self._ns = ns
+        self.ns = ns
         self.prefix = prefix
-        for child in self.children.values():
-            child.parent = self
-        if ns is not None:
-            self.set_ns(ns)
 
 
 class Container(Inner):
@@ -701,12 +643,8 @@ class Container(Inner):
     def __init__(self, name: str, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
         self.name = name
         self.children = children
-        self._ns = ns
+        self.ns = ns
         self.prefix = prefix
-        for child in self.children.values():
-            child.parent = self
-        if ns is not None:
-            self.set_ns(ns)
 
 class List(Node):
     name: str
@@ -719,30 +657,16 @@ class List(Node):
         self.keys = keys
         self.elements = elements
         self.user_order = user_order
-        self._ns = ns
+        self.ns = ns
         self.prefix = prefix
-        for elem in self.elements:
-            elem.parent = self
-        if ns is not None:
-            self.set_ns(ns)
-
-    def set_ns(self, ns: str):
-        self._ns = ns
-        for elem in self.elements:
-            elem.set_ns(ns)
 
 class ListElement(Inner):
-    #_list: List
     key_vals: list[str] # values of the key leafs
 
-    def __init__(self, key_vals: list[str], children: dict[str, Node]={}, ns: ?str=None):
+    def __init__(self, key_vals: list[str], children: dict[str, Node]={}):
         self.key_vals = key_vals
         self.children = children
-        for child in self.children.values():
-            child.parent = self
-        self._ns = ns
-        if ns is not None:
-            self.set_ns(ns)
+        self.ns = None
 
     def key_str(self) -> str:
         def escape_keys(key_val):
@@ -753,9 +677,7 @@ class AbsentListElement(ListElement):
     def __init__(self, key_vals: list[str], ns: ?str=None):
         self.key_vals = key_vals
         self.children = {}
-        self._ns = ns
-        if ns is not None:
-            self.set_ns(ns)
+        self.ns = ns
 
 class Leaf(Node):
     name: str
@@ -766,7 +688,7 @@ class Leaf(Node):
         self.name = name
         self.t = t
         self.val = val
-        self._ns = ns
+        self.ns = ns
         self.prefix = prefix
 
 class LeafList(Node):
@@ -775,7 +697,7 @@ class LeafList(Node):
 
     def __init__(self, name: str, vals: ?value, ns: ?str=None, prefix: ?str=None):
         self.name = name
-        self._ns = ns
+        self.ns = ns
         self.prefix = prefix
         if isinstance(vals, list) and len(vals) > 0 and isinstance(vals[0], value):
             self.vals = vals
@@ -787,7 +709,7 @@ class Absent(Node):
 
     def __init__(self, name: str, ns: ?str=None, prefix: ?str=None):
         self.name = name
-        self._ns = ns
+        self.ns = ns
         self.prefix = prefix
 
 
@@ -837,7 +759,7 @@ def merge(a: Node, b: Node) -> Node:
         raise ValueError("Cannot merge nodes of different types, type(a) = %s, type(b) = %s" % (str(type(a)), str(type(b))))
 
     # Helper to merge keyed children (used by Container, Module, Root, and ListElement)
-    def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node], ns: ?str) -> dict[str, Node]:
+    def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node]) -> dict[str, Node]:
         result: dict[str, Node] = {}
 
         a_keys = []
@@ -914,17 +836,18 @@ def merge(a: Node, b: Node) -> Node:
     if isinstance(a, Container) and isinstance(b, Container):
         if a.name != b.name:
             raise ValueError("Cannot merge containers with different names: %s vs %s" % (a.name, b.name))
-        new_children = merge_keyed_children(a.children, b.children, a.ns())
-        return Container(a.name, children=new_children, ns=a.ns())
+        new_children = merge_keyed_children(a.children, b.children)
+        return Container(a.name, children=new_children, ns=a.ns)
 
     elif isinstance(a, Module) and isinstance(b, Module):
         if a.name != b.name:
             raise ValueError("Cannot merge modules with different names: %s vs %s" % (a.name, b.name))
-        new_children = merge_keyed_children(a.children, b.children, a.ns())
-        return Module(a.name, children=new_children, ns=a.ns())
+        new_children = merge_keyed_children(a.children, b.children)
+        ns = a.ns
+        return Module(a.name, children=new_children, ns=ns if ns is not None else "")
 
     elif isinstance(a, Root) and isinstance(b, Root):
-        new_children = merge_keyed_children(a.children, b.children, a.ns())
+        new_children = merge_keyed_children(a.children, b.children)
         return Root(children=new_children)
 
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
@@ -970,11 +893,11 @@ def merge(a: Node, b: Node) -> Node:
 
             old_map = {}
             for e in a.elements:
-                old_map[key_str(e)] = e
+                old_map[e.key_str()] = e
 
             # Start with elements from a, merge if present in b
             for a_elem in a.elements:
-                k = key_str(a_elem)
+                k = a_elem.key_str()
                 found = False
                 for b_elem in b.elements:
                     if b_elem.key_vals == a_elem.key_vals:
@@ -996,14 +919,14 @@ def merge(a: Node, b: Node) -> Node:
             # For now, we just append them at the end.
             existing_keys = {}
             for e in new_elements:
-                existing_keys[key_str(e)] = True
+                existing_keys[e.key_str()] = True
             for b_elem in b.elements:
-                bk = key_str(b_elem)
+                bk = b_elem.key_str()
                 if bk not in existing_keys:
                     new_elements.append(b_elem)
                     existing_keys[bk] = True
 
-            return List(a.name, a.keys, new_elements, user_order=a.user_order, ns=a.ns(), prefix=a.prefix)
+            return List(a.name, a.keys, new_elements, user_order=a.user_order, ns=a.ns, prefix=a.prefix)
         else:
             # user_order = False
             # Keep the original merging logic since it sorts by keys, not order
@@ -1040,14 +963,14 @@ def merge(a: Node, b: Node) -> Node:
                 else:
                     raise ValueError("unreachable, new_elem should always be a ListElement")
 
-            return List(a.name, a.keys, new_elements, ns=a.ns())
+            return List(a.name, a.keys, new_elements, ns=a.ns)
 
     elif isinstance(a, ListElement) and isinstance(b, ListElement):
         if a.key_vals != b.key_vals:
             raise ValueError("Cannot merge list elements with different keys: %s vs %s" % (str(a.key_vals), str(b.key_vals)))
         # Merge keyed children similarly to Container
-        new_children = merge_keyed_children(a.children, b.children, a.ns())
-        return ListElement(a.key_vals, children=new_children, ns=a.ns())
+        new_children = merge_keyed_children(a.children, b.children)
+        return ListElement(a.key_vals, children=new_children)
 
     elif isinstance(a, Absent) and isinstance(b, Absent):
         # Both absent is odd in a merge scenario, but let's just return absent
@@ -1062,7 +985,7 @@ def diff(old: Node, new: Node) -> ?Node:
         raise ValueError("diff called with nodes of different types: %s vs %s" % (str(type(old)), str(type(new))))
 
     # Helper function for diffing nodes that have children keyed by strings (Root, Module, Container, ListElement)
-    def diff_keyed_children(old_children: dict[str, Node], new_children: dict[str, Node], ns: ?str) -> ?dict[str, Node]:
+    def diff_keyed_children(old_children: dict[str, Node], new_children: dict[str, Node]) -> ?dict[str, Node]:
         # We'll produce a new_children_dict with the diff
         result: dict[str, Node] = {}
 
@@ -1093,7 +1016,7 @@ def diff(old: Node, new: Node) -> ?Node:
 
                 if not ok_in_new:
                     # old key not in new => absent
-                    result[ok] = Absent(ok, ns=ns)
+                    result[ok] = Absent(ok, ns=old_children[ok].ns)
                     i += 1
                 elif not nk_in_old:
                     # new key not in old => new node
@@ -1118,7 +1041,7 @@ def diff(old: Node, new: Node) -> ?Node:
         while i < len(old_keys):
             ok = old_keys[i]
             if ok not in new_children:
-                result[ok] = Absent(ok, ns=ns)
+                result[ok] = Absent(ok, ns=old_children[ok].ns)
             i += 1
 
         # If new still has items, they are new nodes
@@ -1134,13 +1057,6 @@ def diff(old: Node, new: Node) -> ?Node:
 
     # Helper function for diffing Lists which have ordered ListElement children
     def diff_list_elements(old_list: List, new_list: List) -> ?list[ListElement]:
-        def key_str(elem: ListElement) -> str:
-            def escape_keys(k: str) -> str:
-                return k.replace(",", "\\,")
-            parts = []
-            for kv in elem.key_vals:
-                parts.append(escape_keys(kv))
-            return ",".join(parts)
 
         if old_list.name != new_list.name:
             raise ValueError("List names differ: %s vs %s" % (old_list.name, new_list.name))
@@ -1151,14 +1067,14 @@ def diff(old: Node, new: Node) -> ?Node:
         old_map = {}
         old_key_order = []
         for e in old_list.elements:
-            k = key_str(e)
+            k = e.key_str()
             old_map[k] = e
             old_key_order.append(k)
 
         new_map = {}
         new_key_order = []
         for e in new_list.elements:
-            nk = key_str(e)
+            nk = e.key_str()
             new_map[nk] = e
             new_key_order.append(nk)
 
@@ -1192,7 +1108,7 @@ def diff(old: Node, new: Node) -> ?Node:
                     # old element not in new => absent
                     oe = old_map[ok]
                     # AbsentListElement is a ListElement
-                    result.append(AbsentListElement(oe.key_vals, ns=old_list.ns()))
+                    result.append(AbsentListElement(oe.key_vals, ns=oe.ns))
                     i += 1
                 elif not nk_in_old:
                     # new element not in old => new element
@@ -1209,7 +1125,7 @@ def diff(old: Node, new: Node) -> ?Node:
             ok = old_key_order[i]
             if ok not in new_map:
                 oe = old_map[ok]
-                result.append(AbsentListElement(oe.key_vals, ns=old_list.ns()))
+                result.append(AbsentListElement(oe.key_vals, ns=old_list.ns))
             i += 1
 
         # Remaining new elements are new
@@ -1227,7 +1143,7 @@ def diff(old: Node, new: Node) -> ?Node:
     # Diff logic for each node type
 
     if isinstance(old, Root) and isinstance(new, Root):
-        diff_children = diff_keyed_children(old.children, new.children, old.ns())
+        diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
         return Root(children=diff_children, prefix=new.prefix)
@@ -1235,33 +1151,34 @@ def diff(old: Node, new: Node) -> ?Node:
     elif isinstance(old, Module) and isinstance(new, Module):
         if old.name != new.name:
             raise ValueError("Module names differ: %s vs %s" % (old.name, new.name))
-        diff_children = diff_keyed_children(old.children, new.children, old.ns())
+        diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
-        return Module(new.name, children=diff_children, ns=new.ns(), prefix=new.prefix)
+        ns = new.ns
+        return Module(new.name, children=diff_children, ns=ns if ns is not None else "", prefix=new.prefix)
 
     elif isinstance(old, Container) and isinstance(new, Container):
         if old.name != new.name:
             raise ValueError("Container names differ: %s vs %s" % (old.name, new.name))
-        diff_children = diff_keyed_children(old.children, new.children, old.ns())
+        diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
-        return Container(new.name, children=diff_children, ns=new.ns(), prefix=new.prefix)
+        return Container(new.name, children=diff_children, ns=new.ns, prefix=new.prefix)
 
     elif isinstance(old, ListElement) and isinstance(new, ListElement):
         if old.key_vals != new.key_vals:
             raise ValueError("ListElement keys differ: %s vs %s" % (str(old.key_vals), str(new.key_vals)))
-        diff_children = diff_keyed_children(old.children, new.children, old.ns())
+        diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
-        return ListElement(new.key_vals, children=diff_children, ns=new.ns())
+        return ListElement(new.key_vals, children=diff_children)
 
     elif isinstance(old, List) and isinstance(new, List):
         # For lists, we have elements instead of children
         result = diff_list_elements(old, new)
         if result is None:
             return None
-        return List(new.name, new.keys, elements=result, user_order=new.user_order, ns=new.ns(), prefix=new.prefix)
+        return List(new.name, new.keys, elements=result, user_order=new.user_order, ns=new.ns, prefix=new.prefix)
 
     elif isinstance(old, Leaf) and isinstance(new, Leaf):
         if old.name != new.name or old.t != new.t:
@@ -1334,7 +1251,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         # No need to remove unchanged nodes; they are already in new_children
         if len(new_children) == 0:
             return None
-        return Container(old.name, children=new_children, ns=old.ns(), prefix=old.prefix)
+        return Container(old.name, children=new_children, ns=old.ns, prefix=old.prefix)
 
     elif isinstance(old, List) and isinstance(p, List):
         if old.name != p.name:
@@ -1404,7 +1321,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
         if len(new_elements) == 0:
             return None
-        return List(old.name, old.keys, elements=new_elements, user_order=old.user_order, ns=old.ns(), prefix=old.prefix)
+        return List(old.name, old.keys, elements=new_elements, user_order=old.user_order, ns=old.ns, prefix=old.prefix)
 
     # For Root, Module, ListElement: apply similar logic to preserve unchanged children
 
@@ -1453,7 +1370,8 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
         if len(new_children) == 0:
             return None
-        return Module(old.name, children=new_children, ns=old.ns(), prefix=old.prefix)
+        ns = old.ns
+        return Module(old.name, children=new_children, ns=ns if ns is not None else "", prefix=old.prefix)
 
     elif isinstance(old, ListElement) and isinstance(p, ListElement):
         if old.key_vals != p.key_vals:
@@ -1477,7 +1395,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
                 else:
                     new_children[key] = cpatch
 
-        return ListElement(old.key_vals, children=new_children, ns=old.ns())
+        return ListElement(old.key_vals, children=new_children)
 
     elif isinstance(old, Leaf) and isinstance(p, Leaf):
         # Patch leaf replaces old leaf value
@@ -1725,7 +1643,7 @@ def _test_merge_list1():
             "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["last"])
-    ], user_order=True)
+    ], user_order=True, ns="http://example.com/acme")
 
     exp = List("l1", ["name"], [
         ListElement(["first"], {
@@ -1734,24 +1652,25 @@ def _test_merge_list1():
         ListElement(["breaker"], {
             "n1": Leaf("n1", "int", 1)
         }),
-        ListElement(["third"], {
+        ListElement(["fourth"], {
+            "n1": Leaf("n1", "int", 1)
+        }),
+        ListElement(["common"], {
+            "n2": Leaf("n2", "int", 2),
+            "n1": Leaf("n1", "int", 1)
+        }),
+        ListElement(["last"], {
             "n1": Leaf("n1", "int", 1)
         }),
         ListElement(["second"], {
             "n1": Leaf("n1", "int", 1)
         }),
-        ListElement(["fourth"], {
+        ListElement(["third"], {
             "n1": Leaf("n1", "int", 1)
         }),
-        ListElement(["common"], {
-            "n2": Leaf("n2", "int", 2)
-        }),
-        ListElement(["last"], {
-            "n1": Leaf("n1", "int", 1)
-        }),
-    ])
-    print(merge(y1, y2).to_xmlstr())
-    testing.assertEqual(exp, merge(y1, y2))
+    ], user_order=True, ns="http://example.com/acme")
+
+    testing.assertEqual(exp.to_xmlstr(), merge(y1, y2).to_xmlstr())
 
 
 def _test_diff_no_change():
@@ -1814,6 +1733,35 @@ def _test_diff_node_removal():
     exp = Container("foo", {
         "c": Absent("c")
     }, ns="http://example.com/acme")
+
+    testing.assertEqual(d, exp)
+
+def _test_diff_elem_removal():
+    """A list element k1 is removed from old to new. We expect an AbsentListElement(["k1"])
+    node in the diff at the place where k1 was.
+    """
+    old = List("l1", ["name"], [
+        ListElement(["k1"], {
+            "n1": Leaf("n1", "int", 1),
+            "n2": Leaf("n2", "int", 2)
+        }),
+        ListElement(["k4"], {
+            "n4": Leaf("n4", "int", 4),
+        }),
+    ], ns="http://example.com/acme")
+
+    new = List("l1", ["name"], [
+        ListElement(["k4"], {
+            "n4": Leaf("n4", "int", 4),
+        }),
+    ], ns="http://example.com/acme")
+
+    d = diff(old, new)
+
+    # k1 is removed
+    exp = List("l1", ["name"], [
+        AbsentListElement(["k1"]),
+    ], ns="http://example.com/acme")
 
     testing.assertEqual(d, exp)
 
@@ -1933,6 +1881,32 @@ def _test_patch_node_removal():
     exp = Container("foo", {
         "a": Leaf("a", "int", 1),
     }, ns="http://example.com/acme")
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_elem_removal():
+    old = List("l1", ["name"], [
+        ListElement(["k1"], {
+            "n1": Leaf("n1", "int", 1),
+            "n2": Leaf("n2", "int", 2)
+        }),
+        ListElement(["k4"], {
+            "n4": Leaf("n4", "int", 4),
+        }),
+    ], ns="http://example.com/acme")
+
+    # Suppose we remove 'k1'
+    # patch would be:
+    p = List("l1", ["name"], [
+        AbsentListElement(["k1"]),
+    ], ns="http://example.com/acme")
+
+    res = patch(old, p)
+    exp = List("l1", ["name"], [
+        ListElement(["k4"], {
+            "n4": Leaf("n4", "int", 4),
+        }),
+    ], ns="http://example.com/acme")
 
     testing.assertEqual(res, exp)
 
