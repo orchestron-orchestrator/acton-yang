@@ -173,7 +173,11 @@ class Statement(object):
     def pryang(self, indent=0):
         """Print YANG source code for this statement and its substatements
         """
-        res = _yind(indent) + self.kw
+        res = _yind(indent)
+        prefix = self.prefix
+        if prefix != None:
+            res += prefix + ":"
+        res += self.kw
         arg = self.arg
         if arg is not None:
             # Always quote the argument if the keyword "looks better" with the
@@ -972,12 +976,16 @@ class SchemaNode(object):
     parent: ?SchemaNode
     ns: ?str
     exts: list[Ext]
+    _yname: str
 
     def _get_argname(self) -> ?str:
         raise NotImplementedError('SchemaNode _get_argname')
 
     def _get_arg(self) -> ?str:
         raise NotImplementedError('SchemaNode _get_arg')
+
+    def get_attrs(self) -> list[(str, ?value)]:
+        raise NotImplementedError('SchemaNode get_attrs')
 
     def prsrc(self, indent=0) -> str:
         """Print Acton source code for this schema node and its subnodes
@@ -1342,6 +1350,32 @@ class SchemaNode(object):
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find typedef '%s'" % name)
 
+    def to_statement(self) -> Statement:
+        """Convert this schema node to a Statement
+        """
+        stmt = Statement(self._yname, self._get_arg())
+        for attr_name, attr_value in self.get_attrs():
+            if attr_value is not None:
+                if isinstance(attr_value, SchemaNode):
+                    stmt.substatements.append(attr_value.to_statement())
+                elif isinstance(attr_value, list):
+                    for av in attr_value:
+                        if isinstance(av, str):
+                            stmt.substatements.append(Statement(attr_name, av))
+                        elif isinstance(av, SchemaNode):
+                            stmt.substatements.append(av.to_statement())
+                        else:
+                            raise ValueError("Unexpected type in list: %s" % type(av))
+                elif isinstance(attr_value, bool):
+                    stmt.substatements.append(Statement(attr_name, "true" if attr_value else "false"))
+                else:
+                    stmt.substatements.append(Statement(attr_name, str(attr_value)))
+
+        if isinstance(self, SchemaNodeInner):
+            for c in self.children:
+                stmt.substatements.append(c.to_statement())
+
+        return stmt
 
 class SchemaNodeInner(SchemaNode):
     children: list[SchemaNode]
@@ -1392,6 +1426,12 @@ class Ext(SchemaNode):
         text_line = _ind(indent) + "Ext(" + args_text + ")"
         res.append(text_line)
         return "\n".join(res)
+
+    def to_statement(self) -> Statement:
+        res = Statement(self.name, self.arg, self.prefix)
+        for ext in self.exts:
+            res.substatements.append(ext.to_statement())
+        return res
 
     def __str__(self):
         self_arg = self.arg
