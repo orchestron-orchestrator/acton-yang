@@ -180,6 +180,14 @@ def either(a: ?str, b: ?str):
     else:
         return b
 
+def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
+    ns_attr = [("xmlns", '"'+ns+'"')] if ns is not None and not close else []
+    attr_strs = list(map(lambda x: x.0 + "=" + x.1, ns_attr + attrs))
+    left = "</" if close else "<"
+    right = "/>" if end else ">"
+    return left + " ".join([name] + attr_strs) + right
+
+
 class Node(object):
     ns: ?str
     prefix: ?str
@@ -190,11 +198,11 @@ class Node(object):
         ns_str_arg = "ns='" + ns_str + "', "
         res = []
         if isinstance(self, Leaf):
-            return _ind(indent) + "Leaf('" + self.name + "', " + ns_str_arg + str(self.val) + ")"
+            return _ind(indent) + "Leaf('" + name + "', " + ns_str_arg + str(self.val) + ")"
         elif isinstance(self, LeafList):
-            return _ind(indent) + "LeafList('" + self.name + "', " + ns_str_arg + str(self.vals) + ")"
+            return _ind(indent) + "LeafList('" + name + "', " + ns_str_arg + str(self.vals) + ")"
         elif isinstance(self, List):
-            args = ["'" + str(self.name) + "'", str(self.keys), "ns='" + ns_str + "'"]
+            args = ["'" + str(name) + "'", str(self.keys), "ns='" + ns_str + "'"]
             if len(self.elements) > 0:
                 args.append("elements=[")
             args_text = ", ".join(args)
@@ -213,7 +221,7 @@ class Node(object):
             args = []
             sname = ""
             if isinstance(self, Container):
-                args.append("'" + str(self.name) + "'")
+                args.append("'" + str(name) + "'")
                 sname = "Container"
             elif isinstance(self, ListElement):
                 args.append(str(self.key_vals))
@@ -243,33 +251,6 @@ class Node(object):
         else:
             raise ValueError("Unsupported node type in prsrc")
 
-    def get_name(self) -> str:
-        if isinstance(self, Absent):
-            return self.name
-        elif isinstance(self, Container):
-            return self.name
-        elif isinstance(self, Module):
-            return self.name
-        elif isinstance(self, Root):
-            return self.name
-        elif isinstance(self, List):
-            return self.name
-        elif isinstance(self, ListElement):
-            return self.key_str()
-        elif isinstance(self, Leaf):
-            return self.name
-        elif isinstance(self, LeafList):
-            return self.name
-        raise ValueError("Unsupported node type in get_name: " + type(self))
-
-    def fmt_tag2(self, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
-        nodename = [self.get_name()]
-        ns_attr = [("xmlns", '"'+ns+'"')] if ns is not None and not close else []
-        attr_strs = list(map(lambda x: x.0 + "=" + x.1, ns_attr + attrs))
-        left = "</" if close else "<"
-        right = "/>" if end else ">"
-        return left + " ".join(nodename + attr_strs) + right
-
     def to_xmlstr(self, name="top", pretty=True, indent=0, cns:?str=None) -> str:
         def _indent(extra=0):
             if pretty:
@@ -289,9 +270,9 @@ class Node(object):
                 child_xml += child.to_xmlstr(nm, pretty, indent + 1)
             if child_xml == "":
                 return child_xml
-            xml = _indent() + self.fmt_tag2(either(self.ns, cns)) + _nl()
+            xml = _indent() + fmt_tag(name, either(self.ns, cns)) + _nl()
             xml += child_xml
-            xml += _indent() + self.fmt_tag2(close=True) + _nl()
+            xml += _indent() + fmt_tag(name, close=True) + _nl()
             return xml
 
         elif isinstance(self, Module):
@@ -308,7 +289,7 @@ class Node(object):
             xml = ""
             for elem in self.elements:
                 remove = isinstance(elem, AbsentListElement)
-                xml += _indent() + self.fmt_tag2(either(self.ns, cns), attrs=remove_op if remove else []) + _nl()
+                xml += _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op if remove else []) + _nl()
                 # Print key leafs first
                 for key_idx, key_name in enumerate(self.keys):
                     xml += _indent(1) + "<" + key_name + ">" + str(elem.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
@@ -316,7 +297,7 @@ class Node(object):
                     if nm in self.keys or remove:
                         continue
                     xml += child.to_xmlstr(nm, pretty, indent+1)
-                xml += _indent() + self.fmt_tag2(close=True) + _nl()
+                xml += _indent() + fmt_tag(name, close=True) + _nl()
             return xml
         elif isinstance(self, Leaf):
             xml = _indent()
@@ -326,20 +307,20 @@ class Node(object):
                     return ""
                 if isinstance(v, bool):
                     if v == True:
-                        xml += self.fmt_tag2(either(self.ns, cns), end=True)
+                        xml += fmt_tag(name, either(self.ns, cns), end=True)
                     else:
-                        xml += self.fmt_tag2(either(self.ns, cns), attrs=remove_op, end=True)
+                        xml += fmt_tag(name, either(self.ns, cns), attrs=remove_op, end=True)
             else:
-                xml += self.fmt_tag2(either(self.ns, cns)) + str(self.val) + self.fmt_tag2(close=True)
+                xml += fmt_tag(name, either(self.ns, cns)) + str(self.val) + fmt_tag(name, close=True)
             xml += _nl()
             return xml
         elif isinstance(self, LeafList):
             xml = ""
             for val in self.vals:
-                xml += _indent() + self.fmt_tag2(either(self.ns, cns)) + str(val) + self.fmt_tag2(close=True) + _nl()
+                xml += _indent() + fmt_tag(name, either(self.ns, cns)) + str(val) + fmt_tag(name, close=True) + _nl()
             return xml
         elif isinstance(self, Absent):
-            return _indent() + self.fmt_tag2(either(self.ns, cns), attrs=remove_op, end=True) + _nl()
+            return _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op, end=True) + _nl()
         raise ValueError("Unsupported node type in to_xml: " + type(self))
 
     # --
@@ -1670,7 +1651,7 @@ def _test_merge_list1():
         }),
     ], user_order=True, ns="http://example.com/acme")
 
-    testing.assertEqual(exp.to_xmlstr(), merge(y1, y2).to_xmlstr())
+    testing.assertEqual(exp, merge(y1, y2))
 
 
 def _test_diff_no_change():
