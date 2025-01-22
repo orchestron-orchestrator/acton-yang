@@ -898,18 +898,75 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         stmt = stmts[stmt_name]
         arg_name = stmt.argument_name
         have_children = False
-        cattrs = []
-        pos_attr_idx = 0
+
+        # Sort the list of YANG substatements for the current statement, which
+        # are "consumed" by the current SchemaNode class as attributes (are not
+        # in the SchemaNode.children list). This order is then preserved in the
+        # to_statement() method.
+        # A custom order for "module" / "submodule" substatements has priority
+        # so that the module layout conforms to the "typical layout" outlined in
+        # the RFC 7950 section 7.1. After that, mandatory substatements
+        # (cardinality 1) are added, followed by the rest.
+        def sort_attributes(attributes, module_order, mandatory):
+            """Sort attributes using list of items in module_order, followed by mandatory.
+
+            Attributes not explicitly listed are appended at the end.
+            """
+            # Lower number in order dict = higher priority
+            order_dict = {}
+            # Add module_order items first in their preferred order
+            for idx, item in enumerate(module_order):
+                order_dict[item] = idx
+            # Add mandatory items next in the provided order
+            for idx, item in enumerate(mandatory):
+                order_dict.setdefault(item, len(module_order) + idx)
+
+            result = list(attributes)
+
+            n = len(result)
+            for i in range(n):
+                for j in range(0, n - i - 1):
+                    pos_j = order_dict.get_def(result[j], len(order_dict))
+                    pos_j1 = order_dict.get_def(result[j + 1], len(order_dict))
+
+                    if pos_j > pos_j1:
+                        attr_j = result[j]
+                        attr_j1 = result[j+1]
+                        result[j] = attr_j1
+                        result[j+1] = attr_j
+
+            return result
+
+        # Read in YANG substatements for the current statement, which are
+        # "consumed" by the current SchemaNode class as attributes (are not in
+        # the SchemaNode.children list).
+        unsorted_attrs = []
+        mandatory = []
         for substmt in stmt.substmts.values():
-            if substmt.name in child_stmts:
-                have_children = True
-            else:
+            if substmt.name == arg_name:
+                continue
+            if substmt.name not in child_stmts:
+                unsorted_attrs.append(substmt.name)
                 if substmt.cardinality == "1":
-                    cattrs.insert(pos_attr_idx, substmt.name)
-                    pos_attr_idx += 1
-                else:
-                    cattrs.append(substmt.name)
-        kwattrs = cattrs if arg_name is None else cattrs[1:]
+                    mandatory.append(substmt.name)
+            else:
+                have_children = True
+        # Custom order for "module" / "submodule" substatements so that the
+        # module layout conforms to the "typical layout" outlined in the RFC
+        # 7950 section 7.1.
+
+        # Sort the attributes for the current statement
+        if stmt_name in ["module", "submodule"]:
+            module_order = [
+                "yang-version", "namespace", "prefix", "import", "include",
+                "organization", "contact", "description", "reference", "revision"
+            ]
+        else:
+            module_order = []
+        kwattrs = sort_attributes(unsorted_attrs, module_order, mandatory)
+
+        # The substatement that is the argument to the current statement is placed first
+        cattrs = [arg_name] + kwattrs if arg_name != None else kwattrs
 
         parent_class = "SchemaNodeInner" if have_children else "SchemaNodeOuter"
         res.append("class %s(%s):" % (_class_name(stmt_name), parent_class))
