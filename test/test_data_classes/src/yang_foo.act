@@ -83,15 +83,25 @@ class foo__c1(yang.adata.MNode):
     l3: ?int
     l_empty: ?bool
     li: foo__c1__li
+    ll_uint64: list[int]
+    ll_str: list[str]
     l2: ?str
 
-    mut def __init__(self, l1: ?str, l3: ?int, l_empty: ?bool, li: list[foo__c1__li_entry]=[], l2: ?str):
+    mut def __init__(self, l1: ?str, l3: ?int, l_empty: ?bool, li: list[foo__c1__li_entry]=[], ll_uint64: ?list[int]=None, ll_str: ?list[str]=None, l2: ?str):
         self._ns = "http://example.com/foo"
         self.l1 = l1
         self.l3 = l3
         self.l_empty = l_empty
         self.li = foo__c1__li(elements=li)
         self.li._parent = self
+        if ll_uint64 is not None:
+            self.ll_uint64 = ll_uint64
+        else:
+            self.ll_uint64 = []
+        if ll_str is not None:
+            self.ll_str = ll_str
+        else:
+            self.ll_str = []
         self.l2 = l2
 
     mut def to_gdata(self) -> yang.gdata.Node:
@@ -109,6 +119,8 @@ class foo__c1(yang.adata.MNode):
             res.children['l_empty'] = yang.gdata.Leaf('l_empty', 'empty', _l_empty, ns='http://example.com/foo')
         if _li is not None:
             res.children['li'] = _li.to_gdata()
+        res.children['ll_uint64'] = yang.gdata.LeafList('ll_uint64', self.ll_uint64, ns='http://example.com/foo')
+        res.children['ll_str'] = yang.gdata.LeafList('ll_str', self.ll_str, ns='http://example.com/foo')
         if _l2 is not None:
             res.children['l2'] = yang.gdata.Leaf('l2', 'string', _l2, ns='http://example.com/bar')
         for child in res.children.values():
@@ -118,13 +130,13 @@ class foo__c1(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
         if n != None:
-            return foo__c1(l1=n.get_opt_str("l1"), l3=n.get_opt_int("l3"), l_empty=n.get_opt_bool("l_empty"), li=foo__c1__li.from_gdata(n.get_list("li")), l2=n.get_opt_str("l2"))
+            return foo__c1(l1=n.get_opt_str("l1"), l3=n.get_opt_int("l3"), l_empty=n.get_opt_bool("l_empty"), li=foo__c1__li.from_gdata(n.get_list("li")), ll_uint64=n.get_opt_ints("ll_uint64"), ll_str=n.get_opt_strs("ll_str"), l2=n.get_opt_str("l2"))
         return foo__c1()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> foo__c1:
         if n != None:
-            return foo__c1(l1=yang.gdata.from_xml_opt_str(n, "l1"), l3=yang.gdata.from_xml_opt_int(n, "l3"), l_empty=yang.gdata.from_xml_opt_bool(n, "l_empty"), li=foo__c1__li.from_xml(yang.gdata.get_xml_children(n, "li")), l2=yang.gdata.from_xml_opt_str(n, "l2"))
+            return foo__c1(l1=yang.gdata.from_xml_opt_str(n, "l1"), l3=yang.gdata.from_xml_opt_int(n, "l3"), l_empty=yang.gdata.from_xml_opt_bool(n, "l_empty"), li=foo__c1__li.from_xml(yang.gdata.get_xml_children(n, "li")), ll_uint64=yang.gdata.from_xml_opt_ints(n, "ll_uint64"), ll_str=yang.gdata.from_xml_opt_strs(n, "ll_str"), l2=yang.gdata.from_xml_opt_str(n, "l2"))
         return foo__c1()
 
 
