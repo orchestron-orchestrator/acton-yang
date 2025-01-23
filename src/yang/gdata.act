@@ -194,25 +194,23 @@ class Node(object):
 
     def prsrc(self, indent=0, name="") -> str:
         sns = self.ns
-        ns_str = sns if sns is not None else ""
-        ns_str_arg = "ns='" + ns_str + "', "
+        args = ["ns='" + sns + "'"] if sns is not None else []
         res = []
         if isinstance(self, Leaf):
-            return "Leaf(" + ns_str_arg + str(self.val) + ")"
+            args.insert(0, str(self.val))
+            return "Leaf(" + ", ".join(args) + ")"
         elif isinstance(self, LeafList):
-            return "LeafList(" + ns_str_arg + str(self.vals) + ")"
+            args.insert(0, str(self.vals))
+            return "LeafList(" + ", ".join(args) + ")"
         elif isinstance(self, Absent):
-            return "Absent(" + ns_str + ")"
+            return "Absent(" + ", ".join(args) + ")"
         elif isinstance(self, List):
-            args = [str(self.keys), "ns='" + ns_str + "'"]
-            if len(self.elements) > 0:
-                args.append("elements=[")
-            args_text = ", ".join(args)
-            text_line = "List(" + args_text
+            args.insert(0, str(self.keys))
             if len(self.elements) == 0:
-                text_line += ')'
-            res.append(text_line)
-            if len(self.elements) > 0:
+                res.append("List(" + ", ".join(args) + ')')
+            else:
+                args.append("elements=[")
+                res.append("List(" + ", ".join(args))
                 child_res = []
                 for elem in self.elements:
                     child_res.append(elem.prsrc(indent+1))
@@ -220,33 +218,25 @@ class Node(object):
                 res.append(_ind(indent) + "])")
             return "\n".join(res)
         elif isinstance(self, Inner):
-            args = []
             sname = ""
-            text_line = ""
             if isinstance(self, Container):
                 sname = "Container"
             elif isinstance(self, AbsentListElement):
-                sname = "AbsentListElement"
-                text_line += _ind(indent)
+                args.insert(0, str(self.key_vals))
+                sname = _ind(indent) + "AbsentListElement"
             elif isinstance(self, ListElement):
-                args.append(str(self.key_vals))
-                sname = "ListElement"
-                text_line += _ind(indent)
+                args.insert(0, str(self.key_vals))
+                sname = _ind(indent) + "ListElement"
             elif isinstance(self, Module):
                 sname = "Module"
             elif isinstance(self, Root):
                 sname = "Root"
 
-            if not isinstance(self, Root): # a pseudo-Root doesn't have its own namespace
-                args.append("ns='" + ns_str + "'")
-
-            if len(self.children) > 0:
-                args.append("children={")
-            text_line += sname + "(" + ", ".join(args)
             if len(self.children) == 0:
-                text_line += ')'
-            res.append(text_line)
-            if len(self.children) > 0:
+                res.append(sname + "(" + ", ".join(args) + ")")
+            else:
+                args.append("children={")
+                res.append(sname + "(" + ", ".join(args))
                 child_res = []
                 for nm,child in self.children.items():
                     child_res.append(_ind(indent+1) + "'" + nm + "': " + child.prsrc(indent+1, nm))
@@ -1901,7 +1891,7 @@ def _test_diff_and_patch_large_tree():
                 "settings": Container(children={
                     "hostname": Leaf("str", "old-router"),
                     "motd": Leaf("str", "Welcome!")
-                }, ns="http://example.com/yang/mod1"),
+                }),
                 "interfaces": List(["name"], elements=[
                     ListElement(["eth0"], children={
                         "desc": Leaf("str", "Uplink interface"),
@@ -1911,8 +1901,8 @@ def _test_diff_and_patch_large_tree():
                         "desc": Leaf("str", "Internal interface"),
                         "enabled": Leaf("bool", True)
                     }),
-                ], ns="http://example.com/yang/mod1")
-            }, ns="http://example.com/yang/mod1")
+                ])
+            })
         }, ns="http://example.com/yang/mod1"),
         "mod2": Module(children={
             "acl": Container(children={
@@ -1927,8 +1917,8 @@ def _test_diff_and_patch_large_tree():
                         "src": Leaf("str", "any"),
                         "dst": Leaf("str", "any"),
                     }),
-                ], ns="http://example.com/yang/mod2")
-            }, ns="http://example.com/yang/mod2")
+                ])
+            })
         }, ns="http://example.com/yang/mod2"),
     })
 
@@ -1948,7 +1938,7 @@ def _test_diff_and_patch_large_tree():
                     "hostname": Leaf("str", "new-router"),
                     # motd removed
                     "ntp-servers": LeafList(["192.168.100.1", "192.168.100.2"])
-                }, ns="http://example.com/yang/mod1"),
+                }),
                 "interfaces": List(["name"], elements=[
                     ListElement(["eth0"], children={
                         "desc": Leaf("str", "Uplink interface"),
@@ -1959,8 +1949,8 @@ def _test_diff_and_patch_large_tree():
                         "desc": Leaf("str", "DMZ interface"),
                         "enabled": Leaf("bool", False)
                     }),
-                ], ns="http://example.com/yang/mod1")
-            }, ns="http://example.com/yang/mod1")
+                ])
+            })
         }, ns="http://example.com/yang/mod1"),
         "mod2": Module(children={
             "acl": Container(children={
@@ -1980,8 +1970,8 @@ def _test_diff_and_patch_large_tree():
                         "src": Leaf("str", "192.0.2.0/24"),
                         "dst": Leaf("str", "198.51.100.0/24"),
                     }),
-                ], ns="http://example.com/yang/mod2")
-            }, ns="http://example.com/yang/mod2")
+                ])
+            })
         }, ns="http://example.com/yang/mod2")
     })
 
@@ -2037,6 +2027,16 @@ def _test_prsrc_root():
         "foo": Container({
             "a": Leaf("int", 1),
             "b": LeafList(["a", "b", "c"]),
+        }, ns="http://example.com/acme")
+    })
+
+    return y1.prsrc()
+
+def _test_prsrc_leaf_ns():
+    y1 = Root({
+        "foo": Container({
+            "a": Leaf("int", 1, ns="http://example.com/foo"),
+            "b": Leaf("int", 2)
         }, ns="http://example.com/acme")
     })
 
