@@ -15,8 +15,6 @@ mut def from_xml_foo__c1__f_l1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
 mut def from_json_foo__c1__l3(val: value) -> yang.gdata.Leaf:
-    if isinstance(val, str):
-        return yang.gdata.Leaf('uint64', int(val))
     return yang.gdata.Leaf('uint64', val)
 
 mut def from_xml_foo__c1__l3(val: value) -> yang.gdata.Leaf:
@@ -177,13 +175,7 @@ mut def from_json_foo__c1__li(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     return yang.gdata.List(keys=['name'], elements=elements, user_order=True)
 
 mut def from_json_foo__c1__ll_uint64(val: list[value]) -> yang.gdata.LeafList:
-    int_vals = []
-    for v in val:
-        if isinstance(v, str):
-             int_vals.append(int(v))
-        else:
-             int_vals.append(v)
-    return yang.gdata.LeafList('uint64', int_vals)
+    return yang.gdata.LeafList('uint64', val)
 
 mut def from_xml_foo__c1__ll_uint64(val: list[value]) -> yang.gdata.LeafList:
     return yang.gdata.LeafList('uint64', val)
@@ -275,7 +267,7 @@ mut def from_xml_foo__c1(node: xml.Node) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'f:l1', from_xml_foo__c1__f_l1, child_f_l1)
     child_l3 = yang.gdata.from_xml_opt_int(node, 'l3')
     yang.gdata.maybe_add(children, 'l3', from_xml_foo__c1__l3, child_l3)
-    child_l_empty = yang.gdata.from_xml_opt_bool(node, 'l_empty')
+    child_l_empty = yang.gdata.from_xml_opt_empty(node, 'l_empty')
     yang.gdata.maybe_add(children, 'l_empty', from_xml_foo__c1__l_empty, child_l_empty)
     child_li = yang.gdata.from_xml_opt_list(node, 'li')
     yang.gdata.maybe_add(children, 'li', from_xml_foo__c1__li, child_li)
@@ -328,13 +320,13 @@ mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
     child_f_l1 = yang.gdata.take_json_opt_str(jd, 'l1')
     yang.gdata.maybe_add(children, 'f:l1', from_json_foo__c1__f_l1, child_f_l1)
-    child_l3 = yang.gdata.take_json_opt_int(jd, 'l3')
+    child_l3 = yang.gdata.take_json_opt_int64(jd, 'l3')
     yang.gdata.maybe_add(children, 'l3', from_json_foo__c1__l3, child_l3)
-    child_l_empty = yang.gdata.take_json_opt_bool(jd, 'l_empty')
+    child_l_empty = yang.gdata.take_json_opt_empty(jd, 'l_empty')
     yang.gdata.maybe_add(children, 'l_empty', from_json_foo__c1__l_empty, child_l_empty)
     child_li = yang.gdata.take_json_opt_list(jd, 'li')
     yang.gdata.maybe_add(children, 'li', from_json_foo__c1__li, child_li)
-    child_ll_uint64 = yang.gdata.take_json_opt_ints(jd, 'll_uint64')
+    child_ll_uint64 = yang.gdata.take_json_opt_int64s(jd, 'll_uint64')
     yang.gdata.maybe_add(children, 'll_uint64', from_json_foo__c1__ll_uint64, child_ll_uint64)
     child_ll_str = yang.gdata.take_json_opt_strs(jd, 'll_str')
     yang.gdata.maybe_add(children, 'll_str', from_json_foo__c1__ll_str, child_ll_str)
