@@ -1,0 +1,133 @@
+import testing
+
+import yang
+import yang.schema
+import yang.parser
+
+mut def rewrite_unions(node: yang.schema.SchemaNode) -> None:
+    """Rewrite stupid union types to sane types
+
+    This modifies the schema in place.
+
+    JUNOS YANG models have weird construct where normal leaf with seemingly
+    normal values instead are of a union type, where one of the types is a
+    string with the pattern "<.*>|^.*$". The first sub-pattern is probably to
+    allow for wildcards for apply-group templating, but the second sub-pattern
+    matches anything, so it's not clear why it's there. Sometimes the string
+    part is the first member of the union, which is horribly wrong since it will
+    always match and thus the uint32 part (or whatever it might be) will never
+    be used. Utterly broken.
+
+    If we don't care about apply-template and want reasonable types in our YANG
+    model, we can just rewrite such leaf types. This function does that.
+    """
+    def rewrite_type(tn: yang.schema.Type) -> yang.schema.Type:
+        """Rewrite a type node, if it's a union of two, where one type is a
+        string with the pattern "<.*>|^.*$"
+        """
+        def is_weird_pattern(t):
+            if t.name == "string":
+                if len(t.pattern) == 1:
+                    p = t.pattern[0]
+                    if p.value == "<.*>|^.*$" or p.value == "<.*>|$.*":
+                        return True
+            return False
+
+        def has_weird_pattern(types):
+            for t in types:
+                if is_weird_pattern(t):
+                    return True
+            return False
+
+        if tn.name == "union":
+            if len(tn.type_) == 2 and has_weird_pattern(tn.type_):
+                for t in tn.type_:
+                    if not is_weird_pattern(t):
+                        return t
+        return tn
+
+
+    if isinstance(node, yang.schema.Leaf):
+        node.type_ = rewrite_type(node.type_)
+    elif isinstance(node, yang.schema.LeafList):
+        node.type_ = rewrite_type(node.type_)
+    elif isinstance(node, yang.schema.SchemaNodeInner):
+        for child in node.children:
+            rewrite_unions(child)
+
+test_yang = """module test_yang {
+  yang-version "1.1";
+  namespace "http://example.com/test_yang";
+  prefix "test_yang";
+  description "test yang module";
+  revision 2019-01-01 {
+    description "test revision";
+    reference "ref1";
+  }
+  import ietf-inet-types {
+    prefix "inet";
+    revision-date 2013-07-15;
+  }
+  container c1 {
+    description "container 1";
+    leaf l1 {
+      description "keep type";
+      type string;
+    }
+    leaf l2 {
+      description "rewrite union";
+      type union {
+        type string {
+          pattern "<.*>|^.*$";
+        }
+        type uint32;
+      }
+    }
+    leaf l3 {
+      description "rewrite union";
+      type union {
+        type uint32;
+        type string {
+          pattern "<.*>|^.*$";
+        }
+      }
+    }
+    leaf-list l4 {
+      description "rewrite union";
+      type union {
+        type uint32;
+        type string {
+          pattern "<.*>|^.*$";
+        }
+      }
+    }
+    leaf l5 {
+      description "rewrite union";
+      type union {
+        type string {
+          // Other weird pattern
+          pattern "<.*>|$.*";
+        }
+        type uint32;
+      }
+    }
+  }
+}
+"""
+
+
+def _test_rewrite_unions():
+    y = yang.parser.parse(test_yang)
+    n = yang.schema.stmt_to_snode(y)
+    rewrite_unions(n)
+    l1 = n.get("c1").get("l1")
+    l2 = n.get("c1").get("l2")
+    l3 = n.get("c1").get("l3")
+    l4 = n.get("c1").get("l4")
+    l5 = n.get("c1").get("l5")
+    if isinstance(l1, yang.schema.Leaf) and isinstance(l2, yang.schema.Leaf) and isinstance(l3, yang.schema.Leaf) and isinstance(l4, yang.schema.LeafList) and isinstance(l5, yang.schema.Leaf):
+        testing.assertEqual(l1.type_.name, "string")
+        testing.assertEqual(l2.type_.name, "uint32")
+        testing.assertEqual(l3.type_.name, "uint32")
+        testing.assertEqual(l4.type_.name, "uint32")
+        testing.assertEqual(l5.type_.name, "uint32")
