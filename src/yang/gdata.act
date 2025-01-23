@@ -188,7 +188,7 @@ def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
     return left + " ".join([name] + attr_strs) + right
 
 
-class Node(object):
+class Node(value):
     ns: ?str
     prefix: ?str
 
@@ -393,9 +393,11 @@ class Node(object):
         if isinstance(self, Inner):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
-                    cvals = child.vals
-                    if isinstance(cvals, list) and len(cvals) > 0 and isinstance(cvals[0], int):
-                        return cvals
+                    cvals = []
+                    for v in child.vals:
+                        if isinstance(v, int):
+                            cvals.append(v)
+                    return cvals
         raise ValueError("Cannot find leaf-list child with name " + name)
 
     def get_opt_int(self, name) -> ?int:
@@ -429,9 +431,11 @@ class Node(object):
         if isinstance(self, Inner):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
-                    cvals = child.vals
-                    if isinstance(cvals, list) and len(cvals) > 0 and isinstance(cvals[0], str):
-                        return cvals
+                    cvals = []
+                    for v in child.vals:
+                        if isinstance(v, str):
+                            cvals.append(v)
+                    return cvals
         raise ValueError("Cannot find leaf-list child with name " + name)
 
     def get_opt_strs(self, name) -> list[str]:
@@ -638,13 +642,10 @@ class Leaf(Node):
 class LeafList(Node):
     vals: list[value]
 
-    def __init__(self, vals: ?value, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, vals: list[value], ns: ?str=None, prefix: ?str=None):
         self.ns = ns
         self.prefix = prefix
-        if isinstance(vals, list) and len(vals) > 0 and isinstance(vals[0], value):
-            self.vals = vals
-        else:
-            self.vals = []
+        self.vals = vals
 
 class Absent(Node):
 
