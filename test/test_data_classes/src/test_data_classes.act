@@ -39,6 +39,27 @@ def _test_mandatory2():
 #         leaf l1 {
 #             type string;
 #         }
+#         leaf l3 {
+#             type uint64;
+#         }
+#         leaf l_empty {
+#             type empty;
+#         }
+#         list li {
+#             key name;
+#             leaf name {
+#                 type string;
+#             }
+#             leaf val {
+#                 type string;
+#             }
+#         }
+#         leaf-list ll_uint64 {
+#             type uint64;
+#         }
+#         leaf-list ll_str {
+#             type string;
+#         }
 #     }
 #     container pc1 {
 #         presence "p";
@@ -48,18 +69,36 @@ def _test_mandatory2():
 #             }
 #         }
 #     }
+#     container c.dot {
+#         leaf l.dot1 {
+#             type string;
+#         }
+#     }
 # }
 
 def _test_foo_from_xml_full():
+    # TODO: add <l_empty/>
     xml_text = """<data>
 <c1 xmlns="http://example.com/foo">
   <l1>foo</l1>
+  <l3>18446744073709551615</l3>
+  <li>
+    <name>tuta</name>
+    <val>baba</val>
+  </li>
+  <ll_uint64>4</ll_uint64>
+  <ll_uint64>42</ll_uint64>
+  <ll_str>kava</ll_str>
+  <ll_str>čaj</ll_str>
 </c1>
 <pc1 xmlns="http://example.com/foo">
   <foo>
     <l1>bar</l1>
   </foo>
 </pc1>
+<c.dot xmlns="http://example.com/foo">
+  <l.dot1>who put that here?!</l.dot1>
+</c.dot>
 </data>"""
     xml_in = xml.decode(xml_text)
     d = yang_foo_root.from_xml(xml_in)
