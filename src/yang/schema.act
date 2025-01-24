@@ -1270,6 +1270,7 @@ class SchemaNode(object):
                     grouping = child.get_grouping(_safe_name(child.name), context)
                     grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns)
                     child.expand_augments(context, target, in_uses=True)
+                    child.expand_refines(target)
                 else:
                     c_child = child.compile(context)
                     c_child.parent = target
@@ -1278,6 +1279,9 @@ class SchemaNode(object):
                     target.children.append(c_child)
         else:
             raise ValueError("expand_children() called on non-inner node %s" % type(self))
+
+    mut def apply_refine(self, refine: Refine):
+        raise NotImplementedError('SchemaNode apply_refine not implemented for %s' % type(self))
 
     def get_module_by_prefix(self, prefix: str, context: Context) -> Module:
         """Get a Module from the import prefix in the local module"""
@@ -2101,6 +2105,18 @@ class Action(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -2253,6 +2269,27 @@ class Anydata(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_mandatory = refine.mandatory
+        if ref_mandatory != None:
+            self.mandatory = ref_mandatory
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -2372,6 +2409,27 @@ class Anyxml(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_mandatory = refine.mandatory
+        if ref_mandatory != None:
+            self.mandatory = ref_mandatory
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -2482,6 +2540,18 @@ class Augment(SchemaNodeInner):
             ("when", self.when),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -2642,6 +2712,18 @@ class Bit(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -2731,6 +2813,18 @@ class Case(SchemaNodeInner):
             ("when", self.when),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -2841,6 +2935,28 @@ class Choice(SchemaNodeInner):
             ("when", self.when),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        if len(refine.default) == 1:
+            self.default = refine.default[0]
+        elif len(refine.default) > 1:
+            raise ValueError("Attempting to refine default with multiple values")
+        ref_mandatory = refine.mandatory
+        if ref_mandatory != None:
+            self.mandatory = ref_mandatory
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -2962,6 +3078,27 @@ class Container(SchemaNodeInner):
             ("when", self.when),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        ref_presence = refine.presence
+        if ref_presence != None:
+            self.presence = ref_presence
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -3089,6 +3226,18 @@ class Enum(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -3170,6 +3319,15 @@ class Extension(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -3248,6 +3406,18 @@ class Feature(SchemaNodeOuter):
             ("status", self.status),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -3330,6 +3500,15 @@ class Grouping(SchemaNodeInner):
             ("status", self.status),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -3422,6 +3601,18 @@ class Identity(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -3503,6 +3694,15 @@ class Import(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -3578,6 +3778,15 @@ class Include(SchemaNodeOuter):
             ("revision-date", self.revision_date),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -3655,6 +3864,12 @@ class Input(SchemaNodeInner):
             ("must", self.must),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -3779,6 +3994,31 @@ class Leaf(SchemaNodeOuter):
             ("when", self.when),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        if len(refine.default) == 1:
+            self.default = refine.default[0]
+        elif len(refine.default) > 1:
+            raise ValueError("Attempting to refine default with multiple values")
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_mandatory = refine.mandatory
+        if ref_mandatory != None:
+            self.mandatory = ref_mandatory
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -3937,6 +4177,33 @@ class LeafList(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        for ref_default in refine.default:
+            if ref_default not in self.default:
+                self.default.append(ref_default)
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_max_elements = refine.max_elements
+        if ref_max_elements != None:
+            self.max_elements = ref_max_elements
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_min_elements = refine.min_elements
+        if ref_min_elements != None:
+            self.min_elements = ref_min_elements
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -4007,6 +4274,7 @@ class LeafList(SchemaNodeOuter):
             namespace=self.get_namespace(),
             name=self.name,
             config=self.is_config(),
+            default=self.default,
             description=self.description,
             if_feature=self.if_feature,
             max_elements=self.get_max_elements(),
@@ -4069,6 +4337,15 @@ class Length(SchemaNodeOuter):
             ("reference", self.reference),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -4183,6 +4460,30 @@ class List(SchemaNodeInner):
             ("when", self.when),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_max_elements = refine.max_elements
+        if ref_max_elements != None:
+            self.max_elements = ref_max_elements
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_min_elements = refine.min_elements
+        if ref_min_elements != None:
+            self.min_elements = ref_min_elements
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -4395,6 +4696,15 @@ class Module(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -4556,6 +4866,15 @@ class Must(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -4648,6 +4967,21 @@ class Notification(SchemaNodeInner):
             ("status", self.status),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -4759,6 +5093,12 @@ class Output(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -4859,6 +5199,15 @@ class Pattern(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -4939,6 +5288,15 @@ class Range(SchemaNodeOuter):
             ("reference", self.reference),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -5042,6 +5400,39 @@ class Refine(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        ref_presence = refine.presence
+        if ref_presence != None:
+            self.presence = ref_presence
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        for ref_default in refine.default:
+            if ref_default not in self.default:
+                self.default.append(ref_default)
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_mandatory = refine.mandatory
+        if ref_mandatory != None:
+            self.mandatory = ref_mandatory
+        ref_max_elements = refine.max_elements
+        if ref_max_elements != None:
+            self.max_elements = ref_max_elements
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_min_elements = refine.min_elements
+        if ref_min_elements != None:
+            self.min_elements = ref_min_elements
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -5126,6 +5517,15 @@ class Revision(SchemaNodeOuter):
             ("reference", self.reference),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -5223,6 +5623,18 @@ class Rpc(SchemaNodeInner):
             ("status", self.status),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -5425,6 +5837,15 @@ class Submodule(SchemaNodeInner):
             ("feature", self.feature),
             ("exts", self.exts),
         ]
+
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -5731,6 +6152,19 @@ class Typedef(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        if len(refine.default) == 1:
+            self.default = refine.default[0]
+        elif len(refine.default) > 1:
+            raise ValueError("Attempting to refine default with multiple values")
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -5842,6 +6276,18 @@ class Uses(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
+    mut def apply_refine(self, refine: Refine):
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        self.exts.extend(refine.exts)
+
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
         res = []
@@ -5866,6 +6312,26 @@ class Uses(SchemaNodeOuter):
 
     def compile(self, context: Context):
         raise ValueError("Cannot compile 'uses'")
+
+    mut def expand_refines(self, target_base: SchemaNode):
+        """Expand refinements in the uses statement to the target nodes
+
+        target_base is the SchemaNode where this uses statement is located
+        """
+        def get_target(target_base, target: str):
+            parts = target.lstrip("/").split("/")
+            current_node = target_base
+            for part in parts:
+                prefix, name = split_prefix_name(part)
+                if prefix is not None:
+                    # TODO: or is prefix OK when it is the local prefix?
+                    raise ValueError("Relative path in refine under uses cannot have prefixes")
+                current_node = current_node.get(name)
+            return current_node
+
+        for refine in self.refine:
+            target = get_target(target_base, refine.target_node)
+            target.apply_refine(refine)
 
     def __str__(self):
         return "Uses " + self.name

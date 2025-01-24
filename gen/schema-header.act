@@ -1274,6 +1274,7 @@ class SchemaNode(object):
                     grouping = child.get_grouping(_safe_name(child.name), context)
                     grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns)
                     child.expand_augments(context, target, in_uses=True)
+                    child.expand_refines(target)
                 else:
                     c_child = child.compile(context)
                     c_child.parent = target
@@ -1282,6 +1283,9 @@ class SchemaNode(object):
                     target.children.append(c_child)
         else:
             raise ValueError("expand_children() called on non-inner node %s" % type(self))
+
+    mut def apply_refine(self, refine: Refine):
+        raise NotImplementedError('SchemaNode apply_refine not implemented for %s' % type(self))
 
     def get_module_by_prefix(self, prefix: str, context: Context) -> Module:
         """Get a Module from the import prefix in the local module"""
