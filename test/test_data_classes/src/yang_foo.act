@@ -171,8 +171,9 @@ class foo__pc1__foo(yang.adata.MNode):
 
 class foo__pc1(yang.adata.MNode):
     foo: foo__pc1__foo
+    l_hidden: str
 
-    mut def __init__(self, foo: ?foo__pc1__foo=None):
+    mut def __init__(self, l_hidden: str, foo: ?foo__pc1__foo=None):
         self._ns = "http://example.com/foo"
         if foo is not None:
             self.foo = foo
@@ -181,12 +182,16 @@ class foo__pc1(yang.adata.MNode):
         self_foo = self.foo
         if self_foo is not None:
             self_foo._parent = self
+        self.l_hidden = l_hidden
 
     mut def to_gdata(self) -> yang.gdata.Node:
         res = yang.gdata.Container('pc1', ns=self._ns)
         _foo = self.foo
+        _l_hidden = self.l_hidden
         if _foo is not None:
             res.children['foo'] = _foo.to_gdata()
+        if _l_hidden is not None:
+            res.children['l_hidden'] = yang.gdata.Leaf('l_hidden', 'string', _l_hidden, ns='http://example.com/foo')
         for child in res.children.values():
             child.parent = res
         return res
@@ -194,13 +199,13 @@ class foo__pc1(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc1:
         if n != None:
-            return foo__pc1(foo=foo__pc1__foo.from_gdata(n.get_opt_container("foo")))
+            return foo__pc1(foo=foo__pc1__foo.from_gdata(n.get_opt_container("foo")), l_hidden=n.get_str("l_hidden"))
         return foo__pc1()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> foo__pc1:
         if n != None:
-            return foo__pc1(foo=foo__pc1__foo.from_xml(yang.gdata.get_xml_opt_child(n, "foo")))
+            return foo__pc1(foo=foo__pc1__foo.from_xml(yang.gdata.get_xml_opt_child(n, "foo")), l_hidden=yang.gdata.from_xml_str(n, "l_hidden"))
         return foo__pc1()
 
 
@@ -267,8 +272,8 @@ class root(yang.adata.MNode):
         if self_c_dot is not None:
             self_c_dot._parent = self
 
-    mut def create_pc1(self):
-        res = foo__pc1()
+    mut def create_pc1(self, l_hidden):
+        res = foo__pc1(l_hidden)
         self.pc1 = res
         return res
 
