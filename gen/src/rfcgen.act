@@ -667,6 +667,7 @@ snode_methods = {
             namespace=self.get_namespace(),
             name=self.name,
             config=self.is_config(),
+            default=self.default,
             description=self.description,
             if_feature=self.if_feature,
             max_elements=self.get_max_elements(),
@@ -845,6 +846,27 @@ snode_methods = {
         raise ValueError("Cannot compile 'uses'")
 
 """,
+        "expand_refines": '''    mut def expand_refines(self, target_base: SchemaNode):
+        """Expand refinements in the uses statement to the target nodes
+
+        target_base is the SchemaNode where this uses statement is located
+        """
+        def get_target(target_base, target: str):
+            parts = target.lstrip("/").split("/")
+            current_node = target_base
+            for part in parts:
+                prefix, name = split_prefix_name(part)
+                if prefix is not None:
+                    # TODO: or is prefix OK when it is the local prefix?
+                    raise ValueError("Relative path in refine under uses cannot have prefixes")
+                current_node = current_node.get(name)
+            return current_node
+
+        for refine in self.refine:
+            target = get_target(target_base, refine.target_node)
+            target.apply_refine(refine)
+
+''',
     },
 
 }
@@ -1064,6 +1086,40 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("            (\"exts\", self.exts),")
         res.append("        ]")
         res.append("")
+
+        # -- apply_refine
+        # Note: some of these refinements may end up producing invalid schema.
+        # For example:
+        # - refining a node to config=true is not allowed if its parent is
+        #   already config=false
+        # - mandatory and default statements are mutually exclusive
+        # We do not validate the schema after applying the refinements in the
+        # apply_refine() method, because refines are not the only source of such
+        # errors. But we should check for them somewhere else ...
+        refine_substatements = set(stmts["refine"].substmts) - {"target-node"}
+        refinable_substatements = refine_substatements & set(cattrs)
+        if refinable_substatements:
+            res.append("    mut def apply_refine(self, refine: Refine):")
+            for attr in refinable_substatements:
+                target_cardinality = stmt.substmts[attr].cardinality
+                refine_cardinality = stmts["refine"].substmts[attr].cardinality
+                if target_cardinality == "0..1" and refine_cardinality == "0..1":
+                    res.append("        ref_%s = refine.%s" % (_attr_name(attr), _attr_name(attr)))
+                    res.append("        if ref_%s != None:" % _attr_name(attr))
+                    res.append("            self.%s = ref_%s" % (_attr_name(attr), _attr_name(attr)))
+                elif target_cardinality == "0..1" and refine_cardinality == "0..n":
+                    res.append("        if len(refine.%s) == 1:" % _attr_name(attr))
+                    res.append("            self.%s = refine.%s[0]" % (_attr_name(attr), _attr_name(attr)))
+                    res.append("        elif len(refine.%s) > 1:" % _attr_name(attr))
+                    res.append("            raise ValueError(\"Attempting to refine %s with multiple values\")" % attr)
+                elif target_cardinality == "0..n":
+                    res.append("        for ref_%s in refine.%s:" % (_attr_name(attr), _attr_name(attr)))
+                    res.append("            if ref_%s not in self.%s:" % (_attr_name(attr), _attr_name(attr)))
+                    res.append("                self.%s.append(ref_%s)" % (_attr_name(attr), _attr_name(attr)))
+                else:
+                    raise ValueError("Unknown cardinality for %s: %s" % (attr, target_cardinality))
+            res.append("        self.exts.extend(refine.exts)")
+            res.append("")
 
         # -- prsrc
         res.append("    def prsrc(self, indent=0):")

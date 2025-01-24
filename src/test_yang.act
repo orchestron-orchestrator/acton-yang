@@ -1116,7 +1116,7 @@ def _test_compile_augment_implicit_input_output():
     root = yang.compile([ys])
 
 def _test_compile_refine():
-    """Augmenting a grouping"""
+    """Refining a grouping"""
     ys = """module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
@@ -1130,12 +1130,21 @@ def _test_compile_refine():
   }
   uses g1 {
     refine "c1/l1" {
+        description "refined description";
         default "a";
         default "b";
+        some:ext "foo.bar";
     }
   }
 }"""
     root = yang.compile([ys])
+    l1 = root.get("c1").get("l1")
+    if isinstance(l1, yang.schema.DLeafList):
+        testing.assertEqual(l1.description, "refined description")
+        testing.assertEqual(l1.default, ["a", "b"])
+        testing.assertEqual(l1.exts, [yang.schema.Ext("some", "ext", "foo.bar")])
+    else:
+        testing.error("Expected LeafList instance")
 
 def _test_compile_choice():
     ys = """module foo {
