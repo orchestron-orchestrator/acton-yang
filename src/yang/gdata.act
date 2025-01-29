@@ -204,6 +204,10 @@ class Node(object):
                 res.append(",\n".join(child_res))
                 res.append(_ind(indent) + "])")
             return "\n".join(res)
+        elif isinstance(self, AbsentListElement):
+            return _ind(indent) + "AbsentListElement(" + str(self.key_vals) +", ns='" + ns_str + "')"
+        elif isinstance(self, Absent):
+            return _ind(indent) + "Absent('" + str(self.name) + "', ns='" + ns_str + "')"
         elif isinstance(self, Inner):
             args = []
             sname = ""
@@ -1318,10 +1322,10 @@ def patch(old: Node, p: ?Node) -> ?Node:
             if key in new_children:
                 # Patch existing child
                 res = patch(new_children[key], cpatch)
-                if res is None:
-                    del new_children[key]
-                else:
+                if res is not None:
                     new_children[key] = res
+                else:
+                    del new_children[key]
             else:
                 # Key not in old
                 if isinstance(cpatch, Absent):
@@ -1369,11 +1373,12 @@ def patch(old: Node, p: ?Node) -> ?Node:
                 if k in old_map:
                     # Patch existing element
                     res = patch(old_map[k], pelem)
-                    if res is None:
+                    if res is not None:
+                        if isinstance(res, ListElement):
+                            old_map[k] = res
+                    else:
                         # Remove the element
                         del old_map[k]
-                    else:
-                        old_map[k] = res
                 else:
                     # New element
                     old_map[k] = pelem
@@ -1418,10 +1423,10 @@ def patch(old: Node, p: ?Node) -> ?Node:
             cpatch = p.children[key]
             if key in new_children:
                 res = patch(new_children[key], cpatch)
-                if res is None:
-                    del new_children[key]
-                else:
+                if res is not None:
                     new_children[key] = res
+                else:
+                    del new_children[key]
             else:
                 if isinstance(cpatch, Absent):
                     pass
@@ -1441,10 +1446,10 @@ def patch(old: Node, p: ?Node) -> ?Node:
             cpatch = p.children[key]
             if key in new_children:
                 res = patch(new_children[key], cpatch)
-                if res is None:
-                    del new_children[key]
-                else:
+                if res is not None:
                     new_children[key] = res
+                else:
+                    del new_children[key]
             else:
                 if isinstance(cpatch, Absent):
                     pass
@@ -1467,10 +1472,10 @@ def patch(old: Node, p: ?Node) -> ?Node:
             cpatch = p.children[key]
             if key in new_children:
                 res = patch(new_children[key], cpatch)
-                if res is None:
-                    del new_children[key]
-                else:
+                if res is not None:
                     new_children[key] = res
+                else:
+                    del new_children[key]
             else:
                 if isinstance(cpatch, Absent):
                     pass
@@ -1642,8 +1647,6 @@ def from_xml_opt_ints(n: xml.Node, name: str) -> list[int]:
 #def from_xml_u16(n: xml.Node, name: str) -> u16:
 #    return u16(get_xml_child_text(n, name))
 
-
-
 def _test_merge1():
     y1 = Container("foo", {
         "a": Leaf("a", "int", 1),
@@ -1750,7 +1753,7 @@ def _test_merge_list1():
             "n1": Leaf("n1", "int", 1)
         }),
     ])
-    print(merge(y1, y2).to_xmlstr())
+#    print(merge(y1, y2).to_xmlstr())
     testing.assertEqual(exp, merge(y1, y2))
 
 
@@ -2093,7 +2096,7 @@ def _test_diff_and_patch_large_tree():
 
     # Check that patching old with d results in new
     res = patch(old, d)
-    if res != None:
+    if res is not None:
         testing.assertEqual(res.prsrc(), new.prsrc())
 
     # Also check that if we apply diff(new, old), and patch(new, diff(new, old)) we get old back.
