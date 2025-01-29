@@ -26,19 +26,17 @@ class basics__c(yang.adata.MNode):
             self.l_uint64_def = 1234567890
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Container('c', ns=self._ns)
+        children = {}
         _l_str_def = self.l_str_def
         _l_str_def_quoted = self.l_str_def_quoted
         _l_uint64_def = self.l_uint64_def
         if _l_str_def is not None:
-            res.children['l_str_def'] = yang.gdata.Leaf('l_str_def', 'string', _l_str_def, ns='http://example.com/basics')
+            children['l_str_def'] = yang.gdata.Leaf('string', _l_str_def, ns='http://example.com/basics')
         if _l_str_def_quoted is not None:
-            res.children['l_str_def_quoted'] = yang.gdata.Leaf('l_str_def_quoted', 'string', _l_str_def_quoted, ns='http://example.com/basics')
+            children['l_str_def_quoted'] = yang.gdata.Leaf('string', _l_str_def_quoted, ns='http://example.com/basics')
         if _l_uint64_def is not None:
-            res.children['l_uint64_def'] = yang.gdata.Leaf('l_uint64_def', 'uint64', _l_uint64_def, ns='http://example.com/basics')
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['l_uint64_def'] = yang.gdata.Leaf('uint64', _l_uint64_def, ns='http://example.com/basics')
+        return yang.gdata.Container(children, ns=self._ns)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> basics__c:
@@ -67,13 +65,11 @@ class root(yang.adata.MNode):
             self_c._parent = self
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Root()
+        children = {}
         _c = self.c
         if _c is not None:
-            res.children['c'] = _c.to_gdata()
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['c'] = _c.to_gdata()
+        return yang.gdata.Root(children)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
