@@ -996,15 +996,32 @@ class SchemaNode(object):
     mut def to_dnode(self) -> DNode:
         raise NotImplementedError('SchemaNode to_dschema not implemented for %s' % type(self))
 
-    def get_dnode_children(self):
+    def get_dnode_children(self, in_choice: bool=False):
+        mut def unset_mandatory(node):
+            """Unset the mandatory attribute if present
+            """
+            if isinstance(node, DLeaf):
+                print("Unset mandatory on %s" % node.name, err=True)
+                node.mandatory = False
+            elif isinstance(node, DAnydata):
+                node.mandatory = None
+            elif isinstance(node, DAnyxml):
+                node.mandatory = None
+
         if isinstance(self, SchemaNodeInner):
             new_children = []
             for child in self.children:
                 if isinstance(child, Case):
-                    new_children.extend(child.get_dnode_children())
+                    # Direct descendants of case are data nodes, where we must
+                    # unset mandatory
+                    new_children.extend(child.get_dnode_children(in_choice=True))
                     continue
                 if isinstance(child, Choice):
-                    new_children.extend(child.get_dnode_children())
+                    # Direct descendants of choice are either case or data node,
+                    # like leaf, container, etc. We unset mandatory on these to
+                    # avoid ending up with invalid mutually exclusive
+                    # constraints in the data tree. Of course we then have no constraints ...
+                    new_children.extend(child.get_dnode_children(in_choice=True))
                     continue
                 if isinstance(child, Grouping):
                     continue
@@ -1014,7 +1031,10 @@ class SchemaNode(object):
                     continue
                 if isinstance(child, Uses):
                     continue
-                new_children.append(child.to_dnode())
+                dnode_child = child.to_dnode()
+                if in_choice:
+                    unset_mandatory(dnode_child)
+                new_children.append(dnode_child)
             return new_children
         raise ValueError("get_dnode_children() called on non-inner node %s" % type(self))
 
