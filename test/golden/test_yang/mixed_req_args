@@ -6,13 +6,11 @@ class foo__c__li__bar(yang.adata.MNode):
         self.man = man
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Container('bar', ns=self._ns)
+        children = {}
         _man = self.man
         if _man is not None:
-            res.children['man'] = yang.gdata.Leaf('man', 'string', _man, ns='http://example.com/foo')
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['man'] = yang.gdata.Leaf('string', _man)
+        return yang.gdata.Container(children)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c__li__bar:
@@ -43,19 +41,17 @@ class foo__c__li_entry(yang.adata.MNode):
         self.bar._parent = self
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.ListElement([str(self.name)], ns=self._ns)
+        children = {}
         _name = self.name
         _foo = self.foo
         _bar = self.bar
         if _name is not None:
-            res.children['name'] = yang.gdata.Leaf('name', 'string', _name, ns='http://example.com/foo')
+            children['name'] = yang.gdata.Leaf('string', _name)
         if _foo is not None:
-            res.children['foo'] = yang.gdata.Leaf('foo', 'string', _foo, ns='http://example.com/foo')
+            children['foo'] = yang.gdata.Leaf('string', _foo)
         if _bar is not None:
-            res.children['bar'] = _bar.to_gdata()
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['bar'] = _bar.to_gdata()
+        return yang.gdata.ListElement([str(self.name)], children)
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c__li_entry:
@@ -86,13 +82,12 @@ class foo__c__li(yang.adata.MNode):
         return res
 
     mut def to_gdata(self):
-        res = yang.gdata.List('li', ['name'], ns=self._ns)
+        elements = []
         for e in self.elements:
             e_gdata = e.to_gdata()
-            e_gdata.parent = res
             if isinstance(e_gdata, yang.gdata.ListElement):
-                res.elements.append(e_gdata)
-        return res
+                elements.append(e_gdata)
+        return yang.gdata.List(['name'], elements, ns='http://example.com/foo')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.List) -> list[foo__c__li_entry]:

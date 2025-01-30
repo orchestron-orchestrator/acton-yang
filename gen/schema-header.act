@@ -284,7 +284,7 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def prdaclass(self, loose=False, top=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')
@@ -292,7 +292,7 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def prdaclass(self, loose=False, top=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True) -> str:
         """Print the data class for this schema node
         """
 #        stmt_arg = self._get_arg()
@@ -319,7 +319,7 @@ class DNodeInner(DNode):
 
         for child in self.children:
             if isinstance(child, DNodeInner):
-                res.append(child.prdaclass(loose=loose, top=False))
+                res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -453,12 +453,13 @@ class DNodeInner(DNode):
             if not isinstance(child, DLeafList):
                 res.append("        _%s = self.%s" % (_safe_name(child.name), _safe_name(child.name)))
         for child in self.children:
+            child_ns = ", ns='" + child.namespace + "'" if child.namespace != self.namespace else ""
             if isinstance(child, DLeafList):
-                res.append("        children['%s'] = yang.gdata.LeafList(self.%s, ns='%s')" % (child.name, _safe_name(child.name), child.namespace))
+                res.append("        children['%s'] = yang.gdata.LeafList(self.%s%s)" % (child.name, _safe_name(child.name), child_ns))
             else:
                 res.append("        if _%s is not None:" % _safe_name(child.name))
                 if isinstance(child, DLeaf):
-                    res.append("            children['%s'] = yang.gdata.Leaf('%s', _%s, ns='%s')" % (child.name, child.type_.name, _safe_name(child.name), child.namespace))
+                    res.append("            children['%s'] = yang.gdata.Leaf('%s', _%s%s)" % (child.name, child.type_.name, _safe_name(child.name), child_ns))
                 elif isinstance(child, DContainer):
                     res.append("            children['%s'] = _%s.to_gdata()" % (child.name, _safe_name(child.name)))
                 elif isinstance(child, DList):
@@ -471,8 +472,10 @@ class DNodeInner(DNode):
             res.append("        return yang.gdata.ListElement([%s], children)" % (list_keys_str))
         elif isinstance(self, DRoot):
             res.append("        return yang.gdata.%s(children)" % (self.gname))
+        elif set_ns:
+            res.append("        return yang.gdata.%s(children, ns='%s')" % (self.gname, self.namespace))
         else:
-            res.append("        return yang.gdata.%s(children, ns=self._ns)" % (self.gname))
+            res.append("        return yang.gdata.%s(children)" % (self.gname))
         res.append("")
 #
         # .from_gdata()
@@ -573,10 +576,13 @@ class DNodeInner(DNode):
             res.append("    mut def to_gdata(self):" % ())
             res.append("        elements = []")
             res.append("        for e in self.elements:")
-            res.append("            e_gdata = e.to_gdata()")
+            res.append("            e_gdata = e.to_gdata()")                                # child.namespace != self.namespace
             res.append("            if isinstance(e_gdata, yang.gdata.ListElement):")
             res.append("                elements.append(e_gdata)")
-            res.append("        return yang.gdata.List(%s, elements, ns=self._ns)" % (repr(self.key)))
+            if set_ns:
+                res.append("        return yang.gdata.List(%s, elements, ns='%s')" % (repr(self.key), self.namespace))
+            else:
+                res.append("        return yang.gdata.List(%s, elements)" % (repr(self.key)))
             res.append("")
 
 #            # .from_gdata()
@@ -991,7 +997,7 @@ class SchemaNode(object):
         """
         raise NotImplementedError('SchemaNode prsrc')
 
-    def prdaclass(self, loose=False, top=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')
