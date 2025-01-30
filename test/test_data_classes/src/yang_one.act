@@ -15,16 +15,14 @@ class foo__tc1(yang.adata.MNode):
         self.l2 = l2
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Container('tc1', ns=self._ns)
+        children = {}
         _l1 = self.l1
         _l2 = self.l2
         if _l1 is not None:
-            res.children['l1'] = yang.gdata.Leaf('l1', 'string', _l1, ns='http://example.com/foo')
+            children['l1'] = yang.gdata.Leaf('string', _l1)
         if _l2 is not None:
-            res.children['l2'] = yang.gdata.Leaf('l2', 'string', _l2, ns='http://example.com/foo')
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['l2'] = yang.gdata.Leaf('string', _l2)
+        return yang.gdata.Container(children, ns='http://example.com/foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__tc1:
@@ -49,16 +47,14 @@ class foo__li__c1(yang.adata.MNode):
         self.l2 = l2
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Container('c1', ns=self._ns)
+        children = {}
         _l1 = self.l1
         _l2 = self.l2
         if _l1 is not None:
-            res.children['l1'] = yang.gdata.Leaf('l1', 'string', _l1, ns='http://example.com/foo')
+            children['l1'] = yang.gdata.Leaf('string', _l1)
         if _l2 is not None:
-            res.children['l2'] = yang.gdata.Leaf('l2', 'string', _l2, ns='http://example.com/foo')
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['l2'] = yang.gdata.Leaf('string', _l2)
+        return yang.gdata.Container(children)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__li__c1:
@@ -84,16 +80,14 @@ class foo__li_entry(yang.adata.MNode):
         self.c1._parent = self
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.ListElement([str(self.name)], ns=self._ns)
+        children = {}
         _name = self.name
         _c1 = self.c1
         if _name is not None:
-            res.children['name'] = yang.gdata.Leaf('name', 'string', _name, ns='http://example.com/foo')
+            children['name'] = yang.gdata.Leaf('string', _name)
         if _c1 is not None:
-            res.children['c1'] = _c1.to_gdata()
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['c1'] = _c1.to_gdata()
+        return yang.gdata.ListElement([str(self.name)], children)
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_entry:
@@ -124,13 +118,12 @@ class foo__li(yang.adata.MNode):
         return res
 
     mut def to_gdata(self):
-        res = yang.gdata.List('li', ['name'], ns=self._ns)
+        elements = []
         for e in self.elements:
             e_gdata = e.to_gdata()
-            e_gdata.parent = res
             if isinstance(e_gdata, yang.gdata.ListElement):
-                res.elements.append(e_gdata)
-        return res
+                elements.append(e_gdata)
+        return yang.gdata.List(['name'], elements, ns='http://example.com/foo')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.List) -> list[foo__li_entry]:
@@ -159,16 +152,14 @@ class root(yang.adata.MNode):
         self.li._parent = self
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Root()
+        children = {}
         _tc1 = self.tc1
         _li = self.li
         if _tc1 is not None:
-            res.children['tc1'] = _tc1.to_gdata()
+            children['tc1'] = _tc1.to_gdata()
         if _li is not None:
-            res.children['li'] = _li.to_gdata()
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['li'] = _li.to_gdata()
+        return yang.gdata.Root(children)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
