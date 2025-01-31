@@ -235,13 +235,11 @@ class foo__cc__death_entry(yang.adata.MNode):
         self.name = name
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.ListElement([str(self.name)], ns=self._ns)
+        children = {}
         _name = self.name
         if _name is not None:
-            res.children['name'] = yang.gdata.Leaf('name', 'string', _name, ns='http://example.com/foo')
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['name'] = yang.gdata.Leaf('string', _name)
+        return yang.gdata.ListElement([str(self.name)], children)
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__cc__death_entry:
@@ -272,13 +270,12 @@ class foo__cc__death(yang.adata.MNode):
         return res
 
     mut def to_gdata(self):
-        res = yang.gdata.List('death', ['name'], ns=self._ns)
+        elements = []
         for e in self.elements:
             e_gdata = e.to_gdata()
-            e_gdata.parent = res
             if isinstance(e_gdata, yang.gdata.ListElement):
-                res.elements.append(e_gdata)
-        return res
+                elements.append(e_gdata)
+        return yang.gdata.List(['name'], elements)
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.List) -> list[foo__cc__death_entry]:
@@ -306,16 +303,14 @@ class foo__cc(yang.adata.MNode):
         self.death._parent = self
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        res = yang.gdata.Container('cc', ns=self._ns)
+        children = {}
         _cake = self.cake
         _death = self.death
         if _cake is not None:
-            res.children['cake'] = yang.gdata.Leaf('cake', 'string', _cake, ns='http://example.com/foo')
+            children['cake'] = yang.gdata.Leaf('string', _cake)
         if _death is not None:
-            res.children['death'] = _death.to_gdata()
-        for child in res.children.values():
-            child.parent = res
-        return res
+            children['death'] = _death.to_gdata()
+        return yang.gdata.Container(children, ns='http://example.com/foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__cc:
