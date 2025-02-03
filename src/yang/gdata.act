@@ -260,16 +260,14 @@ class Node(value):
             return ""
 
         if isinstance(self, Container):
-            if len(self.children) == 0:
-                if self.presence:
-                    return _indent() + fmt_tag(name, either(self.ns, cns), end=True) + _nl()
-                else:
-                    return ""
             child_xml = ""
             for nm,child in self.children.items():
                 child_xml += child.to_xmlstr(nm, pretty, indent + 1)
             if child_xml == "":
-                return child_xml
+                if self.presence:
+                    return _indent() + fmt_tag(name, either(self.ns, cns), end=True) + _nl()
+                else:
+                    return ""
             xml = _indent() + fmt_tag(name, either(self.ns, cns)) + _nl()
             xml += child_xml
             xml += _indent() + fmt_tag(name, close=True) + _nl()
