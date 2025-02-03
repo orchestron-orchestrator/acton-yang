@@ -473,9 +473,15 @@ class DNodeInner(DNode):
         elif isinstance(self, DRoot):
             res.append("        return yang.gdata.%s(children)" % (self.gname))
         elif set_ns:
-            res.append("        return yang.gdata.%s(children, ns='%s')" % (self.gname, self.namespace))
+            if isinstance(self, DContainer) and self.presence:
+                res.append("        return yang.gdata.%s(children, presence=%s, ns='%s')" % (self.gname, str(self.presence), self.namespace))
+            else:
+                res.append("        return yang.gdata.%s(children, ns='%s')" % (self.gname, self.namespace))
         else:
-            res.append("        return yang.gdata.%s(children)" % (self.gname))
+            if isinstance(self, DContainer) and self.presence:
+                res.append("        return yang.gdata.%s(children, presence=%s)" % (self.gname, str(self.presence)))
+            else:
+                res.append("        return yang.gdata.%s(children)" % (self.gname))
         res.append("")
 #
         # .from_gdata()
