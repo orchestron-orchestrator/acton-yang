@@ -10,16 +10,16 @@ class foo__foo__bar(yang.adata.MNode):
         _l1 = self.l1
         if _l1 is not None:
             children['l1'] = yang.gdata.Leaf('string', _l1)
-        return yang.gdata.Container(children)
+        return yang.gdata.Container(children, presence=True)
 
     @staticmethod
-    mut def from_gdata(n: ?yang.gdata.Node) -> foo__foo__bar:
+    mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__foo__bar:
         if n != None:
             return foo__foo__bar(l1=n.get_str("l1"))
         raise ValueError("Missing required subtree foo__foo__bar")
 
     @staticmethod
-    mut def from_xml(n: ?xml.Node) -> foo__foo__bar:
+    mut def from_xml(n: ?xml.Node) -> ?foo__foo__bar:
         if n != None:
             return foo__foo__bar(l1=yang.gdata.from_xml_str(n, "l1"))
         raise ValueError("Missing required subtree foo__foo__bar")
@@ -48,17 +48,17 @@ class foo__foo(yang.adata.MNode):
         _bar = self.bar
         if _bar is not None:
             children['bar'] = _bar.to_gdata()
-        return yang.gdata.Container(children, ns='http://example.com/foo')
+        return yang.gdata.Container(children, presence=True, ns='http://example.com/foo')
 
     @staticmethod
-    mut def from_gdata(n: ?yang.gdata.Node) -> foo__foo:
+    mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__foo:
         if n != None:
             return foo__foo(bar=foo__foo__bar.from_gdata(n.get_opt_container("bar")))
-        return foo__foo()
+        return None
 
     @staticmethod
-    mut def from_xml(n: ?xml.Node) -> foo__foo:
+    mut def from_xml(n: ?xml.Node) -> ?foo__foo:
         if n != None:
             return foo__foo(bar=foo__foo__bar.from_xml(yang.gdata.get_xml_opt_child(n, "bar")))
-        return foo__foo()
+        return None
 
