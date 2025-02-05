@@ -1,0 +1,88 @@
+import testing
+
+import yang
+import yang.schema
+import yang.parser
+
+mut def rewrite_presence_containers(node: yang.schema.SchemaNode) -> yang.schema.SchemaNode:
+    """Rewrite family/XXX/YYY presence containers to an empty leaf
+
+    The current implementation of the YANG parser does not handle empty presence
+    containers correctly. When an empty presence container is created the
+    appearance is the same as if the node was a leaf of type "empty". We take
+    advantage of this and just rewrite the presence container to an empty leaf.
+
+    For example: family/XXX/YYY presence container with the presence attribute set 
+    to "enable YYY" is rewritten to a leaf with the name YYY and type empty.
+    """
+    def rewrite_node(cn: yang.schema.Container) -> yang.schema.SchemaNode:
+        """Rewrite a presence container, if it's a container with a presence statement
+        and has a "family" grandparent container.
+        """
+        def is_presence(c: yang.schema.Container) -> bool:
+            p = c.presence
+            if p is not None and p == "enable " + c.name:
+                return True
+            return False
+
+        def has_family_grandparent(cn):
+            parent = cn.parent
+            if parent is not None:
+                grandparent = parent.parent
+                if grandparent is not None:
+                    if isinstance(grandparent, yang.schema.Container):
+                        if grandparent.name == "family":
+                            return True
+            return False
+
+        if is_presence(cn) and has_family_grandparent(cn):
+            return yang.schema.Leaf(name=cn.name, type_=yang.schema.Type(name="empty"), parent=cn.parent, description="ayangc transformed presence container")
+        return cn
+
+    if isinstance(node, yang.schema.Container):
+        new_node = rewrite_node(node)
+        if new_node != node:
+            return new_node
+    if isinstance(node, yang.schema.SchemaNodeInner):
+        new_children = []
+        for child in node.children:
+            new_child = rewrite_presence_containers(child)
+            new_children.append(new_child)
+        node.children = new_children
+    return node
+
+test_yang = """module test_yang {
+  yang-version "1.1";
+  namespace "http://example.com/test_yang";
+  prefix "test_yang";
+  description "test yang module";
+  grouping bgp {
+    container bgp {
+      container group {
+        container family {
+          description "Protocol family for NLRIs in updates";
+          container inet6-vpn {
+            description "IPv6 Layer 3 VPN NLRI parameters";
+            container unicast {
+              description "Include unicast NLRI";
+              presence "enable unicast";
+              uses bgp-afi-l3vpn;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  container configuration {
+    uses bgp;
+  }
+}
+"""
+
+
+def _test_rewrite_presence_containers():
+    y = yang.parser.parse(test_yang)
+    n = yang.schema.stmt_to_snode(y)
+    n = rewrite_presence_containers(n)
+    return n.to_statement().pryang()
