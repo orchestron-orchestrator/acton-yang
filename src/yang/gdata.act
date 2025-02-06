@@ -306,7 +306,11 @@ class Node(value):
                     else:
                         xml += fmt_tag(name, either(self.ns, cns), attrs=remove_op, end=True)
             else:
-                xml += fmt_tag(name, either(self.ns, cns)) + str(self.val) + fmt_tag(name, close=True)
+                if isinstance(self.val, bool):
+                    v = str(self.val).lower()
+                else:
+                    v = str(self.val)
+                xml += fmt_tag(name, either(self.ns, cns)) + v + fmt_tag(name, close=True)
             xml += _nl()
             return xml
         elif isinstance(self, LeafList):
@@ -2049,7 +2053,8 @@ def _test_to_xmlstr():
                 ListElement(["k4"], {
                     "n4": Leaf("int", 4),
                 }),
-            ])
+            ]),
+            "b": Leaf("bool", False)
         })
     }, ns="http://example.com/acme")
 
