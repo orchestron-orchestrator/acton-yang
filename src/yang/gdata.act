@@ -221,6 +221,8 @@ class Node(value):
             sname = ""
             if isinstance(self, Container):
                 sname = "Container"
+                if self.presence:
+                    args.insert(0, "presence=True")
             elif isinstance(self, AbsentListElement):
                 args.insert(0, str(self.key_vals))
                 sname = _ind(indent) + "AbsentListElement"
@@ -258,13 +260,14 @@ class Node(value):
             return ""
 
         if isinstance(self, Container):
-            if len(self.children) == 0:
-                return ""
             child_xml = ""
             for nm,child in self.children.items():
                 child_xml += child.to_xmlstr(nm, pretty, indent + 1)
             if child_xml == "":
-                return child_xml
+                if self.presence:
+                    return _indent() + fmt_tag(name, either(self.ns, cns), end=True) + _nl()
+                else:
+                    return ""
             xml = _indent() + fmt_tag(name, either(self.ns, cns)) + _nl()
             xml += child_xml
             xml += _indent() + fmt_tag(name, close=True) + _nl()
@@ -591,8 +594,9 @@ class Module(Inner):
 
 
 class Container(Inner):
-    def __init__(self, children: dict[str, Node]={}, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, children: dict[str, Node]={}, presence: bool=False, ns: ?str=None, prefix: ?str=None):
         self.children = children
+        self.presence = presence
         self.ns = ns
         self.prefix = prefix
 
@@ -2117,3 +2121,19 @@ def _test_to_xmlstr_root_merge():
     ym = merge(y1, y2)
 
     return ym.to_xmlstr()
+
+def _test_to_xmlstr_presence():
+    y1 = Root({
+        "foo": Container({
+            "a": Leaf("int", 1)
+        }, presence=True, ns="http://example.com/acme")
+    })
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_presence_childless():
+    y1 = Root({
+        "foo": Container(presence=True, ns="http://example.com/acme")
+    })
+
+    return y1.to_xmlstr()
