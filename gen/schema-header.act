@@ -387,7 +387,7 @@ class DNodeInner(DNode):
 
         for child in self.children:
             if isinstance(child, DContainer):
-                if loose or optional_subtree(child):
+                if loose or optional_subtree(child) and not child.presence:
                     res.append("        if %s is not None:" % (_safe_name(child.name)))
                     res.append("            self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
                     res.append("        else:")
@@ -473,9 +473,15 @@ class DNodeInner(DNode):
         elif isinstance(self, DRoot):
             res.append("        return yang.gdata.%s(children)" % (self.gname))
         elif set_ns:
-            res.append("        return yang.gdata.%s(children, ns='%s')" % (self.gname, self.namespace))
+            if isinstance(self, DContainer) and self.presence:
+                res.append("        return yang.gdata.%s(children, presence=True, ns='%s')" % (self.gname, self.namespace))
+            else:
+                res.append("        return yang.gdata.%s(children, ns='%s')" % (self.gname, self.namespace))
         else:
-            res.append("        return yang.gdata.%s(children)" % (self.gname))
+            if isinstance(self, DContainer) and self.presence:
+                res.append("        return yang.gdata.%s(children, presence=True)" % (self.gname))
+            else:
+                res.append("        return yang.gdata.%s(children)" % (self.gname))
         res.append("")
 #
         # .from_gdata()
@@ -506,11 +512,17 @@ class DNodeInner(DNode):
             res.append("    mut def from_gdata(n: yang.gdata.Node) -> %s_entry:" % get_path_name(self))
             res.append("        return %s_entry(%s)" % (get_path_name(self), from_gdata_args))
         else:
-            res.append("    mut def from_gdata(n: ?yang.gdata.Node) -> %s:" % get_path_name(self))
+            if isinstance(self, DContainer) and self.presence:
+                res.append("    mut def from_gdata(n: ?yang.gdata.Node) -> ?%s:" % get_path_name(self))
+            else:
+                res.append("    mut def from_gdata(n: ?yang.gdata.Node) -> %s:" % get_path_name(self))
             res.append("        if n != None:")
             res.append("            return %s(%s)" % (get_path_name(self), from_gdata_args))
             if optional_subtree(self):
-                res.append("        return %s()" % (get_path_name(self)))
+                if isinstance(self, DContainer) and self.presence:
+                    res.append("        return None")
+                else:
+                    res.append("        return %s()" % (get_path_name(self)))
             else:
                 res.append("        raise ValueError(\"Missing required subtree %s\")" % get_path_name(self))
         res.append("")
@@ -520,11 +532,17 @@ class DNodeInner(DNode):
             res.append("    mut def from_xml(n: xml.Node) -> %s_entry:" % get_path_name(self))
             res.append("        return %s_entry(%s)" % (get_path_name(self), from_xml_args))
         else:
-            res.append("    mut def from_xml(n: ?xml.Node) -> %s:" % get_path_name(self))
+            if isinstance(self, DContainer) and self.presence:
+                res.append("    mut def from_xml(n: ?xml.Node) -> ?%s:" % get_path_name(self))
+            else:
+                res.append("    mut def from_xml(n: ?xml.Node) -> %s:" % get_path_name(self))
             res.append("        if n != None:")
             res.append("            return %s(%s)" % (get_path_name(self), from_xml_args))
             if optional_subtree(self):
-                res.append("        return %s()" % (get_path_name(self)))
+                if isinstance(self, DContainer) and self.presence:
+                    res.append("        return None")
+                else:
+                    res.append("        return %s()" % (get_path_name(self)))
             else:
                 res.append("        raise ValueError(\"Missing required subtree %s\")" % get_path_name(self))
         res.append("")

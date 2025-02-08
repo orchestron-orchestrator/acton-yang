@@ -124,6 +124,26 @@ def _test_foo_from_xml1():
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
 
+def _test_foo_from_xml_pc():
+    """"""
+    xml_text = """<data>
+<pc1 xmlns="http://example.com/foo"></pc1>
+</data>"""
+    xml_in = xml.decode(xml_text)
+    d = yang_foo_root.from_xml(xml_in)
+    pc1 = d.pc1
+    if pc1 is not None:
+        present = True
+    else:
+        present = False
+    testing.assertEqual(present, True)
+    g = d.to_gdata()
+    gc = g.prsrc()
+    print(gc, err=True)
+    xml_out_text = g.to_xmlstr()
+    xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
+    testing.assertEqual(xml_in.encode(), xml_out.encode())
+
 def _test_foo_from_xml2():
     """"""
     xml_text = """<data>
@@ -133,7 +153,16 @@ def _test_foo_from_xml2():
 </data>"""
     xml_in = xml.decode(xml_text)
     d = yang_foo_root.from_xml(xml_in)
-    xml_out_text = d.to_gdata().to_xmlstr()
+    pc1 = d.pc1
+    if pc1 is not None:
+        present = True
+    else:
+        present = False
+    testing.assertEqual(present, False)
+    g = d.to_gdata()
+    gc = g.prsrc()
+    print(gc, err=True)
+    xml_out_text = g.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
 
@@ -210,3 +239,12 @@ def _test_leaf_default_from_xml():
     testing.assertEqual(r.c.l_str_def, "foo")
     testing.assertEqual(r.c.l_str_def_quoted, '"foo"')
     testing.assertEqual(r.c.l_uint64_def, 1234567890)
+
+def _test_empty_presence():
+    xml_text = """<data><empty-presence xmlns="http://example.com/foo"/></data>"""
+    xml_in = xml.decode(xml_text)
+    d = yang_foo_root.from_xml(xml_in)
+    xml_out_text = d.to_gdata().to_xmlstr()
+    xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
+    # testing.assertEqual(xml_in.encode(), xml_out.encode())
+    return xml_out_text
