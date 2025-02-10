@@ -1025,6 +1025,7 @@ class Context(object):
 class SchemaNode(object):
     parent: ?SchemaNode
     ns: ?str
+    pfx: ?str
     exts: list[Ext]
     _yname: str
 
@@ -1111,8 +1112,9 @@ class SchemaNode(object):
     def get_prefix(self) -> str:
         n = self
         for i in range(RECURSION_LIMIT+1):
-            if isinstance(n, Module):
-                return n.prefix
+            nprefix = n.pfx
+            if nprefix is not None:
+                return nprefix
             nparent = n.parent
             if nparent is not None:
                 n = nparent
@@ -1262,7 +1264,7 @@ class SchemaNode(object):
             break
         raise ValueError("Unable to find Module")
 
-    def compile(self, context: Context, new_ns: ?str=None) -> SchemaNode:
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None) -> SchemaNode:
         """Compile an abstract YANG into a concrete one
         - expand uses / groupings
         - handle augments
@@ -1335,7 +1337,7 @@ class SchemaNode(object):
                     target = get_target(target_base, aug.target_node)
                     if isinstance(target, SchemaNodeInner):
                         # Just move the child to the target
-                        aug.expand_children(context, target, new_ns=aug.get_namespace())
+                        aug.expand_children(context, target, new_ns=aug.get_namespace(), new_pfx=aug.get_prefix())
                         target.exts.extend(aug.exts)
                     else:
                         raise ValueError("Augment target " + str(target) + " is not an inner node")
@@ -1350,18 +1352,18 @@ class SchemaNode(object):
         else:
             raise ValueError("Node type does not have augment substatements")
 
-    def expand_children(self, context: Context, target: SchemaNodeInner, new_ns: ?str = None):
+    def expand_children(self, context: Context, target: SchemaNodeInner, new_ns: ?str = None, new_pfx: ?str = None):
         """Expand abstract children into concrete nodes
         """
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
                 if isinstance(child, Uses):
                     grouping = child.get_grouping(_safe_name(child.name), context)
-                    grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns)
+                    grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx)
                     child.expand_augments(context, target, in_uses=True)
                     child.expand_refines(target)
                 else:
-                    c_child = child.compile(context, new_ns)
+                    c_child = child.compile(context, new_ns, new_pfx)
                     c_child.parent = target
                     target.children.append(c_child)
         else:
