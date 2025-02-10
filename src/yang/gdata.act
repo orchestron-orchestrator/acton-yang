@@ -185,7 +185,8 @@ def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
     attr_strs = list(map(lambda x: x.0 + "=" + x.1, ns_attr + attrs))
     left = "</" if close else "<"
     right = "/>" if end else ">"
-    return left + " ".join([name] + attr_strs) + right
+    name_without_prefix = name.split(":")[-1]
+    return left + " ".join([name_without_prefix] + attr_strs) + right
 
 
 class Node(value):
@@ -1349,13 +1350,13 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
 
 
-def get_xml_child(n: xml.Node, name: str) -> xml.Node:
+def get_xml_child(n: xml.Node, name: str, ns: ?str) -> xml.Node:
     r = get_xml_opt_child(n, name)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name " + name)
 
-def get_xml_opt_child(n: xml.Node, name: str) -> ?xml.Node:
+def get_xml_opt_child(n: xml.Node, name: str, ns: ?str) -> ?xml.Node:
     for child in n.children:
         if child.tag == name:
             return child
