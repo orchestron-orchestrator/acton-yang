@@ -1220,7 +1220,7 @@ class SchemaNode(object):
             break
         raise ValueError("Unable to find Module")
 
-    def compile(self, context: Context) -> SchemaNode:
+    def compile(self, context: Context, new_ns: ?str=None) -> SchemaNode:
         """Compile an abstract YANG into a concrete one
         - expand uses / groupings
         - handle augments
@@ -1319,10 +1319,8 @@ class SchemaNode(object):
                     child.expand_augments(context, target, in_uses=True)
                     child.expand_refines(target)
                 else:
-                    c_child = child.compile(context)
+                    c_child = child.compile(context, new_ns)
                     c_child.parent = target
-                    if new_ns is not None:
-                        c_child.ns = new_ns
                     target.children.append(c_child)
         else:
             raise ValueError("expand_children() called on non-inner node %s" % type(self))
