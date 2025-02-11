@@ -1216,7 +1216,7 @@ class SchemaNode(object):
             break
         raise ValueError("Unable to find Module")
 
-    def compile(self, context: Context) -> SchemaNode:
+    def compile(self, context: Context, new_ns: ?str=None) -> SchemaNode:
         """Compile an abstract YANG into a concrete one
         - expand uses / groupings
         - handle augments
@@ -1315,10 +1315,8 @@ class SchemaNode(object):
                     child.expand_augments(context, target, in_uses=True)
                     child.expand_refines(target)
                 else:
-                    c_child = child.compile(context)
+                    c_child = child.compile(context, new_ns)
                     c_child.parent = target
-                    if new_ns is not None:
-                        c_child.ns = new_ns
                     target.children.append(c_child)
         else:
             raise ValueError("expand_children() called on non-inner node %s" % type(self))
@@ -2204,17 +2202,17 @@ class Action(SchemaNodeInner):
                 return _output
         return SchemaNode.get(self, name, ns)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
         new_input = None
         if self_input is not None:
-            new_input = self_input.compile(context)
+            new_input = self_input.compile(context, new_ns)
         # new_output = self_output.compile(context) if self_output is not None else None # actonc codegen pre-evaluates before None-check
         new_output = None
         if self_output is not None:
-            new_output = self_output.compile(context)
+            new_output = self_output.compile(context, new_ns)
         new = Action(self.name,
                      description=self.description,
                      if_feature=self.if_feature,
@@ -2223,8 +2221,8 @@ class Action(SchemaNodeInner):
                      reference=self.reference,
                      status=self.status,
                      exts=self.exts,
-                     ns=self.ns)
-        self.expand_children(context, new)
+                     ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def to_dnode(self) -> DAction:
@@ -2371,7 +2369,7 @@ class Anydata(SchemaNodeOuter):
             exts=self.exts
         )
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Anydata(self.name,
                       config=self.config,
                       description=self.description,
@@ -2382,7 +2380,7 @@ class Anydata(SchemaNodeOuter):
                       status=self.status,
                       when=self.when,
                       exts=self.exts,
-                      ns=self.ns)
+                      ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -2511,7 +2509,7 @@ class Anyxml(SchemaNodeOuter):
             exts=self.exts
         )
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Anyxml(self.name,
                      config=self.config,
                      description=self.description,
@@ -2522,7 +2520,7 @@ class Anyxml(SchemaNodeOuter):
                      status=self.status,
                      when=self.when,
                      exts=self.exts,
-                     ns=self.ns)
+                     ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -2626,7 +2624,7 @@ class Augment(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Augment(self.target_node,
                       description=self.description,
                       if_feature=self.if_feature,
@@ -2634,8 +2632,8 @@ class Augment(SchemaNodeInner):
                       status=self.status,
                       when=self.when,
                       exts=self.exts,
-                      ns=self.ns)
-        self.expand_children(context, new)
+                      ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -2695,11 +2693,11 @@ class BelongsTo(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = BelongsTo(self.module,
                         prefix=self.prefix,
                         exts=self.exts,
-                        ns=self.ns)
+                        ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -2787,7 +2785,7 @@ class Bit(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Bit(self.name,
                   description=self.description,
                   if_feature=self.if_feature,
@@ -2795,7 +2793,7 @@ class Bit(SchemaNodeOuter):
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  ns=self.ns)
+                  ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -2899,7 +2897,7 @@ class Case(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Case(self.name,
                    description=self.description,
                    if_feature=self.if_feature,
@@ -2907,8 +2905,8 @@ class Case(SchemaNodeInner):
                    status=self.status,
                    when=self.when,
                    exts=self.exts,
-                   ns=self.ns)
-        self.expand_children(context, new)
+                   ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -3034,7 +3032,7 @@ class Choice(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Choice(self.name,
                      config=self.config,
                      default=self.default,
@@ -3045,8 +3043,8 @@ class Choice(SchemaNodeInner):
                      status=self.status,
                      when=self.when,
                      exts=self.exts,
-                     ns=self.ns)
-        self.expand_children(context, new)
+                     ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -3201,7 +3199,7 @@ class Container(SchemaNodeInner):
             child.parent = new_dnode
         return new_dnode
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Container(self.name,
                         config=self.config,
                         description=self.description,
@@ -3212,8 +3210,8 @@ class Container(SchemaNodeInner):
                         status=self.status,
                         when=self.when,
                         exts=self.exts,
-                        ns=self.ns)
-        self.expand_children(context, new)
+                        ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -3301,7 +3299,7 @@ class Enum(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Enum(self.name,
                    description=self.description,
                    if_feature=self.if_feature,
@@ -3309,7 +3307,7 @@ class Enum(SchemaNodeOuter):
                    status=self.status,
                    value=self.value,
                    exts=self.exts,
-                   ns=self.ns)
+                   ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -3390,14 +3388,14 @@ class Extension(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Extension(self.name,
                         argument=self.argument,
                         description=self.description,
                         reference=self.reference,
                         status=self.status,
                         exts=self.exts,
-                        ns=self.ns)
+                        ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -3481,14 +3479,14 @@ class Feature(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Feature(self.name,
                       description=self.description,
                       if_feature=self.if_feature,
                       reference=self.reference,
                       status=self.status,
                       exts=self.exts,
-                      ns=self.ns)
+                      ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -3581,14 +3579,14 @@ class Grouping(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Grouping(self.name,
                        description=self.description,
                        reference=self.reference,
                        status=self.status,
                        exts=self.exts,
-                       ns=self.ns)
-        self.expand_children(context, new)
+                       ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -3676,7 +3674,7 @@ class Identity(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Identity(self.name,
                        base=self.base,
                        description=self.description,
@@ -3684,7 +3682,7 @@ class Identity(SchemaNodeOuter):
                        reference=self.reference,
                        status=self.status,
                        exts=self.exts,
-                       ns=self.ns)
+                       ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -3765,14 +3763,14 @@ class Import(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Import(self.module,
                      prefix=self.prefix,
                      description=self.description,
                      reference=self.reference,
                      revision_date=self.revision_date,
                      exts=self.exts,
-                     ns=self.ns)
+                     ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -3849,13 +3847,13 @@ class Include(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Include(self.module,
                       description=self.description,
                       reference=self.reference,
                       revision_date=self.revision_date,
                       exts=self.exts,
-                      ns=self.ns)
+                      ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -3951,11 +3949,11 @@ class Input(SchemaNodeInner):
             child.parent = new_dnode
         return new_dnode
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Input(must=self.must,
                     exts=self.exts,
-                    ns=self.ns)
-        self.expand_children(context, new)
+                    ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -4089,7 +4087,7 @@ class Leaf(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -4113,7 +4111,7 @@ class Leaf(SchemaNodeOuter):
                    units=new_units,
                    when=self.when,
                    exts=self.exts,
-                   ns=self.ns)
+                   ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def to_dnode(self) -> DLeaf:
@@ -4275,7 +4273,7 @@ class LeafList(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_units = self.units
@@ -4297,7 +4295,7 @@ class LeafList(SchemaNodeOuter):
                        units=new_units,
                        when=self.when,
                        exts=self.exts,
-                       ns=self.ns)
+                       ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def get_max_elements(self) -> ?int:
@@ -4409,14 +4407,14 @@ class Length(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Length(self.value,
                      description=self.description,
                      error_app_tag=self.error_app_tag,
                      error_message=self.error_message,
                      reference=self.reference,
                      exts=self.exts,
-                     ns=self.ns)
+                     ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -4604,7 +4602,7 @@ class List(SchemaNodeInner):
             child.parent = new_dnode
         return new_dnode
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = List(self.name,
                    config=self.config,
                    description=self.description,
@@ -4619,8 +4617,8 @@ class List(SchemaNodeInner):
                    unique=self.unique,
                    when=self.when,
                    exts=self.exts,
-                   ns=self.ns)
-        self.expand_children(context, new)
+                   ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -4832,7 +4830,7 @@ class Module(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Module(self.name,
                      yang_version=self.yang_version,
                      namespace=self.namespace,
@@ -4849,7 +4847,7 @@ class Module(SchemaNodeInner):
                      extension_=self.extension_,
                      feature=self.feature,
                      exts=self.exts)
-        self.expand_children(context, new)
+        self.expand_children(context, new, new_ns)
         new.expand_augments(context)
         return new
 
@@ -4937,14 +4935,14 @@ class Must(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Must(self.condition,
                    description=self.description,
                    error_app_tag=self.error_app_tag,
                    error_message=self.error_message,
                    reference=self.reference,
                    exts=self.exts,
-                   ns=self.ns)
+                   ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -5074,7 +5072,7 @@ class Notification(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Notification(self.name,
                            description=self.description,
                            if_feature=self.if_feature,
@@ -5082,8 +5080,8 @@ class Notification(SchemaNodeInner):
                            reference=self.reference,
                            status=self.status,
                            exts=self.exts,
-                           ns=self.ns)
-        self.expand_children(context, new)
+                           ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -5182,11 +5180,11 @@ class Output(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Output(must=self.must,
                      exts=self.exts,
-                     ns=self.ns)
-        self.expand_children(context, new)
+                     ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def __str__(self):
@@ -5271,7 +5269,7 @@ class Pattern(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Pattern(self.value,
                       description=self.description,
                       error_app_tag=self.error_app_tag,
@@ -5279,7 +5277,7 @@ class Pattern(SchemaNodeOuter):
                       modifier=self.modifier,
                       reference=self.reference,
                       exts=self.exts,
-                      ns=self.ns)
+                      ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -5360,14 +5358,14 @@ class Range(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Range(self.value,
                     description=self.description,
                     error_app_tag=self.error_app_tag,
                     error_message=self.error_message,
                     reference=self.reference,
                     exts=self.exts,
-                    ns=self.ns)
+                    ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -5501,7 +5499,7 @@ class Refine(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Refine(self.target_node,
                      config=self.config,
                      default=self.default,
@@ -5514,7 +5512,7 @@ class Refine(SchemaNodeOuter):
                      presence=self.presence,
                      reference=self.reference,
                      exts=self.exts,
-                     ns=self.ns)
+                     ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -5587,12 +5585,12 @@ class Revision(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Revision(self.date,
                        description=self.description,
                        reference=self.reference,
                        exts=self.exts,
-                       ns=self.ns)
+                       ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -5723,7 +5721,7 @@ class Rpc(SchemaNodeInner):
                 return _output
         return SchemaNode.get(self, name, ns)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
@@ -5742,8 +5740,8 @@ class Rpc(SchemaNodeInner):
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  ns=self.ns)
-        self.expand_children(context, new)
+                  ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
     def to_dnode(self) -> DRpc:
@@ -5940,7 +5938,7 @@ class Submodule(SchemaNodeInner):
                 latest = rev
         return latest
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Submodule(self.name,
                         yang_version=self.yang_version,
                         import_=self.import_,
@@ -5956,7 +5954,7 @@ class Submodule(SchemaNodeInner):
                         extension_=self.extension_,
                         feature=self.feature,
                         exts=self.exts)
-        self.expand_children(context, new)
+        self.expand_children(context, new, new_ns)
         new.expand_augments(context)
         return new
 
@@ -6119,7 +6117,7 @@ class Type(SchemaNodeOuter):
                 raise ValueError("Recursion limit reached for typedef %s" % self.name)
         raise ValueError("Unable to resolve typedef %s" % self.name)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         new = Type(self.name,
                    base=self.base,
                    bit=self.bit,
@@ -6132,7 +6130,7 @@ class Type(SchemaNodeOuter):
                    require_instance=self.require_instance,
                    type_=self.type_,
                    exts=self.exts,
-                   ns=self.ns)
+                   ns=new_ns if new_ns is not None else self.ns)
         return new
 
     def __str__(self):
@@ -6229,7 +6227,7 @@ class Typedef(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -6353,7 +6351,7 @@ class Uses(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context):
+    def compile(self, context: Context, new_ns: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
     mut def expand_refines(self, target_base: SchemaNode):

@@ -326,17 +326,17 @@ snode_methods = {
         return SchemaNode.get(self, name, ns)
 
 """,
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
         new_input = None
         if self_input is not None:
-            new_input = self_input.compile(context)
+            new_input = self_input.compile(context, new_ns)
         # new_output = self_output.compile(context) if self_output is not None else None # actonc codegen pre-evaluates before None-check
         new_output = None
         if self_output is not None:
-            new_output = self_output.compile(context)
+            new_output = self_output.compile(context, new_ns)
         new = Action(self.name,
                      description=self.description,
                      if_feature=self.if_feature,
@@ -345,8 +345,8 @@ snode_methods = {
                      reference=self.reference,
                      status=self.status,
                      exts=self.exts,
-                     ns=self.ns)
-        self.expand_children(context, new)
+                     ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
 """,
@@ -572,7 +572,7 @@ snode_methods = {
     },
     "leaf": {
         # TODO: keep track of constraints in the derived type(s) that we resolve
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -596,7 +596,7 @@ snode_methods = {
                    units=new_units,
                    when=self.when,
                    exts=self.exts,
-                   ns=self.ns)
+                   ns=new_ns if new_ns is not None else self.ns)
         return new
 
 """,
@@ -622,7 +622,7 @@ snode_methods = {
     },
     "leaf-list": {
         # TODO: keep track of constraints in the derived type(s) that we resolve
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_units = self.units
@@ -644,7 +644,7 @@ snode_methods = {
                        units=new_units,
                        when=self.when,
                        exts=self.exts,
-                       ns=self.ns)
+                       ns=new_ns if new_ns is not None else self.ns)
         return new
 
 """,
@@ -716,7 +716,7 @@ snode_methods = {
         return SchemaNode.get(self, name, ns)
 
 """,
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
@@ -735,8 +735,8 @@ snode_methods = {
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  ns=self.ns)
-        self.expand_children(context, new)
+                  ns=new_ns if new_ns is not None else self.ns)
+        self.expand_children(context, new, new_ns)
         return new
 
 """,
@@ -818,7 +818,7 @@ snode_methods = {
 """,
     },
     "typedef": {
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -842,7 +842,7 @@ snode_methods = {
 """,
     },
     "uses": {
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
 """,
@@ -1174,18 +1174,18 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
 
         # -- compile
         if "compile" not in manual_methods:
-            res.append("    def compile(self, context: Context):")
+            res.append("    def compile(self, context: Context, new_ns: ?str=None):")
             new_args = []
             if arg_name is not None:
                 new_args += ["self." + _attr_name(arg_name)]
             new_args += list(map(lambda x: "%s=self.%s" % (_attr_name(x), _attr_name(x)), kwattrs))
             new_args.append("exts=self.exts")
             if stmt_name not in {"module", "submodule"}:
-                new_args.append("ns=self.ns")
+                new_args.append("ns=new_ns if new_ns is not None else self.ns")
 
             res.append("        new = %s(%s)" % (_class_name(stmt_name), (",\n               " + " " * len(_class_name(stmt_name))).join(new_args)))
             if have_children:
-                res.append("        self.expand_children(context, new)")
+                res.append("        self.expand_children(context, new, new_ns)")
             for substmt in stmt.substmts.values():
                 if substmt.name == "augment":
                     res.append("        new.expand_augments(context)")
