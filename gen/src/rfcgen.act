@@ -326,17 +326,17 @@ snode_methods = {
         return SchemaNode.get(self, name, ns)
 
 """,
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
         new_input = None
         if self_input is not None:
-            new_input = self_input.compile(context)
+            new_input = self_input.compile(context, new_ns)
         # new_output = self_output.compile(context) if self_output is not None else None # actonc codegen pre-evaluates before None-check
         new_output = None
         if self_output is not None:
-            new_output = self_output.compile(context)
+            new_output = self_output.compile(context, new_ns)
         new = Action(self.name,
                      description=self.description,
                      if_feature=self.if_feature,
@@ -345,14 +345,16 @@ snode_methods = {
                      reference=self.reference,
                      status=self.status,
                      exts=self.exts,
-                     ns=self.ns)
-        self.expand_children(context, new)
+                     ns=new_ns if new_ns is not None else self.ns,
+                     pfx=new_pfx if new_pfx is not None else self.pfx)
+        self.expand_children(context, new, new_ns, new_pfx)
         return new
 
 """,
         "to_dnode": """    def to_dnode(self) -> DAction:
         new_dnode = DAction(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
@@ -375,6 +377,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DAnydata:
         return DAnydata(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -393,6 +396,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DAnyxml:
         return DAnyxml(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -418,6 +422,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DContainer:
         new_dnode = DContainer(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -440,6 +445,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DInput:
         new_dnode = DInput(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             must=self.must,
             exts=self.exts,
             children=self.get_dnode_children()
@@ -474,6 +480,16 @@ snode_methods = {
         raise ValueError("Module %s has no namespace" % self.name)
 
 """,
+        "get_prefix": """    def get_prefix(self) -> str:
+        self_pfx = self.pfx
+        if self_pfx is not None:
+            return self_pfx
+        selfprefix = self.prefix
+        if selfprefix is not None:
+            return selfprefix
+        raise ValueError("Module %s has no prefix" % self.name)
+
+""",
         "get_revision": """    def get_revision(self) -> ?Revision:
         latest = None
         for rev in self.revision:
@@ -485,7 +501,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DModule:
         new_dnode = DModule(
             namespace=self.get_namespace(),
-            prefix=self.prefix,
+            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             revision=self.revision,
@@ -507,6 +523,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DNotification:
         new_dnode = DNotification(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
@@ -550,6 +567,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DList:
         new_dnode = DList(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             key=self.keys(),
             config=self.is_config(),
@@ -572,7 +590,7 @@ snode_methods = {
     },
     "leaf": {
         # TODO: keep track of constraints in the derived type(s) that we resolve
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -596,13 +614,16 @@ snode_methods = {
                    units=new_units,
                    when=self.when,
                    exts=self.exts,
-                   ns=self.ns)
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx)
+
         return new
 
 """,
         "to_dnode": """    def to_dnode(self) -> DLeaf:
         return DLeaf(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             default=self.default,
@@ -622,7 +643,7 @@ snode_methods = {
     },
     "leaf-list": {
         # TODO: keep track of constraints in the derived type(s) that we resolve
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_units = self.units
@@ -644,7 +665,8 @@ snode_methods = {
                        units=new_units,
                        when=self.when,
                        exts=self.exts,
-                       ns=self.ns)
+                       ns=new_ns if new_ns is not None else self.ns,
+                       pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
 """,
@@ -665,6 +687,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DLeafList:
         return DLeafList(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             default=self.default,
@@ -687,6 +710,7 @@ snode_methods = {
         "to_dnode": """    def to_dnode(self) -> DOutput:
         new_dnode = DOutput(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             must=self.must,
             exts=self.exts,
             children=self.get_dnode_children()
@@ -716,7 +740,7 @@ snode_methods = {
         return SchemaNode.get(self, name, ns)
 
 """,
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
@@ -735,14 +759,16 @@ snode_methods = {
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  ns=self.ns)
-        self.expand_children(context, new)
+                  ns=new_ns if new_ns is not None else self.ns,
+                  pfx=new_pfx if new_pfx is not None else self.pfx)
+        self.expand_children(context, new, new_ns, new_pfx)
         return new
 
 """,
         "to_dnode": """    def to_dnode(self) -> DRpc:
         new_dnode = DRpc(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
@@ -818,7 +844,7 @@ snode_methods = {
 """,
     },
     "typedef": {
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -842,7 +868,7 @@ snode_methods = {
 """,
     },
     "uses": {
-        "compile": """    def compile(self, context: Context):
+        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
 """,
@@ -1024,16 +1050,24 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             init_attrs.append("parent=None")
         if "ns" not in set(cattrs):
             init_attrs.append("ns=None")
+        if "pfx" not in set(cattrs):
+            init_attrs.append("pfx=None")
         res.append("    def __init__(" + ", ".join(init_attrs) + "):")
         res.append("        self.parent = parent")
         res.append("        new_ns = ns")
+        res.append("        new_pfx = pfx")
         if stmt_name == "module":
             res.append("        if new_ns is None:")
             res.append("            new_ns = namespace")
+            res.append("        if new_pfx is None:")
+            res.append("            new_pfx = prefix")
         else:
             res.append("        if new_ns is None and parent is not None:")
             res.append("            new_ns = parent.ns")
+            res.append("        if new_pfx is None and parent is not None:")
+            res.append("            new_pfx = parent.pfx")
         res.append("        self.ns = new_ns")
+        res.append("        self.pfx = new_pfx")
 #        res.append("        self.cname = \"%s\"" % _class_name(stmt_name))
         res.append("        self._yname = \"%s\"" % stmt_name)
 
@@ -1049,17 +1083,26 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                         res.append("            n_ns = %s.ns" % _attr_name(substmt.name))
                         res.append("            if n_ns is None:")
                         res.append("                %s.ns = self.ns" % _attr_name(substmt.name))
+                        res.append("            n_pfx = %s.pfx" % _attr_name(substmt.name))
+                        res.append("            if n_pfx is None:")
+                        res.append("                %s.pfx = self.pfx" % _attr_name(substmt.name))
                     elif substmt.cardinality == "1":
                         res.append("        %s.parent = self" % _attr_name(substmt.name))
                         res.append("        n_ns = %s.ns" % _attr_name(substmt.name))
                         res.append("        if n_ns is None:")
                         res.append("            %s.ns = self.ns" % _attr_name(substmt.name))
+                        res.append("        n_pfx = %s.pfx" % _attr_name(substmt.name))
+                        res.append("        if n_pfx is None:")
+                        res.append("            %s.pfx = self.pfx" % _attr_name(substmt.name))
                     elif substmt.cardinality == "0..n":
                         res.append("        for n in %s:" % _attr_name(substmt.name))
                         res.append("            n.parent = self")
                         res.append("            n_ns = n.ns")
                         res.append("            if n_ns is None:")
                         res.append("                n.ns = self.ns")
+                        res.append("            n_pfx = n.pfx")
+                        res.append("            if n_pfx is None:")
+                        res.append("                n.pfx = self.pfx")
                     else:
                         raise ValueError("Unknown cardinality: %s" % substmt.cardinality)
 
@@ -1075,6 +1118,9 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("            n_ns = n.ns")
             res.append("            if n_ns is None:")
             res.append("                n.ns = self.ns")
+            res.append("            n_pfx = n.pfx")
+            res.append("            if n_pfx is None:")
+            res.append("                n.pfx = self.pfx")
             res.append("        self.children = children")
         res.append("")
 
@@ -1174,18 +1220,19 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
 
         # -- compile
         if "compile" not in manual_methods:
-            res.append("    def compile(self, context: Context):")
+            res.append("    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):")
             new_args = []
             if arg_name is not None:
                 new_args += ["self." + _attr_name(arg_name)]
             new_args += list(map(lambda x: "%s=self.%s" % (_attr_name(x), _attr_name(x)), kwattrs))
             new_args.append("exts=self.exts")
             if stmt_name not in {"module", "submodule"}:
-                new_args.append("ns=self.ns")
+                new_args.append("ns=new_ns if new_ns is not None else self.ns")
+                new_args.append("pfx=new_pfx if new_pfx is not None else self.pfx")
 
             res.append("        new = %s(%s)" % (_class_name(stmt_name), (",\n               " + " " * len(_class_name(stmt_name))).join(new_args)))
             if have_children:
-                res.append("        self.expand_children(context, new)")
+                res.append("        self.expand_children(context, new, new_ns)")
             for substmt in stmt.substmts.values():
                 if substmt.name == "augment":
                     res.append("        new.expand_augments(context)")

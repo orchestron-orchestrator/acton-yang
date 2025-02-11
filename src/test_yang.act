@@ -844,7 +844,7 @@ def _test_compile_uses():
 }"""
     root = yang.compile([ys])
     testing.assertEqual(root.get("c1").get("li1").get("l1").config, True)
-
+    return root.prdaclass()
 
 def _test_compile_imported_grouping():
     ys_foo = """module foo {
@@ -881,7 +881,7 @@ def _test_compile_imported_grouping():
     root = yang.compile([ys_foo, ys_bar])
 
     testing.assertEqual(root.get("c1").get("li1").get("l1").config, True)
-
+    return root.prdaclass()
 
 def _test_compile_augment():
     ys = """module foo {
@@ -905,6 +905,7 @@ def _test_compile_augment():
 
     testing.assertEqual(root.get("c1").get("l1").config, True)
     testing.assertEqual(root.get("c1").get("l2").config, True)
+    return root.prdaclass()
 
 def _test_compile_augment_import():
     ys_foo = """module foo {
@@ -936,6 +937,7 @@ def _test_compile_augment_import():
 
     testing.assertEqual(root.get("c1").get("l1").config, True)
     testing.assertEqual(root.get("c1").get("l2").config, True)
+    return root.prdaclass()
 
 def _test_compile_uses_augment():
     """Augmenting a grouping"""
@@ -970,6 +972,7 @@ def _test_compile_uses_augment():
     testing.assertEqual(root.get("c1").get("l1").config, True)
     testing.assertEqual(root.get("c1").get("l2").config, True)
     testing.assertEqual(root.get("c1").exts, [yang.schema.Ext("some", "ext", "foo.bar")])
+    return root.prdaclass()
 
 def _test_compile_augment_uses():
     """Augmenting a grouping"""
@@ -1009,6 +1012,7 @@ def _test_compile_augment_uses():
         testing.assertEqual(l1.description, "leaf 1")
     else:
         testing.error("Expected Leaf instance")
+    return root.prdaclass()
 
 def _test_compile_augment_absolute_path_under_uses():
     """Augmenting a grouping"""
@@ -1114,6 +1118,7 @@ def _test_compile_augment_implicit_input_output():
   }
 }"""
     root = yang.compile([ys])
+    return root.prdaclass()
 
 def _test_compile_refine():
     """Refining a grouping"""
@@ -1145,6 +1150,7 @@ def _test_compile_refine():
         testing.assertEqual(l1.exts, [yang.schema.Ext("some", "ext", "foo.bar")])
     else:
         testing.error("Expected LeafList instance")
+    return root.prdaclass()
 
 def _test_compile_choice():
     ys = """module foo {
@@ -1225,7 +1231,7 @@ def _test_resolve_type_union_of_string():
     if isinstance(l1, yang.schema.DLeaf):
         acton_type = yang.schema.yang_leaf_to_acton_type(l1)
         testing.assertEqual(acton_type, "?str")
-
+    return root.prdaclass()
 
 def _test_resolve_type_union_of_intX():
     ys = """module foo {
@@ -1291,6 +1297,7 @@ def _test_resolve_type_union_of_intX():
         # TODO: once we have integer subtyping, expect...
         #testing.assertEqual(acton_type, "?i64")
         testing.assertEqual(acton_type, "?int")
+    return root.prdaclass()
 
 def _test_compile_bundle1():
     ys_foo = """module foo {
@@ -1335,6 +1342,7 @@ def _test_compile_bundle1():
     src = root1.prdaclass()
     if not len(list(filter(lambda x: "    c1: foo__c1" == x, src.splitlines()))) == 1:
         testing.error("Expected exactly one 'c1: foo__c1'")
+    return src
 
 def _test_compile_extension():
     ys = """module foo {
@@ -1366,6 +1374,7 @@ def _test_compile_extension():
     root = yang.compile([ys])
     things_list = root.get("c1").get("things")
     testing.assertEqual(things_list.exts, [yang.schema.Ext("some", "exty", "foo.bar")])
+    return root.prdaclass()
 
 def _test_compile_augment_on_augment():
     ys_foo = """module foo {
@@ -1401,7 +1410,7 @@ def _test_compile_augment_on_augment():
     root = yang.compile([ys_foo])
     l3 = root.get("c1").get("c2").get("l3")
     testing.assertEqual(l3.config, True)
-
+    return root.prdaclass()
 
 def _test_compile_augment_on_augment_across_modules():
     ys_foo = """module foo {
@@ -1485,7 +1494,7 @@ def _test_compile_augment_on_augment_across_modules():
     testing.assertEqual(l1.namespace, "http://example.com/foo")
     testing.assertEqual(l2.namespace, "http://example.com/bar")
     testing.assertEqual(l3.namespace, "http://example.com/baz")
-
+    return root.prdaclass()
 
 def _test_compile_submodules1():
     ys_foo = """module foo {
@@ -1522,6 +1531,7 @@ def _test_compile_submodules1():
     l2 = root.get("c2").get("l2")
     testing.assertEqual(l1.config, True)
     testing.assertEqual(l2.config, True)
+    return root.prdaclass()
 
 def _test_compile_submodules2():
     ys_foo = """module foo {
@@ -1723,6 +1733,31 @@ def _test_prdaclass_list_key_mandatory():
     src = l1.prdaclass(top=False)
     return src
 
+def _test_prdaclass_top_conflict():
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+    }
+}"""
+    ys_bar = """module bar {
+    yang-version "1.1";
+    namespace "http://example.com/bar";
+    prefix "bar";
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+    }
+}"""
+    root = yang.compile([ys_foo, ys_bar])
+    src = root.prdaclass()
+    return src
+
 def _test_prdaclass_augment_name_conflict():
     ys_base = """module base {
     yang-version "1.1";
@@ -1760,7 +1795,6 @@ def _test_prdaclass_augment_name_conflict():
     }
 }"""
 
-    # TODO: sort out the resulting conflict by using a prefix
     root = yang.compile([ys_base, ys_foo, ys_bar])
     c1 = root.get("c1")
     src = c1.prdaclass(top=False)
