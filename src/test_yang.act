@@ -1733,6 +1733,31 @@ def _test_prdaclass_list_key_mandatory():
     src = l1.prdaclass(top=False)
     return src
 
+def _test_prdaclass_top_conflict():
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+    }
+}"""
+    ys_bar = """module bar {
+    yang-version "1.1";
+    namespace "http://example.com/bar";
+    prefix "bar";
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+    }
+}"""
+    root = yang.compile([ys_foo, ys_bar])
+    src = root.prdaclass()
+    return src
+
 def _test_prdaclass_augment_name_conflict():
     ys_base = """module base {
     yang-version "1.1";
@@ -1770,7 +1795,6 @@ def _test_prdaclass_augment_name_conflict():
     }
 }"""
 
-    # TODO: sort out the resulting conflict by using a prefix
     root = yang.compile([ys_base, ys_foo, ys_bar])
     c1 = root.get("c1")
     src = c1.prdaclass(top=False)

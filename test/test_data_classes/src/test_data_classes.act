@@ -10,7 +10,7 @@ from yang_foo import root as yang_foo_root
 import yang_basics
 
 def _test_mandatory1():
-    xml_text = """<data><tc1><l1>foo</l1></tc1></data>"""
+    xml_text = """<data><tc1 xmlns="http://example.com/foo"><l1>foo</l1></tc1></data>"""
     # This should work, because we provide a value for the mandatory leaf l1
     r = yang_one.root.from_xml(xml.decode(xml_text))
     # This should not work
@@ -21,7 +21,7 @@ def _test_mandatory1():
 
 def _test_mandatory2():
     # This should work, because we provide a value for the mandatory leaf l1
-    xml_text = """<data><tc1><l1>foo</l1></tc1><li><name>foo</name><c1><l1>foo</l1></c1></li></data>"""
+    xml_text = """<data><tc1 xmlns="http://example.com/foo"><l1>foo</l1></tc1><li xmlns="http://example.com/foo"><name>foo</name><c1><l1>foo</l1></c1></li></data>"""
     r = yang_one.root.from_xml(xml.decode(xml_text))
     # This should not work
     try:
@@ -102,10 +102,18 @@ def _test_foo_from_xml_full():
 <cc xmlns="http://example.com/foo">
   <cake>cake</cake>
 </cc>
+<conflict xmlns="http://example.com/foo">
+  <foo>foo-foo</foo>
+</conflict>
+<conflict xmlns="http://example.com/bar">
+  <foo>foo-bar</foo>
+</conflict>
 </data>"""
     xml_in = xml.decode(xml_text)
     d = yang_foo_root.from_xml(xml_in)
-    xml_out_text = d.to_gdata().to_xmlstr()
+    g = d.to_gdata()
+    print(g.prsrc(), err=True)
+    xml_out_text = g.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
 
@@ -171,6 +179,20 @@ def _test_foo_from_xml_leaf_ns():
 <c1 xmlns="http://example.com/foo">
   <l1>foo</l1>
   <l2 xmlns="http://example.com/bar">bar</l2>
+</c1>
+</data>"""
+    xml_in = xml.decode(xml_text)
+    d = yang_foo_root.from_xml(xml_in)
+    xml_out_text = d.to_gdata().to_xmlstr()
+    xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
+    #testing.assertEqual(xml_in.encode(), xml_out.encode())
+    return xml_out_text
+
+def _test_foo_from_xml_named_ns():
+    xml_text = """<data>
+<c1 xmlns="http://example.com/foo">
+  <l1>foo</l1>
+  <bar:l2 xmlns:bar="http://example.com/bar">bar</bar:l2>
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)

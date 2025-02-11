@@ -245,6 +245,7 @@ class DNode(object):
     parent: ?DNode
     gname: str       # The name of the GData class, e.g. "Container" for yang.gdata.Container
     namespace: str
+    prefix: str
     name: str
     config: bool
     description: ?str
@@ -305,13 +306,28 @@ class DNodeInner(DNode):
         # Reorder children so that positional arguments, like list keys, come first
         new_children = []
         pos_child_idx = 0
+        child_names = set()
+        child_name_conflicts = set()
         for child in self.children:
             if isinstance(child, DLeaf) and child.is_key():
                 new_children.insert(pos_child_idx, child)
                 pos_child_idx += 1
             else:
                 new_children.append(child)
-        self.children = new_children
+            if child.name in child_names:
+                child_name_conflicts.add(child.name)
+            else:
+                child_names.add(child.name)
+
+
+        def _unique_name(name: str, prefix: str) -> str:
+            if name not in child_name_conflicts:
+                return name
+            return "%s:%s" % (prefix, name)
+
+        def _unique_safe_name(name: str, prefix: str) -> str:
+            unique_name = _unique_name(name, prefix)
+            return _safe_name(unique_name).replace(":", "_")
 
         for child in self.children:
             if isinstance(child, DNodeInner):
@@ -328,16 +344,16 @@ class DNodeInner(DNode):
 
         for child in self.children:
             if isinstance(child, DLeaf):
-                res.append("    %s: %s" % (_safe_name(child.name), yang_leaf_to_acton_type(child, loose)))
+                res.append("    %s: %s" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_acton_type(child, loose)))
             elif isinstance(child, DLeafList):
-                res.append("    %s: %s" % (_safe_name(child.name), yang_leaflist_to_acton_type(child)))
+                res.append("    %s: %s" % (_unique_safe_name(child.name, child.prefix), yang_leaflist_to_acton_type(child)))
             elif isinstance(child, DContainer):
                 if child.presence:
-                    res.append("    %s: ?%s" % (_safe_name(child.name), get_path_name(child)))
+                    res.append("    %s: ?%s" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
                 else:
-                    res.append("    %s: %s" % (_safe_name(child.name), get_path_name(child)))
+                    res.append("    %s: %s" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
             elif isinstance(child, DNodeInner):
-                res.append("    %s: %s" % (_safe_name(child.name), get_path_name(child)))
+                res.append("    %s: %s" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
             elif isinstance(child, DAnydata):
                 pass # TODO
             elif isinstance(child, DAnyxml):
@@ -358,23 +374,23 @@ class DNodeInner(DNode):
         for child in self.children:
             if isinstance(child, DContainer):
                 if loose or child.presence or optional_subtree(child):
-                    opt_args.append("%s: ?%s=None" % (_safe_name(child.name), get_path_name(child)))
+                    opt_args.append("%s: ?%s=None" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
                 else:
-                    req_args.append("%s: %s" % (_safe_name(child.name), get_path_name(child)))
+                    req_args.append("%s: %s" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
             elif isinstance(child, DLeaf):
                 defval = ""
                 child_default = child.default
                 if child_default != None:
                     defval = "=None"
-                child_arg = "%s: %s%s" % (_safe_name(child.name), yang_leaf_to_acton_arg_type(child, loose), defval)
+                child_arg = "%s: %s%s" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_acton_arg_type(child, loose), defval)
                 if is_optional_arg_yang_leaf(child, loose):
                     opt_args.append(child_arg)
                 else:
                     req_args.append(child_arg)
             elif isinstance(child, DLeafList):
-                opt_args.append("%s: ?%s=None" % (_safe_name(child.name), yang_leaflist_to_acton_type(child)))
+                opt_args.append("%s: ?%s=None" % (_unique_safe_name(child.name, child.prefix), yang_leaflist_to_acton_type(child)))
             elif isinstance(child, DList):
-                opt_args.append("%s: list[%s_entry]=[]" % (_safe_name(child.name), get_path_name(child)))
+                opt_args.append("%s: list[%s_entry]=[]" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
 
         init_args_str = ", ".join(["self"] + req_args + opt_args)
         res.append("    mut def __init__(%s):" % init_args_str)
@@ -384,39 +400,39 @@ class DNodeInner(DNode):
         for child in self.children:
             if isinstance(child, DContainer):
                 if loose or optional_subtree(child) and not child.presence:
-                    res.append("        if %s is not None:" % (_safe_name(child.name)))
-                    res.append("            self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
+                    res.append("        if %s is not None:" % (_unique_safe_name(child.name, child.prefix)))
+                    res.append("            self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
                     res.append("        else:")
-                    res.append("            self.%s = %s()" % (_safe_name(child.name), get_path_name(child)))
+                    res.append("            self.%s = %s()" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
                 else:
                     # NOTE: the default argument for P-container is None, so
                     # although unconditionally set here, it can be None
-                    res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
+                    res.append("        self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
                 if loose or child.presence or optional_subtree(child):
-                    res.append("        self_%s = self.%s" % (_safe_name(child.name), _safe_name(child.name)))
-                    res.append("        if self_%s is not None:" % (_safe_name(child.name)))
-                    res.append("            self_%s._parent = self" % (_safe_name(child.name)))
+                    res.append("        self_%s = self.%s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
+                    res.append("        if self_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
+                    res.append("            self_%s._parent = self" % (_unique_safe_name(child.name, child.prefix)))
                 else:
-                    res.append("        self.%s._parent = self" % (_safe_name(child.name)))
+                    res.append("        self.%s._parent = self" % (_unique_safe_name(child.name, child.prefix)))
             elif isinstance(child, DLeaf):
                 child_default = child.default
                 if child_default != None:
-                    res.append("        if %s != None:" % (_safe_name(child.name)))
-                    res.append("            self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
+                    res.append("        if %s != None:" % (_unique_safe_name(child.name, child.prefix)))
+                    res.append("            self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
                     res.append("        else:")
-                    res.append("            self.%s = %s" % (_safe_name(child.name), prsrc_literal(child.type_.name, child_default)))
+                    res.append("            self.%s = %s" % (_unique_safe_name(child.name, child.prefix), prsrc_literal(child.type_.name, child_default)))
                 else:
-                    res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
+                    res.append("        self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
             elif isinstance(child, DLeafList):
-                #res.append("        self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
-                res.append("        if %s is not None:" % (_safe_name(child.name)))
-                res.append("            self.%s = %s" % (_safe_name(child.name), _safe_name(child.name)))
+                #res.append("        self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
+                res.append("        if %s is not None:" % (_unique_safe_name(child.name, child.prefix)))
+                res.append("            self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
                 res.append("        else:")
                 # TODO: this is where we can set the leaf-list to a default value
-                res.append("            self.%s = []" % (_safe_name(child.name)))
+                res.append("            self.%s = []" % (_unique_safe_name(child.name, child.prefix)))
             elif isinstance(child, DList):
-                res.append("        self.%s = %s(elements=%s)" % (_safe_name(child.name), get_path_name(child), _safe_name(child.name)))
-                res.append("        self.%s._parent = self" % (_safe_name(child.name)))
+                res.append("        self.%s = %s(elements=%s)" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                res.append("        self.%s._parent = self" % (_unique_safe_name(child.name, child.prefix)))
         if len(self.children) == 0:
             res.append("        pass")
         res.append("")
@@ -434,9 +450,9 @@ class DNodeInner(DNode):
                     elif isinstance(cchild, DContainer):
                         if not (loose or optional_subtree(cchild)):
                             pc_args.append(_safe_name(cchild.name))
-                res.append("    mut def create_%s(%s):" % (_safe_name(child.name), ", ".join(pc_args)))
+                res.append("    mut def create_%s(%s):" % (_unique_safe_name(child.name, child.prefix), ", ".join(pc_args)))
                 res.append("        res = %s(%s)" % (get_path_name(child), ", ".join(pc_args[1:])))
-                res.append("        self.%s = res" % (_safe_name(child.name)))
+                res.append("        self.%s = res" % (_unique_safe_name(child.name, child.prefix)))
                 res.append("        return res")
                 res.append("")
 
@@ -447,19 +463,19 @@ class DNodeInner(DNode):
 
         for child in self.children:
             if not isinstance(child, DLeafList):
-                res.append("        _%s = self.%s" % (_safe_name(child.name), _safe_name(child.name)))
+                res.append("        _%s = self.%s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
         for child in self.children:
             child_ns = ", ns='" + child.namespace + "'" if child.namespace != self.namespace else ""
             if isinstance(child, DLeafList):
-                res.append("        children['%s'] = yang.gdata.LeafList(self.%s%s)" % (child.name, _safe_name(child.name), child_ns))
+                res.append("        children['%s'] = yang.gdata.LeafList(self.%s%s)" % (_unique_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix), child_ns))
             else:
-                res.append("        if _%s is not None:" % _safe_name(child.name))
+                res.append("        if _%s is not None:" % _unique_safe_name(child.name, child.prefix))
                 if isinstance(child, DLeaf):
-                    res.append("            children['%s'] = yang.gdata.Leaf('%s', _%s%s)" % (child.name, child.type_.name, _safe_name(child.name), child_ns))
+                    res.append("            children['%s'] = yang.gdata.Leaf('%s', _%s%s)" % (_unique_name(child.name, child.prefix), child.type_.name, _unique_safe_name(child.name, child.prefix), child_ns))
                 elif isinstance(child, DContainer):
-                    res.append("            children['%s'] = _%s.to_gdata()" % (child.name, _safe_name(child.name)))
+                    res.append("            children['%s'] = _%s.to_gdata()" % (_unique_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
                 elif isinstance(child, DList):
-                    res.append("            children['%s'] = _%s.to_gdata()" % (child.name, _safe_name(child.name)))
+                    res.append("            children['%s'] = _%s.to_gdata()" % (_unique_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
 
         if isinstance(self, DList):
             # keys contains a yang spec of the keys, like "k1 k2"
@@ -480,27 +496,32 @@ class DNodeInner(DNode):
                 res.append("        return yang.gdata.%s(children)" % (self.gname))
         res.append("")
 #
+        def _maybe_ns(child: DNode) -> str:
+            if child.namespace != self.namespace:
+                return ", \"%s\"" % child.namespace
+            return ""
+
         # .from_gdata()
         # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
         from_gdata_args_list = []
         from_xml_args_list = []
         for child in self.children:
             if isinstance(child, DLeaf):
-                from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_safe_name(child.name), yang_leaf_to_getval(child), child.name))
-                from_xml_args_list.append("%s=yang.gdata.from_xml_%s(n, \"%s\")" % (_safe_name(child.name), yang_leaf_to_getval(child), child.name))
+                from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), _unique_name(child.name, child.prefix)))
+                from_xml_args_list.append("%s=yang.gdata.from_xml_%s(n, \"%s\"%s)" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), child.name, _maybe_ns(child)))
             elif isinstance(child, DLeafList):
-                from_gdata_args_list.append("%s=n.get_%ss(\"%s\")" % (_safe_name(child.name), yang_leaf_to_getval(child), child.name))
-                from_xml_args_list.append("%s=yang.gdata.from_xml_%ss(n, \"%s\")" % (_safe_name(child.name), yang_leaf_to_getval(child), child.name))
+                from_gdata_args_list.append("%s=n.get_%ss(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), _unique_name(child.name, child.prefix)))
+                from_xml_args_list.append("%s=yang.gdata.from_xml_%ss(n, \"%s\"%s)" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), child.name, _maybe_ns(child)))
             elif isinstance(child, DContainer):
                 if loose or optional_subtree(child):
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_container(\"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
-                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_opt_child(n, \"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
+                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
+                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_opt_child(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
                 else:
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
-                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_child(n, \"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
+                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
+                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_child(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
             elif isinstance(child, DList):
-                from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
-                from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_children(n, \"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
+                from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
+                from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_children(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
         from_gdata_args = ", ".join(from_gdata_args_list)
         from_xml_args = ", ".join(from_xml_args_list)
         res.append("    @staticmethod")
@@ -567,10 +588,10 @@ class DNodeInner(DNode):
                     if child.name in self.key:
                         continue
                     if child.mandatory:
-                        list_key_args.append(_safe_name(child.name))
+                        list_key_args.append(_unique_safe_name(child.name, child.prefix))
                 elif isinstance(child, DContainer):
                     if not (loose or optional_subtree(child)):
-                        list_key_args.append(_safe_name(child.name))
+                        list_key_args.append(_unique_safe_name(child.name, child.prefix))
             list_create_args = ["self"] + list_key_args
             res.append("    mut def create(%s):" % (", ".join(list_create_args)))
             res.append("        for e in self.elements:")
@@ -604,13 +625,13 @@ class DNodeInner(DNode):
             from_gdata_args_list = []
             for child in self.children:
                 if isinstance(child, DLeaf):
-                    from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_safe_name(child.name), yang_leaf_to_getval(child), child.name))
+                    from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), _unique_name(child.name, child.prefix)))
                 elif isinstance(child, DContainer):
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
+                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
                 elif isinstance(child, DList):
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
+                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
 #                elif isinstance(child, ListElement):
-#                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_safe_name(child.name), get_path_name(child), child.name))
+#                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
             from_gdata_args = ", ".join(from_gdata_args_list)
             res.append("    @staticmethod")
             res.append("    mut def from_gdata(n: yang.gdata.List) -> list[%s_entry]:" % get_path_name(self))
@@ -651,8 +672,9 @@ class DAction(DNodeInner):
     must: list[Must]
     status: ?str
 
-    def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "Action"
         self.config = False
@@ -670,8 +692,9 @@ class DAnydata(DNode):
     status: ?str
     when: ?str
 
-    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "Anydata"
         self.config = config
@@ -691,8 +714,9 @@ class DAnyxml(DNode):
     status: ?str
     when: ?str
 
-    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "Anyxml"
         self.config = config
@@ -711,8 +735,9 @@ class DContainer(DNodeInner):
     presence: bool
     status: ?str
 
-    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "Container"
         self.config = config
@@ -728,8 +753,9 @@ class DContainer(DNodeInner):
 class DInput(DNodeInner):
     must: list[Must]
 
-    def __init__(self, namespace: str, must=[], exts=[], children=[]):
+    def __init__(self, namespace: str, prefix: str, must=[], exts=[], children=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = "input"
         self.gname = "Input"
         self.config = False
@@ -738,7 +764,6 @@ class DInput(DNodeInner):
         self.children = children
 
 class DModule(DNodeInner):
-    prefix: str
     augment: list[Augment]
     contact: ?str
     deviation: list[str]
@@ -786,8 +811,9 @@ class DList(DNodeInner):
     unique: list[str]
     when: ?str
 
-    def __init__(self, namespace: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "List"
         self.key = key
@@ -809,8 +835,9 @@ class DLeaf(DNodeLeaf):
     default: ?str
     units: ?str
 
-    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "Leaf"
         self.config = config
@@ -840,8 +867,9 @@ class DLeafList(DNodeLeaf):
     ordered_by: str
     units: ?str
 
-    def __init__(self, namespace: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "LeafList"
         self.config = config
@@ -862,8 +890,9 @@ class DLeafList(DNodeLeaf):
 class DNotification(DNodeInner):
     status: ?str
 
-    def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "Notification"
         self.description = description
@@ -875,8 +904,9 @@ class DNotification(DNodeInner):
 class DOutput(DNodeInner):
     must: list[Must]
 
-    def __init__(self, namespace: str, must=[], exts=[], children=[]):
+    def __init__(self, namespace: str, prefix: str, must=[], exts=[], children=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = "output"
         self.gname = "Output"
         self.config = False
@@ -887,6 +917,7 @@ class DOutput(DNodeInner):
 class DRoot(DNodeInner):
     def __init__(self, modules: list[DNode]=[]):
         self.namespace = ""
+        self.prefix = ""
         self.name = "root"
         self.gname = "Root"
         self.config = True
@@ -903,8 +934,9 @@ class DRpc(DNodeInner):
     must: list[Must]
     status: ?str
 
-    def __init__(self, namespace: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
+    def __init__(self, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
         self.namespace = namespace
+        self.prefix = prefix
         self.name = name
         self.gname = "Rpc"
         self.config = False
@@ -994,6 +1026,7 @@ class Context(object):
 class SchemaNode(object):
     parent: ?SchemaNode
     ns: ?str
+    pfx: ?str
     exts: list[Ext]
     _yname: str
 
@@ -1024,7 +1057,7 @@ class SchemaNode(object):
             """Unset the mandatory attribute if present
             """
             if isinstance(node, DLeaf):
-                print("Unset mandatory on %s" % node.name, err=True)
+                # print("Unset mandatory on %s" % node.name, err=True)
                 node.mandatory = False
             elif isinstance(node, DAnydata):
                 node.mandatory = None
@@ -1076,6 +1109,22 @@ class SchemaNode(object):
             if i > RECURSION_LIMIT:
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find namespace")
+
+    def get_prefix(self) -> str:
+        n = self
+        for i in range(RECURSION_LIMIT+1):
+            nprefix = n.pfx
+            if nprefix is not None:
+                return nprefix
+            nparent = n.parent
+            if nparent is not None:
+                n = nparent
+                continue
+            else:
+                raise ValueError("Unable to find prefix")
+            if i > RECURSION_LIMIT:
+                raise ValueError("Recursion limit reached")
+        raise ValueError("Unable to find prefix")
 
     def is_config(self) -> bool:
         n = self
@@ -1216,7 +1265,7 @@ class SchemaNode(object):
             break
         raise ValueError("Unable to find Module")
 
-    def compile(self, context: Context, new_ns: ?str=None) -> SchemaNode:
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None) -> SchemaNode:
         """Compile an abstract YANG into a concrete one
         - expand uses / groupings
         - handle augments
@@ -1289,7 +1338,7 @@ class SchemaNode(object):
                     target = get_target(target_base, aug.target_node)
                     if isinstance(target, SchemaNodeInner):
                         # Just move the child to the target
-                        aug.expand_children(context, target, new_ns=aug.get_namespace())
+                        aug.expand_children(context, target, new_ns=aug.get_namespace(), new_pfx=aug.get_prefix())
                         target.exts.extend(aug.exts)
                     else:
                         raise ValueError("Augment target " + str(target) + " is not an inner node")
@@ -1304,18 +1353,18 @@ class SchemaNode(object):
         else:
             raise ValueError("Node type does not have augment substatements")
 
-    def expand_children(self, context: Context, target: SchemaNodeInner, new_ns: ?str = None):
+    def expand_children(self, context: Context, target: SchemaNodeInner, new_ns: ?str = None, new_pfx: ?str = None):
         """Expand abstract children into concrete nodes
         """
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
                 if isinstance(child, Uses):
                     grouping = child.get_grouping(_safe_name(child.name), context)
-                    grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns)
+                    grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx)
                     child.expand_augments(context, target, in_uses=True)
                     child.expand_refines(target)
                 else:
-                    c_child = child.compile(context, new_ns)
+                    c_child = child.compile(context, new_ns, new_pfx)
                     c_child.parent = target
                     target.children.append(c_child)
         else:
@@ -2103,23 +2152,33 @@ class Action(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "action"
         if input is not None:
             input.parent = self
             n_ns = input.ns
             if n_ns is None:
                 input.ns = self.ns
+            n_pfx = input.pfx
+            if n_pfx is None:
+                input.pfx = self.pfx
         if output is not None:
             output.parent = self
             n_ns = output.ns
             if n_ns is None:
                 output.ns = self.ns
+            n_pfx = output.pfx
+            if n_pfx is None:
+                output.pfx = self.pfx
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -2133,6 +2192,9 @@ class Action(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -2202,7 +2264,7 @@ class Action(SchemaNodeInner):
                 return _output
         return SchemaNode.get(self, name, ns)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
@@ -2221,13 +2283,15 @@ class Action(SchemaNodeInner):
                      reference=self.reference,
                      status=self.status,
                      exts=self.exts,
-                     ns=new_ns if new_ns is not None else self.ns)
-        self.expand_children(context, new, new_ns)
+                     ns=new_ns if new_ns is not None else self.ns,
+                     pfx=new_pfx if new_pfx is not None else self.pfx)
+        self.expand_children(context, new, new_ns, new_pfx)
         return new
 
     def to_dnode(self) -> DAction:
         new_dnode = DAction(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
@@ -2274,18 +2338,25 @@ class Anydata(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "anydata"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.config = config
         self.description = description
@@ -2357,6 +2428,7 @@ class Anydata(SchemaNodeOuter):
     def to_dnode(self) -> DAnydata:
         return DAnydata(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -2369,7 +2441,7 @@ class Anydata(SchemaNodeOuter):
             exts=self.exts
         )
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Anydata(self.name,
                       config=self.config,
                       description=self.description,
@@ -2380,7 +2452,8 @@ class Anydata(SchemaNodeOuter):
                       status=self.status,
                       when=self.when,
                       exts=self.exts,
-                      ns=new_ns if new_ns is not None else self.ns)
+                      ns=new_ns if new_ns is not None else self.ns,
+                      pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -2414,18 +2487,25 @@ class Anyxml(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "anyxml"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.config = config
         self.description = description
@@ -2497,6 +2577,7 @@ class Anyxml(SchemaNodeOuter):
     def to_dnode(self) -> DAnyxml:
         return DAnyxml(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -2509,7 +2590,7 @@ class Anyxml(SchemaNodeOuter):
             exts=self.exts
         )
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Anyxml(self.name,
                      config=self.config,
                      description=self.description,
@@ -2520,7 +2601,8 @@ class Anyxml(SchemaNodeOuter):
                      status=self.status,
                      when=self.when,
                      exts=self.exts,
-                     ns=new_ns if new_ns is not None else self.ns)
+                     ns=new_ns if new_ns is not None else self.ns,
+                     pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -2551,12 +2633,16 @@ class Augment(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, target_node: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, target_node: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "augment"
         self.target_node = target_node
         self.description = description
@@ -2570,6 +2656,9 @@ class Augment(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -2624,7 +2713,7 @@ class Augment(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Augment(self.target_node,
                       description=self.description,
                       if_feature=self.if_feature,
@@ -2632,7 +2721,8 @@ class Augment(SchemaNodeInner):
                       status=self.status,
                       when=self.when,
                       exts=self.exts,
-                      ns=new_ns if new_ns is not None else self.ns)
+                      ns=new_ns if new_ns is not None else self.ns,
+                      pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -2660,12 +2750,16 @@ class BelongsTo(SchemaNodeOuter):
     module: str
     prefix: str
 
-    def __init__(self, module: str, prefix: str, exts=[], parent=None, ns=None):
+    def __init__(self, module: str, prefix: str, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "belongs-to"
         self.module = module
         self.prefix = prefix
@@ -2693,11 +2787,12 @@ class BelongsTo(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = BelongsTo(self.module,
                         prefix=self.prefix,
                         exts=self.exts,
-                        ns=new_ns if new_ns is not None else self.ns)
+                        ns=new_ns if new_ns is not None else self.ns,
+                        pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -2728,12 +2823,16 @@ class Bit(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], position: ?int=None, reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], position: ?int=None, reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "bit"
         self.name = name
         self.description = description
@@ -2785,7 +2884,7 @@ class Bit(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Bit(self.name,
                   description=self.description,
                   if_feature=self.if_feature,
@@ -2793,7 +2892,8 @@ class Bit(SchemaNodeOuter):
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  ns=new_ns if new_ns is not None else self.ns)
+                  ns=new_ns if new_ns is not None else self.ns,
+                  pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -2824,12 +2924,16 @@ class Case(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "case"
         self.name = name
         self.description = description
@@ -2843,6 +2947,9 @@ class Case(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -2897,7 +3004,7 @@ class Case(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Case(self.name,
                    description=self.description,
                    if_feature=self.if_feature,
@@ -2905,7 +3012,8 @@ class Case(SchemaNodeInner):
                    status=self.status,
                    when=self.when,
                    exts=self.exts,
-                   ns=new_ns if new_ns is not None else self.ns)
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -2940,12 +3048,16 @@ class Choice(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "choice"
         self.name = name
         self.config = config
@@ -2962,6 +3074,9 @@ class Choice(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -3032,7 +3147,7 @@ class Choice(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Choice(self.name,
                      config=self.config,
                      default=self.default,
@@ -3043,7 +3158,8 @@ class Choice(SchemaNodeInner):
                      status=self.status,
                      when=self.when,
                      exts=self.exts,
-                     ns=new_ns if new_ns is not None else self.ns)
+                     ns=new_ns if new_ns is not None else self.ns,
+                     pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -3078,18 +3194,25 @@ class Container(SchemaNodeInner):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], presence: ?str=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], presence: ?str=None, reference: ?str=None, status: ?str=None, when: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "container"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.config = config
         self.description = description
@@ -3105,6 +3228,9 @@ class Container(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -3183,6 +3309,7 @@ class Container(SchemaNodeInner):
     def to_dnode(self) -> DContainer:
         new_dnode = DContainer(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             description=self.description,
@@ -3199,7 +3326,7 @@ class Container(SchemaNodeInner):
             child.parent = new_dnode
         return new_dnode
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Container(self.name,
                         config=self.config,
                         description=self.description,
@@ -3210,7 +3337,8 @@ class Container(SchemaNodeInner):
                         status=self.status,
                         when=self.when,
                         exts=self.exts,
-                        ns=new_ns if new_ns is not None else self.ns)
+                        ns=new_ns if new_ns is not None else self.ns,
+                        pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -3242,12 +3370,16 @@ class Enum(SchemaNodeOuter):
     status: ?str
     value: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, value: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, value: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "enum"
         self.name = name
         self.description = description
@@ -3299,7 +3431,7 @@ class Enum(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Enum(self.name,
                    description=self.description,
                    if_feature=self.if_feature,
@@ -3307,7 +3439,8 @@ class Enum(SchemaNodeOuter):
                    status=self.status,
                    value=self.value,
                    exts=self.exts,
-                   ns=new_ns if new_ns is not None else self.ns)
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -3337,12 +3470,16 @@ class Extension(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, argument: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, argument: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "extension"
         self.name = name
         self.argument = argument
@@ -3388,14 +3525,15 @@ class Extension(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Extension(self.name,
                         argument=self.argument,
                         description=self.description,
                         reference=self.reference,
                         status=self.status,
                         exts=self.exts,
-                        ns=new_ns if new_ns is not None else self.ns)
+                        ns=new_ns if new_ns is not None else self.ns,
+                        pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -3425,12 +3563,16 @@ class Feature(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "feature"
         self.name = name
         self.description = description
@@ -3479,14 +3621,15 @@ class Feature(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Feature(self.name,
                       description=self.description,
                       if_feature=self.if_feature,
                       reference=self.reference,
                       status=self.status,
                       exts=self.exts,
-                      ns=new_ns if new_ns is not None else self.ns)
+                      ns=new_ns if new_ns is not None else self.ns,
+                      pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -3515,12 +3658,16 @@ class Grouping(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, description: ?str=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "grouping"
         self.name = name
         self.description = description
@@ -3532,6 +3679,9 @@ class Grouping(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -3579,13 +3729,14 @@ class Grouping(SchemaNodeInner):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Grouping(self.name,
                        description=self.description,
                        reference=self.reference,
                        status=self.status,
                        exts=self.exts,
-                       ns=new_ns if new_ns is not None else self.ns)
+                       ns=new_ns if new_ns is not None else self.ns,
+                       pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -3617,12 +3768,16 @@ class Identity(SchemaNodeOuter):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, base: list[str]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, base: list[str]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, status: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "identity"
         self.name = name
         self.base = base
@@ -3674,7 +3829,7 @@ class Identity(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Identity(self.name,
                        base=self.base,
                        description=self.description,
@@ -3682,7 +3837,8 @@ class Identity(SchemaNodeOuter):
                        reference=self.reference,
                        status=self.status,
                        exts=self.exts,
-                       ns=new_ns if new_ns is not None else self.ns)
+                       ns=new_ns if new_ns is not None else self.ns,
+                       pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -3712,12 +3868,16 @@ class Import(SchemaNodeOuter):
     reference: ?str
     revision_date: ?str
 
-    def __init__(self, module: str, prefix: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, module: str, prefix: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "import"
         self.module = module
         self.description = description
@@ -3763,14 +3923,15 @@ class Import(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Import(self.module,
                      prefix=self.prefix,
                      description=self.description,
                      reference=self.reference,
                      revision_date=self.revision_date,
                      exts=self.exts,
-                     ns=new_ns if new_ns is not None else self.ns)
+                     ns=new_ns if new_ns is not None else self.ns,
+                     pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -3799,12 +3960,16 @@ class Include(SchemaNodeOuter):
     reference: ?str
     revision_date: ?str
 
-    def __init__(self, module: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, module: str, description: ?str=None, reference: ?str=None, revision_date: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "include"
         self.module = module
         self.description = description
@@ -3847,13 +4012,14 @@ class Include(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Include(self.module,
                       description=self.description,
                       reference=self.reference,
                       revision_date=self.revision_date,
                       exts=self.exts,
-                      ns=new_ns if new_ns is not None else self.ns)
+                      ns=new_ns if new_ns is not None else self.ns,
+                      pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -3879,18 +4045,25 @@ class Input(SchemaNodeInner):
     """
     must: list[Must]
 
-    def __init__(self, must: list[Must]=[], exts=[], children=[], parent=None, ns=None):
+    def __init__(self, must: list[Must]=[], exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "input"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.must = must
         self.exts = exts
         for n in children:
@@ -3898,6 +4071,9 @@ class Input(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -3941,6 +4117,7 @@ class Input(SchemaNodeInner):
     def to_dnode(self) -> DInput:
         new_dnode = DInput(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             must=self.must,
             exts=self.exts,
             children=self.get_dnode_children()
@@ -3949,10 +4126,11 @@ class Input(SchemaNodeInner):
             child.parent = new_dnode
         return new_dnode
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Input(must=self.must,
                     exts=self.exts,
-                    ns=new_ns if new_ns is not None else self.ns)
+                    ns=new_ns if new_ns is not None else self.ns,
+                    pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -3990,22 +4168,32 @@ class Leaf(SchemaNodeOuter):
     units: ?str
     when: ?str
 
-    def __init__(self, name: str, type_: Type, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, type_: Type, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "leaf"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         type_.parent = self
         n_ns = type_.ns
         if n_ns is None:
             type_.ns = self.ns
+        n_pfx = type_.pfx
+        if n_pfx is None:
+            type_.pfx = self.pfx
         self.name = name
         self.config = config
         self.default = default
@@ -4087,7 +4275,7 @@ class Leaf(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -4111,12 +4299,15 @@ class Leaf(SchemaNodeOuter):
                    units=new_units,
                    when=self.when,
                    exts=self.exts,
-                   ns=new_ns if new_ns is not None else self.ns)
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx)
+
         return new
 
     def to_dnode(self) -> DLeaf:
         return DLeaf(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             default=self.default,
@@ -4168,22 +4359,32 @@ class LeafList(SchemaNodeOuter):
     units: ?str
     when: ?str
 
-    def __init__(self, name: str, type_: Type, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, type_: Type, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "leaf-list"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         type_.parent = self
         n_ns = type_.ns
         if n_ns is None:
             type_.ns = self.ns
+        n_pfx = type_.pfx
+        if n_pfx is None:
+            type_.pfx = self.pfx
         self.name = name
         self.config = config
         self.default = default
@@ -4273,7 +4474,7 @@ class LeafList(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_units = self.units
@@ -4295,7 +4496,8 @@ class LeafList(SchemaNodeOuter):
                        units=new_units,
                        when=self.when,
                        exts=self.exts,
-                       ns=new_ns if new_ns is not None else self.ns)
+                       ns=new_ns if new_ns is not None else self.ns,
+                       pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def get_max_elements(self) -> ?int:
@@ -4313,6 +4515,7 @@ class LeafList(SchemaNodeOuter):
     def to_dnode(self) -> DLeafList:
         return DLeafList(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             config=self.is_config(),
             default=self.default,
@@ -4356,12 +4559,16 @@ class Length(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "length"
         self.value = value
         self.description = description
@@ -4407,14 +4614,15 @@ class Length(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Length(self.value,
                      description=self.description,
                      error_app_tag=self.error_app_tag,
                      error_message=self.error_message,
                      reference=self.reference,
                      exts=self.exts,
-                     ns=new_ns if new_ns is not None else self.ns)
+                     ns=new_ns if new_ns is not None else self.ns,
+                     pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -4452,18 +4660,25 @@ class List(SchemaNodeInner):
     unique: list[str]
     when: ?str
 
-    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], key: ?str=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, unique: list[str]=[], when: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, config: ?bool=None, description: ?str=None, if_feature: list[str]=[], key: ?str=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, unique: list[str]=[], when: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "list"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.config = config
         self.description = description
@@ -4483,6 +4698,9 @@ class List(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -4584,6 +4802,7 @@ class List(SchemaNodeInner):
     def to_dnode(self) -> DList:
         new_dnode = DList(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             key=self.keys(),
             config=self.is_config(),
@@ -4602,7 +4821,7 @@ class List(SchemaNodeInner):
             child.parent = new_dnode
         return new_dnode
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = List(self.name,
                    config=self.config,
                    description=self.description,
@@ -4617,7 +4836,8 @@ class List(SchemaNodeInner):
                    unique=self.unique,
                    when=self.when,
                    exts=self.exts,
-                   ns=new_ns if new_ns is not None else self.ns)
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -4658,43 +4878,65 @@ class Module(SchemaNodeInner):
     extension_: list[Extension]
     feature: list[Feature]
 
-    def __init__(self, name: str, namespace: str, prefix: str, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, namespace: str, prefix: str, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None:
             new_ns = namespace
+        if new_pfx is None:
+            new_pfx = prefix
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "module"
         for n in augment:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in extension_:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in feature:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in import_:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in include:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in revision:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.augment = augment
         self.contact = contact
@@ -4716,6 +4958,9 @@ class Module(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -4805,6 +5050,15 @@ class Module(SchemaNodeInner):
             return selfnamespace
         raise ValueError("Module %s has no namespace" % self.name)
 
+    def get_prefix(self) -> str:
+        self_pfx = self.pfx
+        if self_pfx is not None:
+            return self_pfx
+        selfprefix = self.prefix
+        if selfprefix is not None:
+            return selfprefix
+        raise ValueError("Module %s has no prefix" % self.name)
+
     def get_revision(self) -> ?Revision:
         latest = None
         for rev in self.revision:
@@ -4815,7 +5069,7 @@ class Module(SchemaNodeInner):
     def to_dnode(self) -> DModule:
         new_dnode = DModule(
             namespace=self.get_namespace(),
-            prefix=self.prefix,
+            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             revision=self.revision,
@@ -4830,7 +5084,7 @@ class Module(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Module(self.name,
                      yang_version=self.yang_version,
                      namespace=self.namespace,
@@ -4884,12 +5138,16 @@ class Must(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, condition: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, condition: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "must"
         self.condition = condition
         self.description = description
@@ -4935,14 +5193,15 @@ class Must(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Must(self.condition,
                    description=self.description,
                    error_app_tag=self.error_app_tag,
                    error_message=self.error_message,
                    reference=self.reference,
                    exts=self.exts,
-                   ns=new_ns if new_ns is not None else self.ns)
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -4973,18 +5232,25 @@ class Notification(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], must: list[Must]=[], reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "notification"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -4997,6 +5263,9 @@ class Notification(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -5057,6 +5326,7 @@ class Notification(SchemaNodeInner):
     def to_dnode(self) -> DNotification:
         new_dnode = DNotification(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
@@ -5072,7 +5342,7 @@ class Notification(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Notification(self.name,
                            description=self.description,
                            if_feature=self.if_feature,
@@ -5080,7 +5350,8 @@ class Notification(SchemaNodeInner):
                            reference=self.reference,
                            status=self.status,
                            exts=self.exts,
-                           ns=new_ns if new_ns is not None else self.ns)
+                           ns=new_ns if new_ns is not None else self.ns,
+                           pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -5107,18 +5378,25 @@ class Output(SchemaNodeInner):
     """
     must: list[Must]
 
-    def __init__(self, must: list[Must]=[], exts=[], children=[], parent=None, ns=None):
+    def __init__(self, must: list[Must]=[], exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "output"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.must = must
         self.exts = exts
         for n in children:
@@ -5126,6 +5404,9 @@ class Output(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -5169,6 +5450,7 @@ class Output(SchemaNodeInner):
     def to_dnode(self) -> DOutput:
         new_dnode = DOutput(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             must=self.must,
             exts=self.exts,
             children=self.get_dnode_children()
@@ -5180,10 +5462,11 @@ class Output(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Output(must=self.must,
                      exts=self.exts,
-                     ns=new_ns if new_ns is not None else self.ns)
+                     ns=new_ns if new_ns is not None else self.ns,
+                     pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns)
         return new
 
@@ -5215,12 +5498,16 @@ class Pattern(SchemaNodeOuter):
     modifier: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, modifier: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, modifier: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "pattern"
         self.value = value
         self.description = description
@@ -5269,7 +5556,7 @@ class Pattern(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Pattern(self.value,
                       description=self.description,
                       error_app_tag=self.error_app_tag,
@@ -5277,7 +5564,8 @@ class Pattern(SchemaNodeOuter):
                       modifier=self.modifier,
                       reference=self.reference,
                       exts=self.exts,
-                      ns=new_ns if new_ns is not None else self.ns)
+                      ns=new_ns if new_ns is not None else self.ns,
+                      pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -5307,12 +5595,16 @@ class Range(SchemaNodeOuter):
     error_message: ?str
     reference: ?str
 
-    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, value: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "range"
         self.value = value
         self.description = description
@@ -5358,14 +5650,15 @@ class Range(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Range(self.value,
                     description=self.description,
                     error_app_tag=self.error_app_tag,
                     error_message=self.error_message,
                     reference=self.reference,
                     exts=self.exts,
-                    ns=new_ns if new_ns is not None else self.ns)
+                    ns=new_ns if new_ns is not None else self.ns,
+                    pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -5401,18 +5694,25 @@ class Refine(SchemaNodeOuter):
     presence: ?str
     reference: ?str
 
-    def __init__(self, target_node: str, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], presence: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, target_node: str, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], presence: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "refine"
         for n in must:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.target_node = target_node
         self.config = config
         self.default = default
@@ -5499,7 +5799,7 @@ class Refine(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Refine(self.target_node,
                      config=self.config,
                      default=self.default,
@@ -5512,7 +5812,8 @@ class Refine(SchemaNodeOuter):
                      presence=self.presence,
                      reference=self.reference,
                      exts=self.exts,
-                     ns=new_ns if new_ns is not None else self.ns)
+                     ns=new_ns if new_ns is not None else self.ns,
+                     pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -5540,12 +5841,16 @@ class Revision(SchemaNodeOuter):
     description: ?str
     reference: ?str
 
-    def __init__(self, date: str, description: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, date: str, description: ?str=None, reference: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "revision"
         self.date = date
         self.description = description
@@ -5585,12 +5890,13 @@ class Revision(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Revision(self.date,
                        description=self.description,
                        reference=self.reference,
                        exts=self.exts,
-                       ns=new_ns if new_ns is not None else self.ns)
+                       ns=new_ns if new_ns is not None else self.ns,
+                       pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -5622,23 +5928,33 @@ class Rpc(SchemaNodeInner):
     reference: ?str
     status: ?str
 
-    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, description: ?str=None, if_feature: list[str]=[], input: ?Input=None, output: ?Output=None, reference: ?str=None, status: ?str=None, exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "rpc"
         if input is not None:
             input.parent = self
             n_ns = input.ns
             if n_ns is None:
                 input.ns = self.ns
+            n_pfx = input.pfx
+            if n_pfx is None:
+                input.pfx = self.pfx
         if output is not None:
             output.parent = self
             n_ns = output.ns
             if n_ns is None:
                 output.ns = self.ns
+            n_pfx = output.pfx
+            if n_pfx is None:
+                output.pfx = self.pfx
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -5652,6 +5968,9 @@ class Rpc(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -5721,7 +6040,7 @@ class Rpc(SchemaNodeInner):
                 return _output
         return SchemaNode.get(self, name, ns)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
@@ -5740,13 +6059,15 @@ class Rpc(SchemaNodeInner):
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
-                  ns=new_ns if new_ns is not None else self.ns)
-        self.expand_children(context, new, new_ns)
+                  ns=new_ns if new_ns is not None else self.ns,
+                  pfx=new_pfx if new_pfx is not None else self.pfx)
+        self.expand_children(context, new, new_ns, new_pfx)
         return new
 
     def to_dnode(self) -> DRpc:
         new_dnode = DRpc(
             namespace=self.get_namespace(),
+            prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
@@ -5798,47 +6119,72 @@ class Submodule(SchemaNodeInner):
     extension_: list[Extension]
     feature: list[Feature]
 
-    def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, ns=None):
+    def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "submodule"
         for n in augment:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         belongs_to.parent = self
         n_ns = belongs_to.ns
         if n_ns is None:
             belongs_to.ns = self.ns
+        n_pfx = belongs_to.pfx
+        if n_pfx is None:
+            belongs_to.pfx = self.pfx
         for n in extension_:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in feature:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in import_:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in include:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in revision:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.augment = augment
         self.belongs_to = belongs_to
@@ -5859,6 +6205,9 @@ class Submodule(SchemaNodeInner):
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
@@ -5938,7 +6287,7 @@ class Submodule(SchemaNodeInner):
                 latest = rev
         return latest
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Submodule(self.name,
                         yang_version=self.yang_version,
                         import_=self.import_,
@@ -5991,43 +6340,65 @@ class Type(SchemaNodeOuter):
     require_instance: ?bool
     type_: list[Type]
 
-    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, ns=None):
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "type"
         for n in bit:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in enum:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         if length is not None:
             length.parent = self
             n_ns = length.ns
             if n_ns is None:
                 length.ns = self.ns
+            n_pfx = length.pfx
+            if n_pfx is None:
+                length.pfx = self.pfx
         for n in pattern:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         if range_ is not None:
             range_.parent = self
             n_ns = range_.ns
             if n_ns is None:
                 range_.ns = self.ns
+            n_pfx = range_.pfx
+            if n_pfx is None:
+                range_.pfx = self.pfx
         for n in type_:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.base = base
         self.bit = bit
@@ -6117,7 +6488,7 @@ class Type(SchemaNodeOuter):
                 raise ValueError("Recursion limit reached for typedef %s" % self.name)
         raise ValueError("Unable to resolve typedef %s" % self.name)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Type(self.name,
                    base=self.base,
                    bit=self.bit,
@@ -6130,7 +6501,8 @@ class Type(SchemaNodeOuter):
                    require_instance=self.require_instance,
                    type_=self.type_,
                    exts=self.exts,
-                   ns=new_ns if new_ns is not None else self.ns)
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
     def __str__(self):
@@ -6162,17 +6534,24 @@ class Typedef(SchemaNodeOuter):
     status: ?str
     units: ?str
 
-    def __init__(self, name: str, type_: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, type_: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "typedef"
         type_.parent = self
         n_ns = type_.ns
         if n_ns is None:
             type_.ns = self.ns
+        n_pfx = type_.pfx
+        if n_pfx is None:
+            type_.pfx = self.pfx
         self.name = name
         self.default = default
         self.description = description
@@ -6227,7 +6606,7 @@ class Typedef(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -6278,23 +6657,33 @@ class Uses(SchemaNodeOuter):
     status: ?str
     when: ?str
 
-    def __init__(self, name: str, augment: list[Augment]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, refine: list[Refine]=[], status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None):
+    def __init__(self, name: str, augment: list[Augment]=[], description: ?str=None, if_feature: list[str]=[], reference: ?str=None, refine: list[Refine]=[], status: ?str=None, when: ?str=None, exts=[], parent=None, ns=None, pfx=None):
         self.parent = parent
         new_ns = ns
+        new_pfx = pfx
         if new_ns is None and parent is not None:
             new_ns = parent.ns
+        if new_pfx is None and parent is not None:
+            new_pfx = parent.pfx
         self.ns = new_ns
+        self.pfx = new_pfx
         self._yname = "uses"
         for n in augment:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         for n in refine:
             n.parent = self
             n_ns = n.ns
             if n_ns is None:
                 n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
         self.name = name
         self.augment = augment
         self.description = description
@@ -6351,7 +6740,7 @@ class Uses(SchemaNodeOuter):
         res.append(text_line)
         return "\n".join(res)
 
-    def compile(self, context: Context, new_ns: ?str=None):
+    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
     mut def expand_refines(self, target_base: SchemaNode):

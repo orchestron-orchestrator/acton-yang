@@ -185,7 +185,8 @@ def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
     attr_strs = list(map(lambda x: x.0 + "=" + x.1, ns_attr + attrs))
     left = "</" if close else "<"
     right = "/>" if end else ">"
-    return left + " ".join([name] + attr_strs) + right
+    name_without_prefix = name.split(":")[-1]
+    return left + " ".join([name_without_prefix] + attr_strs) + right
 
 
 class Node(value):
@@ -1347,17 +1348,35 @@ def patch(old: Node, p: ?Node) -> ?Node:
         if p != None:
             raise ValueError("Unhandled node type in patch: %s" % str(type(p)))
 
+def _node_match(n: xml.Node, name: str, ns: ?str) -> bool:
+    """Check if an XML node matches the given name and namespace
 
+    It will match either on the default (nameless) namespace, or the node prefix
+    & a named namespace. For example:
+    <foo xmlns="urn:foo"> and <ns:foo xmlns:ns="urn:foo"> both match with name="foo", ns="urn:foo"
+    """
+    if n.tag == name:
+        if ns is not None:
+            for nsdef in n.nsdefs:
+                n0 = nsdef.0
+                n1 = nsdef.1
+                if n0 is not None and n0 == n.prefix and n1 == ns:
+                    return True
+                elif n0 is None and n1 == ns:
+                    return True
+        else:
+            return True
+    return False
 
-def get_xml_child(n: xml.Node, name: str) -> xml.Node:
-    r = get_xml_opt_child(n, name)
+def get_xml_child(n: xml.Node, name: str, ns: ?str) -> xml.Node:
+    r = get_xml_opt_child(n, name, ns)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name " + name)
 
-def get_xml_opt_child(n: xml.Node, name: str) -> ?xml.Node:
+def get_xml_opt_child(n: xml.Node, name: str, ns: ?str) -> ?xml.Node:
     for child in n.children:
-        if child.tag == name:
+        if _node_match(child, name, ns):
             return child
     return None
 
@@ -1370,98 +1389,98 @@ def get_xml_child_text(n: xml.Node, name: str) -> str:
             raise ValueError("Child text is None")
     raise ValueError("Cannot find xml child with name " + name)
 
-def get_xml_children(n: xml.Node, name: str) -> list[xml.Node]:
+def get_xml_children(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
     res = []
     for child in n.children:
-        if child.tag == name:
+        if _node_match(child, name, ns):
             res.append(child)
     return res
 
-def from_xml_opt_bool(n: xml.Node, name: str) -> ?bool:
+def from_xml_opt_bool(n: xml.Node, name: str, ns: ?str) -> ?bool:
     try:
-        text = get_xml_child(n, name).text
+        text = get_xml_child(n, name, ns).text
         if text is not None:
             return bool(text)
     except ValueError:
         return None
 
-def from_xml_bool(n: xml.Node, name: str) -> bool:
-    r = from_xml_opt_bool(n, name)
+def from_xml_bool(n: xml.Node, name: str, ns: ?str) -> bool:
+    r = from_xml_opt_bool(n, name, ns)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name " + name)
 
-def from_xml_float(n: xml.Node, name: str) -> float:
-    text = get_xml_child(n, name).text
+def from_xml_float(n: xml.Node, name: str, ns: ?str) -> float:
+    text = get_xml_child(n, name, ns).text
     if text is not None:
         res = float(text)
         return res
     raise ValueError("Cannot find xml child with name " + name)
     return 13.37 # bah, get C error otherwise
 
-def from_xml_opt_float(n: xml.Node, name: str) -> ?float:
+def from_xml_opt_float(n: xml.Node, name: str, ns: ?str) -> ?float:
     try:
-        text = get_xml_child(n, name).text
+        text = get_xml_child(n, name, ns).text
         if text is not None:
             res = float(text)
             return res
     except ValueError:
         return None
 
-def from_xml_opt_int(n: xml.Node, name: str) -> ?int:
+def from_xml_opt_int(n: xml.Node, name: str, ns: ?str) -> ?int:
     try:
-        text = get_xml_child(n, name).text
+        text = get_xml_child(n, name, ns).text
         if text is not None:
             return int(text)
     except ValueError:
         return None
 
-def from_xml_int(n: xml.Node, name: str) -> int:
-    r = from_xml_opt_int(n, name)
+def from_xml_int(n: xml.Node, name: str, ns: ?str) -> int:
+    r = from_xml_opt_int(n, name, ns)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name " + name)
 
-def from_xml_opt_str(n: xml.Node, name: str) -> ?str:
+def from_xml_opt_str(n: xml.Node, name: str, ns: ?str) -> ?str:
     try:
-        return get_xml_child(n, name).text
+        return get_xml_child(n, name, ns).text
     except ValueError:
         return None
 
-def from_xml_str(n: xml.Node, name: str) -> str:
-    r = from_xml_opt_str(n, name)
+def from_xml_str(n: xml.Node, name: str, ns: ?str) -> str:
+    r = from_xml_opt_str(n, name, ns)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name " + name)
 
-def from_xml_opt_value(n: xml.Node, name: str) -> ?value:
+def from_xml_opt_value(n: xml.Node, name: str, ns: ?str) -> ?value:
     try:
-        t = get_xml_child(n, name).text
+        t = get_xml_child(n, name, ns).text
         if isinstance(t, value):
             return t
     except ValueError:
         return None
 
 # plural
-def from_xml_opt_strs(n: xml.Node, name: str) -> list[str]:
+def from_xml_opt_strs(n: xml.Node, name: str, ns: ?str) -> list[str]:
     res = []
-    for child in get_xml_children(n, name):
+    for child in get_xml_children(n, name, ns):
         ctext = child.text
         if ctext is not None:
             res.append(ctext)
     return res
 
-def from_xml_opt_values(n: xml.Node, name: str) -> list[value]:
+def from_xml_opt_values(n: xml.Node, name: str, ns: ?str) -> list[value]:
     res = []
-    for child in get_xml_children(n, name):
+    for child in get_xml_children(n, name, ns):
         ctext = child.text
         if isinstance(ctext, value):
             res.append(ctext)
     return res
 
-def from_xml_opt_ints(n: xml.Node, name: str) -> list[int]:
+def from_xml_opt_ints(n: xml.Node, name: str, ns: ?str) -> list[int]:
     res = []
-    for child in get_xml_children(n, name):
+    for child in get_xml_children(n, name, ns):
         ctext = child.text
         if ctext is not None:
             res.append(int(ctext))

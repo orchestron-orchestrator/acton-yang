@@ -131,7 +131,7 @@ class foo__c1(yang.adata.MNode):
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> foo__c1:
         if n != None:
-            return foo__c1(l1=yang.gdata.from_xml_opt_str(n, "l1"), l3=yang.gdata.from_xml_opt_int(n, "l3"), l_empty=yang.gdata.from_xml_opt_bool(n, "l_empty"), li=foo__c1__li.from_xml(yang.gdata.get_xml_children(n, "li")), ll_uint64=yang.gdata.from_xml_opt_ints(n, "ll_uint64"), ll_str=yang.gdata.from_xml_opt_strs(n, "ll_str"), l2=yang.gdata.from_xml_opt_str(n, "l2"))
+            return foo__c1(l1=yang.gdata.from_xml_opt_str(n, "l1"), l3=yang.gdata.from_xml_opt_int(n, "l3"), l_empty=yang.gdata.from_xml_opt_bool(n, "l_empty"), li=foo__c1__li.from_xml(yang.gdata.get_xml_children(n, "li")), ll_uint64=yang.gdata.from_xml_opt_ints(n, "ll_uint64"), ll_str=yang.gdata.from_xml_opt_strs(n, "ll_str"), l2=yang.gdata.from_xml_opt_str(n, "l2", "http://example.com/bar"))
         return foo__c1()
 
 
@@ -246,7 +246,7 @@ class foo__c_dot(yang.adata.MNode):
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> foo__c_dot:
         if n != None:
-            return foo__c_dot(l_dot1=yang.gdata.from_xml_opt_str(n, "l.dot1"), l_dot2=yang.gdata.from_xml_opt_str(n, "l.dot2"))
+            return foo__c_dot(l_dot1=yang.gdata.from_xml_opt_str(n, "l.dot1"), l_dot2=yang.gdata.from_xml_opt_str(n, "l.dot2", "http://example.com/bar"))
         return foo__c_dot()
 
 
@@ -348,14 +348,70 @@ class foo__cc(yang.adata.MNode):
         return foo__cc()
 
 
+class foo__conflict(yang.adata.MNode):
+    foo: ?str
+
+    mut def __init__(self, foo: ?str):
+        self._ns = "http://example.com/foo"
+        self.foo = foo
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _foo = self.foo
+        if _foo is not None:
+            children['foo'] = yang.gdata.Leaf('string', _foo)
+        return yang.gdata.Container(children, ns='http://example.com/foo')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__conflict:
+        if n != None:
+            return foo__conflict(foo=n.get_opt_str("foo"))
+        return foo__conflict()
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> foo__conflict:
+        if n != None:
+            return foo__conflict(foo=yang.gdata.from_xml_opt_str(n, "foo"))
+        return foo__conflict()
+
+
+class bar__conflict(yang.adata.MNode):
+    foo: ?str
+
+    mut def __init__(self, foo: ?str):
+        self._ns = "http://example.com/bar"
+        self.foo = foo
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _foo = self.foo
+        if _foo is not None:
+            children['foo'] = yang.gdata.Leaf('string', _foo)
+        return yang.gdata.Container(children, ns='http://example.com/bar')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> bar__conflict:
+        if n != None:
+            return bar__conflict(foo=n.get_opt_str("foo"))
+        return bar__conflict()
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> bar__conflict:
+        if n != None:
+            return bar__conflict(foo=yang.gdata.from_xml_opt_str(n, "foo"))
+        return bar__conflict()
+
+
 class root(yang.adata.MNode):
     c1: foo__c1
     pc1: ?foo__pc1
     empty_presence: ?foo__empty_presence
     c_dot: foo__c_dot
     cc: foo__cc
+    foo_conflict: foo__conflict
+    bar_conflict: bar__conflict
 
-    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None):
+    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, foo_conflict: ?foo__conflict=None, bar_conflict: ?bar__conflict=None):
         self._ns = ""
         if c1 is not None:
             self.c1 = c1
@@ -386,6 +442,20 @@ class root(yang.adata.MNode):
         self_cc = self.cc
         if self_cc is not None:
             self_cc._parent = self
+        if foo_conflict is not None:
+            self.foo_conflict = foo_conflict
+        else:
+            self.foo_conflict = foo__conflict()
+        self_foo_conflict = self.foo_conflict
+        if self_foo_conflict is not None:
+            self_foo_conflict._parent = self
+        if bar_conflict is not None:
+            self.bar_conflict = bar_conflict
+        else:
+            self.bar_conflict = bar__conflict()
+        self_bar_conflict = self.bar_conflict
+        if self_bar_conflict is not None:
+            self_bar_conflict._parent = self
 
     mut def create_pc1(self):
         res = foo__pc1()
@@ -404,6 +474,8 @@ class root(yang.adata.MNode):
         _empty_presence = self.empty_presence
         _c_dot = self.c_dot
         _cc = self.cc
+        _foo_conflict = self.foo_conflict
+        _bar_conflict = self.bar_conflict
         if _c1 is not None:
             children['c1'] = _c1.to_gdata()
         if _pc1 is not None:
@@ -414,17 +486,21 @@ class root(yang.adata.MNode):
             children['c.dot'] = _c_dot.to_gdata()
         if _cc is not None:
             children['cc'] = _cc.to_gdata()
+        if _foo_conflict is not None:
+            children['foo:conflict'] = _foo_conflict.to_gdata()
+        if _bar_conflict is not None:
+            children['bar:conflict'] = _bar_conflict.to_gdata()
         return yang.gdata.Root(children)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")), pc1=foo__pc1.from_gdata(n.get_opt_container("pc1")), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container("empty-presence")), c_dot=foo__c_dot.from_gdata(n.get_opt_container("c.dot")), cc=foo__cc.from_gdata(n.get_opt_container("cc")))
+            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")), pc1=foo__pc1.from_gdata(n.get_opt_container("pc1")), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container("empty-presence")), c_dot=foo__c_dot.from_gdata(n.get_opt_container("c.dot")), cc=foo__cc.from_gdata(n.get_opt_container("cc")), foo_conflict=foo__conflict.from_gdata(n.get_opt_container("foo:conflict")), bar_conflict=bar__conflict.from_gdata(n.get_opt_container("bar:conflict")))
         return root()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1")), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, "pc1")), empty_presence=foo__empty_presence.from_xml(yang.gdata.get_xml_opt_child(n, "empty-presence")), c_dot=foo__c_dot.from_xml(yang.gdata.get_xml_opt_child(n, "c.dot")), cc=foo__cc.from_xml(yang.gdata.get_xml_opt_child(n, "cc")))
+            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1", "http://example.com/foo")), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, "pc1", "http://example.com/foo")), empty_presence=foo__empty_presence.from_xml(yang.gdata.get_xml_opt_child(n, "empty-presence", "http://example.com/foo")), c_dot=foo__c_dot.from_xml(yang.gdata.get_xml_opt_child(n, "c.dot", "http://example.com/foo")), cc=foo__cc.from_xml(yang.gdata.get_xml_opt_child(n, "cc", "http://example.com/foo")), foo_conflict=foo__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/foo")), bar_conflict=bar__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/bar")))
         return root()
 
