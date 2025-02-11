@@ -1141,7 +1141,15 @@ def patch(old: Node, p: ?Node) -> ?Node:
     if p is None:
         return old
 
-    if isinstance(old, Container) and isinstance(p, Container):
+    if isinstance(p, Absent):
+        # Patch says remove this node
+        return None
+
+    elif isinstance(p, AbsentListElement):
+        # Patch says remove this element
+        return None
+
+    elif isinstance(old, Container) and isinstance(p, Container):
         # Start with old children
         new_children: dict[str, Node] = {}
         for key in old.children:
@@ -1329,14 +1337,6 @@ def patch(old: Node, p: ?Node) -> ?Node:
         # Both absent means element was removed
         if old.key_vals != p.key_vals:
             raise ValueError("AbsentListElement keys differ in patch: %s vs %s" % (str(old.key_vals), str(p.key_vals)))
-        return None
-
-    elif isinstance(p, Absent):
-        # Patch says remove this node
-        return None
-
-    elif isinstance(p, AbsentListElement):
-        # Patch says remove this element
         return None
 
     else:
@@ -1821,6 +1821,18 @@ def _test_patch_elem_removal():
     ], ns="http://example.com/acme")
 
     testing.assertEqual(res, exp)
+
+def _test_patch_elem_removal2():
+    old = ListElement(["k1"], {
+        "n1": Leaf("int", 1),
+        "n2": Leaf("int", 2)
+    })
+
+    p = AbsentListElement(["k1"])
+
+    res = patch(old, p)
+
+    testing.assertEqual(res, None)
 
 def _test_patch_node_addition():
     old = Container({
