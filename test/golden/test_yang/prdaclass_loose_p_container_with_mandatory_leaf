@@ -1,3 +1,6 @@
+mut def from_json_foo__foo__bar__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
 class foo__foo__bar(yang.adata.MNode):
     l1: ?str
 
@@ -23,6 +26,39 @@ class foo__foo__bar(yang.adata.MNode):
         if n != None:
             return foo__foo__bar(l1=yang.gdata.from_xml_str(n, "l1"))
         raise ValueError("Missing required subtree foo__foo__bar")
+
+
+mut def from_json_path_foo__foo__bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:l1' or point == 'l1':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__foo__bar(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__foo__bar(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l1_full = jd.get('foo:l1')
+    child_l1 = child_l1_full if child_l1_full is not None else jd.get('l1')
+    if child_l1 is not None:
+        children['l1'] = from_json_foo__foo__bar__l1(child_l1)
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__foo__bar(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_l1 = n.children.get('l1')
+    if child_l1 is not None:
+        if isinstance(child_l1, yang.gdata.Leaf):
+            children['l1'] = child_l1.val
+    return children
 
 
 class foo__foo(yang.adata.MNode):
@@ -61,4 +97,38 @@ class foo__foo(yang.adata.MNode):
         if n != None:
             return foo__foo(bar=foo__foo__bar.from_xml(yang.gdata.get_xml_opt_child(n, "bar")))
         return None
+
+
+mut def from_json_path_foo__foo(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:bar' or point == 'bar':
+            child = {'bar': from_json_path_foo__foo__bar(jd, rest_path, op) }
+            return yang.gdata.Container(child)
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__foo(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__foo(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_bar_full = jd.get('foo:bar')
+    child_bar = child_bar_full if child_bar_full is not None else jd.get('bar')
+    if child_bar is not None and isinstance(child_bar, dict):
+        children['bar'] = from_json_foo__foo__bar(child_bar)
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__foo(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_bar = n.children.get('bar')
+    if child_bar is not None:
+        if isinstance(child_bar, yang.gdata.Container):
+            children['bar'] = to_json_foo__foo__bar(child_bar)
+    return children
 
