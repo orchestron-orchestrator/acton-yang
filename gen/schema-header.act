@@ -500,27 +500,32 @@ class DNodeInner(DNode):
                 res.append("        return yang.gdata.%s(children)" % (self.gname))
         res.append("")
 #
+        def _maybe_ns(child: DNode) -> str:
+            if child.namespace != self.namespace:
+                return ", \"%s\"" % child.namespace
+            return ""
+
         # .from_gdata()
         # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
         from_gdata_args_list = []
         from_xml_args_list = []
         for child in self.children:
             if isinstance(child, DLeaf):
-                from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), yang_leaf_to_getval(child), child.name))
-                from_xml_args_list.append("%s=yang.gdata.from_xml_%s(n, \"%s\")" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), yang_leaf_to_getval(child), child.name))
+                from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), _unique_name(child.name, child.prefix)))
+                from_xml_args_list.append("%s=yang.gdata.from_xml_%s(n, \"%s\"%s)" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), child.name, _maybe_ns(child)))
             elif isinstance(child, DLeafList):
-                from_gdata_args_list.append("%s=n.get_%ss(\"%s\")" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), yang_leaf_to_getval(child), child.name))
-                from_xml_args_list.append("%s=yang.gdata.from_xml_%ss(n, \"%s\")" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), yang_leaf_to_getval(child), child.name))
+                from_gdata_args_list.append("%s=n.get_%ss(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), _unique_name(child.name, child.prefix)))
+                from_xml_args_list.append("%s=yang.gdata.from_xml_%ss(n, \"%s\"%s)" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), child.name, _maybe_ns(child)))
             elif isinstance(child, DContainer):
                 if loose or optional_subtree(child):
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), _unique_safe_name(child.name, child.prefix, child_name_conflicts)))
-                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_opt_child(n, \"%s\", \"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), child.name, child.prefix))
+                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
+                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_opt_child(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
                 else:
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), _unique_safe_name(child.name, child.prefix, child_name_conflicts)))
-                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_child(n, \"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), child.name))
+                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
+                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_child(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
             elif isinstance(child, DList):
-                from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), child.name))
-                from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_children(n, \"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), child.name))
+                from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
+                from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_children(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
         from_gdata_args = ", ".join(from_gdata_args_list)
         from_xml_args = ", ".join(from_xml_args_list)
         res.append("    @staticmethod")
@@ -624,13 +629,13 @@ class DNodeInner(DNode):
             from_gdata_args_list = []
             for child in self.children:
                 if isinstance(child, DLeaf):
-                    from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), yang_leaf_to_getval(child), child.name))
+                    from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), _unique_name(child.name, child.prefix)))
                 elif isinstance(child, DContainer):
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), child.name))
+                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
                 elif isinstance(child, DList):
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), child.name))
+                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
 #                elif isinstance(child, ListElement):
-#                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix, child_name_conflicts), get_path_name(child), child.name))
+#                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
             from_gdata_args = ", ".join(from_gdata_args_list)
             res.append("    @staticmethod")
             res.append("    mut def from_gdata(n: yang.gdata.List) -> list[%s_entry]:" % get_path_name(self))
