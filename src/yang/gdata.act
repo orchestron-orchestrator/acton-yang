@@ -180,6 +180,12 @@ def either(a: ?str, b: ?str):
     else:
         return b
 
+def yang_str(v) -> str:
+    s = str(v)
+    if isinstance(v, bool):
+        s = s.lower()
+    return s
+
 def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
     ns_attr = [("xmlns", '"'+ns+'"')] if ns is not None and not close else []
     attr_strs = list(map(lambda x: x.0 + "=" + x.1, ns_attr + attrs))
@@ -310,10 +316,7 @@ class Node(value):
                     else:
                         xml += fmt_tag(name, either(self.ns, cns), attrs=remove_op, end=True)
             else:
-                if isinstance(self.val, bool):
-                    v = str(self.val).lower()
-                else:
-                    v = str(self.val)
+                v = yang_str(self.val)
                 xml += fmt_tag(name, either(self.ns, cns)) + v + fmt_tag(name, close=True)
             xml += _nl()
             return xml
