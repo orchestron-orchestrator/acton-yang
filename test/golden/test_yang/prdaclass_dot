@@ -1,9 +1,13 @@
+import json
 import xml
 import yang.adata
 import yang.gdata
 
 # == This file is generated ==
 
+
+mut def from_json_foo__ieee_802_3__ieee_802_3(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
 
 class foo__ieee_802_3(yang.adata.MNode):
     ieee_802_3: ?str
@@ -30,6 +34,39 @@ class foo__ieee_802_3(yang.adata.MNode):
         if n != None:
             return foo__ieee_802_3(ieee_802_3=yang.gdata.from_xml_opt_str(n, "ieee-802.3"))
         return foo__ieee_802_3()
+
+
+mut def from_json_path_foo__ieee_802_3(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:ieee-802.3' or point == 'ieee-802.3':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__ieee_802_3(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__ieee_802_3(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_ieee_802_3_full = jd.get('foo:ieee-802.3')
+    child_ieee_802_3 = child_ieee_802_3_full if child_ieee_802_3_full is not None else jd.get('ieee-802.3')
+    if child_ieee_802_3 is not None:
+        children['ieee-802.3'] = from_json_foo__ieee_802_3__ieee_802_3(child_ieee_802_3)
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__ieee_802_3(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_ieee_802_3 = n.children.get('ieee-802.3')
+    if child_ieee_802_3 is not None:
+        if isinstance(child_ieee_802_3, yang.gdata.Leaf):
+            children['ieee-802.3'] = child_ieee_802_3.val
+    return children
 
 
 class root(yang.adata.MNode):
@@ -63,4 +100,37 @@ class root(yang.adata.MNode):
         if n != None:
             return root(ieee_802_3=foo__ieee_802_3.from_xml(yang.gdata.get_xml_opt_child(n, "ieee-802.3", "http://example.com/foo")))
         return root()
+
+
+mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:ieee-802.3':
+            child = {'ieee-802.3': from_json_path_foo__ieee_802_3(jd, rest_path, op) }
+            return yang.gdata.Root(child)
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
+    children = {}
+    child_ieee_802_3 = jd.get('foo:ieee-802.3')
+    if child_ieee_802_3 is not None and isinstance(child_ieee_802_3, dict):
+        children['ieee-802.3'] = from_json_foo__ieee_802_3(child_ieee_802_3)
+    return yang.gdata.Root(children)
+
+mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
+    children = {}
+    child_ieee_802_3 = n.children.get('ieee-802.3')
+    if child_ieee_802_3 is not None:
+        if isinstance(child_ieee_802_3, yang.gdata.Container):
+            children['foo:ieee-802.3'] = to_json_foo__ieee_802_3(child_ieee_802_3)
+    return children
 

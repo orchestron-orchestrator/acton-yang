@@ -1,3 +1,12 @@
+mut def from_json_foo__c__li__name(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
+mut def from_json_foo__c__li__foo(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
+mut def from_json_foo__c__li__bar__man(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
 class foo__c__li__bar(yang.adata.MNode):
     man: str
 
@@ -23,6 +32,39 @@ class foo__c__li__bar(yang.adata.MNode):
         if n != None:
             return foo__c__li__bar(man=yang.gdata.from_xml_str(n, "man"))
         raise ValueError("Missing required subtree foo__c__li__bar")
+
+
+mut def from_json_path_foo__c__li__bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:man' or point == 'man':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__c__li__bar(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__c__li__bar(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_man_full = jd.get('foo:man')
+    child_man = child_man_full if child_man_full is not None else jd.get('man')
+    if child_man is not None:
+        children['man'] = from_json_foo__c__li__bar__man(child_man)
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__c__li__bar(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_man = n.children.get('man')
+    if child_man is not None:
+        if isinstance(child_man, yang.gdata.Leaf):
+            children['man'] = child_man.val
+    return children
 
 
 class foo__c__li_entry(yang.adata.MNode):
@@ -103,4 +145,100 @@ class foo__c__li(yang.adata.MNode):
         for node in nodes:
             res.append(foo__c__li_entry.from_xml(node))
         return res
+
+
+mut def from_json_path_foo__c__li_element(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.ListElement:
+    if len(path) == 1:
+        point = path[0]
+        keys = point.split(",")
+        jd_dict = yang.gdata.unwrap_dict(jd)
+        val = from_json_foo__c__li_element(jd_dict)
+        if op == "merge":
+            return val
+        elif op == "remove":
+            return yang.gdata.AbsentListElement(val.key_vals)
+        raise ValueError("Invalid operation")
+    elif len(path) > 1:
+        keys = path[0].split(",")
+        point = path[1]
+        rest_path = path[2:]
+        children: dict[str, yang.gdata.Node] = {}
+        for idx, key in enumerate(['name']):
+            children[key] = yang.gdata.Leaf("str", keys[idx])
+        if point == 'foo':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'bar':
+            children['bar'] = from_json_path_foo__c__li__bar(jd, rest_path, op)
+        return yang.gdata.ListElement(keys, children)
+    raise ValueError("unreachable - no keys to list element")
+
+mut def from_json_path_foo__c__li(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.List:
+    if len(path) == 1:
+        point = path[0]
+        keys = point.split(",")
+        jd_dict = yang.gdata.unwrap_dict(jd)
+        # Check that all keys are present in payload.
+        # If present, they must equal the keys in the path
+        # If not present, fill in from path
+        for key in ['name']:
+            if key not in jd_dict:
+                jd_dict[key] = keys.pop(0)
+            else:
+                if str(jd_dict[key]) != keys.pop(0):
+                    raise ValueError("Key value mismatch between path and payload")
+        element = from_json_foo__c__li_element(jd_dict)
+        elements = []
+        if op == "merge":
+            elements.append(element)
+        elif op == "remove":
+            elements.append(yang.gdata.AbsentListElement(element.key_vals))
+        return yang.gdata.List(['name'], elements)
+    elif len(path) > 1:
+        return yang.gdata.List(['name'], [from_json_path_foo__c__li_element(jd, path, op)])
+    raise ValueError("Unable to resolve path, no keys provided")
+
+mut def from_json_foo__c__li_element(jd: dict[str, ?value]) -> yang.gdata.ListElement:
+    children = {}
+    child_name_full = jd.get('foo:name')
+    child_name = child_name_full if child_name_full is not None else jd.get('name')
+    if child_name is not None:
+        children['name'] = from_json_foo__c__li__name(child_name)
+    child_foo_full = jd.get('foo:foo')
+    child_foo = child_foo_full if child_foo_full is not None else jd.get('foo')
+    if child_foo is not None:
+        children['foo'] = from_json_foo__c__li__foo(child_foo)
+    child_bar_full = jd.get('foo:bar')
+    child_bar = child_bar_full if child_bar_full is not None else jd.get('bar')
+    if child_bar is not None and isinstance(child_bar, dict):
+        children['bar'] = from_json_foo__c__li__bar(child_bar)
+    return yang.gdata.ListElement([str(child_name if child_name is not None else "")], children)
+
+mut def from_json_foo__c__li(jd: list[dict[str, ?value]]) -> yang.gdata.List:
+    elements = []
+    for e in jd:
+        if isinstance(e, dict):
+            elements.append(from_json_foo__c__li_element(e))
+    return yang.gdata.List(keys=['name'], elements=elements, user_order=False, ns=None, prefix=None)
+
+mut def to_json_foo__c__li_element(n: yang.gdata.ListElement) -> dict[str, ?value]:
+    children = {}
+    child_name = n.children.get('name')
+    if child_name is not None:
+        if isinstance(child_name, yang.gdata.Leaf):
+            children['name'] = child_name.val
+    child_foo = n.children.get('foo')
+    if child_foo is not None:
+        if isinstance(child_foo, yang.gdata.Leaf):
+            children['foo'] = child_foo.val
+    child_bar = n.children.get('bar')
+    if child_bar is not None:
+        if isinstance(child_bar, yang.gdata.Container):
+            children['bar'] = to_json_foo__c__li__bar(child_bar)
+    return children
+
+mut def to_json_foo__c__li(n: yang.gdata.List) -> list[dict[str, ?value]]:
+    elements = []
+    for e in n.elements:
+        elements.append(to_json_foo__c__li_element(e))
+    return elements
 

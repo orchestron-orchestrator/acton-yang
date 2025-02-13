@@ -1,9 +1,22 @@
+import json
 import xml
 import yang.adata
 import yang.gdata
 
 # == This file is generated ==
 
+
+mut def from_json_foo__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("union", val)
+
+mut def from_json_foo__l2(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("union", val)
+
+mut def from_json_foo__l3(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("union", val)
+
+mut def from_json_foo__l4(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("union", val)
 
 class root(yang.adata.MNode):
     l1: ?int
@@ -45,4 +58,63 @@ class root(yang.adata.MNode):
         if n != None:
             return root(l1=yang.gdata.from_xml_opt_int(n, "l1", "http://example.com/foo"), l2=yang.gdata.from_xml_opt_int(n, "l2", "http://example.com/foo"), l3=yang.gdata.from_xml_opt_int(n, "l3", "http://example.com/foo"), l4=yang.gdata.from_xml_opt_int(n, "l4", "http://example.com/foo"))
         return root()
+
+
+mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:l1':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'foo:l2':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'foo:l3':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'foo:l4':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
+    children = {}
+    child_l1 = jd.get('foo:l1')
+    if child_l1 is not None:
+        children['l1'] = from_json_foo__l1(child_l1)
+    child_l2 = jd.get('foo:l2')
+    if child_l2 is not None:
+        children['l2'] = from_json_foo__l2(child_l2)
+    child_l3 = jd.get('foo:l3')
+    if child_l3 is not None:
+        children['l3'] = from_json_foo__l3(child_l3)
+    child_l4 = jd.get('foo:l4')
+    if child_l4 is not None:
+        children['l4'] = from_json_foo__l4(child_l4)
+    return yang.gdata.Root(children)
+
+mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
+    children = {}
+    child_l1 = n.children.get('l1')
+    if child_l1 is not None:
+        if isinstance(child_l1, yang.gdata.Leaf):
+            children['foo:l1'] = child_l1.val
+    child_l2 = n.children.get('l2')
+    if child_l2 is not None:
+        if isinstance(child_l2, yang.gdata.Leaf):
+            children['foo:l2'] = child_l2.val
+    child_l3 = n.children.get('l3')
+    if child_l3 is not None:
+        if isinstance(child_l3, yang.gdata.Leaf):
+            children['foo:l3'] = child_l3.val
+    child_l4 = n.children.get('l4')
+    if child_l4 is not None:
+        if isinstance(child_l4, yang.gdata.Leaf):
+            children['foo:l4'] = child_l4.val
+    return children
 

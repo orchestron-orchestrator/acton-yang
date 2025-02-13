@@ -1,11 +1,13 @@
 
 import testing
+import json
 import xml
 
 import yang.adata
 import yang.gdata
 
 import yang_one
+import yang_foo
 from yang_foo import root as yang_foo_root
 import yang_basics
 
@@ -294,3 +296,201 @@ def _test_empty_presence():
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     # testing.assertEqual(xml_in.encode(), xml_out.encode())
     return xml_out_text
+
+# JSON
+def _test_from_json():
+    """Test mandatory field handling - success case"""
+    json_data = {
+        "foo:tc1": {
+            "l1": "foo"
+        }
+    }
+    # Should successfully parse since mandatory field is present
+    gdata = yang_one.from_json(json_data)
+    #root = yang_one.root.from_gdata(gdata)
+    #testing.assertEqual(root.children["tc1"].children["l1"].val, "foo")
+    return gdata.to_xmlstr()
+
+# example JSON data
+jd1 = {
+    "foo:c1": {
+        "l1": "foo",
+        "l3": 123,
+        "li": [
+            {
+                "name": "tuta",
+                "val": "baba"
+            },
+            {
+                "name": "tata",
+                "val": "baba"
+            }
+        ],
+        "ll_uint64": [4, 42],
+        "ll_str": ["kava", "čaj"]
+    },
+    "foo:pc1": {
+        "foo": {
+            "l1": "bar"
+        }
+    },
+    "foo:c.dot": {
+        "l.dot1": "who put that here?!"
+    },
+    "foo:cc": {
+        "cake": "cake"
+    }
+}
+
+def _test_json_to_gdata():
+    """Test JSON to GData conversion"""
+    gdata = yang_foo.from_json(jd1)
+    return gdata.prsrc()
+
+def _test_json_roundtrip():
+    """Test JSON roundtrip"""
+    gdata = yang_foo.from_json(jd1)
+    json_out = json.encode(yang_foo.to_json(gdata))
+    testing.assertEqual(json.encode(jd1), json_out)
+
+
+def _test_json_path():
+    jda = {
+        "foo:nested": {
+            "inner": {
+                "foo": "WINNING"
+            }
+        }
+    }
+    gda = yang_foo.from_json(jda)
+
+    jdb = {
+        "foo": "WINNING"
+        }
+    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner"])
+
+    testing.assertEqual(gda.prsrc(), gdb.prsrc())
+
+def _test_json_path_nested_key_in_payload():
+    jda = {
+        "foo:nested": {
+            "inner": {
+                "li1": [
+                    {
+                        "name": "AAA",
+                        "bar": "WINNING"
+                    }
+                ]
+            }
+        }
+    }
+    gda = yang_foo.from_json(jda)
+
+    jdb = {
+        "name": "AAA",
+        "bar": "WINNING"
+        }
+    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+
+    testing.assertEqual(gda.prsrc(), gdb.prsrc())
+    return gdb.prsrc()
+
+def _test_json_path_nested_no_key_in_payload():
+    jda = {
+        "foo:nested": {
+            "inner": {
+                "li1": [
+                    {
+                        "name": "AAA",
+                        "bar": "WINNING"
+                    }
+                ]
+            }
+        }
+    }
+    gda = yang_foo.from_json(jda)
+
+    jdb = {
+        "bar": "WINNING"
+        }
+    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+
+    testing.assertEqual(gda.prsrc(), gdb.prsrc())
+    return gdb.prsrc()
+
+def _test_json_path_nested_key_mismatch():
+    jda = {
+        "foo:nested": {
+            "inner": {
+                "li1": [
+                    {
+                        "name": "AAA",
+                        "bar": "WINNING"
+                    }
+                ]
+            }
+        }
+    }
+    gda = yang_foo.from_json(jda)
+
+    jdb = {
+        "name": "banana",
+        "bar": "WINNING"
+        }
+    try:
+        gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+        testing.error("Expected exception on key mismatch")
+    except ValueError:
+        return
+
+def _test_json_path_nested():
+    jda = {
+        "foo:nested": {
+            "inner": {
+                "li1": [
+                    {
+                        "name": "AAA",
+                        "li2": [
+                            {
+                                "key1": "BBB",
+                                "key2": "CCC",
+                                "baz": "WINNING"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+    gda = yang_foo.from_json(jda)
+
+    jdb = {
+        "baz": "WINNING"
+        }
+    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA", "li2", "BBB,CCC"])
+
+    testing.assertEqual(gda.prsrc(), gdb.prsrc())
+    return gdb.prsrc()
+
+
+def _test_json_path_remove():
+    gd = yang_foo.from_json_path({}, ["foo:nested", "inner"], "remove")
+    return gd.prsrc()
+
+def _test_json_path_remove_list_element():
+    gd = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+    return gd.prsrc()
+
+def _test_json_ops():
+    ds1 = yang_foo.from_json({})
+    p1 = yang_foo.from_json_path({"bar": "p1"}, ["foo:nested", "inner", "li1", "AAA"])
+    ds2 = yang.gdata.patch(ds1, p1)
+    if ds2 is not None:
+        p2 = yang_foo.from_json_path({"bar": "p2"}, ["foo:nested", "inner", "li1", "BBB"])
+        ds3 = yang.gdata.patch(ds2, p2)
+        if ds3 is not None:
+            p3 = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+            ds4 = yang.gdata.patch(ds3, p3)
+            if ds4 is not None:
+                return ds4.prsrc()
+    return ""

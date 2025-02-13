@@ -1,9 +1,13 @@
+import json
 import xml
 import yang.adata
 import yang.gdata
 
 # == This file is generated ==
 
+
+mut def from_json_foo__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("union", val)
 
 class root(yang.adata.MNode):
     l1: ?str
@@ -30,4 +34,36 @@ class root(yang.adata.MNode):
         if n != None:
             return root(l1=yang.gdata.from_xml_opt_str(n, "l1", "http://example.com/foo"))
         return root()
+
+
+mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:l1':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
+    children = {}
+    child_l1 = jd.get('foo:l1')
+    if child_l1 is not None:
+        children['l1'] = from_json_foo__l1(child_l1)
+    return yang.gdata.Root(children)
+
+mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
+    children = {}
+    child_l1 = n.children.get('l1')
+    if child_l1 is not None:
+        if isinstance(child_l1, yang.gdata.Leaf):
+            children['foo:l1'] = child_l1.val
+    return children
 

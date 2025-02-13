@@ -1144,6 +1144,7 @@ def diff(old: Node, new: Node) -> ?Node:
         raise ValueError("Unhandled node type in diff: %s" % str(type(old)))
 
 
+# TODO: Can we make patch return a Node instead of ?Node?
 def patch(old: Node, p: ?Node) -> ?Node:
     if p is None:
         return old
@@ -1497,6 +1498,154 @@ def from_xml_opt_ints(n: xml.Node, name: str, ns: ?str) -> list[int]:
 #def from_xml_u16(n: xml.Node, name: str) -> u16:
 #    return u16(get_xml_child_text(n, name))
 
+def maybe_add(target: dict[str, value], key: str, val: ?value) -> None:
+    if val is not None:
+        target[key] = val
+
+def take_json_opt_value(jd: dict[str, value], name: str, prefix: ?str=None) -> ?value:
+    print("jd: ", jd)
+    full_name = (prefix + ":" + name) if prefix is not None else name
+    fname = jd.get(full_name)
+    if fname is not None:
+        print("fname: ", fname)
+        return fname
+    sname = jd.get(name)
+    print("sname: ", sname)
+    return sname
+
+def take_json_value(jd: dict[str, value], name: str, prefix: ?str=None) -> value:
+    full_name = (prefix + ":" + name) if prefix is not None else name
+    val = take_json_opt_value(jd, name, prefix)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json child with name " + full_name)
+
+def take_json_opt_cnt(jd: dict[str, value], name: str, prefix: ?str=None) -> ?dict[str, value]:
+    child = take_json_opt_value(jd, name, prefix)
+    print("child: ", child)
+    if child is not None:
+        try:
+            return unwrap_dict(child)
+        except:
+            raise ValueError("Expected a dictionary for " + name)
+    return None
+
+def take_json_cnt(jd: dict[str, value], name: str, prefix: ?str=None) -> dict[str, value]:
+    val = take_json_opt_cnt(jd, name, prefix)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json child with name " + name)
+
+def take_json_opt_list(jd: dict[str, value], name: str, prefix: ?str=None) -> ?list[dict[str, value]]:
+    child = take_json_opt_value(jd, name, prefix)
+    if child is not None:
+        try:
+            return unwrap_list(child)
+        except:
+            raise ValueError("Expected a list for " + name)
+    return None
+
+def take_json_list(jd: dict[str, value], name: str, prefix: ?str=None) -> list[dict[str, value]]:
+    val = take_json_opt_list(jd, name, prefix)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json list with name " + name)
+
+def take_json_opt_str(jd: dict[str, value], name: str, prefix: ?str=None) -> ?str:
+    child = take_json_opt_value(jd, name, prefix)
+    if child is not None:
+        if isinstance(child, str):
+            return child
+        raise ValueError("Expected a string for " + name)
+    return None
+
+def take_json_str(jd: dict[str, value], name: str, prefix: ?str=None) -> str:
+    val = take_json_opt_str(jd, name, prefix)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json str child with name: " + name)
+
+def take_json_strs(jd: dict[str, value], name: str, prefix: ?str=None) -> list[str]:
+    child = take_json_opt_value(jd, name, prefix)
+    if child is not None:
+        if isinstance(child, list):
+            if len(child) == 0:
+                return []
+            elem = child[0]
+            if isinstance(elem, str):
+                return child
+            raise ValueError(name + "is a list of wrong type, should be str, not " + str(type(elem)))
+        raise ValueError(name + "is not a list of strings")
+    return []
+
+def take_json_opt_int(jd: dict[str, value], name: str, prefix: ?str=None) -> ?int:
+    child = take_json_opt_value(jd, name, prefix)
+    if child is not None:
+        if isinstance(child, int):
+            return child
+        raise ValueError("Expected an int for " + name)
+    return None
+
+def take_json_int(jd: dict[str, value], name: str, prefix: ?str=None) -> int:
+    val = take_json_opt_int(jd, name, prefix)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json int child with name " + name)
+
+def take_json_ints(jd: dict[str, value], name: str, prefix: ?str=None) -> list[int]:
+    child = take_json_opt_value(jd, name, prefix)
+    if child is not None:
+        if isinstance(child, list):
+            if len(child) == 0:
+                return []
+            elem = child[0]
+            if isinstance(elem, int):
+                return child
+            raise ValueError(name + "is a list of wrong type, should be int, not " + str(type(elem)))
+        raise ValueError(name + "is not a list of ints")
+    return []
+
+
+def take_json_opt_bool(jd: dict[str, value], name: str, prefix: ?str=None) -> ?bool:
+    child = take_json_opt_value(jd, name, prefix)
+    if child is not None:
+        if isinstance(child, bool):
+            return child
+        raise ValueError("Expected a bool for " + name)
+    return None
+
+def take_json_bool(jd: dict[str, value], name: str, prefix: ?str=None) -> bool:
+    val = take_json_opt_bool(jd, name, prefix)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json child with name " + name)
+
+# --
+def unwrap_dict(jd: value) -> dict[str, value]:
+    """Unwrap an unknown JSON data structure to a dict or throw an error
+    """
+    if isinstance(jd, dict):
+        if len(jd) == 0:
+            res: dict[str, value] = {}
+            return res
+        key = next(jd.keys())
+        if isinstance(key, str):
+            return jd
+    raise ValueError("Expected a dictionary with str keys")
+
+def unwrap_list(jd: value) -> list[dict[str, value]]:
+    """Unwrap an unknown JSON data structure to a list of dicts or throw an error
+    """
+    if isinstance(jd, list):
+        if len(jd) == 0:
+            res: list[dict[str, value]] = []
+            return res
+        elem = jd[0]
+        if isinstance(elem, dict):
+            key = next(elem.keys())
+            if isinstance(key, str):
+                return jd
+    raise ValueError("Expected a list of dicts, got something else")
 
 
 def _test_merge1():
