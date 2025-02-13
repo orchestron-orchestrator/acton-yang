@@ -311,7 +311,7 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def prdaclass(self, loose=False, top=True, set_ns=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')
@@ -319,7 +319,7 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def prdaclass(self, loose=False, top=True, set_ns=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
         """Print the data class for this schema node
         """
         res = []
@@ -360,7 +360,7 @@ class DNodeInner(DNode):
             return _safe_name(unique_name).replace(":", "_")
 
         for child in self.children:
-            res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace))
+            res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, gen_json=gen_json, gen_xml=gen_xml))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -689,7 +689,7 @@ class DNodeInner(DNode):
         # == JSON serde ================================
 
         # from_json(): from JSON -> gdata
-        if isinstance(self, DNodeInner):
+        if gen_json and isinstance(self, DNodeInner):
             fname = "from_json_path"
             if not top:
                 fname += "_" + get_path_name(self)
@@ -784,7 +784,7 @@ class DNodeInner(DNode):
 
             res.append("")
 
-        if isinstance(self, DNodeInner):
+        if gen_json and isinstance(self, DNodeInner):
             fname = "from_json"
             if not top:
                 fname += "_" + get_path_name(self)
@@ -828,21 +828,21 @@ class DNodeInner(DNode):
                 res.append("    return yang.gdata.%s(children)" % dnode_to_gd_type(self))
             res.append("")
 
-        elif isinstance(self, DLeaf):
+        elif gen_json and isinstance(self, DLeaf):
             fname = "from_json_" + get_path_name(self)
             res.append("# leaf")
             res.append("mut def %s(jd: dict[str, ?value]) -> yang.gdata.Leaf:" % fname)
             res.append("    return yang.gdata.Leaf(jd.get('%s'))" % self.name)
             res.append("")
 
-        elif isinstance(self, DLeafList):
+        elif gen_json and isinstance(self, DLeafList):
             fname = "from_json_" + get_path_name(self)
             res.append("# leaflist")
             res.append("mut def %s(jd: dict[str, ?value]) -> yang.gdata.LeafList:" % fname)
             res.append("    return yang.gdata.LeafList(jd.get('%s'))" % self.name)
             res.append("")
 
-        if isinstance(self, DList):
+        if gen_json and isinstance(self, DList):
             fname = "from_json_" + get_path_name(self)
             res.append("mut def %s(jd: list[dict[str, ?value]]) -> yang.gdata.List:" % fname)
             res.append("    elements = []")
@@ -853,7 +853,7 @@ class DNodeInner(DNode):
             res.append("")
 
         # to_json(): gdata -> JSON
-        if isinstance(self, DNodeInner):
+        if gen_json and isinstance(self, DNodeInner):
             fname = "to_json"
             if not top:
                 fname += "_" + get_path_name(self)
@@ -899,19 +899,19 @@ class DNodeInner(DNode):
                 res.append("    return children")
             res.append("")
 
-        elif isinstance(self, DLeaf):
+        elif gen_json and isinstance(self, DLeaf):
             fname = "to_json_" + get_path_name(self)
             res.append("mut def %s(ll: yang.gdata.Leaf) -> ?value:" % fname)
             res.append("    return jd.get('%s'))" % self.name)
             res.append("")
 
-        elif isinstance(self, DLeafList):
+        elif gen_json and isinstance(self, DLeafList):
             fname = "to_json_" + get_path_name(self)
             res.append("mut def %s(ll: yang.gdata.LeafList) -> list[value]:" % fname)
             res.append("    return jd.get('%s'))" % self.name)
             res.append("")
 
-        if isinstance(self, DList):
+        if gen_json and isinstance(self, DList):
             fname = "to_json_" + get_path_name(self)
             res.append("mut def %s(n: yang.gdata.List) -> list[dict[str, ?value]]:" % fname)
             res.append("    elements = []")
@@ -1125,7 +1125,7 @@ class DLeaf(DNodeLeaf):
                 return True
         return False
 
-    def prdaclass(self, loose=False, top=True, set_ns=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
         fname = "from_json_" + get_path_name(self)
         res = []
         res.append("mut def %s(val: value) -> yang.gdata.Leaf:" % fname)
@@ -1161,7 +1161,7 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
-    def prdaclass(self, loose=False, top=True, set_ns=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
         fname = "from_json_" + get_path_name(self)
         res = []
         res.append("mut def %s(val: list[value]) -> yang.gdata.LeafList:" % fname)
@@ -1327,7 +1327,7 @@ class SchemaNode(object):
         """
         raise NotImplementedError('SchemaNode prsrc')
 
-    def prdaclass(self, loose=False, top=True, set_ns=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')
@@ -1340,7 +1340,6 @@ class SchemaNode(object):
             """Unset the mandatory attribute if present
             """
             if isinstance(node, DLeaf):
-                # print("Unset mandatory on %s" % node.name, err=True)
                 node.mandatory = False
             elif isinstance(node, DAnydata):
                 node.mandatory = None
