@@ -556,8 +556,12 @@ extension Node(Eq):
             if len(self.elements) != len(other.elements):
                 return False
             for i in range(len(self.elements)):
-                e1: ListElement = self.elements[i]
-                e2: ListElement = other.elements[i]
+                e1 = self.elements[i]
+                e2 = other.elements[i]
+                if not self.user_order and e1.key_vals != e2.key_vals:
+                    for e2 in other.elements:
+                        if e1.key_vals == e2.key_vals:
+                            break
                 if e1 != e2:
                     return False
             return True
@@ -817,15 +821,6 @@ def merge(a: Node, b: Node) -> Node:
             # Two-pointer approach for merging list elements
             # This preserves the order from 'a' as baseline and inserts 'b' elements accordingly.
             new_elements: list[ListElement] = []
-
-            # Map by keys for quick lookup
-            def key_str(elem: ListElement) -> str:
-                def escape_keys(k: str) -> str:
-                    return k.replace(",", "\\,")
-                parts = []
-                for kv in elem.key_vals:
-                    parts.append(escape_keys(kv))
-                return ",".join(parts)
 
             old_map = {}
             for e in a.elements:
@@ -1191,17 +1186,9 @@ def patch(old: Node, p: ?Node) -> ?Node:
         if old.keys != p.keys:
             raise ValueError("List keys differ: %s vs %s" % (str(old.keys), str(p.keys)))
 
-        def key_str(elem: ListElement) -> str:
-            def escape_keys(k: str) -> str:
-                return k.replace(",", "\\,")
-            parts = []
-            for kv in elem.key_vals:
-                parts.append(escape_keys(kv))
-            return ",".join(parts)
-
         old_map = {}
         for e in old.elements:
-            k = key_str(e)
+            k = e.key_str()
             old_map[k] = e
 
         # Apply patch elements
@@ -1209,12 +1196,12 @@ def patch(old: Node, p: ?Node) -> ?Node:
         for pelem in patch_elems:
             if isinstance(pelem, AbsentListElement):
                 # Remove this element if it exists
-                k = key_str(pelem)
+                k = pelem.key_str()
                 if k in old_map:
                     del old_map[k]
             else:
                 # pelem is a ListElement
-                k = key_str(pelem)
+                k = pelem.key_str()
                 if k in old_map:
                     # Patch existing element
                     res = patch(old_map[k], pelem)
@@ -1232,7 +1219,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         final_key_order = []
         chosen = {}
         for e in old.elements:
-            k = key_str(e)
+            k = e.key_str()
             if k in old_map:
                 final_key_order.append(k)
                 chosen[k] = True
@@ -1242,7 +1229,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         for pelem in patch_elems:
             if isinstance(pelem, AbsentListElement):
                 continue
-            k = key_str(pelem)
+            k = pelem.key_str()
             if k in old_map and k not in chosen:
                 final_key_order.append(k)
                 chosen[k] = True
@@ -1758,6 +1745,45 @@ def _test_merge_list1():
 
     testing.assertEqual(exp, merge(y1, y2))
 
+def _test_eq_list():
+    l1 = List(["name"], [
+        ListElement(["a"], {
+            "x": Leaf("int", 1)
+        }),
+        ListElement(["b"], {
+            "x": Leaf("int", 2)
+        })
+    ])
+    l2 = List(["name"], [
+        ListElement(["b"], {
+            "x": Leaf("int", 2)
+        }),
+        ListElement(["a"], {
+            "x": Leaf("int", 1)
+        })
+    ])
+    testing.assertEqual(l1, l1)
+    testing.assertEqual(l1, l2)
+
+def _test_eq_list_user_order():
+    l1 = List(["name"], user_order=True, elements=[
+        ListElement(["a"], {
+            "x": Leaf("int", 1)
+        }),
+        ListElement(["b"], {
+            "x": Leaf("int", 2)
+        })
+    ])
+    l2 = List(["name"], user_order=True, elements=[
+        ListElement(["b"], {
+            "x": Leaf("int", 2)
+        }),
+        ListElement(["a"], {
+            "x": Leaf("int", 1)
+        })
+    ])
+    testing.assertEqual(l1, l1)
+    testing.assertNotEqual(l1, l2)
 
 def _test_diff_no_change():
     """In this test, old and new are identical. We expect diff to return None
