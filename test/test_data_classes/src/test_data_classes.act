@@ -104,6 +104,11 @@ def _test_foo_from_xml_full():
     <l1>bar</l1>
   </foo>
 </pc1>
+<pc2 xmlns="http://example.com/foo">
+  <foo>
+    <l_mandatory>baz</l_mandatory>
+  </foo>
+</pc2>
 <c.dot xmlns="http://example.com/foo">
   <l.dot1>who put that here?!</l.dot1>
 </c.dot>
@@ -144,7 +149,7 @@ def _test_foo_from_xml1():
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
 
-def _test_foo_from_xml_pc():
+def _test_foo_from_xml_pc1():
     """"""
     xml_text = """<data>
 <pc1 xmlns="http://example.com/foo"></pc1>
@@ -163,6 +168,20 @@ def _test_foo_from_xml_pc():
     xml_out_text = g.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
+
+def _test_foo_from_xml_pc2():
+    """"""
+    xml_text = """<data>
+<pc2 xmlns="http://example.com/foo"></pc2>
+</data>"""
+    xml_in = xml.decode(xml_text)
+    try:
+        d = yang_foo_root.from_xml(xml_in)
+        testing.error("Expected exception on missing mandatory leaf")
+    except ValueError as e:
+        if str(e) != "ValueError: Cannot find xml child with name foo":
+            raise e
+        return
 
 def _test_foo_from_xml2():
     """"""

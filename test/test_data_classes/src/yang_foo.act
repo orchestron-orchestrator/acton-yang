@@ -471,6 +471,131 @@ mut def to_json_foo__pc1(n: yang.gdata.Container) -> dict[str, ?value]:
     return children
 
 
+mut def from_json_foo__pc2__foo__l_mandatory(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
+class foo__pc2__foo(yang.adata.MNode):
+    l_mandatory: str
+
+    mut def __init__(self, l_mandatory: str):
+        self._ns = "http://example.com/foo"
+        self.l_mandatory = l_mandatory
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _l_mandatory = self.l_mandatory
+        if _l_mandatory is not None:
+            children['l_mandatory'] = yang.gdata.Leaf('string', _l_mandatory)
+        return yang.gdata.Container(children)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc2__foo:
+        if n != None:
+            return foo__pc2__foo(l_mandatory=n.get_str("l_mandatory"))
+        raise ValueError("Missing required subtree foo__pc2__foo")
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> foo__pc2__foo:
+        if n != None:
+            return foo__pc2__foo(l_mandatory=yang.gdata.from_xml_str(n, "l_mandatory"))
+        raise ValueError("Missing required subtree foo__pc2__foo")
+
+
+mut def from_json_path_foo__pc2__foo(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:l_mandatory' or point == 'l_mandatory':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__pc2__foo(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__pc2__foo(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l_mandatory_full = jd.get('foo:l_mandatory')
+    child_l_mandatory = child_l_mandatory_full if child_l_mandatory_full is not None else jd.get('l_mandatory')
+    if child_l_mandatory is not None:
+        children['l_mandatory'] = from_json_foo__pc2__foo__l_mandatory(child_l_mandatory)
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__pc2__foo(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_l_mandatory = n.children.get('l_mandatory')
+    if child_l_mandatory is not None:
+        if isinstance(child_l_mandatory, yang.gdata.Leaf):
+            children['l_mandatory'] = child_l_mandatory.val
+    return children
+
+
+class foo__pc2(yang.adata.MNode):
+    foo: foo__pc2__foo
+
+    mut def __init__(self, foo: foo__pc2__foo):
+        self._ns = "http://example.com/foo"
+        self.foo = foo
+        self.foo._parent = self
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _foo = self.foo
+        if _foo is not None:
+            children['foo'] = _foo.to_gdata()
+        return yang.gdata.Container(children, presence=True, ns='http://example.com/foo')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__pc2:
+        if n != None:
+            return foo__pc2(foo=foo__pc2__foo.from_gdata(n.get_container("foo")))
+        return None
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> ?foo__pc2:
+        if n != None:
+            return foo__pc2(foo=foo__pc2__foo.from_xml(yang.gdata.get_xml_child(n, "foo")))
+        return None
+
+
+mut def from_json_path_foo__pc2(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:foo' or point == 'foo':
+            child = {'foo': from_json_path_foo__pc2__foo(jd, rest_path, op) }
+            return yang.gdata.Container(child)
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__pc2(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__pc2(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_foo_full = jd.get('foo:foo')
+    child_foo = child_foo_full if child_foo_full is not None else jd.get('foo')
+    if child_foo is not None and isinstance(child_foo, dict):
+        children['foo'] = from_json_foo__pc2__foo(child_foo)
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__pc2(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_foo = n.children.get('foo')
+    if child_foo is not None:
+        if isinstance(child_foo, yang.gdata.Container):
+            children['foo'] = to_json_foo__pc2__foo(child_foo)
+    return children
+
+
 class foo__empty_presence(yang.adata.MNode):
 
     mut def __init__(self):
@@ -1605,6 +1730,7 @@ mut def to_json_bar__conflict(n: yang.gdata.Container) -> dict[str, ?value]:
 class root(yang.adata.MNode):
     c1: foo__c1
     pc1: ?foo__pc1
+    pc2: ?foo__pc2
     empty_presence: ?foo__empty_presence
     c_dot: foo__c_dot
     cc: foo__cc
@@ -1613,7 +1739,7 @@ class root(yang.adata.MNode):
     nested: foo__nested
     bar_conflict: bar__conflict
 
-    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, foo_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, bar_conflict: ?bar__conflict=None):
+    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, foo_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, bar_conflict: ?bar__conflict=None):
         self._ns = ""
         if c1 is not None:
             self.c1 = c1
@@ -1626,6 +1752,10 @@ class root(yang.adata.MNode):
         self_pc1 = self.pc1
         if self_pc1 is not None:
             self_pc1._parent = self
+        self.pc2 = pc2
+        self_pc2 = self.pc2
+        if self_pc2 is not None:
+            self_pc2._parent = self
         self.empty_presence = empty_presence
         self_empty_presence = self.empty_presence
         if self_empty_presence is not None:
@@ -1673,6 +1803,11 @@ class root(yang.adata.MNode):
         self.pc1 = res
         return res
 
+    mut def create_pc2(self, foo):
+        res = foo__pc2(foo)
+        self.pc2 = res
+        return res
+
     mut def create_empty_presence(self):
         res = foo__empty_presence()
         self.empty_presence = res
@@ -1682,6 +1817,7 @@ class root(yang.adata.MNode):
         children = {}
         _c1 = self.c1
         _pc1 = self.pc1
+        _pc2 = self.pc2
         _empty_presence = self.empty_presence
         _c_dot = self.c_dot
         _cc = self.cc
@@ -1693,6 +1829,8 @@ class root(yang.adata.MNode):
             children['c1'] = _c1.to_gdata()
         if _pc1 is not None:
             children['pc1'] = _pc1.to_gdata()
+        if _pc2 is not None:
+            children['pc2'] = _pc2.to_gdata()
         if _empty_presence is not None:
             children['empty-presence'] = _empty_presence.to_gdata()
         if _c_dot is not None:
@@ -1712,13 +1850,13 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")), pc1=foo__pc1.from_gdata(n.get_opt_container("pc1")), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container("empty-presence")), c_dot=foo__c_dot.from_gdata(n.get_opt_container("c.dot")), cc=foo__cc.from_gdata(n.get_opt_container("cc")), foo_conflict=foo__conflict.from_gdata(n.get_opt_container("foo:conflict")), special=foo__special.from_gdata(n.get_opt_list("special")), nested=foo__nested.from_gdata(n.get_opt_container("nested")), bar_conflict=bar__conflict.from_gdata(n.get_opt_container("bar:conflict")))
+            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")), pc1=foo__pc1.from_gdata(n.get_opt_container("pc1")), pc2=foo__pc2.from_gdata(n.get_opt_container("pc2")), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container("empty-presence")), c_dot=foo__c_dot.from_gdata(n.get_opt_container("c.dot")), cc=foo__cc.from_gdata(n.get_opt_container("cc")), foo_conflict=foo__conflict.from_gdata(n.get_opt_container("foo:conflict")), special=foo__special.from_gdata(n.get_opt_list("special")), nested=foo__nested.from_gdata(n.get_opt_container("nested")), bar_conflict=bar__conflict.from_gdata(n.get_opt_container("bar:conflict")))
         return root()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1", "http://example.com/foo")), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, "pc1", "http://example.com/foo")), empty_presence=foo__empty_presence.from_xml(yang.gdata.get_xml_opt_child(n, "empty-presence", "http://example.com/foo")), c_dot=foo__c_dot.from_xml(yang.gdata.get_xml_opt_child(n, "c.dot", "http://example.com/foo")), cc=foo__cc.from_xml(yang.gdata.get_xml_opt_child(n, "cc", "http://example.com/foo")), foo_conflict=foo__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/foo")), special=foo__special.from_xml(yang.gdata.get_xml_children(n, "special", "http://example.com/foo")), nested=foo__nested.from_xml(yang.gdata.get_xml_opt_child(n, "nested", "http://example.com/foo")), bar_conflict=bar__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/bar")))
+            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1", "http://example.com/foo")), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, "pc1", "http://example.com/foo")), pc2=foo__pc2.from_xml(yang.gdata.get_xml_opt_child(n, "pc2", "http://example.com/foo")), empty_presence=foo__empty_presence.from_xml(yang.gdata.get_xml_opt_child(n, "empty-presence", "http://example.com/foo")), c_dot=foo__c_dot.from_xml(yang.gdata.get_xml_opt_child(n, "c.dot", "http://example.com/foo")), cc=foo__cc.from_xml(yang.gdata.get_xml_opt_child(n, "cc", "http://example.com/foo")), foo_conflict=foo__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/foo")), special=foo__special.from_xml(yang.gdata.get_xml_children(n, "special", "http://example.com/foo")), nested=foo__nested.from_xml(yang.gdata.get_xml_opt_child(n, "nested", "http://example.com/foo")), bar_conflict=bar__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/bar")))
         return root()
 
 
@@ -1732,6 +1870,9 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.
             return yang.gdata.Root(child)
         if point == 'foo:pc1':
             child = {'pc1': from_json_path_foo__pc1(jd, rest_path, op) }
+            return yang.gdata.Root(child)
+        if point == 'foo:pc2':
+            child = {'pc2': from_json_path_foo__pc2(jd, rest_path, op) }
             return yang.gdata.Root(child)
         if point == 'foo:empty-presence':
             child = {'empty-presence': from_json_path_foo__empty_presence(jd, rest_path, op) }
@@ -1771,6 +1912,9 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
     child_pc1 = jd.get('foo:pc1')
     if child_pc1 is not None and isinstance(child_pc1, dict):
         children['pc1'] = from_json_foo__pc1(child_pc1)
+    child_pc2 = jd.get('foo:pc2')
+    if child_pc2 is not None and isinstance(child_pc2, dict):
+        children['pc2'] = from_json_foo__pc2(child_pc2)
     child_empty_presence = jd.get('foo:empty-presence')
     if child_empty_presence is not None and isinstance(child_empty_presence, dict):
         children['empty-presence'] = from_json_foo__empty_presence(child_empty_presence)
@@ -1804,6 +1948,10 @@ mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
     if child_pc1 is not None:
         if isinstance(child_pc1, yang.gdata.Container):
             children['foo:pc1'] = to_json_foo__pc1(child_pc1)
+    child_pc2 = n.children.get('pc2')
+    if child_pc2 is not None:
+        if isinstance(child_pc2, yang.gdata.Container):
+            children['foo:pc2'] = to_json_foo__pc2(child_pc2)
     child_empty_presence = n.children.get('empty-presence')
     if child_empty_presence is not None:
         if isinstance(child_empty_presence, yang.gdata.Container):
