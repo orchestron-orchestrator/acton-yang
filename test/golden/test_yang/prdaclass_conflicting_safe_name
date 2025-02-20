@@ -6,77 +6,93 @@ import yang.gdata
 # == This file is generated ==
 
 
-mut def from_json_foo__foo_bar__foo_bar(val: value) -> yang.gdata.Leaf:
+mut def from_json_m1__foo_bar__m1_foo_bar(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf("string", val)
 
-class foo__foo_bar(yang.adata.MNode):
-    foo_bar: ?str
+mut def from_json_m1__foo_bar__m2_foo_bar(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
 
-    mut def __init__(self, foo_bar: ?str):
-        self._ns = "http://example.com/foo"
-        self.foo_bar = foo_bar
+class m1__foo_bar(yang.adata.MNode):
+    m1_foo_bar: ?str
+    m2_foo_bar: ?str
+
+    mut def __init__(self, m1_foo_bar: ?str, m2_foo_bar: ?str):
+        self._ns = "http://example.com/m1"
+        self.m1_foo_bar = m1_foo_bar
+        self.m2_foo_bar = m2_foo_bar
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        _foo_bar = self.foo_bar
-        if _foo_bar is not None:
-            children['foo-bar'] = yang.gdata.Leaf('string', _foo_bar)
-        return yang.gdata.Container(children, ns='http://example.com/foo')
+        _m1_foo_bar = self.m1_foo_bar
+        _m2_foo_bar = self.m2_foo_bar
+        if _m1_foo_bar is not None:
+            children['m1:foo-bar'] = yang.gdata.Leaf('string', _m1_foo_bar)
+        if _m2_foo_bar is not None:
+            children['m2:foo-bar'] = yang.gdata.Leaf('string', _m2_foo_bar, ns='http://example.com/m2')
+        return yang.gdata.Container(children, ns='http://example.com/m1')
 
     @staticmethod
-    mut def from_gdata(n: ?yang.gdata.Node) -> foo__foo_bar:
+    mut def from_gdata(n: ?yang.gdata.Node) -> m1__foo_bar:
         if n != None:
-            return foo__foo_bar(foo_bar=n.get_opt_str("foo-bar"))
-        return foo__foo_bar()
+            return m1__foo_bar(m1_foo_bar=n.get_opt_str("m1:foo-bar"), m2_foo_bar=n.get_opt_str("m2:foo-bar"))
+        return m1__foo_bar()
 
     @staticmethod
-    mut def from_xml(n: ?xml.Node) -> foo__foo_bar:
+    mut def from_xml(n: ?xml.Node) -> m1__foo_bar:
         if n != None:
-            return foo__foo_bar(foo_bar=yang.gdata.from_xml_opt_str(n, "foo-bar"))
-        return foo__foo_bar()
+            return m1__foo_bar(m1_foo_bar=yang.gdata.from_xml_opt_str(n, "foo-bar"), m2_foo_bar=yang.gdata.from_xml_opt_str(n, "foo-bar", "http://example.com/m2"))
+        return m1__foo_bar()
 
 
-mut def from_json_path_foo__foo_bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+mut def from_json_path_m1__foo_bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
         point = path[0]
         rest_path = path[1:]
-        if point == 'foo:foo-bar' or point == 'foo-bar':
+        if point == 'm1:foo-bar':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'm2:foo-bar':
             raise ValueError("Invalid json path to non-inner node")
         raise ValueError("Invalid path")
     elif len(path) == 0:
         if op == "merge":
-            return from_json_foo__foo_bar(yang.gdata.unwrap_dict(jd))
+            return from_json_m1__foo_bar(yang.gdata.unwrap_dict(jd))
         elif op == "remove":
             return yang.gdata.Absent()
         raise ValueError("Invalid operation")
     raise ValueError("Unable to resolve path")
 
-mut def from_json_foo__foo_bar(jd: dict[str, ?value]) -> yang.gdata.Container:
+mut def from_json_m1__foo_bar(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_foo_bar_full = jd.get('foo:foo-bar')
-    child_foo_bar = child_foo_bar_full if child_foo_bar_full is not None else jd.get('foo-bar')
-    if child_foo_bar is not None:
-        children['foo-bar'] = from_json_foo__foo_bar__foo_bar(child_foo_bar)
+    child_m1_foo_bar = jd.get('m1:foo-bar')
+    if child_m1_foo_bar is not None:
+        children['foo-bar'] = from_json_m1__foo_bar__m1_foo_bar(child_m1_foo_bar)
+    child_m2_foo_bar = jd.get('m2:foo-bar')
+    if child_m2_foo_bar is not None:
+        children['foo-bar'] = from_json_m1__foo_bar__m2_foo_bar(child_m2_foo_bar)
     return yang.gdata.Container(children)
 
-mut def to_json_foo__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
+mut def to_json_m1__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
     children = {}
-    child_foo_bar = n.children.get('foo-bar')
-    if child_foo_bar is not None:
-        if isinstance(child_foo_bar, yang.gdata.Leaf):
-            children['foo-bar'] = child_foo_bar.val
+    child_m1_foo_bar = n.children.get('foo-bar')
+    if child_m1_foo_bar is not None:
+        if isinstance(child_m1_foo_bar, yang.gdata.Leaf):
+            children['foo-bar'] = child_m1_foo_bar.val
+    child_m2_foo_bar = n.children.get('foo-bar')
+    if child_m2_foo_bar is not None:
+        if isinstance(child_m2_foo_bar, yang.gdata.Leaf):
+            children['m2:foo-bar'] = child_m2_foo_bar.val
     return children
 
 
-mut def from_json_foo__foo_bar__foo_bar(val: value) -> yang.gdata.Leaf:
+mut def from_json_m1__foo_bar__foo_bar(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf("string", val)
 
-class foo__foo_bar(yang.adata.MNode):
+class m1__foo_bar(yang.adata.MNode):
     foo_bar: ?str
 
     mut def __init__(self, foo_bar: ?str):
-        self._ns = "http://example.com/foo"
+        self._ns = "http://example.com/m1"
         self.foo_bar = foo_bar
 
     mut def to_gdata(self) -> yang.gdata.Node:
@@ -84,46 +100,46 @@ class foo__foo_bar(yang.adata.MNode):
         _foo_bar = self.foo_bar
         if _foo_bar is not None:
             children['foo_bar'] = yang.gdata.Leaf('string', _foo_bar)
-        return yang.gdata.Container(children, ns='http://example.com/foo')
+        return yang.gdata.Container(children, ns='http://example.com/m1')
 
     @staticmethod
-    mut def from_gdata(n: ?yang.gdata.Node) -> foo__foo_bar:
+    mut def from_gdata(n: ?yang.gdata.Node) -> m1__foo_bar:
         if n != None:
-            return foo__foo_bar(foo_bar=n.get_opt_str("foo_bar"))
-        return foo__foo_bar()
+            return m1__foo_bar(foo_bar=n.get_opt_str("foo_bar"))
+        return m1__foo_bar()
 
     @staticmethod
-    mut def from_xml(n: ?xml.Node) -> foo__foo_bar:
+    mut def from_xml(n: ?xml.Node) -> m1__foo_bar:
         if n != None:
-            return foo__foo_bar(foo_bar=yang.gdata.from_xml_opt_str(n, "foo_bar"))
-        return foo__foo_bar()
+            return m1__foo_bar(foo_bar=yang.gdata.from_xml_opt_str(n, "foo_bar"))
+        return m1__foo_bar()
 
 
-mut def from_json_path_foo__foo_bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+mut def from_json_path_m1__foo_bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
         point = path[0]
         rest_path = path[1:]
-        if point == 'foo:foo_bar' or point == 'foo_bar':
+        if point == 'm1:foo_bar' or point == 'foo_bar':
             raise ValueError("Invalid json path to non-inner node")
         raise ValueError("Invalid path")
     elif len(path) == 0:
         if op == "merge":
-            return from_json_foo__foo_bar(yang.gdata.unwrap_dict(jd))
+            return from_json_m1__foo_bar(yang.gdata.unwrap_dict(jd))
         elif op == "remove":
             return yang.gdata.Absent()
         raise ValueError("Invalid operation")
     raise ValueError("Unable to resolve path")
 
-mut def from_json_foo__foo_bar(jd: dict[str, ?value]) -> yang.gdata.Container:
+mut def from_json_m1__foo_bar(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_foo_bar_full = jd.get('foo:foo_bar')
+    child_foo_bar_full = jd.get('m1:foo_bar')
     child_foo_bar = child_foo_bar_full if child_foo_bar_full is not None else jd.get('foo_bar')
     if child_foo_bar is not None:
-        children['foo_bar'] = from_json_foo__foo_bar__foo_bar(child_foo_bar)
+        children['foo_bar'] = from_json_m1__foo_bar__foo_bar(child_foo_bar)
     return yang.gdata.Container(children)
 
-mut def to_json_foo__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
+mut def to_json_m1__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
     children = {}
     child_foo_bar = n.children.get('foo_bar')
     if child_foo_bar is not None:
@@ -132,14 +148,14 @@ mut def to_json_foo__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
     return children
 
 
-mut def from_json_foo__foo_bar__foo_bar(val: value) -> yang.gdata.Leaf:
+mut def from_json_m1__foo_bar__foo_bar(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf("string", val)
 
-class foo__foo_bar(yang.adata.MNode):
+class m1__foo_bar(yang.adata.MNode):
     foo_bar: ?str
 
     mut def __init__(self, foo_bar: ?str):
-        self._ns = "http://example.com/foo"
+        self._ns = "http://example.com/m1"
         self.foo_bar = foo_bar
 
     mut def to_gdata(self) -> yang.gdata.Node:
@@ -147,46 +163,46 @@ class foo__foo_bar(yang.adata.MNode):
         _foo_bar = self.foo_bar
         if _foo_bar is not None:
             children['foo.bar'] = yang.gdata.Leaf('string', _foo_bar)
-        return yang.gdata.Container(children, ns='http://example.com/foo')
+        return yang.gdata.Container(children, ns='http://example.com/m1')
 
     @staticmethod
-    mut def from_gdata(n: ?yang.gdata.Node) -> foo__foo_bar:
+    mut def from_gdata(n: ?yang.gdata.Node) -> m1__foo_bar:
         if n != None:
-            return foo__foo_bar(foo_bar=n.get_opt_str("foo.bar"))
-        return foo__foo_bar()
+            return m1__foo_bar(foo_bar=n.get_opt_str("foo.bar"))
+        return m1__foo_bar()
 
     @staticmethod
-    mut def from_xml(n: ?xml.Node) -> foo__foo_bar:
+    mut def from_xml(n: ?xml.Node) -> m1__foo_bar:
         if n != None:
-            return foo__foo_bar(foo_bar=yang.gdata.from_xml_opt_str(n, "foo.bar"))
-        return foo__foo_bar()
+            return m1__foo_bar(foo_bar=yang.gdata.from_xml_opt_str(n, "foo.bar"))
+        return m1__foo_bar()
 
 
-mut def from_json_path_foo__foo_bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+mut def from_json_path_m1__foo_bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
         point = path[0]
         rest_path = path[1:]
-        if point == 'foo:foo.bar' or point == 'foo.bar':
+        if point == 'm1:foo.bar' or point == 'foo.bar':
             raise ValueError("Invalid json path to non-inner node")
         raise ValueError("Invalid path")
     elif len(path) == 0:
         if op == "merge":
-            return from_json_foo__foo_bar(yang.gdata.unwrap_dict(jd))
+            return from_json_m1__foo_bar(yang.gdata.unwrap_dict(jd))
         elif op == "remove":
             return yang.gdata.Absent()
         raise ValueError("Invalid operation")
     raise ValueError("Unable to resolve path")
 
-mut def from_json_foo__foo_bar(jd: dict[str, ?value]) -> yang.gdata.Container:
+mut def from_json_m1__foo_bar(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_foo_bar_full = jd.get('foo:foo.bar')
+    child_foo_bar_full = jd.get('m1:foo.bar')
     child_foo_bar = child_foo_bar_full if child_foo_bar_full is not None else jd.get('foo.bar')
     if child_foo_bar is not None:
-        children['foo.bar'] = from_json_foo__foo_bar__foo_bar(child_foo_bar)
+        children['foo.bar'] = from_json_m1__foo_bar__foo_bar(child_foo_bar)
     return yang.gdata.Container(children)
 
-mut def to_json_foo__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
+mut def to_json_m1__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
     children = {}
     child_foo_bar = n.children.get('foo.bar')
     if child_foo_bar is not None:
@@ -195,58 +211,132 @@ mut def to_json_foo__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
     return children
 
 
-class root(yang.adata.MNode):
-    foo_bar_0: foo__foo_bar
-    foo_bar_1: foo__foo_bar
-    foo_bar_2: foo__foo_bar
+mut def from_json_m2__foo_bar__foo_bar(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
 
-    mut def __init__(self, foo_bar_0: ?foo__foo_bar=None, foo_bar_1: ?foo__foo_bar=None, foo_bar_2: ?foo__foo_bar=None):
+class m2__foo_bar(yang.adata.MNode):
+    foo_bar: ?str
+
+    mut def __init__(self, foo_bar: ?str):
+        self._ns = "http://example.com/m2"
+        self.foo_bar = foo_bar
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _foo_bar = self.foo_bar
+        if _foo_bar is not None:
+            children['foo-bar'] = yang.gdata.Leaf('string', _foo_bar)
+        return yang.gdata.Container(children, ns='http://example.com/m2')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> m2__foo_bar:
+        if n != None:
+            return m2__foo_bar(foo_bar=n.get_opt_str("foo-bar"))
+        return m2__foo_bar()
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> m2__foo_bar:
+        if n != None:
+            return m2__foo_bar(foo_bar=yang.gdata.from_xml_opt_str(n, "foo-bar"))
+        return m2__foo_bar()
+
+
+mut def from_json_path_m2__foo_bar(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'm2:foo-bar' or point == 'foo-bar':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_m2__foo_bar(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_m2__foo_bar(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_foo_bar_full = jd.get('m2:foo-bar')
+    child_foo_bar = child_foo_bar_full if child_foo_bar_full is not None else jd.get('foo-bar')
+    if child_foo_bar is not None:
+        children['foo-bar'] = from_json_m2__foo_bar__foo_bar(child_foo_bar)
+    return yang.gdata.Container(children)
+
+mut def to_json_m2__foo_bar(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_foo_bar = n.children.get('foo-bar')
+    if child_foo_bar is not None:
+        if isinstance(child_foo_bar, yang.gdata.Leaf):
+            children['foo-bar'] = child_foo_bar.val
+    return children
+
+
+class root(yang.adata.MNode):
+    m1_foo_bar: m1__foo_bar
+    foo_bar_1: m1__foo_bar
+    foo_bar_2: m1__foo_bar
+    m2_foo_bar: m2__foo_bar
+
+    mut def __init__(self, m1_foo_bar: ?m1__foo_bar=None, foo_bar_1: ?m1__foo_bar=None, foo_bar_2: ?m1__foo_bar=None, m2_foo_bar: ?m2__foo_bar=None):
         self._ns = ""
-        if foo_bar_0 is not None:
-            self.foo_bar_0 = foo_bar_0
+        if m1_foo_bar is not None:
+            self.m1_foo_bar = m1_foo_bar
         else:
-            self.foo_bar_0 = foo__foo_bar()
-        self_foo_bar_0 = self.foo_bar_0
-        if self_foo_bar_0 is not None:
-            self_foo_bar_0._parent = self
+            self.m1_foo_bar = m1__foo_bar()
+        self_m1_foo_bar = self.m1_foo_bar
+        if self_m1_foo_bar is not None:
+            self_m1_foo_bar._parent = self
         if foo_bar_1 is not None:
             self.foo_bar_1 = foo_bar_1
         else:
-            self.foo_bar_1 = foo__foo_bar()
+            self.foo_bar_1 = m1__foo_bar()
         self_foo_bar_1 = self.foo_bar_1
         if self_foo_bar_1 is not None:
             self_foo_bar_1._parent = self
         if foo_bar_2 is not None:
             self.foo_bar_2 = foo_bar_2
         else:
-            self.foo_bar_2 = foo__foo_bar()
+            self.foo_bar_2 = m1__foo_bar()
         self_foo_bar_2 = self.foo_bar_2
         if self_foo_bar_2 is not None:
             self_foo_bar_2._parent = self
+        if m2_foo_bar is not None:
+            self.m2_foo_bar = m2_foo_bar
+        else:
+            self.m2_foo_bar = m2__foo_bar()
+        self_m2_foo_bar = self.m2_foo_bar
+        if self_m2_foo_bar is not None:
+            self_m2_foo_bar._parent = self
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        _foo_bar_0 = self.foo_bar_0
+        _m1_foo_bar = self.m1_foo_bar
         _foo_bar_1 = self.foo_bar_1
         _foo_bar_2 = self.foo_bar_2
-        if _foo_bar_0 is not None:
-            children['foo-bar'] = _foo_bar_0.to_gdata()
+        _m2_foo_bar = self.m2_foo_bar
+        if _m1_foo_bar is not None:
+            children['m1:foo-bar'] = _m1_foo_bar.to_gdata()
         if _foo_bar_1 is not None:
             children['foo_bar'] = _foo_bar_1.to_gdata()
         if _foo_bar_2 is not None:
             children['foo.bar'] = _foo_bar_2.to_gdata()
+        if _m2_foo_bar is not None:
+            children['m2:foo-bar'] = _m2_foo_bar.to_gdata()
         return yang.gdata.Root(children)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n != None:
-            return root(foo_bar_0=foo__foo_bar.from_gdata(n.get_opt_container("foo-bar")), foo_bar_1=foo__foo_bar.from_gdata(n.get_opt_container("foo_bar")), foo_bar_2=foo__foo_bar.from_gdata(n.get_opt_container("foo.bar")))
+            return root(m1_foo_bar=m1__foo_bar.from_gdata(n.get_opt_container("m1:foo-bar")), foo_bar_1=m1__foo_bar.from_gdata(n.get_opt_container("foo_bar")), foo_bar_2=m1__foo_bar.from_gdata(n.get_opt_container("foo.bar")), m2_foo_bar=m2__foo_bar.from_gdata(n.get_opt_container("m2:foo-bar")))
         return root()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> root:
         if n != None:
-            return root(foo_bar_0=foo__foo_bar.from_xml(yang.gdata.get_xml_opt_child(n, "foo-bar", "http://example.com/foo")), foo_bar_1=foo__foo_bar.from_xml(yang.gdata.get_xml_opt_child(n, "foo_bar", "http://example.com/foo")), foo_bar_2=foo__foo_bar.from_xml(yang.gdata.get_xml_opt_child(n, "foo.bar", "http://example.com/foo")))
+            return root(m1_foo_bar=m1__foo_bar.from_xml(yang.gdata.get_xml_opt_child(n, "foo-bar", "http://example.com/m1")), foo_bar_1=m1__foo_bar.from_xml(yang.gdata.get_xml_opt_child(n, "foo_bar", "http://example.com/m1")), foo_bar_2=m1__foo_bar.from_xml(yang.gdata.get_xml_opt_child(n, "foo.bar", "http://example.com/m1")), m2_foo_bar=m2__foo_bar.from_xml(yang.gdata.get_xml_opt_child(n, "foo-bar", "http://example.com/m2")))
         return root()
 
 
@@ -255,14 +345,17 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.
     if len(path) > 0:
         point = path[0]
         rest_path = path[1:]
-        if point == 'foo:foo-bar':
-            child = {'foo-bar': from_json_path_foo__foo_bar(jd, rest_path, op) }
+        if point == 'm1:foo-bar':
+            child = {'foo-bar': from_json_path_m1__foo_bar(jd, rest_path, op) }
             return yang.gdata.Root(child)
-        if point == 'foo:foo_bar':
-            child = {'foo_bar': from_json_path_foo__foo_bar(jd, rest_path, op) }
+        if point == 'm1:foo_bar':
+            child = {'foo_bar': from_json_path_m1__foo_bar(jd, rest_path, op) }
             return yang.gdata.Root(child)
-        if point == 'foo:foo.bar':
-            child = {'foo.bar': from_json_path_foo__foo_bar(jd, rest_path, op) }
+        if point == 'm1:foo.bar':
+            child = {'foo.bar': from_json_path_m1__foo_bar(jd, rest_path, op) }
+            return yang.gdata.Root(child)
+        if point == 'm2:foo-bar':
+            child = {'foo-bar': from_json_path_m2__foo_bar(jd, rest_path, op) }
             return yang.gdata.Root(child)
         raise ValueError("Invalid path")
     elif len(path) == 0:
@@ -275,30 +368,37 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.
 
 mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
     children = {}
-    child_foo_bar_0 = jd.get('foo:foo-bar')
-    if child_foo_bar_0 is not None and isinstance(child_foo_bar_0, dict):
-        children['foo-bar'] = from_json_foo__foo_bar(child_foo_bar_0)
-    child_foo_bar_1 = jd.get('foo:foo_bar')
+    child_m1_foo_bar = jd.get('m1:foo-bar')
+    if child_m1_foo_bar is not None and isinstance(child_m1_foo_bar, dict):
+        children['foo-bar'] = from_json_m1__foo_bar(child_m1_foo_bar)
+    child_foo_bar_1 = jd.get('m1:foo_bar')
     if child_foo_bar_1 is not None and isinstance(child_foo_bar_1, dict):
-        children['foo_bar'] = from_json_foo__foo_bar(child_foo_bar_1)
-    child_foo_bar_2 = jd.get('foo:foo.bar')
+        children['foo_bar'] = from_json_m1__foo_bar(child_foo_bar_1)
+    child_foo_bar_2 = jd.get('m1:foo.bar')
     if child_foo_bar_2 is not None and isinstance(child_foo_bar_2, dict):
-        children['foo.bar'] = from_json_foo__foo_bar(child_foo_bar_2)
+        children['foo.bar'] = from_json_m1__foo_bar(child_foo_bar_2)
+    child_m2_foo_bar = jd.get('m2:foo-bar')
+    if child_m2_foo_bar is not None and isinstance(child_m2_foo_bar, dict):
+        children['foo-bar'] = from_json_m2__foo_bar(child_m2_foo_bar)
     return yang.gdata.Root(children)
 
 mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
     children = {}
-    child_foo_bar_0 = n.children.get('foo-bar')
-    if child_foo_bar_0 is not None:
-        if isinstance(child_foo_bar_0, yang.gdata.Container):
-            children['foo:foo-bar'] = to_json_foo__foo_bar(child_foo_bar_0)
+    child_m1_foo_bar = n.children.get('foo-bar')
+    if child_m1_foo_bar is not None:
+        if isinstance(child_m1_foo_bar, yang.gdata.Container):
+            children['m1:foo-bar'] = to_json_m1__foo_bar(child_m1_foo_bar)
     child_foo_bar_1 = n.children.get('foo_bar')
     if child_foo_bar_1 is not None:
         if isinstance(child_foo_bar_1, yang.gdata.Container):
-            children['foo:foo_bar'] = to_json_foo__foo_bar(child_foo_bar_1)
+            children['m1:foo_bar'] = to_json_m1__foo_bar(child_foo_bar_1)
     child_foo_bar_2 = n.children.get('foo.bar')
     if child_foo_bar_2 is not None:
         if isinstance(child_foo_bar_2, yang.gdata.Container):
-            children['foo:foo.bar'] = to_json_foo__foo_bar(child_foo_bar_2)
+            children['m1:foo.bar'] = to_json_m1__foo_bar(child_foo_bar_2)
+    child_m2_foo_bar = n.children.get('foo-bar')
+    if child_m2_foo_bar is not None:
+        if isinstance(child_m2_foo_bar, yang.gdata.Container):
+            children['m2:foo-bar'] = to_json_m2__foo_bar(child_m2_foo_bar)
     return children
 
