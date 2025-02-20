@@ -360,7 +360,20 @@ class DNodeInner(DNode):
             return _safe_name(unique_name).replace(":", "_")
 
         for child in self.children:
-            res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, gen_json=gen_json, gen_xml=gen_xml))
+            if isinstance(child, DNodeInner):
+                res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, gen_json=gen_json, gen_xml=gen_xml))
+            elif isinstance(child, DLeaf):
+                fname = "from_json_" + get_path_name(child)
+                res.append("mut def %s(val: value) -> yang.gdata.Leaf:" % fname)
+                res.append("    return yang.gdata.Leaf(\"%s\", val)" % (child.type_.name))
+                res.append("")
+            elif isinstance(child, DLeafList):
+                fname = "from_json_" + get_path_name(child)
+                res.append("mut def %s(val: list[value]) -> yang.gdata.LeafList:" % fname)
+                res.append("    return yang.gdata.LeafList(val)")
+                res.append("")
+            else:
+                raise ValueError("Unhandled child type in prdaclass: " + str(type(child)))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -1126,15 +1139,6 @@ class DLeaf(DNodeLeaf):
                 return True
         return False
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
-        fname = "from_json_" + get_path_name(self)
-        res = []
-        res.append("mut def %s(val: value) -> yang.gdata.Leaf:" % fname)
-        res.append("    return yang.gdata.Leaf(\"%s\", val)" % (self.type_.name))
-        res.append("")
-        return "\n".join(res)
-
-
 class DLeafList(DNodeLeaf):
     default: ?list[str]
     max_elements: ?int
@@ -1161,15 +1165,6 @@ class DLeafList(DNodeLeaf):
         self.units = units
         self.when = when
         self.exts = exts
-
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
-        fname = "from_json_" + get_path_name(self)
-        res = []
-        res.append("mut def %s(val: list[value]) -> yang.gdata.LeafList:" % fname)
-        res.append("    return yang.gdata.LeafList(val)")
-        res.append("")
-        return "\n".join(res)
-
 
 class DNotification(DNodeInner):
     status: ?str
