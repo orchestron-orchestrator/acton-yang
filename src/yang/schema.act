@@ -311,7 +311,7 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True, self_unique_safe_name: ?str) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')
@@ -319,7 +319,7 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True, self_unique_safe_name: ?str) -> str:
         """Print the data class for this schema node
         """
         res = []
@@ -359,9 +359,16 @@ class DNodeInner(DNode):
             unique_name = _unique_name(name, prefix)
             return _safe_name(unique_name).replace(":", "_")
 
+        # We get the safe (conflict free) names from the our caller (parent
+        # node) because it knows about our siblings. If we don't, we have no
+        # choice but to assume this name is unique.
+        _self_unique_safe_name = self_unique_safe_name if self_unique_safe_name is not None else _safe_name(self.name)
+        print("In node", self, err=True)
+        print("self_unique_safe_name:", self_unique_safe_name, err=True)
+
         for child in self.children:
             if isinstance(child, DNodeInner):
-                res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, gen_json=gen_json, gen_xml=gen_xml))
+                res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, gen_json=gen_json, gen_xml=gen_xml, self_unique_safe_name=_unique_safe_name(child.name, child.prefix)))
             elif isinstance(child, DLeaf):
                 fname = "from_json_" + get_path_name(child)
                 res.append("mut def %s(val: value) -> yang.gdata.Leaf:" % fname)
@@ -1323,7 +1330,7 @@ class SchemaNode(object):
         """
         raise NotImplementedError('SchemaNode prsrc')
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True, self_unique_safe_name: ?str) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')
