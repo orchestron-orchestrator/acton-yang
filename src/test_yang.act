@@ -1820,6 +1820,41 @@ def _test_prdaclass_augment_name_conflict():
     src = c1.prdaclass(top=False)
     return src
 
+def _test_prdaclass_augment_inner_name_conflict():
+    ys_base = """module base {
+    yang-version "1.1";
+    namespace "http://example.com/base";
+    prefix "base";
+    container c1 {
+        container c2 {
+            leaf foo {
+                type string;
+            }
+        }
+    }
+}"""
+
+    ys_foo = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    import base {
+      prefix "b";
+    }
+    augment "/b:c1" {
+        container c2 {
+            leaf foo {
+                type string;
+            }
+        }
+    }
+}"""
+
+    root = yang.compile([ys_base, ys_foo])
+    # c2 = root.get("c2")
+    src = root.prdaclass(top=False)
+    return src
+
 def _test_prdaclass_top_container_from_xml_opt():
     ys_base = """module foo {
     yang-version "1.1";
