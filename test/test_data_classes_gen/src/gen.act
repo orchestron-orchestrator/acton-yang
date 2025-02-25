@@ -3,9 +3,9 @@ import file
 
 import yang
 
-def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str) -> None:
+def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str, loose=False) -> None:
     root = yang.compile(yangs)
-    src = root.prdaclass()
+    src = root.prdaclass(loose=loose)
     wf = file.WriteFile(wfcap, filename)
     wf.write(src.encode())
     await async wf.close()
@@ -205,5 +205,6 @@ actor main(env: Env):
     wfcap = file.WriteFileCap(file.FileCap(env.cap))
     yang_to_act(wfcap, yangs=[ys_one], filename="../test_data_classes/src/yang_one.act")
     yang_to_act(wfcap, yangs=[ys_foo, ys_bar], filename="../test_data_classes/src/yang_foo.act")
+    yang_to_act(wfcap, yangs=[ys_foo, ys_bar], filename="../test_data_classes/src/yang_foo_loose.act", loose=True)
     yang_to_act(wfcap, yangs=[ys_basics], filename="../test_data_classes/src/yang_basics.act")
     env.exit(0)
