@@ -920,67 +920,17 @@ def diff(old: Node, new: Node) -> ?Node:
         # We'll produce a new_children_dict with the diff
         result: dict[str, Node] = {}
 
-        old_keys = []
-        for k in old_children:
-            old_keys.append(k)
-        new_keys = []
-        for k in new_children:
-            new_keys.append(k)
-
-        i = 0
-        j = 0
-
-        while i < len(old_keys) and j < len(new_keys):
-            ok = old_keys[i]
-            nk = new_keys[j]
-            if ok == nk:
-                # same key in both old and new
-                child_diff = diff(old_children[ok], new_children[nk])
+        for k,nchild in new_children.items():
+            if k in old_children:
+                ochild = old_children[k]
+                child_diff = diff(ochild, nchild)
                 if child_diff is not None:
-                    result[ok] = child_diff
-                i += 1
-                j += 1
+                    result[k] = child_diff
             else:
-                # keys differ, decide how to proceed
-                ok_in_new = (ok in new_children)
-                nk_in_old = (nk in old_children)
-
-                if not ok_in_new:
-                    # old key not in new => absent
-                    result[ok] = Absent(ns=old_children[ok].ns)
-                    i += 1
-                elif not nk_in_old:
-                    # new key not in old => new node
-                    # Since we want absent nodes first, handle old node first if it's absent.
-                    # Here old node is in new, so it's not absent.
-                    # We can safely place the new node now since we're stuck.
-                    result[nk] = new_children[nk]
-                    j += 1
-                else:
-                    # Both keys appear in both old and new, but we have a reorder scenario.
-                    # The requirement: absent nodes appear before new nodes.
-                    # In this scenario, both keys exist in both old and new.
-                    # This implies a complex reordering that shouldn't happen if schema is stable.
-                    # We can choose to raise an error or pick a heuristic.
-                    #
-                    # Let's pick a heuristic: advance old until we can match nk or find an absent.
-                    # We'll scan forward to see if ok_in_new and nk_in_old helps.
-                    # For simplicity, raise an error indicating reordering is not handled:
-                    raise ValueError("Complex reordering scenario encountered in keyed children")
-
-        # If old still has items, they must be absent
-        while i < len(old_keys):
-            ok = old_keys[i]
-            if ok not in new_children:
-                result[ok] = Absent(ns=old_children[ok].ns)
-            i += 1
-
-        # If new still has items, they are new nodes
-        while j < len(new_keys):
-            nk = new_keys[j]
-            if nk not in old_children:
-                result[nk] = new_children[nk]
-            j += 1
+                result[k] = nchild
+        for k,ochild in old_children.items():
+            if k not in new_children:
+                result[k] = Absent(ns=ochild.ns)
 
         if len(result) == 0:
             return None
