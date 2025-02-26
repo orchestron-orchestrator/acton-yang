@@ -55,8 +55,13 @@ extension NameRevMap[T](Collection[(str, (?str, T))]):
     def __len__(self) -> int:
         return len(self.items)
 
-def compile(yang_sources: list[str]) -> yang.schema.DRoot:
-    """Parse and compile a set of YANG modules and submodules into a schema tree
+def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
+    """Parse and compile a set of YANG modules and submodules into (derived) DModule objects
+
+    This function returns a list of DModule objects with derived schema
+    (expanded groupings, augments, ...). This is an intermediate step in
+    compiling modules, as what we usually do is then combine those DModule
+    objects into a single DRoot object.
     """
     ctx = yang.schema.Context()
     modules: NameRevMap[yang.schema.Module] = NameRevMap()
@@ -162,13 +167,31 @@ def compile(yang_sources: list[str]) -> yang.schema.DRoot:
             else:
                 break
 
-    dnodes = []
+    no_rev_modules: list[yang.schema.Module] = []
     for mod_rev, m in ctx.modules.items():
         mod_rev_rev = mod_rev.rev
         if mod_rev_rev is None:
-            dnodes.append(m.to_dnode())
-    return yang.schema.DRoot(dnodes)
+            no_rev_modules.append(m)
+    return no_rev_modules
 
+def compile_to_dmodules(modules: list[yang.schema.Module]) -> list[yang.schema.DModule]:
+    dmodules = []
+    for m in modules:
+        dm = m.to_dnode()
+        if isinstance(dm, yang.schema.DModule):
+            dmodules.append(dm)
+    return dmodules
+
+def compile(yang_sources: list[str]) -> yang.schema.DRoot:
+    """Parse and compile a set of YANG modules and submodules into a derived schema tree
+
+    The derived schema tree combines all processed modules and submodules into
+    a single DRoot. Direct descendats of DRoot are the data nodes, not the
+    modules. The derived schema tree consists of DNode objects for data nodes
+    only - no grouping, uses, typedef and indentity statements.
+    """
+    modules = compile_modules(yang_sources)
+    return yang.schema.DRoot(compile_to_dmodules(modules))
 
 def schema_from_src(src: str) -> yang.schema.SchemaNode:
     """Parse a single YANG schema from source code into the SchemaNode representation
