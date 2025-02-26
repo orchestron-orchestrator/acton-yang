@@ -2215,18 +2215,68 @@ def _safe_name(name: str) -> str:
     return new
 
 def get_path_name(dnode: DNode) -> str:
-    """
+    """Build the adata path name for a data node
+
+    For example, for the following YANG model:
+
+    module foo {
+      prefix foo;
+      container bar {
+        leaf baz {
+          type string;
+        }
+      }
+    }
+
+    the path name for the baz leaf is "foo__bar__baz".
+
+    This function detects conflicting names across sibling nodes. If we add
+    another module that augments a conflicting node like this:
+
+    module m2 {
+      import foo { prefix foo; }
+      augment /foo:bar {
+        leaf baz {
+          type string;
+        }
+      }
+    }
+
+    Then the path name for the baz leaves in the two modules is:
+    - foo__bar__foo_baz
+    - foo__bar__m2_baz
+
+    We do not rewrite the builtin keywords here (see _safe_name()) because it
+    is not necessary.
     """
     path = []
     while True:
-        path.append(dnode.name.replace("-", "_").replace(".", "_"))
+        self_unique_name = dnode.name
         parent = dnode.parent
+        # if parent is not None then of course it is DNodeInner (= has children
+        # attribute), but let's make that explicit for the compiler ...
         if parent is not None:
-            dnode = parent
-        else:
+            if isinstance(parent, DNodeInner):
+                sibling_names = set()
+                sibling_names_conflicts = set()
+                for sibling in parent.children:
+                    if sibling.name in sibling_names:
+                        sibling_names_conflicts.add(sibling.name)
+                    else:
+                        sibling_names.add(sibling.name)
+                if dnode.name not in sibling_names_conflicts:
+                    self_unique_name = dnode.name
+                else:
+                    self_unique_name = "%s:%s" % (dnode.prefix, dnode.name)
+                dnode = parent
+        path.append(self_unique_name.replace("-", "_").replace(".", "_").replace(":", "_"))
+        if parent is None:
             break
+
+    # This never happens, we always get at least our name!
     if len(path) == 0:
         raise ValueError("No path for DNode" + str(dnode))
+
     return "__".join(reversed(path))
 
 

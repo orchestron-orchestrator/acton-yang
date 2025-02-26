@@ -948,33 +948,159 @@ mut def to_json_foo__cc(n: yang.gdata.Container) -> dict[str, ?value]:
     return children
 
 
-mut def from_json_foo__conflict__foo(val: value) -> yang.gdata.Leaf:
+mut def from_json_foo__conflict__foo_foo(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf("string", val)
 
-class foo__conflict(yang.adata.MNode):
-    foo: ?str
+class foo__conflict__foo_inner(yang.adata.MNode):
 
-    mut def __init__(self, foo: ?str):
+    mut def __init__(self):
         self._ns = "http://example.com/foo"
-        self.foo = foo
+        pass
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        _foo = self.foo
-        if _foo is not None:
-            children['foo'] = yang.gdata.Leaf('string', _foo)
+        return yang.gdata.Container(children, presence=True)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__conflict__foo_inner:
+        if n != None:
+            return foo__conflict__foo_inner()
+        return None
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> ?foo__conflict__foo_inner:
+        if n != None:
+            return foo__conflict__foo_inner()
+        return None
+
+
+mut def from_json_path_foo__conflict__foo_inner(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__conflict__foo_inner(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__conflict__foo_inner(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__conflict__foo_inner(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    return children
+
+
+mut def from_json_foo__conflict__bar_foo(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
+class foo__conflict__bar_inner(yang.adata.MNode):
+
+    mut def __init__(self):
+        self._ns = "http://example.com/bar"
+        pass
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        return yang.gdata.Container(children, presence=True, ns='http://example.com/bar')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__conflict__bar_inner:
+        if n != None:
+            return foo__conflict__bar_inner()
+        return None
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> ?foo__conflict__bar_inner:
+        if n != None:
+            return foo__conflict__bar_inner()
+        return None
+
+
+mut def from_json_path_foo__conflict__bar_inner(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__conflict__bar_inner(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__conflict__bar_inner(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__conflict__bar_inner(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    return children
+
+
+class foo__conflict(yang.adata.MNode):
+    foo_foo: ?str
+    foo_inner: ?foo__conflict__foo_inner
+    bar_foo: ?str
+    bar_inner: ?foo__conflict__bar_inner
+
+    mut def __init__(self, foo_foo: ?str, foo_inner: ?foo__conflict__foo_inner=None, bar_foo: ?str, bar_inner: ?foo__conflict__bar_inner=None):
+        self._ns = "http://example.com/foo"
+        self.foo_foo = foo_foo
+        self.foo_inner = foo_inner
+        self_foo_inner = self.foo_inner
+        if self_foo_inner is not None:
+            self_foo_inner._parent = self
+        self.bar_foo = bar_foo
+        self.bar_inner = bar_inner
+        self_bar_inner = self.bar_inner
+        if self_bar_inner is not None:
+            self_bar_inner._parent = self
+
+    mut def create_foo_inner(self):
+        res = foo__conflict__foo_inner()
+        self.foo_inner = res
+        return res
+
+    mut def create_bar_inner(self):
+        res = foo__conflict__bar_inner()
+        self.bar_inner = res
+        return res
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _foo_foo = self.foo_foo
+        _foo_inner = self.foo_inner
+        _bar_foo = self.bar_foo
+        _bar_inner = self.bar_inner
+        if _foo_foo is not None:
+            children['foo:foo'] = yang.gdata.Leaf('string', _foo_foo)
+        if _foo_inner is not None:
+            children['foo:inner'] = _foo_inner.to_gdata()
+        if _bar_foo is not None:
+            children['bar:foo'] = yang.gdata.Leaf('string', _bar_foo, ns='http://example.com/bar')
+        if _bar_inner is not None:
+            children['bar:inner'] = _bar_inner.to_gdata()
         return yang.gdata.Container(children, ns='http://example.com/foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__conflict:
         if n != None:
-            return foo__conflict(foo=n.get_opt_str("foo"))
+            return foo__conflict(foo_foo=n.get_opt_str("foo:foo"), foo_inner=foo__conflict__foo_inner.from_gdata(n.get_opt_container("foo:inner")), bar_foo=n.get_opt_str("bar:foo"), bar_inner=foo__conflict__bar_inner.from_gdata(n.get_opt_container("bar:inner")))
         return foo__conflict()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> foo__conflict:
         if n != None:
-            return foo__conflict(foo=yang.gdata.from_xml_opt_str(n, "foo"))
+            return foo__conflict(foo_foo=yang.gdata.from_xml_opt_str(n, "foo"), foo_inner=foo__conflict__foo_inner.from_xml(yang.gdata.get_xml_opt_child(n, "inner")), bar_foo=yang.gdata.from_xml_opt_str(n, "foo", "http://example.com/bar"), bar_inner=foo__conflict__bar_inner.from_xml(yang.gdata.get_xml_opt_child(n, "inner", "http://example.com/bar")))
         return foo__conflict()
 
 
@@ -983,8 +1109,16 @@ mut def from_json_path_foo__conflict(jd: value, path: list[str]=[], op: ?str="me
     if len(path) > 0:
         point = path[0]
         rest_path = path[1:]
-        if point == 'foo:foo' or point == 'foo':
+        if point == 'foo:foo':
             raise ValueError("Invalid json path to non-inner node")
+        if point == 'foo:inner':
+            child = {'inner': from_json_path_foo__conflict__foo_inner(jd, rest_path, op) }
+            return yang.gdata.Container(child)
+        if point == 'bar:foo':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'bar:inner':
+            child = {'inner': from_json_path_foo__conflict__bar_inner(jd, rest_path, op) }
+            return yang.gdata.Container(child)
         raise ValueError("Invalid path")
     elif len(path) == 0:
         if op == "merge":
@@ -996,18 +1130,38 @@ mut def from_json_path_foo__conflict(jd: value, path: list[str]=[], op: ?str="me
 
 mut def from_json_foo__conflict(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_foo_full = jd.get('foo:foo')
-    child_foo = child_foo_full if child_foo_full is not None else jd.get('foo')
-    if child_foo is not None:
-        children['foo'] = from_json_foo__conflict__foo(child_foo)
+    child_foo_foo = jd.get('foo:foo')
+    if child_foo_foo is not None:
+        children['foo'] = from_json_foo__conflict__foo_foo(child_foo_foo)
+    child_foo_inner = jd.get('foo:inner')
+    if child_foo_inner is not None and isinstance(child_foo_inner, dict):
+        children['inner'] = from_json_foo__conflict__foo_inner(child_foo_inner)
+    child_bar_foo = jd.get('bar:foo')
+    if child_bar_foo is not None:
+        children['foo'] = from_json_foo__conflict__bar_foo(child_bar_foo)
+    child_bar_inner = jd.get('bar:inner')
+    if child_bar_inner is not None and isinstance(child_bar_inner, dict):
+        children['inner'] = from_json_foo__conflict__bar_inner(child_bar_inner)
     return yang.gdata.Container(children)
 
 mut def to_json_foo__conflict(n: yang.gdata.Container) -> dict[str, ?value]:
     children = {}
-    child_foo = n.children.get('foo')
-    if child_foo is not None:
-        if isinstance(child_foo, yang.gdata.Leaf):
-            children['foo'] = child_foo.val
+    child_foo_foo = n.children.get('foo')
+    if child_foo_foo is not None:
+        if isinstance(child_foo_foo, yang.gdata.Leaf):
+            children['foo'] = child_foo_foo.val
+    child_foo_inner = n.children.get('inner')
+    if child_foo_inner is not None:
+        if isinstance(child_foo_inner, yang.gdata.Container):
+            children['inner'] = to_json_foo__conflict__foo_inner(child_foo_inner)
+    child_bar_foo = n.children.get('foo')
+    if child_bar_foo is not None:
+        if isinstance(child_bar_foo, yang.gdata.Leaf):
+            children['bar:foo'] = child_bar_foo.val
+    child_bar_inner = n.children.get('inner')
+    if child_bar_inner is not None:
+        if isinstance(child_bar_inner, yang.gdata.Container):
+            children['bar:inner'] = to_json_foo__conflict__bar_inner(child_bar_inner)
     return children
 
 
