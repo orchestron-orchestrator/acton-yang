@@ -211,6 +211,51 @@ ys_basics = """module basics {
     }
 }"""
 
+ys_m1 = """module m1 {
+    yang-version "1.1";
+    namespace "http://example.com/m1";
+    prefix m1;
+    container foo-bar {
+        leaf foo-bar {
+            type string;
+        }
+    }
+    container foo_bar {
+        leaf foo_bar {
+            type string;
+        }
+    }
+    container foo.bar {
+        leaf foo.bar {
+            type string;
+        }
+    }
+}"""
+
+ys_m2 = """module m2 {
+    yang-version "1.1";
+    namespace "http://example.com/m2";
+    prefix "m2";
+    import m1 {
+        prefix m1;
+    }
+    container foo-bar {
+        leaf foo-bar {
+            type string;
+        }
+    }
+    augment "/m1:foo-bar" {
+        leaf foo-bar {
+            type string;
+        }
+        leaf foo_bar {
+            type string;
+        }
+        leaf "foo.bar" {
+            type string;
+        }
+    }
+}"""
 
 actor main(env: Env):
     wfcap = file.WriteFileCap(file.FileCap(env.cap))
@@ -218,4 +263,5 @@ actor main(env: Env):
     yang_to_act(wfcap, yangs=[ys_foo, ys_bar], filename="../test_data_classes/src/yang_foo.act")
     yang_to_act(wfcap, yangs=[ys_foo, ys_bar], filename="../test_data_classes/src/yang_foo_loose.act", loose=True)
     yang_to_act(wfcap, yangs=[ys_basics], filename="../test_data_classes/src/yang_basics.act")
+    yang_to_act(wfcap, yangs=[ys_m1, ys_m2], filename="../test_data_classes/src/yang_mc.act")
     env.exit(0)

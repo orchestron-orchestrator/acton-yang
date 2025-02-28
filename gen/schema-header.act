@@ -350,19 +350,20 @@ class DNodeInner(DNode):
 
         child_names = set()
         child_name_conflicts = set()
-        child_safe_names = dict()
-        child_safe_name_conflicts = set()
+        child_safe_names: dict[str, dict[str, list[str]]] = dict()
+        child_safe_name_conflicts: dict[str, set[str]] = dict()
         for child in self.children:
             child_safe_name = _safe_name(child.name)
             if child.name in child_names:
                 child_name_conflicts.add(child.name)
             else:
                 child_names.add(child.name)
-            if child_safe_name in child_safe_names:
-                child_safe_name_conflicts.add(child_safe_name)
-                child_safe_names[child_safe_name].append(child.name)
+            if child_safe_name in child_safe_names.get_def(child.prefix, dict()):
+                child_safe_name_conflicts.setdefault(child.prefix, set())
+                child_safe_name_conflicts[child.prefix].add(child_safe_name)
+                child_safe_names[child.prefix][child_safe_name].append(child.name)
             else:
-                child_safe_names[child_safe_name] = [child.name]
+                child_safe_names[child.prefix] = {child_safe_name: [child.name]}
 
         def _unique_name(name: str, prefix: str) -> str:
             if name not in child_name_conflicts:
@@ -373,9 +374,9 @@ class DNodeInner(DNode):
             # First get the non-ambiguous YANG name, possibly with prefix
             unique_name = _unique_name(name, prefix)
             safe_name = _safe_name(unique_name)
-            # Now check if the safe name is unique
-            if safe_name in child_safe_name_conflicts:
-                idx = child_safe_names[safe_name].index(name)
+            # Now check if the safe name is unique (within the confines of the module)
+            if safe_name in child_safe_name_conflicts.get_def(prefix, set()):
+                idx = child_safe_names[prefix][safe_name].index(name)
                 return safe_name.replace(":", "_") + "_" + str(idx)
             return _safe_name(unique_name).replace(":", "_")
 
