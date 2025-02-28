@@ -344,13 +344,12 @@ class DNodeInner(DNode):
                 new_children.append(child)
         self.children = new_children
 
-        child_name_conflicts, child_safe_names, child_safe_name_conflicts = _find_conflicting_names(self)
-
+        un = _UniqueNamer(self)
         def _unique_name(name: str, prefix: str) -> str:
-            return _g_unique_name(name, prefix, child_name_conflicts)
+            return un.unique_name(name, prefix)
 
         def _unique_safe_name(name: str, prefix: str) -> str:
-            return _g_unique_safe_name(name, prefix, child_name_conflicts, child_safe_names, child_safe_name_conflicts)
+            return un.unique_safe_name(name, prefix)
 
         for child in self.children:
             res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, gen_json=gen_json, gen_xml=gen_xml))
@@ -756,7 +755,7 @@ class DNodeInner(DNode):
                 res.append("        point = path[0]")
                 res.append("        rest_path = path[1:]")
                 for child in self.children:
-                    if top == True or (child.name in child_name_conflicts):
+                    if top == True or (child.name in un.name_conflicts):
                         res.append("        if point == '%s:%s':" % (child.prefix, child.name))
                     else:
                         res.append("        if point == '%s:%s' or point == '%s':" % (child.prefix, child.name, child.name))
@@ -790,7 +789,7 @@ class DNodeInner(DNode):
 
             res.append("    children = {}")
             for child in self.children:
-                if top == True or (child.name in child_name_conflicts):
+                if top == True or (child.name in un.name_conflicts):
                     res.append("    child_%s = jd.get('%s:%s')" % (_unique_safe_name(child.name, child.prefix), child.prefix, child.name))
                 else:
                     res.append("    child_%s_full = jd.get('%s:%s')" % (_unique_safe_name(child.name, child.prefix), child.prefix, child.name))
@@ -2208,39 +2207,43 @@ def _safe_name(name: str, safe_kw=True) -> str:
             new += "_"
     return new
 
-def _find_conflicting_names(node: DNodeInner):
-    child_names = set()
-    child_name_conflicts = set()
-    child_safe_names: dict[str, dict[str, list[str]]] = dict()
-    child_safe_name_conflicts: dict[str, set[str]] = dict()
-    for child in node.children:
-        child_safe_name = _safe_name(child.name)
-        if child.name in child_names:
-            child_name_conflicts.add(child.name)
-        else:
-            child_names.add(child.name)
-        if child_safe_name in child_safe_names.get_def(child.prefix, dict()):
-            child_safe_name_conflicts.setdefault(child.prefix, set())
-            child_safe_name_conflicts[child.prefix].add(child_safe_name)
-            child_safe_names[child.prefix][child_safe_name].append(child.name)
-        else:
-            child_safe_names[child.prefix] = {child_safe_name: [child.name]}
-    return child_name_conflicts, child_safe_names, child_safe_name_conflicts
+class _UniqueNamer(object):
+    name_conflicts: set[str]
+    safe_names: dict[str, dict[str, list[str]]]
+    safe_name_conflicts: dict[str, set[str]]
 
-def _g_unique_name(name: str, prefix: str, child_name_conflicts) -> str:
-    if name not in child_name_conflicts:
-        return name
-    return "%s:%s" % (prefix, name)
-
-def _g_unique_safe_name(name: str, prefix: str, child_name_conflicts, child_safe_names, child_safe_name_conflicts, safe_kw=True) -> str:
-    # First get the non-ambiguous YANG name, possibly with prefix
-    unique_name = _g_unique_name(name, prefix, child_name_conflicts)
-    safe_name = _safe_name(unique_name, safe_kw)
-    # Now check if the safe name is unique (within the confines of the module)
-    if safe_name in child_safe_name_conflicts.get_def(prefix, set()):
-        idx = child_safe_names[prefix][safe_name].index(name)
-        return safe_name.replace(":", "_") + "_" + str(idx)
-    return _safe_name(unique_name, safe_kw).replace(":", "_")
+    def __init__(self, node: DNodeInner):
+        names = set()
+        self.name_conflicts = set()
+        self.safe_names = dict()
+        self.safe_name_conflicts = dict()
+        for child in node.children:
+            child_safe_name = _safe_name(child.name)
+            if child.name in names:
+                self.name_conflicts.add(child.name)
+            else:
+                names.add(child.name)
+            if child_safe_name in self.safe_names.get_def(child.prefix, dict()):
+                self.safe_name_conflicts.setdefault(child.prefix, set())
+                self.safe_name_conflicts[child.prefix].add(child_safe_name)
+                self.safe_names[child.prefix][child_safe_name].append(child.name)
+            else:
+                self.safe_names[child.prefix] = {child_safe_name: [child.name]}
+    
+    def unique_name(self, name: str, prefix: str) -> str:
+        if name not in self.name_conflicts:
+            return name
+        return "%s:%s" % (prefix, name)
+    
+    def unique_safe_name(self, name: str, prefix: str, safe_kw=True) -> str:
+        # First get the non-ambiguous YANG name, possibly with prefix
+        unique_name = self.unique_name(name, prefix)
+        safe_name = _safe_name(unique_name, safe_kw)
+        # Now check if the safe name is unique (within the confines of the module)
+        if safe_name in self.safe_name_conflicts.get_def(prefix, set()):
+            idx = self.safe_names[prefix][safe_name].index(name)
+            return safe_name.replace(":", "_") + "_" + str(idx)
+        return _safe_name(unique_name, safe_kw).replace(":", "_")
 
 def get_path_name(dnode: DNode) -> str:
     """Build the adata path name for a data node
@@ -2286,11 +2289,8 @@ def get_path_name(dnode: DNode) -> str:
         # attribute), but let's make that explicit for the compiler ...
         if parent is not None:
             if isinstance(parent, DNodeInner):
-                sibling_name_conflicts, sibling_safe_names, sibling_safe_names_conflicts = _find_conflicting_names(parent)
-
-                # Now check if the safe name is unique (within the confines of the module)
-                self_unique_safe_name = _g_unique_safe_name(dnode.name, dnode.prefix, sibling_name_conflicts, sibling_safe_names, sibling_safe_names_conflicts, safe_kw=False)
-                
+                un = _UniqueNamer(parent)
+                self_unique_safe_name = un.unique_safe_name(dnode.name, dnode.prefix, safe_kw=False)
                 dnode = parent
         path.append(self_unique_safe_name)
         if parent is None:
@@ -2300,7 +2300,6 @@ def get_path_name(dnode: DNode) -> str:
     if len(path) == 0:
         raise ValueError("No path for DNode" + str(dnode))
 
-    print("path", path, err=True)
     return "__".join(reversed(path))
 
 
