@@ -2304,7 +2304,7 @@ def get_path_name(dnode: DNode) -> str:
 
     path = []
     while True:
-        self_unique_name = dnode.name
+        self_unique_safe_name = dnode.name
         parent = dnode.parent
         # if parent is not None then of course it is DNodeInner (= has children
         # attribute), but let's make that explicit for the compiler ...
@@ -2327,19 +2327,25 @@ def get_path_name(dnode: DNode) -> str:
                     else:
                         sibling_safe_names[sibling.prefix] = {sibling_safe_name: [sibling.name]}
 
-                self_safe_name = dnode.name.replace("-", "_").replace(".", "_")
-                if self_safe_name in sibling_safe_names_conflicts.get_def(dnode.prefix, set()):
-                    # If not, we need to add a number suffix to make it unique
-                    idx = sibling_safe_names[dnode.prefix][self_safe_name].index(dnode.name)
-                    self_safe_name = self_safe_name + "_" + str(idx)
-                
-                # Now get the non-ambiguous YANG name, possibly with prefix
-                self_unique_name = self_safe_name
+                # First get the non-ambiguous YANG name, possibly with prefix
                 if dnode.name in sibling_names_conflicts:
-                    self_unique_name = "%s_%s" % (dnode.prefix, self_safe_name)
+                    self_unique_name = "%s:%s" % (dnode.prefix, dnode.name)
+                else:
+                    self_unique_name = dnode.name
 
+                # Now check if the safe name is unique (within the confines of the module)
+                self_unique_safe_name = self_unique_name.replace("-", "_").replace(".", "_").replace(":", "_")
+                if self_unique_safe_name == "foo_bar":
+                    print(sibling_safe_names_conflicts, err=True)
+                    print(sibling_safe_names, err=True)
+                if self_unique_safe_name in sibling_safe_names_conflicts.get_def(dnode.prefix, set()):
+                    print("in here", err=True)
+                    # If not, we need to add a number suffix to make it unique
+                    idx = sibling_safe_names[dnode.prefix][self_unique_safe_name].index(dnode.name)
+                    self_unique_safe_name = self_unique_safe_name + "_" + str(idx)
+                
                 dnode = parent
-        path.append(self_unique_name.replace("-", "_").replace(".", "_").replace(":", "_"))
+        path.append(self_unique_safe_name.replace("-", "_").replace(".", "_").replace(":", "_"))
         if parent is None:
             break
 
