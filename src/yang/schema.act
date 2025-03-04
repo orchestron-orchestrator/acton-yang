@@ -287,25 +287,25 @@ class DNode(object):
         """
         if isinstance(self, DNodeInner):
             for child in self.children:
-                if isinstance(child, DAction) and _safe_name(child.name) == name:
+                if isinstance(child, DAction) and child.name == name:
                     return child
-                elif isinstance(child, DAnydata) and _safe_name(child.name) == name:
+                elif isinstance(child, DAnydata) and child.name == name:
                     return child
-                elif isinstance(child, DAnyxml) and _safe_name(child.name) == name:
+                elif isinstance(child, DAnyxml) and child.name == name:
                     return child
-                elif isinstance(child, DContainer) and _safe_name(child.name) == name:
+                elif isinstance(child, DContainer) and child.name == name:
                     return child
                 elif isinstance(child, DInput) and name == 'input':
                     return child
-                elif isinstance(child, DLeaf) and _safe_name(child.name) == name:
+                elif isinstance(child, DLeaf) and child.name == name:
                     return child
-                elif isinstance(child, DLeafList) and _safe_name(child.name) == name:
+                elif isinstance(child, DLeafList) and child.name == name:
                     return child
-                elif isinstance(child, DList) and _safe_name(child.name) == name:
+                elif isinstance(child, DList) and child.name == name:
                     return child
                 elif isinstance(child, DOutput) and name == 'output':
                     return child
-                elif isinstance(child, DRpc) and _safe_name(child.name) == name:
+                elif isinstance(child, DRpc) and child.name == name:
                     return child
             raise ValueError("Child %s not found" % name)
 
@@ -1642,7 +1642,7 @@ class SchemaNode(object):
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
                 if isinstance(child, Uses):
-                    grouping = child.get_grouping(_safe_name(child.name), context)
+                    grouping = child.get_grouping(child.name, context)
                     grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx)
                     child.expand_augments(context, target, in_uses=True)
                     child.expand_refines(target)
@@ -1682,7 +1682,7 @@ class SchemaNode(object):
         for i in range(RECURSION_LIMIT+1):
             if isinstance(n, SchemaNodeInner):
                 for child in n.children:
-                    if isinstance(child, Grouping) and _safe_name(child.name) == name:
+                    if isinstance(child, Grouping) and child.name == name:
                         return child
             nparent = n.parent
             if nparent is not None:
