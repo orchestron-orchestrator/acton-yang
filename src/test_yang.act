@@ -1568,6 +1568,32 @@ def _test_compile_submodules2():
     # TODO: This conflict should be detected during compilation
     #testing.error("Expected ValueError")
 
+def _test_compile_import_hyphenated_prefix():
+    ys_foo = """module acme_foo-bar {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "acme_foo-bar";
+  import acme_qux-baz {
+    prefix "acme_qux-baz";
+  }
+  uses acme_qux-baz:g1;
+}"""
+    ys_qux = """module acme_qux-baz {
+  yang-version "1.1";
+  namespace "http://example.com/qux";
+  prefix "acme_qux-baz";
+  grouping g1 {
+    container c1 {
+      leaf l1 {
+        type string;
+      }
+    }
+  }
+}"""
+    root = yang.compile([ys_foo, ys_qux])
+
+    testing.assertEqual(root.get("c1").get("l1").config, True)
+    return root.prdaclass()
 
 def _test_prdaclass_req_arg():
     """Required arguments must come before optional arguments
