@@ -599,7 +599,7 @@ class DNodeInner(DNode):
             # List has special handling as it actually results in two classes:
             # - the list itself
             # - the list entry class
-            # Here we create the list entry class, the list itself comes later
+            # Here we create the list class, list entry class was created above
             res.append("class %s(yang.adata.MNode):" % get_path_name(self))
             res.append("    elements: list[%s_entry]" % get_path_name(self))
 
@@ -653,20 +653,6 @@ class DNodeInner(DNode):
 
 #            # .from_gdata()
 #            # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
-            from_gdata_args_list = []
-            for child in self.children:
-                if isinstance(child, DLeaf):
-                    from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child), _unique_name(child.name, child.prefix)))
-                elif isinstance(child, DContainer):
-                    if loose or child.presence or optional_subtree(child):
-                        from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
-                    else:
-                        from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
-                elif isinstance(child, DList):
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
-#                elif isinstance(child, ListElement):
-#                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
-            from_gdata_args = ", ".join(from_gdata_args_list)
             res.append("    @staticmethod")
             res.append("    mut def from_gdata(n: ?yang.gdata.List) -> list[%s_entry]:" % get_path_name(self))
             res.append("        res = []")
