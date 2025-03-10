@@ -2186,6 +2186,21 @@ def prsrc_literal(ytype: str, value: str) -> str:
         return value
     elif ytype == "string":
         return '"' + value.replace('"', '\\"') + '"'
+    elif ytype == "union":
+        # Attempt to convert the default to one of Acton built-in types;
+        # numeric types can be converted to float, pass verbatim
+        try:
+            a = float(value)
+            return value
+        except ValueError:
+            pass
+        # true, false is boolean,
+        if value.lower() == "true":
+            return str(True)
+        elif value.lower() == "false":
+            return str(False)
+        # otherwise it is a string
+        return '"' + value.replace('"', '\\"') + '"'
     raise ValueError("Unhandled prsrc literal of type " + ytype)
 
 def _safe_name(name: str) -> str:
