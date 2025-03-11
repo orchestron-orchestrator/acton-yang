@@ -1818,6 +1818,177 @@ mut def to_json_foo__nested(n: yang.gdata.Container) -> dict[str, ?value]:
     return children
 
 
+mut def from_json_foo__li_union__k1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
+mut def from_json_foo__li_union__k2(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("union", val)
+
+class foo__li_union_entry(yang.adata.MNode):
+    k1: str
+    k2: value
+
+    mut def __init__(self, k1: str, k2: value):
+        self._ns = "http://example.com/foo"
+        self.k1 = k1
+        self.k2 = k2
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _k1 = self.k1
+        _k2 = self.k2
+        if _k1 is not None:
+            children['k1'] = yang.gdata.Leaf('string', _k1)
+        if _k2 is not None:
+            children['k2'] = yang.gdata.Leaf('union', _k2)
+        return yang.gdata.ListElement([yang.gdata.yang_str(self.k1), yang.gdata.yang_str(self.k2)], children)
+
+    @staticmethod
+    mut def from_gdata(n: yang.gdata.Node) -> foo__li_union_entry:
+        return foo__li_union_entry(k1=n.get_str("k1"), k2=n.get_value("k2"))
+
+    @staticmethod
+    mut def from_xml(n: xml.Node) -> foo__li_union_entry:
+        return foo__li_union_entry(k1=yang.gdata.from_xml_str(n, "k1"), k2=yang.gdata.from_xml_value(n, "k2"))
+
+class foo__li_union(yang.adata.MNode):
+    elements: list[foo__li_union_entry]
+    mut def __init__(self, elements=[]):
+        self._ns = "http://example.com/foo"
+        self._name = 'li-union'
+        self.elements = elements
+
+    mut def create(self, k1, k2):
+        for e in self.elements:
+            match = True
+            if e.k1 != k1:
+                match = False
+                continue
+            e_k2 = e.k2
+            if isinstance(e_k2, int) and isinstance(k2, int):
+                if e_k2 != k2:
+                    match = False
+                    continue
+            e_k2 = e.k2
+            if isinstance(e_k2, str) and isinstance(k2, str):
+                if e_k2 != k2:
+                    match = False
+                    continue
+            if match:
+                return e
+
+        res = foo__li_union_entry(k1, k2)
+        self.elements.append(res)
+        return res
+
+    mut def to_gdata(self):
+        elements = []
+        for e in self.elements:
+            e_gdata = e.to_gdata()
+            if isinstance(e_gdata, yang.gdata.ListElement):
+                elements.append(e_gdata)
+        return yang.gdata.List(['k1', 'k2'], elements, ns='http://example.com/foo')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.List) -> list[foo__li_union_entry]:
+        res = []
+        if n is not None:
+            for e in n.elements:
+                res.append(foo__li_union_entry.from_gdata(e))
+        return res
+
+    @staticmethod
+    mut def from_xml(nodes: list[xml.Node]) -> list[foo__li_union_entry]:
+        res = []
+        for node in nodes:
+            res.append(foo__li_union_entry.from_xml(node))
+        return res
+
+
+mut def from_json_path_foo__li_union_element(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.ListElement:
+    if len(path) == 1:
+        point = path[0]
+        keys = point.split(",")
+        jd_dict = yang.gdata.unwrap_dict(jd)
+        val = from_json_foo__li_union_element(jd_dict)
+        if op == "merge":
+            return val
+        elif op == "remove":
+            return yang.gdata.AbsentListElement(val.key_vals)
+        raise ValueError("Invalid operation")
+    elif len(path) > 1:
+        keys = path[0].split(",")
+        point = path[1]
+        rest_path = path[2:]
+        children: dict[str, yang.gdata.Node] = {}
+        for idx, key in enumerate(['k1', 'k2']):
+            children[key] = yang.gdata.Leaf("str", keys[idx])
+        return yang.gdata.ListElement(keys, children)
+    raise ValueError("unreachable - no keys to list element")
+
+mut def from_json_path_foo__li_union(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.List:
+    if len(path) == 1:
+        point = path[0]
+        keys = point.split(",")
+        jd_dict = yang.gdata.unwrap_dict(jd)
+        # Check that all keys are present in payload.
+        # If present, they must equal the keys in the path
+        # If not present, fill in from path
+        for key in ['k1', 'k2']:
+            if key not in jd_dict:
+                jd_dict[key] = keys.pop(0)
+            else:
+                if str(jd_dict[key]) != keys.pop(0):
+                    raise ValueError("Key value mismatch between path and payload")
+        element = from_json_foo__li_union_element(jd_dict)
+        elements = []
+        if op == "merge":
+            elements.append(element)
+        elif op == "remove":
+            elements.append(yang.gdata.AbsentListElement(element.key_vals))
+        return yang.gdata.List(['k1', 'k2'], elements)
+    elif len(path) > 1:
+        return yang.gdata.List(['k1', 'k2'], [from_json_path_foo__li_union_element(jd, path, op)])
+    raise ValueError("Unable to resolve path, no keys provided")
+
+mut def from_json_foo__li_union_element(jd: dict[str, ?value]) -> yang.gdata.ListElement:
+    children = {}
+    child_k1_full = jd.get('foo:k1')
+    child_k1 = child_k1_full if child_k1_full is not None else jd.get('k1')
+    if child_k1 is not None:
+        children['k1'] = from_json_foo__li_union__k1(child_k1)
+    child_k2_full = jd.get('foo:k2')
+    child_k2 = child_k2_full if child_k2_full is not None else jd.get('k2')
+    if child_k2 is not None:
+        children['k2'] = from_json_foo__li_union__k2(child_k2)
+    return yang.gdata.ListElement([str(child_k1 if child_k1 is not None else ""), str(child_k2 if child_k2 is not None else "")], children)
+
+mut def from_json_foo__li_union(jd: list[dict[str, ?value]]) -> yang.gdata.List:
+    elements = []
+    for e in jd:
+        if isinstance(e, dict):
+            elements.append(from_json_foo__li_union_element(e))
+    return yang.gdata.List(keys=['k1', 'k2'], elements=elements, user_order=False, ns=None, prefix=None)
+
+mut def to_json_foo__li_union_element(n: yang.gdata.ListElement) -> dict[str, ?value]:
+    children = {}
+    child_k1 = n.children.get('k1')
+    if child_k1 is not None:
+        if isinstance(child_k1, yang.gdata.Leaf):
+            children['k1'] = child_k1.val
+    child_k2 = n.children.get('k2')
+    if child_k2 is not None:
+        if isinstance(child_k2, yang.gdata.Leaf):
+            children['k2'] = child_k2.val
+    return children
+
+mut def to_json_foo__li_union(n: yang.gdata.List) -> list[dict[str, ?value]]:
+    elements = []
+    for e in n.elements:
+        elements.append(to_json_foo__li_union_element(e))
+    return elements
+
+
 mut def from_json_bar__conflict__foo(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf("string", val)
 
@@ -1891,9 +2062,10 @@ class root(yang.adata.MNode):
     foo_conflict: foo__conflict
     special: foo__special
     nested: foo__nested
+    li_union: foo__li_union
     bar_conflict: bar__conflict
 
-    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, foo_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, bar_conflict: ?bar__conflict=None):
+    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, foo_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, li_union: list[foo__li_union_entry]=[], bar_conflict: ?bar__conflict=None):
         self._ns = ""
         if c1 is not None:
             self.c1 = c1
@@ -1944,6 +2116,8 @@ class root(yang.adata.MNode):
         self_nested = self.nested
         if self_nested is not None:
             self_nested._parent = self
+        self.li_union = foo__li_union(elements=li_union)
+        self.li_union._parent = self
         if bar_conflict is not None:
             self.bar_conflict = bar_conflict
         else:
@@ -1978,6 +2152,7 @@ class root(yang.adata.MNode):
         _foo_conflict = self.foo_conflict
         _special = self.special
         _nested = self.nested
+        _li_union = self.li_union
         _bar_conflict = self.bar_conflict
         if _c1 is not None:
             children['c1'] = _c1.to_gdata()
@@ -1997,6 +2172,8 @@ class root(yang.adata.MNode):
             children['special'] = _special.to_gdata()
         if _nested is not None:
             children['nested'] = _nested.to_gdata()
+        if _li_union is not None:
+            children['li-union'] = _li_union.to_gdata()
         if _bar_conflict is not None:
             children['bar:conflict'] = _bar_conflict.to_gdata()
         return yang.gdata.Root(children)
@@ -2004,13 +2181,13 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")), pc1=foo__pc1.from_gdata(n.get_opt_container("pc1")), pc2=foo__pc2.from_gdata(n.get_opt_container("pc2")), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container("empty-presence")), c_dot=foo__c_dot.from_gdata(n.get_opt_container("c.dot")), cc=foo__cc.from_gdata(n.get_opt_container("cc")), foo_conflict=foo__conflict.from_gdata(n.get_opt_container("foo:conflict")), special=foo__special.from_gdata(n.get_opt_list("special")), nested=foo__nested.from_gdata(n.get_opt_container("nested")), bar_conflict=bar__conflict.from_gdata(n.get_opt_container("bar:conflict")))
+            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")), pc1=foo__pc1.from_gdata(n.get_opt_container("pc1")), pc2=foo__pc2.from_gdata(n.get_opt_container("pc2")), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container("empty-presence")), c_dot=foo__c_dot.from_gdata(n.get_opt_container("c.dot")), cc=foo__cc.from_gdata(n.get_opt_container("cc")), foo_conflict=foo__conflict.from_gdata(n.get_opt_container("foo:conflict")), special=foo__special.from_gdata(n.get_opt_list("special")), nested=foo__nested.from_gdata(n.get_opt_container("nested")), li_union=foo__li_union.from_gdata(n.get_opt_list("li-union")), bar_conflict=bar__conflict.from_gdata(n.get_opt_container("bar:conflict")))
         return root()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1", "http://example.com/foo")), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, "pc1", "http://example.com/foo")), pc2=foo__pc2.from_xml(yang.gdata.get_xml_opt_child(n, "pc2", "http://example.com/foo")), empty_presence=foo__empty_presence.from_xml(yang.gdata.get_xml_opt_child(n, "empty-presence", "http://example.com/foo")), c_dot=foo__c_dot.from_xml(yang.gdata.get_xml_opt_child(n, "c.dot", "http://example.com/foo")), cc=foo__cc.from_xml(yang.gdata.get_xml_opt_child(n, "cc", "http://example.com/foo")), foo_conflict=foo__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/foo")), special=foo__special.from_xml(yang.gdata.get_xml_children(n, "special", "http://example.com/foo")), nested=foo__nested.from_xml(yang.gdata.get_xml_opt_child(n, "nested", "http://example.com/foo")), bar_conflict=bar__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/bar")))
+            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1", "http://example.com/foo")), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, "pc1", "http://example.com/foo")), pc2=foo__pc2.from_xml(yang.gdata.get_xml_opt_child(n, "pc2", "http://example.com/foo")), empty_presence=foo__empty_presence.from_xml(yang.gdata.get_xml_opt_child(n, "empty-presence", "http://example.com/foo")), c_dot=foo__c_dot.from_xml(yang.gdata.get_xml_opt_child(n, "c.dot", "http://example.com/foo")), cc=foo__cc.from_xml(yang.gdata.get_xml_opt_child(n, "cc", "http://example.com/foo")), foo_conflict=foo__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/foo")), special=foo__special.from_xml(yang.gdata.get_xml_children(n, "special", "http://example.com/foo")), nested=foo__nested.from_xml(yang.gdata.get_xml_opt_child(n, "nested", "http://example.com/foo")), li_union=foo__li_union.from_xml(yang.gdata.get_xml_children(n, "li-union", "http://example.com/foo")), bar_conflict=bar__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/bar")))
         return root()
 
 
@@ -2045,6 +2222,9 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.
             return yang.gdata.Root(child)
         if point == 'foo:nested':
             child = {'nested': from_json_path_foo__nested(jd, rest_path, op) }
+            return yang.gdata.Root(child)
+        if point == 'foo:li-union':
+            child = {'li-union': from_json_path_foo__li_union(jd, rest_path, op) }
             return yang.gdata.Root(child)
         if point == 'bar:conflict':
             child = {'conflict': from_json_path_bar__conflict(jd, rest_path, op) }
@@ -2087,6 +2267,9 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
     child_nested = jd.get('foo:nested')
     if child_nested is not None and isinstance(child_nested, dict):
         children['nested'] = from_json_foo__nested(child_nested)
+    child_li_union = jd.get('foo:li-union')
+    if child_li_union is not None and isinstance(child_li_union, list):
+        children['li-union'] = from_json_foo__li_union(child_li_union)
     child_bar_conflict = jd.get('bar:conflict')
     if child_bar_conflict is not None and isinstance(child_bar_conflict, dict):
         children['conflict'] = from_json_bar__conflict(child_bar_conflict)
@@ -2130,6 +2313,10 @@ mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
     if child_nested is not None:
         if isinstance(child_nested, yang.gdata.Container):
             children['foo:nested'] = to_json_foo__nested(child_nested)
+    child_li_union = n.children.get('li-union')
+    if child_li_union is not None:
+        if isinstance(child_li_union, yang.gdata.List):
+            children['foo:li-union'] = to_json_foo__li_union(child_li_union)
     child_bar_conflict = n.children.get('conflict')
     if child_bar_conflict is not None:
         if isinstance(child_bar_conflict, yang.gdata.Container):

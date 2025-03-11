@@ -610,9 +610,11 @@ class DNodeInner(DNode):
             res.append("")
 
             list_key_args = list(map(lambda x: _safe_name(x), self.key))
+            list_key_types = {}
             for child in self.children:
                 if isinstance(child, DLeaf):
                     if child.name in self.key:
+                        list_key_types[child.name] = child.type_
                         continue
                     if child.mandatory:
                         list_key_args.append(_unique_safe_name(child.name, child.prefix))
@@ -624,9 +626,26 @@ class DNodeInner(DNode):
             res.append("        for e in self.elements:")
             res.append("            match = True")
             for key in self.key:
-                res.append("            if e.%s != %s:" % (_safe_name(key), _safe_name(key)))
-                res.append("                match = False")
-                res.append("                continue")
+                unique_base_types = set()
+                for t in list_key_types[key].type_:
+                    unique_base_types.add(yang_type_to_acton_type(t))
+                if len(unique_base_types) <= 1:
+                    # Class attribute is a not a "value" Acton type because it
+                    # is either not an union or it an union that was resolved
+                    # to a single builtin type, it has equality check
+                    res.append("            if e.%s != %s:" % (_safe_name(key), _safe_name(key)))
+                    res.append("                match = False")
+                    res.append("                continue")
+                else:
+                    # Union types for mixed unions are Acton "value" types, so
+                    # we need to first attempt to bind them to a more specific type
+                    # TODO: use Acton unions
+                    for t in unique_base_types:
+                        res.append("            e_%s = e.%s" % (_safe_name(key), _safe_name(key)))
+                        res.append("            if isinstance(e_%s, %s) and isinstance(%s, %s):" % (_safe_name(key), t, _safe_name(key), t))
+                        res.append("                if e_%s != %s:" % (_safe_name(key), _safe_name(key)))
+                        res.append("                    match = False")
+                        res.append("                    continue")
             res.append("            if match:")
             res.append("                return e")
             res.append("")
