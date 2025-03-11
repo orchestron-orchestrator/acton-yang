@@ -463,6 +463,19 @@ class Node(value):
         if child != None:
             return child.val
 
+    def get_values(self, name) -> list[value]:
+        if isinstance(self, Inner):
+            for nm,child in self.children.items():
+                if isinstance(child, LeafList) and nm == name:
+                    return child.vals
+        raise ValueError("Cannot find leaf-list child with name " + name)
+
+    def get_opt_values(self, name) -> list[value]:
+        try:
+            return self.get_values(name)
+        except ValueError:
+            return []
+
 extension Node(Eq):
     def __eq__(self, other: Node) -> bool:
         if self.ns != other.ns:
@@ -1400,6 +1413,12 @@ def from_xml_opt_value(n: xml.Node, name: str, ns: ?str) -> ?value:
             return t
     except ValueError:
         return None
+
+def from_xml_value(n: xml.Node, name: str, ns: ?str) -> value:
+    r = from_xml_opt_value(n, name, ns)
+    if r is not None:
+        return r
+    raise ValueError("Cannot find xml child with name " + name)
 
 # plural
 def from_xml_opt_strs(n: xml.Node, name: str, ns: ?str) -> list[str]:
