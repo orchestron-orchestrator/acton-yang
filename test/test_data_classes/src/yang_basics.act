@@ -1,3 +1,4 @@
+import base64
 import json
 import xml
 import yang.adata
@@ -30,6 +31,9 @@ mut def from_json_basics__c__l_union_def_bool(val: value) -> yang.gdata.Leaf:
 mut def from_json_basics__c__l_union_def_enumeration(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf("union", val)
 
+mut def from_json_basics__c__l_binary_def(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("binary", val)
+
 class basics__c(yang.adata.MNode):
     l_str_def: str
     l_str_def_quoted: str
@@ -39,8 +43,9 @@ class basics__c(yang.adata.MNode):
     l_union_def_float: value
     l_union_def_bool: value
     l_union_def_enumeration: value
+    l_binary_def: bytes
 
-    mut def __init__(self, l_str_def: ?str=None, l_str_def_quoted: ?str=None, l_uint64_def: ?int=None, l_union_def_str: ?value=None, l_union_def_int: ?value=None, l_union_def_float: ?value=None, l_union_def_bool: ?value=None, l_union_def_enumeration: ?value=None):
+    mut def __init__(self, l_str_def: ?str=None, l_str_def_quoted: ?str=None, l_uint64_def: ?int=None, l_union_def_str: ?value=None, l_union_def_int: ?value=None, l_union_def_float: ?value=None, l_union_def_bool: ?value=None, l_union_def_enumeration: ?value=None, l_binary_def: ?bytes=None):
         self._ns = "http://example.com/basics"
         if l_str_def != None:
             self.l_str_def = l_str_def
@@ -74,6 +79,10 @@ class basics__c(yang.adata.MNode):
             self.l_union_def_enumeration = l_union_def_enumeration
         else:
             self.l_union_def_enumeration = "unlimited"
+        if l_binary_def != None:
+            self.l_binary_def = l_binary_def
+        else:
+            self.l_binary_def = base64.decode("SGVsbG8gQWN0b24g8J+roQ==".encode())
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
@@ -85,6 +94,7 @@ class basics__c(yang.adata.MNode):
         _l_union_def_float = self.l_union_def_float
         _l_union_def_bool = self.l_union_def_bool
         _l_union_def_enumeration = self.l_union_def_enumeration
+        _l_binary_def = self.l_binary_def
         if _l_str_def is not None:
             children['l_str_def'] = yang.gdata.Leaf('string', _l_str_def)
         if _l_str_def_quoted is not None:
@@ -101,18 +111,20 @@ class basics__c(yang.adata.MNode):
             children['l_union_def_bool'] = yang.gdata.Leaf('union', _l_union_def_bool)
         if _l_union_def_enumeration is not None:
             children['l_union_def_enumeration'] = yang.gdata.Leaf('union', _l_union_def_enumeration)
+        if _l_binary_def is not None:
+            children['l_binary_def'] = yang.gdata.Leaf('binary', _l_binary_def)
         return yang.gdata.Container(children, ns='http://example.com/basics')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> basics__c:
         if n != None:
-            return basics__c(l_str_def=n.get_opt_str("l_str_def"), l_str_def_quoted=n.get_opt_str("l_str_def_quoted"), l_uint64_def=n.get_opt_int("l_uint64_def"), l_union_def_str=n.get_opt_value("l_union_def_str"), l_union_def_int=n.get_opt_value("l_union_def_int"), l_union_def_float=n.get_opt_value("l_union_def_float"), l_union_def_bool=n.get_opt_value("l_union_def_bool"), l_union_def_enumeration=n.get_opt_value("l_union_def_enumeration"))
+            return basics__c(l_str_def=n.get_opt_str("l_str_def"), l_str_def_quoted=n.get_opt_str("l_str_def_quoted"), l_uint64_def=n.get_opt_int("l_uint64_def"), l_union_def_str=n.get_opt_value("l_union_def_str"), l_union_def_int=n.get_opt_value("l_union_def_int"), l_union_def_float=n.get_opt_value("l_union_def_float"), l_union_def_bool=n.get_opt_value("l_union_def_bool"), l_union_def_enumeration=n.get_opt_value("l_union_def_enumeration"), l_binary_def=n.get_opt_bytes("l_binary_def"))
         return basics__c()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> basics__c:
         if n != None:
-            return basics__c(l_str_def=yang.gdata.from_xml_opt_str(n, "l_str_def"), l_str_def_quoted=yang.gdata.from_xml_opt_str(n, "l_str_def_quoted"), l_uint64_def=yang.gdata.from_xml_opt_int(n, "l_uint64_def"), l_union_def_str=yang.gdata.from_xml_opt_value(n, "l_union_def_str"), l_union_def_int=yang.gdata.from_xml_opt_value(n, "l_union_def_int"), l_union_def_float=yang.gdata.from_xml_opt_value(n, "l_union_def_float"), l_union_def_bool=yang.gdata.from_xml_opt_value(n, "l_union_def_bool"), l_union_def_enumeration=yang.gdata.from_xml_opt_value(n, "l_union_def_enumeration"))
+            return basics__c(l_str_def=yang.gdata.from_xml_opt_str(n, "l_str_def"), l_str_def_quoted=yang.gdata.from_xml_opt_str(n, "l_str_def_quoted"), l_uint64_def=yang.gdata.from_xml_opt_int(n, "l_uint64_def"), l_union_def_str=yang.gdata.from_xml_opt_value(n, "l_union_def_str"), l_union_def_int=yang.gdata.from_xml_opt_value(n, "l_union_def_int"), l_union_def_float=yang.gdata.from_xml_opt_value(n, "l_union_def_float"), l_union_def_bool=yang.gdata.from_xml_opt_value(n, "l_union_def_bool"), l_union_def_enumeration=yang.gdata.from_xml_opt_value(n, "l_union_def_enumeration"), l_binary_def=yang.gdata.from_xml_opt_bytes(n, "l_binary_def"))
         return basics__c()
 
 
@@ -136,6 +148,8 @@ mut def from_json_path_basics__c(jd: value, path: list[str]=[], op: ?str="merge"
         if point == 'b:l_union_def_bool' or point == 'l_union_def_bool':
             raise ValueError("Invalid json path to non-inner node")
         if point == 'b:l_union_def_enumeration' or point == 'l_union_def_enumeration':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'b:l_binary_def' or point == 'l_binary_def':
             raise ValueError("Invalid json path to non-inner node")
         raise ValueError("Invalid path")
     elif len(path) == 0:
@@ -180,6 +194,10 @@ mut def from_json_basics__c(jd: dict[str, ?value]) -> yang.gdata.Container:
     child_l_union_def_enumeration = child_l_union_def_enumeration_full if child_l_union_def_enumeration_full is not None else jd.get('l_union_def_enumeration')
     if child_l_union_def_enumeration is not None:
         children['l_union_def_enumeration'] = from_json_basics__c__l_union_def_enumeration(child_l_union_def_enumeration)
+    child_l_binary_def_full = jd.get('b:l_binary_def')
+    child_l_binary_def = child_l_binary_def_full if child_l_binary_def_full is not None else jd.get('l_binary_def')
+    if child_l_binary_def is not None:
+        children['l_binary_def'] = from_json_basics__c__l_binary_def(child_l_binary_def)
     return yang.gdata.Container(children)
 
 mut def to_json_basics__c(n: yang.gdata.Container) -> dict[str, ?value]:
@@ -216,6 +234,10 @@ mut def to_json_basics__c(n: yang.gdata.Container) -> dict[str, ?value]:
     if child_l_union_def_enumeration is not None:
         if isinstance(child_l_union_def_enumeration, yang.gdata.Leaf):
             children['l_union_def_enumeration'] = child_l_union_def_enumeration.val
+    child_l_binary_def = n.children.get('l_binary_def')
+    if child_l_binary_def is not None:
+        if isinstance(child_l_binary_def, yang.gdata.Leaf):
+            children['l_binary_def'] = child_l_binary_def.val
     return children
 
 
