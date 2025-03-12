@@ -5,7 +5,7 @@ import yang
 
 def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str, loose=False) -> None:
     root = yang.compile(yangs)
-    src = root.prdaclass(loose=loose)
+    src = root.prdaclass(loose=loose, include_state=True)
     wf = file.WriteFile(wfcap, filename)
     wf.write(src.encode())
     await async wf.close()
@@ -168,6 +168,17 @@ ys_foo = """module foo {
                 type enumeration {
                     enum "unlimited";
                 }
+            }
+        }
+    }
+    container state {
+        config false;
+        container c1 {
+            leaf l1 {
+                type string;
+            }
+            leaf l2 {
+                type string;
             }
         }
     }

@@ -310,7 +310,7 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')
@@ -318,7 +318,7 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
         res = []
@@ -339,6 +339,8 @@ class DNodeInner(DNode):
         child_names = set()
         child_name_conflicts = set()
         for child in self.children:
+            if include_state == False and child.config == False:
+                continue
             if isinstance(child, DLeaf) and child.is_key():
                 new_children.insert(pos_child_idx, child)
                 pos_child_idx += 1
@@ -360,7 +362,7 @@ class DNodeInner(DNode):
             return _safe_name(unique_name).replace(":", "_")
 
         for child in self.children:
-            res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, gen_json=gen_json, gen_xml=gen_xml))
+            res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -1131,7 +1133,9 @@ class DLeaf(DNodeLeaf):
                 return True
         return False
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True, include_state=False) -> str:
+        if include_state == False and self.config == False:
+            return ""
         fname = "from_json_" + get_path_name(self)
         res = []
         res.append("mut def %s(val: value) -> yang.gdata.Leaf:" % fname)
@@ -1167,7 +1171,9 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True, include_state=False) -> str:
+        if include_state == False and self.config == False:
+            return ""
         fname = "from_json_" + get_path_name(self)
         res = []
         res.append("mut def %s(val: list[value]) -> yang.gdata.LeafList:" % fname)
@@ -1333,7 +1339,7 @@ class SchemaNode(object):
         """
         raise NotImplementedError('SchemaNode prsrc')
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')

@@ -1990,6 +1990,154 @@ mut def to_json_foo__li_union(n: yang.gdata.List) -> list[dict[str, ?value]]:
     return elements
 
 
+mut def from_json_foo__state__c1__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
+mut def from_json_foo__state__c1__l2(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("string", val)
+
+class foo__state__c1(yang.adata.MNode):
+    l1: ?str
+    l2: ?str
+
+    mut def __init__(self, l1: ?str, l2: ?str):
+        self._ns = "http://example.com/foo"
+        self.l1 = l1
+        self.l2 = l2
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _l1 = self.l1
+        _l2 = self.l2
+        if _l1 is not None:
+            children['l1'] = yang.gdata.Leaf('string', _l1)
+        if _l2 is not None:
+            children['l2'] = yang.gdata.Leaf('string', _l2)
+        return yang.gdata.Container(children)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__state__c1:
+        if n != None:
+            return foo__state__c1(l1=n.get_opt_str("l1"), l2=n.get_opt_str("l2"))
+        return foo__state__c1()
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> foo__state__c1:
+        if n != None:
+            return foo__state__c1(l1=yang.gdata.from_xml_opt_str(n, "l1"), l2=yang.gdata.from_xml_opt_str(n, "l2"))
+        return foo__state__c1()
+
+
+mut def from_json_path_foo__state__c1(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:l1' or point == 'l1':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'foo:l2' or point == 'l2':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__state__c1(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__state__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l1_full = jd.get('foo:l1')
+    child_l1 = child_l1_full if child_l1_full is not None else jd.get('l1')
+    if child_l1 is not None:
+        children['l1'] = from_json_foo__state__c1__l1(child_l1)
+    child_l2_full = jd.get('foo:l2')
+    child_l2 = child_l2_full if child_l2_full is not None else jd.get('l2')
+    if child_l2 is not None:
+        children['l2'] = from_json_foo__state__c1__l2(child_l2)
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__state__c1(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_l1 = n.children.get('l1')
+    if child_l1 is not None:
+        if isinstance(child_l1, yang.gdata.Leaf):
+            children['l1'] = child_l1.val
+    child_l2 = n.children.get('l2')
+    if child_l2 is not None:
+        if isinstance(child_l2, yang.gdata.Leaf):
+            children['l2'] = child_l2.val
+    return children
+
+
+class foo__state(yang.adata.MNode):
+    c1: foo__state__c1
+
+    mut def __init__(self, c1: ?foo__state__c1=None):
+        self._ns = "http://example.com/foo"
+        if c1 is not None:
+            self.c1 = c1
+        else:
+            self.c1 = foo__state__c1()
+        self_c1 = self.c1
+        if self_c1 is not None:
+            self_c1._parent = self
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _c1 = self.c1
+        if _c1 is not None:
+            children['c1'] = _c1.to_gdata()
+        return yang.gdata.Container(children, ns='http://example.com/foo')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__state:
+        if n != None:
+            return foo__state(c1=foo__state__c1.from_gdata(n.get_opt_container("c1")))
+        return foo__state()
+
+    @staticmethod
+    mut def from_xml(n: ?xml.Node) -> foo__state:
+        if n != None:
+            return foo__state(c1=foo__state__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1")))
+        return foo__state()
+
+
+mut def from_json_path_foo__state(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'foo:c1' or point == 'c1':
+            child = {'c1': from_json_path_foo__state__c1(jd, rest_path, op) }
+            return yang.gdata.Container(child)
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__state(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__state(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_c1_full = jd.get('foo:c1')
+    child_c1 = child_c1_full if child_c1_full is not None else jd.get('c1')
+    if child_c1 is not None and isinstance(child_c1, dict):
+        children['c1'] = from_json_foo__state__c1(child_c1)
+    return yang.gdata.Container(children)
+
+mut def to_json_foo__state(n: yang.gdata.Container) -> dict[str, ?value]:
+    children = {}
+    child_c1 = n.children.get('c1')
+    if child_c1 is not None:
+        if isinstance(child_c1, yang.gdata.Container):
+            children['c1'] = to_json_foo__state__c1(child_c1)
+    return children
+
+
 mut def from_json_bar__conflict__foo(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf("string", val)
 
@@ -2064,9 +2212,10 @@ class root(yang.adata.MNode):
     special: foo__special
     nested: foo__nested
     li_union: foo__li_union
+    state: foo__state
     bar_conflict: bar__conflict
 
-    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, foo_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, li_union: list[foo__li_union_entry]=[], bar_conflict: ?bar__conflict=None):
+    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, foo_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, li_union: list[foo__li_union_entry]=[], state: ?foo__state=None, bar_conflict: ?bar__conflict=None):
         self._ns = ""
         if c1 is not None:
             self.c1 = c1
@@ -2119,6 +2268,13 @@ class root(yang.adata.MNode):
             self_nested._parent = self
         self.li_union = foo__li_union(elements=li_union)
         self.li_union._parent = self
+        if state is not None:
+            self.state = state
+        else:
+            self.state = foo__state()
+        self_state = self.state
+        if self_state is not None:
+            self_state._parent = self
         if bar_conflict is not None:
             self.bar_conflict = bar_conflict
         else:
@@ -2154,6 +2310,7 @@ class root(yang.adata.MNode):
         _special = self.special
         _nested = self.nested
         _li_union = self.li_union
+        _state = self.state
         _bar_conflict = self.bar_conflict
         if _c1 is not None:
             children['c1'] = _c1.to_gdata()
@@ -2175,6 +2332,8 @@ class root(yang.adata.MNode):
             children['nested'] = _nested.to_gdata()
         if _li_union is not None:
             children['li-union'] = _li_union.to_gdata()
+        if _state is not None:
+            children['state'] = _state.to_gdata()
         if _bar_conflict is not None:
             children['bar:conflict'] = _bar_conflict.to_gdata()
         return yang.gdata.Root(children)
@@ -2182,13 +2341,13 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")), pc1=foo__pc1.from_gdata(n.get_opt_container("pc1")), pc2=foo__pc2.from_gdata(n.get_opt_container("pc2")), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container("empty-presence")), c_dot=foo__c_dot.from_gdata(n.get_opt_container("c.dot")), cc=foo__cc.from_gdata(n.get_opt_container("cc")), foo_conflict=foo__conflict.from_gdata(n.get_opt_container("foo:conflict")), special=foo__special.from_gdata(n.get_opt_list("special")), nested=foo__nested.from_gdata(n.get_opt_container("nested")), li_union=foo__li_union.from_gdata(n.get_opt_list("li-union")), bar_conflict=bar__conflict.from_gdata(n.get_opt_container("bar:conflict")))
+            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")), pc1=foo__pc1.from_gdata(n.get_opt_container("pc1")), pc2=foo__pc2.from_gdata(n.get_opt_container("pc2")), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container("empty-presence")), c_dot=foo__c_dot.from_gdata(n.get_opt_container("c.dot")), cc=foo__cc.from_gdata(n.get_opt_container("cc")), foo_conflict=foo__conflict.from_gdata(n.get_opt_container("foo:conflict")), special=foo__special.from_gdata(n.get_opt_list("special")), nested=foo__nested.from_gdata(n.get_opt_container("nested")), li_union=foo__li_union.from_gdata(n.get_opt_list("li-union")), state=foo__state.from_gdata(n.get_opt_container("state")), bar_conflict=bar__conflict.from_gdata(n.get_opt_container("bar:conflict")))
         return root()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1", "http://example.com/foo")), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, "pc1", "http://example.com/foo")), pc2=foo__pc2.from_xml(yang.gdata.get_xml_opt_child(n, "pc2", "http://example.com/foo")), empty_presence=foo__empty_presence.from_xml(yang.gdata.get_xml_opt_child(n, "empty-presence", "http://example.com/foo")), c_dot=foo__c_dot.from_xml(yang.gdata.get_xml_opt_child(n, "c.dot", "http://example.com/foo")), cc=foo__cc.from_xml(yang.gdata.get_xml_opt_child(n, "cc", "http://example.com/foo")), foo_conflict=foo__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/foo")), special=foo__special.from_xml(yang.gdata.get_xml_children(n, "special", "http://example.com/foo")), nested=foo__nested.from_xml(yang.gdata.get_xml_opt_child(n, "nested", "http://example.com/foo")), li_union=foo__li_union.from_xml(yang.gdata.get_xml_children(n, "li-union", "http://example.com/foo")), bar_conflict=bar__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/bar")))
+            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1", "http://example.com/foo")), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, "pc1", "http://example.com/foo")), pc2=foo__pc2.from_xml(yang.gdata.get_xml_opt_child(n, "pc2", "http://example.com/foo")), empty_presence=foo__empty_presence.from_xml(yang.gdata.get_xml_opt_child(n, "empty-presence", "http://example.com/foo")), c_dot=foo__c_dot.from_xml(yang.gdata.get_xml_opt_child(n, "c.dot", "http://example.com/foo")), cc=foo__cc.from_xml(yang.gdata.get_xml_opt_child(n, "cc", "http://example.com/foo")), foo_conflict=foo__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/foo")), special=foo__special.from_xml(yang.gdata.get_xml_children(n, "special", "http://example.com/foo")), nested=foo__nested.from_xml(yang.gdata.get_xml_opt_child(n, "nested", "http://example.com/foo")), li_union=foo__li_union.from_xml(yang.gdata.get_xml_children(n, "li-union", "http://example.com/foo")), state=foo__state.from_xml(yang.gdata.get_xml_opt_child(n, "state", "http://example.com/foo")), bar_conflict=bar__conflict.from_xml(yang.gdata.get_xml_opt_child(n, "conflict", "http://example.com/bar")))
         return root()
 
 
@@ -2226,6 +2385,9 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.
             return yang.gdata.Root(child)
         if point == 'foo:li-union':
             child = {'li-union': from_json_path_foo__li_union(jd, rest_path, op) }
+            return yang.gdata.Root(child)
+        if point == 'foo:state':
+            child = {'state': from_json_path_foo__state(jd, rest_path, op) }
             return yang.gdata.Root(child)
         if point == 'bar:conflict':
             child = {'conflict': from_json_path_bar__conflict(jd, rest_path, op) }
@@ -2271,6 +2433,9 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
     child_li_union = jd.get('foo:li-union')
     if child_li_union is not None and isinstance(child_li_union, list):
         children['li-union'] = from_json_foo__li_union(child_li_union)
+    child_state = jd.get('foo:state')
+    if child_state is not None and isinstance(child_state, dict):
+        children['state'] = from_json_foo__state(child_state)
     child_bar_conflict = jd.get('bar:conflict')
     if child_bar_conflict is not None and isinstance(child_bar_conflict, dict):
         children['conflict'] = from_json_bar__conflict(child_bar_conflict)
@@ -2318,6 +2483,10 @@ mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
     if child_li_union is not None:
         if isinstance(child_li_union, yang.gdata.List):
             children['foo:li-union'] = to_json_foo__li_union(child_li_union)
+    child_state = n.children.get('state')
+    if child_state is not None:
+        if isinstance(child_state, yang.gdata.Container):
+            children['foo:state'] = to_json_foo__state(child_state)
     child_bar_conflict = n.children.get('conflict')
     if child_bar_conflict is not None:
         if isinstance(child_bar_conflict, yang.gdata.Container):
