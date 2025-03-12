@@ -327,6 +327,7 @@ class DNodeInner(DNode):
         """
         res = []
         if top:
+            res.append("import base64")
             res.append("import json")
             res.append("import xml")
             res.append("import yang.adata")
@@ -2202,6 +2203,10 @@ def prsrc_literal(ytype: str, value: str) -> str:
         return '"' + value + '"'
     elif ytype in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
         return value
+    elif ytype == "binary":
+        # Binary values are encoded as base64 strings in YANG and NETCONF, but
+        # stored as Acton bytes, so we need to decode it first
+        return "base64.decode(\"%s\".encode())" % value
     elif ytype == "string":
         return '"' + value.replace('"', '\\"') + '"'
     elif ytype == "union":
