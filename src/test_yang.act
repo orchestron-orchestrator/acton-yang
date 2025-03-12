@@ -248,6 +248,36 @@ def _test_parse_snode_pryang_twice():
     yy2 = ys2.pryang()
     testing.assertEqual(yy1, yy2, "YANG round trip^2 failed\n" + yy1 + "\n===\n" + yy2)
 
+def _test_parse_pryang_non_idempotent():
+    # YANG -> Statement -> SchemaNode -> Statement -> YANG -> Statement -> SchemaNode -> Statement -> YANG
+    # The single quoted keyword arguments will be converted to use double
+    # quotes after a single roundtrip, as we do not preserve the quotes used in
+    # our schema representation. This is fine, as long as the resulting YANG is
+    # still valid - \ is escaped as \\.
+    original = """module test_yang {
+    yang-version "1.1";
+    namespace "http://example.com/test_yang";
+    prefix "test_yang";
+    container c1 {
+        leaf l1 {
+            type string {
+                pattern 'example\\.com';
+            }
+            description 'leaf with single quote';
+        }
+    }
+}"""
+    n1 = yang.schema_from_src(original)
+    ys1 = n1.to_statement()
+    yy1 = ys1.pryang()
+    print(yy1, err=True)
+    testing.assertNotEqual(original, yy1, "YANG round trip not failed")
+    n2 = yang.schema_from_src(yy1)
+    ys2 = n2.to_statement()
+    yy2 = ys2.pryang()
+    testing.assertEqual(yy1, yy2, "YANG round trip^2 failed")
+    return yy1
+
 def _test_prsrc():
     s = yang.schema_from_src(test_yang)
     return s.prsrc()
