@@ -1145,42 +1145,6 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("        self.exts.extend(refine.exts)")
             res.append("")
 
-        # -- prsrc
-        res.append("    def prsrc(self, indent=0):")
-        res.append('        """Print Acton source of this node"""')
-        res.append("        res = []")
-
-        res.append("        self_arg = self._get_arg()")
-        res.append("        if self_arg is not None:")
-        res.append("            args = [\"'\" + self_arg + \"'\"]")
-        res.append("        else:")
-        res.append("            args = []")
-        res.append("        attrs_text = _prsrc_attrs(indent, self.get_attrs())")
-        res.append("        if len(attrs_text) > 0:")
-        res.append("            args.append(_prsrc_attrs(indent, self.get_attrs()))")
-        if have_children:
-            res.append("        if len(self.children) > 0:")
-            res.append("            args.append(\"children=[\")")
-        res.append("        args_text = \", \".join(args)")
-        text_prscr_attrs = "        text_line = _ind(indent) + self._get_class_name() + \"(\" + args_text"
-        if not have_children:
-            text_prscr_attrs += " + \")\""
-        res.append(text_prscr_attrs)
-        if have_children:
-            res.append("        if len(self.children) == 0:")
-            res.append("            text_line += ')'")
-        res.append("        res.append(text_line)")
-        if have_children:
-            res.append("        if len(self.children) > 0:")
-            res.append("            child_res = []")
-            res.append("            for child in self.children:")
-            res.append("                child_res.append(child.prsrc(indent+1))")
-            res.append("            res.append(\",\\n\".join(child_res))")
-            res.append("            res.append(_ind(indent) + \"])\")")
-
-        res.append("        return \"\\n\".join(res)")
-        res.append("")
-
         manual_methods = []
         # == Statement specific methods ================================
         for method_name in snode_methods.get_def(stmt_name, {}):
