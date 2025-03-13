@@ -67,7 +67,7 @@ def _test_mandatory2():
 #         presence "p";
 #         container foo {
 #             leaf l1 {
-#                 type string;
+#                 type binary;
 #             }
 #         }
 #     }
@@ -101,7 +101,7 @@ def _test_foo_from_xml_full():
 </c1>
 <pc1 xmlns="http://example.com/foo">
   <foo>
-    <l1>bar</l1>
+    <l1>SGVsbG8gQWN0b24g8J+roQ==</l1>
   </foo>
 </pc1>
 <pc2 xmlns="http://example.com/foo">
@@ -127,10 +127,17 @@ def _test_foo_from_xml_full():
 <li-union xmlns="http://example.com/foo">
   <k1>first</k1>
   <k2>4</k2>
+  <k3>SGVsbG8gQWN0b24g8J+roQ==</k3>
 </li-union>
 <li-union xmlns="http://example.com/foo">
   <k1>second</k1>
   <k2>unlimited</k2>
+  <k3>SGVsbG8gQWN0b24g8J+roQ==</k3>
+</li-union>
+<li-union xmlns="http://example.com/foo">
+  <k1>third</k1>
+  <k2>aGk=</k2>
+  <k3>SGVsbG8gQWN0b24g8J+roQ==</k3>
 </li-union>
 <conflict xmlns="http://example.com/bar">
   <foo>foo-bar</foo>
@@ -150,7 +157,7 @@ def _test_foo_from_xml1():
     xml_text = """<data>
 <pc1 xmlns="http://example.com/foo">
   <foo>
-    <l1>bar</l1>
+    <l1>SGVsbG8gQWN0b24g8J+roQ==</l1>
   </foo>
 </pc1>
 </data>"""
@@ -257,6 +264,49 @@ def _test_foo_from_xml_dots():
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     #testing.assertEqual(xml_in.encode(), xml_out.encode())
     return xml_out_text
+
+def _test_foo_from_xml_li_union():
+    xml_text = """<data>
+<li-union xmlns="http://example.com/foo">
+  <k1>first</k1>
+  <k2>4</k2>
+  <k3>SGVsbG8gQWN0b24g8J+roQ==</k3>
+</li-union>
+<li-union xmlns="http://example.com/foo">
+  <k1>second</k1>
+  <k2>unlimited</k2>
+  <k3>SGVsbG8gQWN0b24g8J+roQ==</k3>
+</li-union>
+<li-union xmlns="http://example.com/foo">
+  <k1>third</k1>
+  <k2>aGk=</k2>
+  <k3>SGVsbG8gQWN0b24g8J+roQ==</k3>
+</li-union>
+</data>"""
+    xml_in = xml.decode(xml_text)
+    root = yang_foo_root.from_xml(xml_in)
+
+    li1 = root.li_union.elements[0]
+    testing.assertEqual(li1.k1, "first")
+    k2 = li1.k2
+    if isinstance(k2, int):
+        testing.assertEqual(k2, 4)
+    testing.assertEqual(li1.k3, "Hello Acton 🫡".encode())
+
+    li2 = root.li_union.elements[1]
+    testing.assertEqual(li2.k1, "second")
+    k2 = li2.k2
+    if isinstance(k2, str):
+        testing.assertEqual(k2, "unlimited")
+    testing.assertEqual(li1.k3, "Hello Acton 🫡".encode())
+
+    li3 = root.li_union.elements[2]
+    testing.assertEqual(li3.k1, "third")
+    k2 = li3.k2
+    # TODO: fix this once binary is recognized as part of the union!
+    if isinstance(k2, str):
+        testing.assertEqual(k2, "aGk=")
+    testing.assertEqual(li1.k3, "Hello Acton 🫡".encode())
 
 def _test_list_create_idempotency():
     r = yang_foo_root()
@@ -423,7 +473,7 @@ jd1 = {
     },
     "foo:pc1": {
         "foo": {
-            "l1": "bar"
+            "l1": ["SGVsbG8gQWN0b24g8J+roQ=="]
         }
     },
     "foo:c.dot": {

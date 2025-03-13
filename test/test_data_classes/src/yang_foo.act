@@ -342,33 +342,34 @@ mut def to_json_foo__c1(n: yang.gdata.Container) -> dict[str, ?value]:
     return children
 
 
-mut def from_json_foo__pc1__foo__l1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf("string", val)
+mut def from_json_foo__pc1__foo__l1(val: list[value]) -> yang.gdata.LeafList:
+    return yang.gdata.LeafList(val)
 
 class foo__pc1__foo(yang.adata.MNode):
-    l1: ?str
+    l1: list[bytes]
 
-    mut def __init__(self, l1: ?str):
+    mut def __init__(self, l1: ?list[bytes]=None):
         self._ns = "http://example.com/foo"
-        self.l1 = l1
+        if l1 is not None:
+            self.l1 = l1
+        else:
+            self.l1 = []
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('string', _l1)
+        children['l1'] = yang.gdata.LeafList(self.l1)
         return yang.gdata.Container(children)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc1__foo:
         if n != None:
-            return foo__pc1__foo(l1=n.get_opt_str("l1"))
+            return foo__pc1__foo(l1=n.get_opt_bytess("l1"))
         return foo__pc1__foo()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> foo__pc1__foo:
         if n != None:
-            return foo__pc1__foo(l1=yang.gdata.from_xml_opt_str(n, "l1"))
+            return foo__pc1__foo(l1=yang.gdata.from_xml_opt_bytess(n, "l1"))
         return foo__pc1__foo()
 
 
@@ -392,7 +393,7 @@ mut def from_json_foo__pc1__foo(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
     child_l1_full = jd.get('foo:l1')
     child_l1 = child_l1_full if child_l1_full is not None else jd.get('l1')
-    if child_l1 is not None:
+    if child_l1 is not None and isinstance(child_l1, list):
         children['l1'] = from_json_foo__pc1__foo__l1(child_l1)
     return yang.gdata.Container(children)
 
@@ -400,8 +401,8 @@ mut def to_json_foo__pc1__foo(n: yang.gdata.Container) -> dict[str, ?value]:
     children = {}
     child_l1 = n.children.get('l1')
     if child_l1 is not None:
-        if isinstance(child_l1, yang.gdata.Leaf):
-            children['l1'] = child_l1.val
+        if isinstance(child_l1, yang.gdata.LeafList):
+            children['l1'] = child_l1.vals
     return children
 
 
@@ -1825,32 +1826,40 @@ mut def from_json_foo__li_union__k1(val: value) -> yang.gdata.Leaf:
 mut def from_json_foo__li_union__k2(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf("union", val)
 
+mut def from_json_foo__li_union__k3(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf("binary", val)
+
 class foo__li_union_entry(yang.adata.MNode):
     k1: str
     k2: value
+    k3: bytes
 
-    mut def __init__(self, k1: str, k2: value):
+    mut def __init__(self, k1: str, k2: value, k3: bytes):
         self._ns = "http://example.com/foo"
         self.k1 = k1
         self.k2 = k2
+        self.k3 = k3
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
         _k1 = self.k1
         _k2 = self.k2
+        _k3 = self.k3
         if _k1 is not None:
             children['k1'] = yang.gdata.Leaf('string', _k1)
         if _k2 is not None:
             children['k2'] = yang.gdata.Leaf('union', _k2)
-        return yang.gdata.ListElement([yang.gdata.yang_str(self.k1), yang.gdata.yang_str(self.k2)], children)
+        if _k3 is not None:
+            children['k3'] = yang.gdata.Leaf('binary', _k3)
+        return yang.gdata.ListElement([yang.gdata.yang_str(self.k1), yang.gdata.yang_str(self.k2), yang.gdata.yang_str(self.k3)], children)
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_union_entry:
-        return foo__li_union_entry(k1=n.get_str("k1"), k2=n.get_value("k2"))
+        return foo__li_union_entry(k1=n.get_str("k1"), k2=n.get_value("k2"), k3=n.get_bytes("k3"))
 
     @staticmethod
     mut def from_xml(n: xml.Node) -> foo__li_union_entry:
-        return foo__li_union_entry(k1=yang.gdata.from_xml_str(n, "k1"), k2=yang.gdata.from_xml_value(n, "k2"))
+        return foo__li_union_entry(k1=yang.gdata.from_xml_str(n, "k1"), k2=yang.gdata.from_xml_value(n, "k2"), k3=yang.gdata.from_xml_bytes(n, "k3"))
 
 class foo__li_union(yang.adata.MNode):
     elements: list[foo__li_union_entry]
@@ -1859,12 +1868,17 @@ class foo__li_union(yang.adata.MNode):
         self._name = 'li-union'
         self.elements = elements
 
-    mut def create(self, k1, k2):
+    mut def create(self, k1, k2, k3):
         for e in self.elements:
             match = True
             if e.k1 != k1:
                 match = False
                 continue
+            e_k2 = e.k2
+            if isinstance(e_k2, bytes) and isinstance(k2, bytes):
+                if e_k2 != k2:
+                    match = False
+                    continue
             e_k2 = e.k2
             if isinstance(e_k2, str) and isinstance(k2, str):
                 if e_k2 != k2:
@@ -1875,10 +1889,13 @@ class foo__li_union(yang.adata.MNode):
                 if e_k2 != k2:
                     match = False
                     continue
+            if e.k3 != k3:
+                match = False
+                continue
             if match:
                 return e
 
-        res = foo__li_union_entry(k1, k2)
+        res = foo__li_union_entry(k1, k2, k3)
         self.elements.append(res)
         return res
 
@@ -1888,7 +1905,7 @@ class foo__li_union(yang.adata.MNode):
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.ListElement):
                 elements.append(e_gdata)
-        return yang.gdata.List(['k1', 'k2'], elements, ns='http://example.com/foo')
+        return yang.gdata.List(['k1', 'k2', 'k3'], elements, ns='http://example.com/foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__li_union_entry]:
@@ -1922,7 +1939,7 @@ mut def from_json_path_foo__li_union_element(jd: value, path: list[str]=[], op: 
         point = path[1]
         rest_path = path[2:]
         children: dict[str, yang.gdata.Node] = {}
-        for idx, key in enumerate(['k1', 'k2']):
+        for idx, key in enumerate(['k1', 'k2', 'k3']):
             children[key] = yang.gdata.Leaf("str", keys[idx])
         return yang.gdata.ListElement(keys, children)
     raise ValueError("unreachable - no keys to list element")
@@ -1935,7 +1952,7 @@ mut def from_json_path_foo__li_union(jd: value, path: list[str]=[], op: ?str="me
         # Check that all keys are present in payload.
         # If present, they must equal the keys in the path
         # If not present, fill in from path
-        for key in ['k1', 'k2']:
+        for key in ['k1', 'k2', 'k3']:
             if key not in jd_dict:
                 jd_dict[key] = keys.pop(0)
             else:
@@ -1947,9 +1964,9 @@ mut def from_json_path_foo__li_union(jd: value, path: list[str]=[], op: ?str="me
             elements.append(element)
         elif op == "remove":
             elements.append(yang.gdata.AbsentListElement(element.key_vals))
-        return yang.gdata.List(['k1', 'k2'], elements)
+        return yang.gdata.List(['k1', 'k2', 'k3'], elements)
     elif len(path) > 1:
-        return yang.gdata.List(['k1', 'k2'], [from_json_path_foo__li_union_element(jd, path, op)])
+        return yang.gdata.List(['k1', 'k2', 'k3'], [from_json_path_foo__li_union_element(jd, path, op)])
     raise ValueError("Unable to resolve path, no keys provided")
 
 mut def from_json_foo__li_union_element(jd: dict[str, ?value]) -> yang.gdata.ListElement:
@@ -1962,14 +1979,18 @@ mut def from_json_foo__li_union_element(jd: dict[str, ?value]) -> yang.gdata.Lis
     child_k2 = child_k2_full if child_k2_full is not None else jd.get('k2')
     if child_k2 is not None:
         children['k2'] = from_json_foo__li_union__k2(child_k2)
-    return yang.gdata.ListElement([str(child_k1 if child_k1 is not None else ""), str(child_k2 if child_k2 is not None else "")], children)
+    child_k3_full = jd.get('foo:k3')
+    child_k3 = child_k3_full if child_k3_full is not None else jd.get('k3')
+    if child_k3 is not None:
+        children['k3'] = from_json_foo__li_union__k3(child_k3)
+    return yang.gdata.ListElement([str(child_k1 if child_k1 is not None else ""), str(child_k2 if child_k2 is not None else ""), str(child_k3 if child_k3 is not None else "")], children)
 
 mut def from_json_foo__li_union(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = []
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__li_union_element(e))
-    return yang.gdata.List(keys=['k1', 'k2'], elements=elements, user_order=False, ns=None, prefix=None)
+    return yang.gdata.List(keys=['k1', 'k2', 'k3'], elements=elements, user_order=False, ns=None, prefix=None)
 
 mut def to_json_foo__li_union_element(n: yang.gdata.ListElement) -> dict[str, ?value]:
     children = {}
@@ -1981,6 +2002,10 @@ mut def to_json_foo__li_union_element(n: yang.gdata.ListElement) -> dict[str, ?v
     if child_k2 is not None:
         if isinstance(child_k2, yang.gdata.Leaf):
             children['k2'] = child_k2.val
+    child_k3 = n.children.get('k3')
+    if child_k3 is not None:
+        if isinstance(child_k3, yang.gdata.Leaf):
+            children['k3'] = child_k3.val
     return children
 
 mut def to_json_foo__li_union(n: yang.gdata.List) -> list[dict[str, ?value]]:
