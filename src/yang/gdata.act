@@ -182,6 +182,9 @@ def either(a: ?str, b: ?str):
         return b
 
 def yang_str(v) -> str:
+    if isinstance(v, bytes):
+        s = base64.encode(v).decode()
+        return s
     s = str(v)
     if isinstance(v, bool):
         s = s.lower()
@@ -324,7 +327,8 @@ class Node(value):
         elif isinstance(self, LeafList):
             xml = ""
             for val in self.vals:
-                xml += _indent() + fmt_tag(name, either(self.ns, cns)) + str(val) + fmt_tag(name, close=True) + _nl()
+                v = yang_str(val)
+                xml += _indent() + fmt_tag(name, either(self.ns, cns)) + v + fmt_tag(name, close=True) + _nl()
             return xml
         elif isinstance(self, Absent):
             return _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op, end=True) + _nl()
@@ -2289,7 +2293,9 @@ def _test_to_xmlstr():
                     "n4": Leaf("int", 4),
                 }),
             ]),
-            "b": Leaf("bool", False)
+            "b": Leaf("bool", False),
+            "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
+            "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"])
         })
     }, ns="http://example.com/acme")
 
