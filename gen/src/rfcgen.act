@@ -1184,7 +1184,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("        if len(self.children) > 0:")
             res.append("            args.append(\"children=[\")")
         res.append("        args_text = \", \".join(args)")
-        text_prscr_attrs = "        text_line = _ind(indent) + \"%s(\" + args_text" % (_class_name(stmt_name))
+        text_prscr_attrs = "        text_line = _ind(indent) + self._get_class_name() + \"(\" + args_text"
         if not have_children:
             text_prscr_attrs += " + \")\""
         res.append(text_prscr_attrs)
@@ -1236,6 +1236,10 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("    def __str__(self):")
         strret = "\"%s \" + self.%s" % (_class_name(stmt_name), _attr_name(arg_name)) if arg_name is not None else "\"%s\"" % (_class_name(stmt_name))
         res.append("        return " + strret)
+        res.append("")
+
+        res.append("    def _get_class_name(self) -> str:")
+        res.append("        return \"%s\"" % _class_name(stmt_name))
         res.append("")
 
         res.append("    def _get_argname(self) -> ?str:")
