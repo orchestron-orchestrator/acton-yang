@@ -1,3 +1,4 @@
+from yang.schema import *
 import base64
 import json
 import xml
@@ -2540,3 +2541,293 @@ mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
             children['bar:conflict'] = to_json_bar__conflict(child_bar_conflict)
     return children
 
+def src_yang():
+    res = []
+    res.append("""module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    grouping g1 {
+        leaf l1 {
+            type string;
+        }
+        leaf l2 {
+            type string;
+        }
+    }
+    container c1 {
+        leaf l1 {
+            type string;
+        }
+        leaf l3 {
+            type uint64;
+        }
+        leaf l_empty {
+            type empty;
+        }
+        list li {
+            key name;
+            leaf name {
+                type string;
+            }
+            leaf val {
+                type string;
+            }
+        }
+        leaf-list ll_uint64 {
+            type uint64;
+        }
+        leaf-list ll_str {
+            type string;
+        }
+    }
+    container pc1 {
+        presence "p";
+        container foo {
+            leaf-list l1 {
+                type binary;
+            }
+        }
+    }
+    container pc2 {
+        presence "p";
+        container foo {
+            leaf l_mandatory {
+                type string;
+                mandatory true;
+            }
+        }
+    }
+    container empty-presence {
+        presence "nothing else here";
+    }
+    container c.dot {
+        leaf l.dot1 {
+            type string;
+        }
+    }
+    container cc {
+        choice cake-or-death {
+            case cake {
+                leaf cake {
+                    type string;
+                    mandatory true;
+                }
+            }
+            case death {
+                list death {
+                    key name;
+                    leaf name {
+                        type string;
+                    }
+                }
+            }
+            mandatory true;
+        }
+    }
+    container conflict {
+        leaf foo {
+            type string;
+        }
+        container inner {
+            presence "inner presence";
+        }
+    }
+    list special {
+        key yes;
+        leaf yes {
+            type boolean;
+        }
+    }
+    container nested {
+        container inner {
+            leaf foo {
+                type string;
+            }
+            list li1 {
+                key name;
+                leaf name {
+                    type string;
+                }
+                leaf bar {
+                    type string;
+                }
+                list li2 {
+                    key "key1 key2";
+                    leaf key1 {
+                        type string;
+                    }
+                    leaf key2 {
+                        type string;
+                    }
+                    leaf baz {
+                        type string;
+                    }
+                }
+            }
+        }
+    }
+    list li-union {
+        key "k1 k2 k3";
+        leaf k1 {
+            type string;
+        }
+        leaf k2 {
+            type union {
+                type uint32;
+                type enumeration {
+                    enum "unlimited";
+                }
+                type binary;
+            }
+        }
+        leaf k3 {
+            type binary;
+        }
+    }
+    container state {
+        config false;
+        container c1 {
+            uses g1;
+        }
+    }
+}""")
+    res.append("""module bar {
+    yang-version "1.1";
+    namespace "http://example.com/bar";
+    prefix "bar";
+    import foo {
+        prefix "foo";
+    }
+    augment /foo:c1 {
+        // create a conflict with /foo:c1/l1
+        uses foo:g1;
+    }
+    augment /foo:c.dot {
+        leaf l.dot2 {
+            type string;
+        }
+    }
+    container conflict {
+        leaf foo {
+            type string;
+        }
+    }
+    augment /foo:conflict {
+        leaf foo {
+            type string;
+        }
+        container inner {
+            presence "inner presence from bar";
+        }
+    }
+}""")
+    return res
+
+def src_schema():
+    res = {}
+    res["foo"] = Module('foo', yang_version=1.1, namespace='http://example.com/foo', prefix='foo', children=[
+    Grouping('g1', children=[
+        Leaf('l1', type_=Type('string')),
+        Leaf('l2', type_=Type('string'))
+    ]),
+    Container('c1', children=[
+        Leaf('l1', type_=Type('string')),
+        Leaf('l3', type_=Type('uint64')),
+        Leaf('l_empty', type_=Type('empty')),
+        List('li', key='name', children=[
+            Leaf('name', type_=Type('string')),
+            Leaf('val', type_=Type('string'))
+        ]),
+        LeafList('ll_uint64', type_=Type('uint64')),
+        LeafList('ll_str', type_=Type('string')),
+        Leaf('l1', type_=Type('string')),
+        Leaf('l2', type_=Type('string'))
+    ]),
+    Container('pc1', presence='p', children=[
+        Container('foo', children=[
+            LeafList('l1', type_=Type('binary'))
+        ])
+    ]),
+    Container('pc2', presence='p', children=[
+        Container('foo', children=[
+            Leaf('l_mandatory', type_=Type('string'), mandatory=True)
+        ])
+    ]),
+    Container('empty-presence', presence='nothing else here'),
+    Container('c.dot', children=[
+        Leaf('l.dot1', type_=Type('string')),
+        Leaf('l.dot2', type_=Type('string'))
+    ]),
+    Container('cc', children=[
+        Choice('cake-or-death', mandatory=True, children=[
+            Case('cake', children=[
+                Leaf('cake', type_=Type('string'), mandatory=True)
+            ]),
+            Case('death', children=[
+                List('death', key='name', children=[
+                    Leaf('name', type_=Type('string'))
+                ])
+            ])
+        ])
+    ]),
+    Container('conflict', children=[
+        Leaf('foo', type_=Type('string')),
+        Container('inner', presence='inner presence'),
+        Leaf('foo', type_=Type('string')),
+        Container('inner', presence='inner presence from bar')
+    ]),
+    List('special', key='yes', children=[
+        Leaf('yes', type_=Type('boolean'))
+    ]),
+    Container('nested', children=[
+        Container('inner', children=[
+            Leaf('foo', type_=Type('string')),
+            List('li1', key='name', children=[
+                Leaf('name', type_=Type('string')),
+                Leaf('bar', type_=Type('string')),
+                List('li2', key='key1 key2', children=[
+                    Leaf('key1', type_=Type('string')),
+                    Leaf('key2', type_=Type('string')),
+                    Leaf('baz', type_=Type('string'))
+                ])
+            ])
+        ])
+    ]),
+    List('li-union', key='k1 k2 k3', children=[
+        Leaf('k1', type_=Type('string')),
+        Leaf('k2', type_=Type('union', type_=[
+        Type('uint32'),
+        Type('enumeration', enum=[
+                Enum('unlimited')
+            ]),
+        Type('binary')
+    ])),
+        Leaf('k3', type_=Type('binary'))
+    ]),
+    Container('state', config=False, children=[
+        Container('c1', children=[
+            Leaf('l1', type_=Type('string')),
+            Leaf('l2', type_=Type('string'))
+        ])
+    ])
+])
+    res["bar"] = Module('bar', yang_version=1.1, namespace='http://example.com/bar', prefix='bar', import_=[
+        Import('foo', prefix='foo')
+    ], augment=[
+        Augment('/foo:c1', children=[
+            Uses('foo:g1')
+        ]),
+        Augment('/foo:c.dot', children=[
+            Leaf('l.dot2', type_=Type('string'))
+        ]),
+        Augment('/foo:conflict', children=[
+            Leaf('foo', type_=Type('string')),
+            Container('inner', presence='inner presence from bar')
+        ])
+    ], children=[
+    Container('conflict', children=[
+        Leaf('foo', type_=Type('string'))
+    ])
+])
+    return res

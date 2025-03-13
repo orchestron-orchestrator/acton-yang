@@ -4,10 +4,25 @@ import file
 import yang
 
 def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str, loose=False) -> None:
-    root = yang.compile(yangs)
-    src = root.prdaclass(loose=loose, include_state=True)
+    modules = yang.compile_modules(yangs)
+    root = yang.compile_to_droot(yang.compile_to_dmodules(modules))
+    src = "from yang.schema import *\n"
+    src += root.prdaclass(loose=loose, include_state=True)
     wf = file.WriteFile(wfcap, filename)
-    wf.write(src.encode())
+    src += "def src_yang():\n"
+    src += "    res = []\n"
+    for y in yangs:
+        src += '    res.append("""%s""")\n' % (y)
+    src += "    return res\n"
+    src += "\n"
+
+    src += "def src_schema():\n"
+    src += "    res = {}\n"
+    for m in modules:
+        # TF can't we write to the same file multiple times?!
+        src += '    res["%s"] = %s\n' % (m.name, m.prsrc())
+    src += "    return res\n"
+    await async wf.write(src.encode())
     await async wf.close()
 
 ys_one = """module foo {
