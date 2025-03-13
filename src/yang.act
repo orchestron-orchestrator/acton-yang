@@ -182,6 +182,14 @@ def compile_to_dmodules(modules: list[yang.schema.Module]) -> list[yang.schema.D
             dmodules.append(dm)
     return dmodules
 
+def compile_to_droot(dmodules: list[yang.schema.DModule]) -> yang.schema.DRoot:
+    """Compile a list of DModules into a DRoot object
+
+    This function is the final step in compiling YANG modules. It takes a
+    list of DModules and combines them into a single DRoot object.
+    """
+    return yang.schema.DRoot(dmodules)
+
 def compile(yang_sources: list[str]) -> yang.schema.DRoot:
     """Parse and compile a set of YANG modules and submodules into a derived schema tree
 
@@ -190,8 +198,7 @@ def compile(yang_sources: list[str]) -> yang.schema.DRoot:
     modules. The derived schema tree consists of DNode objects for data nodes
     only - no grouping, uses, typedef and indentity statements.
     """
-    modules = compile_modules(yang_sources)
-    return yang.schema.DRoot(compile_to_dmodules(modules))
+    return compile_to_droot(compile_to_dmodules(compile_modules(yang_sources)))
 
 def schema_from_src(src: str) -> yang.schema.SchemaNode:
     """Parse a single YANG schema from source code into the SchemaNode representation
