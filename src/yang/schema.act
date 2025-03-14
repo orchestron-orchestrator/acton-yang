@@ -315,6 +315,89 @@ class DNode(object):
         """
         raise NotImplementedError('SchemaNode pdc')
 
+    def prtree(self) -> str:
+        """Print the tree representation for this schema node
+
+        For example, the module
+
+        module foo {
+          prefix "f";
+          namespace "http://example.com/foo";
+          container c1 {
+            leaf l1 {
+              type string;
+            }
+            container c2 {
+              presence "foo";
+              leaf l2 {
+                type int32;
+              }
+            }
+            list list1 {
+              key "k1 k2";
+              leaf k1 {
+                type string;
+              }
+              leaf k2 {
+                type int32;
+              }
+            }
+          }
+        }
+
+        would be printed as:
+
+        module: junos-conf-protocols
+            +--rw c1
+               +--rw l1 string
+               +--rw c2!
+               |  +--rw l2 int32
+               +--rw list1* [k1 k2]
+                  +--rw k1 string
+                  +--rw k2 int32
+        """
+
+        def print_node(node: DNode, prefix: str, has_siblings: bool=False) -> list[str]:
+            res = []
+            if isinstance(node, DRoot):
+                # DRoot contains the combined children of all modules
+                res.append("root:")
+                for child in node.children:
+                    res.extend(print_node(child, prefix + "   "))
+                return res
+
+            node_prefix = prefix + "+--r"
+            if node.config:
+                node_prefix += "w"
+            else:
+                node_prefix += "o"
+            if isinstance(node, DLeaf):
+                optional = "?" if node.mandatory == False else ""
+                res.append("%s %s%s %s" % (node_prefix, node.name, optional, node.type_.name))
+            elif isinstance(node, DLeafList):
+                res.append("%s %s* %s" % (node_prefix, node.name, node.type_.name))
+            elif isinstance(node, DContainer):
+                res.append("%s %s%s" % (node_prefix, node.name, "!" if node.presence else ""))
+            elif isinstance(node, DList):
+                res.append("%s %s* [%s]" % (node_prefix, node.name, " ".join(node.key)))
+            elif isinstance(node, DModule):
+                res.append("module: %s" % (node.name))
+            else:
+                res.append("%s %s" % (node_prefix, node.gname))
+            if isinstance(node, DNodeInner):
+                new_has_siblings = len(node.children) > 1
+                for i, child in enumerate(node.children):
+                    if has_siblings:
+                        new_prefix = prefix + "|  "
+                    else:
+                        new_prefix = prefix + "   "
+                    if i == len(node.children) - 1:
+                        new_has_siblings = False
+                    res.extend(print_node(child, new_prefix, new_has_siblings))
+            return res
+
+        return "\n".join(print_node(self, ""))
+
 class DNodeInner(DNode):
     children: list[DNode]
 
@@ -1761,6 +1844,116 @@ class SchemaNode(object):
                 stmt.substatements.append(c.to_statement())
 
         return stmt
+
+    def prtree(self) -> str:
+        """Print the tree representation for this schema node
+
+        For example, the module
+
+        module foo {
+          prefix "f";
+          namespace "http://example.com/foo";
+          container c1 {
+            leaf l1 {
+              type string;
+            }
+            container c2 {
+              presence "foo";
+              leaf l2 {
+                type int32;
+              }
+            }
+            list list1 {
+              key "k1 k2";
+              leaf k1 {
+                type string;
+              }
+              leaf k2 {
+                type int32;
+              }
+            }
+          }
+        }
+
+        would be printed as:
+
+        module: junos-conf-protocols
+            +--rw c1
+               +--rw l1 string
+               +--rw c2!
+               |  +--rw l2 int32
+               +--rw list1* [k1 k2]
+                  +--rw k1 string
+                  +--rw k2 int32
+        """
+
+        def print_node(node: SchemaNode, prefix: str, has_siblings: bool=False, in_grouping: bool=False):
+            res = []
+            res_g: dict[str, list[str]] = {}
+            if isinstance(node, Typedef):
+                return res, res_g
+
+            # If we're in a grouping, there is no config/operational distinction
+            if isinstance(node, Grouping):
+                node_prefix = ""
+                in_grouping = True
+            elif isinstance(node, Uses):
+                node_prefix = prefix + "+---u"
+            else:
+                if in_grouping:
+                    node_prefix = prefix + "+--"
+                else:
+                    node_prefix = prefix + "+--r"
+                    if node.is_config():
+                        node_prefix += "w"
+                    else:
+                        node_prefix += "o"
+            if isinstance(node, Leaf):
+                optional = "?" if node.mandatory == False else ""
+                res.append("%s %s%s %s" % (node_prefix, node.name, optional, node.type_.name))
+            elif isinstance(node, LeafList):
+                res.append("%s %s* %s" % (node_prefix, node.name, node.type_.name))
+            elif isinstance(node, Container):
+                presence = node.presence
+                res.append("%s %s%s" % (node_prefix, node.name, "!" if presence is not None else ""))
+            elif isinstance(node, List):
+                key = node.key
+                res.append("%s %s* [%s]" % (node_prefix, node.name, key if key is not None else ""))
+            elif isinstance(node, Module):
+                res.append("module: %s" % (node.name))
+            elif isinstance(node, Grouping):
+                res_g[node.name] = ["grouping: %s" % (node.name)]
+            elif isinstance(node, Uses):
+                res.append("%s %s" % (node_prefix, node.name))
+            else:
+                res.append("%s %s" % (node_prefix, node.prsrc()))
+            if isinstance(node, SchemaNodeInner):
+                new_has_siblings = len(node.children) > 1
+                for i, child in enumerate(node.children):
+                    if isinstance(node, Grouping):
+                        new_prefix = prefix
+                    else:
+                        if has_siblings:
+                            new_prefix = prefix + "|  "
+                        else:
+                            new_prefix = prefix + "   "
+                    if i == len(node.children) - 1:
+                        new_has_siblings = False
+                    r, rg = print_node(child, new_prefix, new_has_siblings, in_grouping)
+                    if isinstance(node, Grouping):
+                        res_g[node.name].extend(r)
+                    else:
+                        res.extend(r)
+                    res_g.update(rg.items())
+
+            return res, res_g
+
+        res, res_g = print_node(self, "")
+        txt = ""
+        for g in res_g.values():
+            txt += "\n".join(g) + "\n"
+        txt += "\n".join(res)
+        return txt
 
 class SchemaNodeInner(SchemaNode):
     children: list[SchemaNode]
