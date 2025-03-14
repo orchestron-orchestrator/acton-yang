@@ -804,7 +804,7 @@ class DNodeInner(DNode):
 
             res.append("    children = {}")
             for child in self.children:
-                if top == True or (child.name in child_name_conflicts):
+                if top == True or child.namespace != self.namespace:
                     res.append("    child_%s = jd.get('%s:%s')" % (_unique_safe_name(child.name, child.prefix), child.prefix, child.name))
                 else:
                     res.append("    child_%s_full = jd.get('%s:%s')" % (_unique_safe_name(child.name, child.prefix), child.prefix, child.name))
@@ -812,16 +812,16 @@ class DNodeInner(DNode):
 
                 if isinstance(child, DContainer):
                     res.append("    if child_%s is not None and isinstance(child_%s, dict):" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        children['%s'] = from_json_%s(child_%s)" % (child.name, get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append("        children['%s'] = from_json_%s(child_%s)" % (_unique_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
                 elif isinstance(child, DList):
                     res.append("    if child_%s is not None and isinstance(child_%s, list):" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        children['%s'] = from_json_%s(child_%s)" % (child.name, get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append("        children['%s'] = from_json_%s(child_%s)" % (_unique_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
                 elif isinstance(child, DLeafList):
                     res.append("    if child_%s is not None and isinstance(child_%s, list):" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        children['%s'] = from_json_%s(child_%s)" % (child.name, get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append("        children['%s'] = from_json_%s(child_%s)" % (_unique_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
                 else:
                     res.append("    if child_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("        children['%s'] = from_json_%s(child_%s)" % (child.name, get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append("        children['%s'] = from_json_%s(child_%s)" % (_unique_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
 
             # TODO: need to better handle mandatory nodes... right now I think this JSON parsing is very naive
             #
@@ -878,7 +878,7 @@ class DNodeInner(DNode):
             res.append("    children = {}")
             for child in self.children:
                 child_name = (child.prefix + ":" + child.name) if child.namespace != self.namespace else child.name
-                res.append("    child_%s = n.children.get('%s')" % (_unique_safe_name(child.name, child.prefix), child.name))
+                res.append("    child_%s = n.children.get('%s')" % (_unique_safe_name(child.name, child.prefix), _unique_name(child.name, child.prefix)))
                 res.append("    if child_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
                 if isinstance(child, DLeaf):
                     res.append("        if isinstance(child_%s, yang.gdata.Leaf):" % (_unique_safe_name(child.name, child.prefix)))

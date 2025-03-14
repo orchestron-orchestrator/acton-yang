@@ -190,21 +190,22 @@ mut def from_json_path_base__c1(jd: value, path: list[str]=[], op: ?str="merge")
 
 mut def from_json_base__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_base_c2 = jd.get('base:c2')
+    child_base_c2_full = jd.get('base:c2')
+    child_base_c2 = child_base_c2_full if child_base_c2_full is not None else jd.get('c2')
     if child_base_c2 is not None and isinstance(child_base_c2, dict):
-        children['c2'] = from_json_base__c1__base_c2(child_base_c2)
+        children['base:c2'] = from_json_base__c1__base_c2(child_base_c2)
     child_foo_c2 = jd.get('foo:c2')
     if child_foo_c2 is not None and isinstance(child_foo_c2, dict):
-        children['c2'] = from_json_base__c1__foo_c2(child_foo_c2)
+        children['foo:c2'] = from_json_base__c1__foo_c2(child_foo_c2)
     return yang.gdata.Container(children)
 
 mut def to_json_base__c1(n: yang.gdata.Container) -> dict[str, ?value]:
     children = {}
-    child_base_c2 = n.children.get('c2')
+    child_base_c2 = n.children.get('base:c2')
     if child_base_c2 is not None:
         if isinstance(child_base_c2, yang.gdata.Container):
             children['c2'] = to_json_base__c1__base_c2(child_base_c2)
-    child_foo_c2 = n.children.get('c2')
+    child_foo_c2 = n.children.get('foo:c2')
     if child_foo_c2 is not None:
         if isinstance(child_foo_c2, yang.gdata.Container):
             children['foo:c2'] = to_json_base__c1__foo_c2(child_foo_c2)
@@ -263,8 +264,7 @@ mut def from_json_path_root(jd: value, path: list[str]=[], op: ?str="merge") -> 
 
 mut def from_json_root(jd: dict[str, ?value]) -> yang.gdata.Root:
     children = {}
-    child_c1_full = jd.get('base:c1')
-    child_c1 = child_c1_full if child_c1_full is not None else jd.get('c1')
+    child_c1 = jd.get('base:c1')
     if child_c1 is not None and isinstance(child_c1, dict):
         children['c1'] = from_json_base__c1(child_c1)
     return yang.gdata.Root(children)

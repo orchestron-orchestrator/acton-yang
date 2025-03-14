@@ -45,6 +45,14 @@ ys_foo = """module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
+    grouping g1 {
+        leaf l1 {
+            type string;
+        }
+        leaf l2 {
+            type string;
+        }
+    }
     container c1 {
         leaf l1 {
             type string;
@@ -178,12 +186,7 @@ ys_foo = """module foo {
     container state {
         config false;
         container c1 {
-            leaf l1 {
-                type string;
-            }
-            leaf l2 {
-                type string;
-            }
+            uses g1;
         }
     }
 }"""
@@ -196,9 +199,8 @@ ys_bar = """module bar {
         prefix "foo";
     }
     augment /foo:c1 {
-        leaf l2 {
-            type string;
-        }
+        // create a conflict with /foo:c1/l1
+        uses foo:g1;
     }
     augment /foo:c.dot {
         leaf l.dot2 {

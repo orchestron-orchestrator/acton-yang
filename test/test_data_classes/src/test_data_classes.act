@@ -88,7 +88,7 @@ def _test_foo_from_xml_full():
     # TODO: add <l_empty/>
     xml_text = """<data>
 <c1 xmlns="http://example.com/foo">
-  <l1>foo</l1>
+  <l1>foo-foo</l1>
   <l3>18446744073709551615</l3>
   <li>
     <name>tuta</name>
@@ -98,6 +98,8 @@ def _test_foo_from_xml_full():
   <ll_uint64>42</ll_uint64>
   <ll_str>kava</ll_str>
   <ll_str>čaj</ll_str>
+  <l1 xmlns="http://example.com/bar">foo-bar</l1>
+  <l2 xmlns="http://example.com/bar">bar</l2>
 </c1>
 <pc1 xmlns="http://example.com/foo">
   <foo>
@@ -338,7 +340,9 @@ def _test_foo_from_gdata_empty():
 def _test_foo_from_gdata_c1_l1():
     gd = yang.gdata.Root(children={
         "c1": yang.gdata.Container(children={
-            "l1": yang.gdata.Leaf("str", "foo")
+            "foo:l1": yang.gdata.Leaf("str", "foo-foo"),
+            "bar:l1": yang.gdata.Leaf("str", "foo-bar", ns="http://example.com/bar", prefix="bar"),
+            "l2": yang.gdata.Leaf("str", "bar", ns="http://example.com/bar", prefix="bar"),
         })
     })
     # ValueError: Cannot find list child with name li
@@ -456,7 +460,7 @@ def _test_from_json():
 # example JSON data
 jd1 = {
     "foo:c1": {
-        "l1": "foo",
+        "l1": "foo-foo",
         "l3": 123,
         "li": [
             {
@@ -469,7 +473,9 @@ jd1 = {
             }
         ],
         "ll_uint64": [4, 42],
-        "ll_str": ["kava", "čaj"]
+        "ll_str": ["kava", "čaj"],
+        "bar:l1": "foo-bar",
+        "bar:l2": "bar",
     },
     "foo:pc1": {
         "foo": {
