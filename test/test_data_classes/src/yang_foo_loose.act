@@ -2740,6 +2740,108 @@ def src_schema():
             Leaf('val', type_=Type('string'))
         ]),
         LeafList('ll_uint64', type_=Type('uint64')),
+        LeafList('ll_str', type_=Type('string'))
+    ]),
+    Container('pc1', presence='p', children=[
+        Container('foo', children=[
+            LeafList('l1', type_=Type('binary'))
+        ])
+    ]),
+    Container('pc2', presence='p', children=[
+        Container('foo', children=[
+            Leaf('l_mandatory', type_=Type('string'), mandatory=True)
+        ])
+    ]),
+    Container('empty-presence', presence='nothing else here'),
+    Container('c.dot', children=[
+        Leaf('l.dot1', type_=Type('string'))
+    ]),
+    Container('cc', children=[
+        Choice('cake-or-death', mandatory=True, children=[
+            Case('cake', children=[
+                Leaf('cake', type_=Type('string'), mandatory=True)
+            ]),
+            Case('death', children=[
+                List('death', key='name', children=[
+                    Leaf('name', type_=Type('string'))
+                ])
+            ])
+        ])
+    ]),
+    Container('conflict', children=[
+        Leaf('foo', type_=Type('string')),
+        Container('inner', presence='inner presence')
+    ]),
+    List('special', key='yes', children=[
+        Leaf('yes', type_=Type('boolean'))
+    ]),
+    Container('nested', children=[
+        Container('inner', children=[
+            Leaf('foo', type_=Type('string')),
+            List('li1', key='name', children=[
+                Leaf('name', type_=Type('string')),
+                Leaf('bar', type_=Type('string')),
+                List('li2', key='key1 key2', children=[
+                    Leaf('key1', type_=Type('string')),
+                    Leaf('key2', type_=Type('string')),
+                    Leaf('baz', type_=Type('string'))
+                ])
+            ])
+        ])
+    ]),
+    List('li-union', key='k1 k2 k3', children=[
+        Leaf('k1', type_=Type('string')),
+        Leaf('k2', type_=Type('union', type_=[
+        Type('uint32'),
+        Type('enumeration', enum=[
+                Enum('unlimited')
+            ]),
+        Type('binary')
+    ])),
+        Leaf('k3', type_=Type('binary'))
+    ]),
+    Container('state', config=False, children=[
+        Container('c1', children=[
+            Uses('g1')
+        ])
+    ])
+])
+    res["bar"] = Module('bar', yang_version=1.1, namespace='http://example.com/bar', prefix='bar', import_=[
+        Import('foo', prefix='foo')
+    ], augment=[
+        Augment('/foo:c1', children=[
+            Uses('foo:g1')
+        ]),
+        Augment('/foo:c.dot', children=[
+            Leaf('l.dot2', type_=Type('string'))
+        ]),
+        Augment('/foo:conflict', children=[
+            Leaf('foo', type_=Type('string')),
+            Container('inner', presence='inner presence from bar')
+        ])
+    ], children=[
+    Container('conflict', children=[
+        Leaf('foo', type_=Type('string'))
+    ])
+])
+    return res
+
+def src_schema_compiled():
+    res = {}
+    res["foo"] = Module('foo', yang_version=1.1, namespace='http://example.com/foo', prefix='foo', children=[
+    Grouping('g1', children=[
+        Leaf('l1', type_=Type('string')),
+        Leaf('l2', type_=Type('string'))
+    ]),
+    Container('c1', children=[
+        Leaf('l1', type_=Type('string')),
+        Leaf('l3', type_=Type('uint64')),
+        Leaf('l_empty', type_=Type('empty')),
+        List('li', key='name', children=[
+            Leaf('name', type_=Type('string')),
+            Leaf('val', type_=Type('string'))
+        ]),
+        LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
         Leaf('l1', type_=Type('string')),
         Leaf('l2', type_=Type('string'))
