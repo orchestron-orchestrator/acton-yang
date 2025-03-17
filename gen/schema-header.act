@@ -315,8 +315,6 @@ class DNodeInner(DNode):
         # Reorder children so that positional arguments, like list keys, come first
         new_children = []
         pos_child_idx = 0
-        child_names = set()
-        child_name_conflicts = set()
         for child in self.children:
             if include_state == False and child.config == False:
                 continue
@@ -325,26 +323,15 @@ class DNodeInner(DNode):
                 pos_child_idx += 1
             else:
                 new_children.append(child)
-            if child.name in child_names:
-                child_name_conflicts.add(child.name)
-            else:
-                child_names.add(child.name)
         self.children = new_children
 
-        def _unique_name(name: str, prefix: str) -> str:
-            if name not in child_name_conflicts:
-                return name
-            return f"{prefix}:{name}"
+        unique_namer = _UniqueNamer(self)
 
         def uname(n) -> str:
-            return _unique_name(n.name, n.prefix)
-
-        def _unique_safe_name(name: str, prefix: str) -> str:
-            unique_name = _unique_name(name, prefix)
-            return _safe_name(unique_name).replace(":", "_")
+            return unique_namer.unique_name(n.name, n.prefix)
 
         def usname(n) -> str:
-            return _unique_safe_name(n.name, n.prefix)
+            return unique_namer.unique_safe_name(n.name, n.prefix)
 
         def pname(n):
             return get_path_name(n)
@@ -2218,28 +2205,49 @@ def prsrc_literal(ytype: str, value: str) -> str:
         return '"' + value.replace('"', '\\"') + '"'
     raise ValueError("Unhandled prsrc literal of type " + ytype)
 
-def _safe_name(name: str) -> str:
+def _safe_name(name: str, safe_kw=True) -> str:
     new = name.replace("-", "_").replace(".", "_")
-    if new in {"action",
-               "actor",
-               "as",
-               "class",
-               "del",
-               "except",
-               "for",
-               "from",
-               "import",
-               "in",
-               "mut",
-               "None",
-               "proc",
-               "protocol",
-               "pure",
-               "with",
-               "yield",
-               }:
+    if safe_kw and new in {"action",
+                           "actor",
+                           "as",
+                           "class",
+                           "del",
+                           "except",
+                           "for",
+                           "from",
+                           "import",
+                           "in",
+                           "mut",
+                           "None",
+                           "proc",
+                           "protocol",
+                           "pure",
+                           "with",
+                           "yield",
+                           }:
         new += "_"
     return new
+
+class _UniqueNamer(object):
+    _name_conflicts: set[str]
+
+    def __init__(self, node: DNodeInner):
+        names = set()
+        self._name_conflicts = set()
+        for child in node.children:
+            if child.name in names:
+                self._name_conflicts.add(child.name)
+            else:
+                names.add(child.name)
+
+    def unique_name(self, name, prefix):
+        if name not in self._name_conflicts:
+            return name
+        return f"{prefix}:{name}"
+
+    def unique_safe_name(self, name, prefix, safe_kw=True):
+        unique_name = self.unique_name(name, prefix)
+        return _safe_name(unique_name, safe_kw).replace(":", "_")
 
 def get_path_name(dnode: DNode) -> str:
     """Build the adata path name for a data node
@@ -2273,30 +2281,27 @@ def get_path_name(dnode: DNode) -> str:
     - foo__bar__foo_baz
     - foo__bar__m2_baz
 
-    We do not rewrite the builtin keywords here (see _safe_name()) because it
-    is not necessary.
+    We do not rewrite the builtin keywords here (see _safe_name()) because it is
+    not necessary. An exception to this is if we are the top node without
+    children - then the path is just our name.
     """
     path = []
+    parent = dnode.parent
+    if parent is None and isinstance(dnode, DNodeInner):
+        top_solo = True if not dnode.children else False
+    else:
+        top_solo = False
     while True:
-        self_unique_name = dnode.name
+        self_unique_safe_name = _safe_name(dnode.name, safe_kw=not top_solo)
         parent = dnode.parent
         # if parent is not None then of course it is DNodeInner (= has children
         # attribute), but let's make that explicit for the compiler ...
         if parent is not None:
             if isinstance(parent, DNodeInner):
-                sibling_names = set()
-                sibling_names_conflicts = set()
-                for sibling in parent.children:
-                    if sibling.name in sibling_names:
-                        sibling_names_conflicts.add(sibling.name)
-                    else:
-                        sibling_names.add(sibling.name)
-                if dnode.name not in sibling_names_conflicts:
-                    self_unique_name = dnode.name
-                else:
-                    self_unique_name = f"{dnode.prefix}:{dnode.name}"
+                unique_namer = _UniqueNamer(parent)
+                self_unique_safe_name = unique_namer.unique_safe_name(dnode.name, dnode.prefix, safe_kw=False)
                 dnode = parent
-        path.append(self_unique_name.replace("-", "_").replace(".", "_").replace(":", "_"))
+        path.append(self_unique_safe_name)
         if parent is None:
             break
 
