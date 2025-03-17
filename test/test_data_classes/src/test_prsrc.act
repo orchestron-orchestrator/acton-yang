@@ -14,6 +14,12 @@ def _module_name(sn: yang.schema.SchemaNode) -> str:
         raise ValueError("Expected Module or Submodule, got %s" % type(sn))
 
 def _test_prsrc_yang_one_roundtrip():
+    """Test prsrc() consistency after restoring the schema from data structure
+
+    We restore the schema tree (ys2) from an auxiliary data structure stored in
+    the adata module. Then we compare the restored schema tree with a schema
+    tree (ys1) created directly from YANG (also grabbed the adata module).
+    """
     # schema_2 contains Module and Submodule objects from parsed YANG
     schema_2 = yang_one.src_schema()
     for y1 in yang_one.src_yang():
@@ -21,10 +27,16 @@ def _test_prsrc_yang_one_roundtrip():
         ys2 = schema_2[_module_name(ys1)]
         # Compare the Module or Submodule objects for equality using the Eq extension (generated)
         testing.assertEqual(ys1, ys2)
-        # Compare the output of prsrc() to ensure we can do it again
+        # Compare the output of prsrc() to ensure we can do it again and it is stable
         testing.assertEqual(ys1.prsrc(), ys2.prsrc())
 
 def _test_prsrc_yang_foo_roundtrip():
+    """Test prsrc() consistency after restoring the schema from data structure
+
+    We restore the schema tree (ys2) from an auxiliary data structure stored in
+    the adata module. Then we compare the restored schema tree with a schema
+    tree (ys1) created directly from YANG (also grabbed the adata module).
+    """
     # schema_2 contains Module and Submodule objects from parsed YANG
     schema_2 = yang_foo.src_schema()
     for y1 in yang_foo.src_yang():
@@ -32,10 +44,17 @@ def _test_prsrc_yang_foo_roundtrip():
         ys2 = schema_2[_module_name(ys1)]
         # Compare the Module or Submodule objects for equality using the Eq extension (generated)
         testing.assertEqual(ys1, ys2)
-        # Compare the output of prsrc() to ensure we can do it again
+        # Compare the output of prsrc() to ensure we can do it again and it is stable
         testing.assertEqual(ys1.prsrc(), ys2.prsrc())
 
 def _test_prsrc_yang_one_compiled_roundtrip():
+    """Test compiled schema prsrc() consistency after restoring the schema from data structure
+
+    We restore the compiled schema tree which is a list of modules (m2) from an
+    auxiliary data structure stored in the adata module. Then we compare the
+    restored schema tree with a newly compiled schema tree modules (m1) created
+    directly from YANG (also grabbed the adata module).
+    """
     modules_1 = yang.compile_modules(yang_one.src_yang())
     modules_2 = yang_one.src_schema_compiled()
     for m1 in modules_1:
@@ -46,6 +65,13 @@ def _test_prsrc_yang_one_compiled_roundtrip():
         testing.assertEqual(m1.prsrc(), m2.prsrc())
 
 def _test_prsrc_yang_foo_compiled_roundtrip():
+    """Test compiled schema prsrc() consistency after restoring the schema from data structure
+
+    We restore the compiled schema tree which is a list of modules (m2) from an
+    auxiliary data structure stored in the adata module. Then we compare the
+    restored schema tree with a newly compiled schema tree modules (m1) created
+    directly from YANG (also grabbed the adata module).
+    """
     modules_1 = yang.compile_modules(yang_foo.src_yang())
     modules_2 = yang_foo.src_schema_compiled()
     for m1 in modules_1:
