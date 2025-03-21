@@ -1345,10 +1345,35 @@ class SchemaNode(object):
     def get_attrs(self) -> list[(str, ?value)]:
         raise NotImplementedError('SchemaNode get_attrs')
 
-    def prsrc(self, indent=0) -> str:
+    _get_class_name: pure() -> str
+
+    def prsrc(self, indent=0):
         """Print Acton source code for this schema node and its subnodes
         """
-        raise NotImplementedError('SchemaNode prsrc')
+        res = []
+        self_arg = self._get_arg()
+        if self_arg is not None:
+            args = ["'" + self_arg + "'"]
+        else:
+            args = []
+        attrs_text = _prsrc_attrs(indent, self.get_attrs())
+        if len(attrs_text) > 0:
+            args.append(_prsrc_attrs(indent, self.get_attrs()))
+        have_children = True if isinstance(self, SchemaNodeInner) and len(self.children) > 0 else False
+        if have_children:
+            args.append("children=[")
+        args_text = ", ".join(args)
+        text_line = _ind(indent) + self._get_class_name() + "(" + args_text
+        if not have_children:
+            text_line += ')'
+        res.append(text_line)
+        if isinstance(self, SchemaNodeInner) and have_children:
+            child_res = []
+            for child in self.children:
+                child_res.append(child.prsrc(indent+1))
+            res.append(",\n".join(child_res))
+            res.append(_ind(indent) + "])")
+        return "\n".join(res)
 
     def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
@@ -1801,6 +1826,9 @@ class Ext(SchemaNode):
         if len(parts) != 2:
             raise ValueError("Invalid extension name %s, extensions must always have a prefix like: foo:bar 'test';" % fullname)
         return Ext(parts[0], parts[1], None)
+
+    def _get_class_name(self):
+        return "Ext"
 
     def prsrc(self, indent=0):
         """Print Acton source of this node"""
@@ -2622,37 +2650,6 @@ class Action(SchemaNodeInner):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("input", self.input),
-            ("output", self.output),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Action(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def get(self, name: str, ns: ?str=None) -> SchemaNode:
         # TODO: support looking up qualified by namespace
         #tns = ns if ns is not None else self.get_namespace()
@@ -2711,6 +2708,9 @@ class Action(SchemaNodeInner):
 
     def __str__(self):
         return "Action " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Action"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -2804,29 +2804,6 @@ class Anydata(SchemaNodeOuter):
             self.config = ref_config
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("config", self.config),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("mandatory", self.mandatory),
-            ("must", self.must),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Anydata(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def to_dnode(self) -> DAnydata:
         return DAnydata(
             namespace=self.get_namespace(),
@@ -2860,6 +2837,9 @@ class Anydata(SchemaNodeOuter):
 
     def __str__(self):
         return "Anydata " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Anydata"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -2953,29 +2933,6 @@ class Anyxml(SchemaNodeOuter):
             self.config = ref_config
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("config", self.config),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("mandatory", self.mandatory),
-            ("must", self.must),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Anyxml(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def to_dnode(self) -> DAnyxml:
         return DAnyxml(
             namespace=self.get_namespace(),
@@ -3009,6 +2966,9 @@ class Anyxml(SchemaNodeOuter):
 
     def __str__(self):
         return "Anyxml " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Anyxml"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -3085,36 +3045,6 @@ class Augment(SchemaNodeInner):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.target_node) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Augment(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Augment(self.target_node,
                       description=self.description,
@@ -3130,6 +3060,9 @@ class Augment(SchemaNodeInner):
 
     def __str__(self):
         return "Augment " + self.target_node
+
+    def _get_class_name(self) -> str:
+        return "Augment"
 
     def _get_argname(self) -> ?str:
         return 'target_node'
@@ -3173,22 +3106,6 @@ class BelongsTo(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("prefix", self.prefix),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.module) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "BelongsTo(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = BelongsTo(self.module,
                         prefix=self.prefix,
@@ -3199,6 +3116,9 @@ class BelongsTo(SchemaNodeOuter):
 
     def __str__(self):
         return "BelongsTo " + self.module
+
+    def _get_class_name(self) -> str:
+        return "BelongsTo"
 
     def _get_argname(self) -> ?str:
         return 'module'
@@ -3266,26 +3186,6 @@ class Bit(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("position", self.position),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Bit(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Bit(self.name,
                   description=self.description,
@@ -3300,6 +3200,9 @@ class Bit(SchemaNodeOuter):
 
     def __str__(self):
         return "Bit " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Bit"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -3376,36 +3279,6 @@ class Case(SchemaNodeInner):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Case(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Case(self.name,
                    description=self.description,
@@ -3421,6 +3294,9 @@ class Case(SchemaNodeInner):
 
     def __str__(self):
         return "Case " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Case"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -3516,39 +3392,6 @@ class Choice(SchemaNodeInner):
             self.config = ref_config
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("config", self.config),
-            ("default", self.default),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("mandatory", self.mandatory),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Choice(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Choice(self.name,
                      config=self.config,
@@ -3567,6 +3410,9 @@ class Choice(SchemaNodeInner):
 
     def __str__(self):
         return "Choice " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Choice"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -3669,39 +3515,6 @@ class Container(SchemaNodeInner):
             self.config = ref_config
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("config", self.config),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("must", self.must),
-            ("presence", self.presence),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Container(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def is_presence(self) -> bool:
         selfpresence = self.presence
         if selfpresence is not None:
@@ -3746,6 +3559,9 @@ class Container(SchemaNodeInner):
 
     def __str__(self):
         return "Container " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Container"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -3813,26 +3629,6 @@ class Enum(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("value", self.value),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Enum(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Enum(self.name,
                    description=self.description,
@@ -3847,6 +3643,9 @@ class Enum(SchemaNodeOuter):
 
     def __str__(self):
         return "Enum " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Enum"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -3908,25 +3707,6 @@ class Extension(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("argument", self.argument),
-            ("description", self.description),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Extension(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Extension(self.name,
                         argument=self.argument,
@@ -3940,6 +3720,9 @@ class Extension(SchemaNodeOuter):
 
     def __str__(self):
         return "Extension " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Extension"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -4004,25 +3787,6 @@ class Feature(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Feature(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Feature(self.name,
                       description=self.description,
@@ -4036,6 +3800,9 @@ class Feature(SchemaNodeOuter):
 
     def __str__(self):
         return "Feature " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Feature"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -4103,34 +3870,6 @@ class Grouping(SchemaNodeInner):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Grouping(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Grouping(self.name,
                        description=self.description,
@@ -4144,6 +3883,9 @@ class Grouping(SchemaNodeInner):
 
     def __str__(self):
         return "Grouping " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Grouping"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -4211,26 +3953,6 @@ class Identity(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("base", self.base),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Identity(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Identity(self.name,
                        base=self.base,
@@ -4245,6 +3967,9 @@ class Identity(SchemaNodeOuter):
 
     def __str__(self):
         return "Identity " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Identity"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -4306,25 +4031,6 @@ class Import(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("prefix", self.prefix),
-            ("description", self.description),
-            ("reference", self.reference),
-            ("revision-date", self.revision_date),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.module) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Import(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Import(self.module,
                      prefix=self.prefix,
@@ -4338,6 +4044,9 @@ class Import(SchemaNodeOuter):
 
     def __str__(self):
         return "Import " + self.module
+
+    def _get_class_name(self) -> str:
+        return "Import"
 
     def _get_argname(self) -> ?str:
         return 'module'
@@ -4396,24 +4105,6 @@ class Include(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("reference", self.reference),
-            ("revision-date", self.revision_date),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.module) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Include(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Include(self.module,
                       description=self.description,
@@ -4426,6 +4117,9 @@ class Include(SchemaNodeOuter):
 
     def __str__(self):
         return "Include " + self.module
+
+    def _get_class_name(self) -> str:
+        return "Include"
 
     def _get_argname(self) -> ?str:
         return 'module'
@@ -4490,32 +4184,6 @@ class Input(SchemaNodeInner):
                 self.must.append(ref_must)
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("must", self.must),
-            ("exts", self.exts),
-        ]
-        args = []
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Input(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def to_dnode(self) -> DInput:
         new_dnode = DInput(
             namespace=self.get_namespace(),
@@ -4537,6 +4205,9 @@ class Input(SchemaNodeInner):
         return new
 
     def __str__(self):
+        return "Input"
+
+    def _get_class_name(self) -> str:
         return "Input"
 
     def _get_argname(self) -> ?str:
@@ -4651,32 +4322,6 @@ class Leaf(SchemaNodeOuter):
             self.config = ref_config
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("type", self.type_),
-            ("config", self.config),
-            ("default", self.default),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("mandatory", self.mandatory),
-            ("must", self.must),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("units", self.units),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Leaf(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
@@ -4727,6 +4372,9 @@ class Leaf(SchemaNodeOuter):
 
     def __str__(self):
         return "Leaf " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Leaf"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -4848,34 +4496,6 @@ class LeafList(SchemaNodeOuter):
             self.config = ref_config
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("type", self.type_),
-            ("config", self.config),
-            ("default", self.default),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("max-elements", self.max_elements),
-            ("min-elements", self.min_elements),
-            ("must", self.must),
-            ("ordered-by", self.ordered_by),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("units", self.units),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "LeafList(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
@@ -4937,6 +4557,9 @@ class LeafList(SchemaNodeOuter):
     def __str__(self):
         return "LeafList " + self.name
 
+    def _get_class_name(self) -> str:
+        return "LeafList"
+
     def _get_argname(self) -> ?str:
         return 'name'
 
@@ -4997,25 +4620,6 @@ class Length(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("error-app-tag", self.error_app_tag),
-            ("error-message", self.error_message),
-            ("reference", self.reference),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.value) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Length(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Length(self.value,
                      description=self.description,
@@ -5029,6 +4633,9 @@ class Length(SchemaNodeOuter):
 
     def __str__(self):
         return "Length " + self.value
+
+    def _get_class_name(self) -> str:
+        return "Length"
 
     def _get_argname(self) -> ?str:
         return 'value'
@@ -5146,43 +4753,6 @@ class List(SchemaNodeInner):
             self.config = ref_config
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("config", self.config),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("key", self.key),
-            ("max-elements", self.max_elements),
-            ("min-elements", self.min_elements),
-            ("must", self.must),
-            ("ordered-by", self.ordered_by),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("unique", self.unique),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "List(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def keys(self) -> list[str]:
         selfkey = self.key
         if selfkey is not None:
@@ -5245,6 +4815,9 @@ class List(SchemaNodeInner):
 
     def __str__(self):
         return "List " + self.name
+
+    def _get_class_name(self) -> str:
+        return "List"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -5393,45 +4966,6 @@ class Module(SchemaNodeInner):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("yang-version", self.yang_version),
-            ("namespace", self.namespace),
-            ("prefix", self.prefix),
-            ("import", self.import_),
-            ("include", self.include),
-            ("organization", self.organization),
-            ("contact", self.contact),
-            ("description", self.description),
-            ("reference", self.reference),
-            ("revision", self.revision),
-            ("augment", self.augment),
-            ("deviation", self.deviation),
-            ("extension", self.extension_),
-            ("feature", self.feature),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Module(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def get_import_by_prefix(self, prefix: str) -> Import:
         for imp in self.import_:
             if imp.prefix == prefix:
@@ -5510,6 +5044,9 @@ class Module(SchemaNodeInner):
     def __str__(self):
         return "Module " + self.name
 
+    def _get_class_name(self) -> str:
+        return "Module"
+
     def _get_argname(self) -> ?str:
         return 'name'
 
@@ -5576,25 +5113,6 @@ class Must(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("error-app-tag", self.error_app_tag),
-            ("error-message", self.error_message),
-            ("reference", self.reference),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.condition) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Must(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Must(self.condition,
                    description=self.description,
@@ -5608,6 +5126,9 @@ class Must(SchemaNodeOuter):
 
     def __str__(self):
         return "Must " + self.condition
+
+    def _get_class_name(self) -> str:
+        return "Must"
 
     def _get_argname(self) -> ?str:
         return 'condition'
@@ -5695,36 +5216,6 @@ class Notification(SchemaNodeInner):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("must", self.must),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Notification(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def to_dnode(self) -> DNotification:
         new_dnode = DNotification(
             namespace=self.get_namespace(),
@@ -5759,6 +5250,9 @@ class Notification(SchemaNodeInner):
 
     def __str__(self):
         return "Notification " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Notification"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -5823,32 +5317,6 @@ class Output(SchemaNodeInner):
                 self.must.append(ref_must)
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("must", self.must),
-            ("exts", self.exts),
-        ]
-        args = []
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Output(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def to_dnode(self) -> DOutput:
         new_dnode = DOutput(
             namespace=self.get_namespace(),
@@ -5873,6 +5341,9 @@ class Output(SchemaNodeInner):
         return new
 
     def __str__(self):
+        return "Output"
+
+    def _get_class_name(self) -> str:
         return "Output"
 
     def _get_argname(self) -> ?str:
@@ -5938,26 +5409,6 @@ class Pattern(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("error-app-tag", self.error_app_tag),
-            ("error-message", self.error_message),
-            ("modifier", self.modifier),
-            ("reference", self.reference),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.value) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Pattern(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Pattern(self.value,
                       description=self.description,
@@ -5972,6 +5423,9 @@ class Pattern(SchemaNodeOuter):
 
     def __str__(self):
         return "Pattern " + self.value
+
+    def _get_class_name(self) -> str:
+        return "Pattern"
 
     def _get_argname(self) -> ?str:
         return 'value'
@@ -6033,25 +5487,6 @@ class Range(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("error-app-tag", self.error_app_tag),
-            ("error-message", self.error_message),
-            ("reference", self.reference),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.value) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Range(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Range(self.value,
                     description=self.description,
@@ -6065,6 +5500,9 @@ class Range(SchemaNodeOuter):
 
     def __str__(self):
         return "Range " + self.value
+
+    def _get_class_name(self) -> str:
+        return "Range"
 
     def _get_argname(self) -> ?str:
         return 'value'
@@ -6176,31 +5614,6 @@ class Refine(SchemaNodeOuter):
             self.config = ref_config
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("config", self.config),
-            ("default", self.default),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("mandatory", self.mandatory),
-            ("max-elements", self.max_elements),
-            ("min-elements", self.min_elements),
-            ("must", self.must),
-            ("presence", self.presence),
-            ("reference", self.reference),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.target_node) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Refine(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Refine(self.target_node,
                      config=self.config,
@@ -6220,6 +5633,9 @@ class Refine(SchemaNodeOuter):
 
     def __str__(self):
         return "Refine " + self.target_node
+
+    def _get_class_name(self) -> str:
+        return "Refine"
 
     def _get_argname(self) -> ?str:
         return 'target_node'
@@ -6275,23 +5691,6 @@ class Revision(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("reference", self.reference),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.date) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Revision(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         new = Revision(self.date,
                        description=self.description,
@@ -6303,6 +5702,9 @@ class Revision(SchemaNodeOuter):
 
     def __str__(self):
         return "Revision " + self.date
+
+    def _get_class_name(self) -> str:
+        return "Revision"
 
     def _get_argname(self) -> ?str:
         return 'date'
@@ -6398,37 +5800,6 @@ class Rpc(SchemaNodeInner):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("input", self.input),
-            ("output", self.output),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Rpc(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def get(self, name: str, ns: ?str=None) -> SchemaNode:
         # TODO: support looking up qualified by namespace
         #tns = ns if ns is not None else self.get_namespace()
@@ -6487,6 +5858,9 @@ class Rpc(SchemaNodeInner):
 
     def __str__(self):
         return "Rpc " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Rpc"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -6639,44 +6013,6 @@ class Submodule(SchemaNodeInner):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("yang-version", self.yang_version),
-            ("import", self.import_),
-            ("include", self.include),
-            ("organization", self.organization),
-            ("contact", self.contact),
-            ("description", self.description),
-            ("reference", self.reference),
-            ("revision", self.revision),
-            ("belongs-to", self.belongs_to),
-            ("augment", self.augment),
-            ("deviation", self.deviation),
-            ("extension", self.extension_),
-            ("feature", self.feature),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        if len(self.children) > 0:
-            args.append("children=[")
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Submodule(" + args_text
-        if len(self.children) == 0:
-            text_line += ')'
-        res.append(text_line)
-        if len(self.children) > 0:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
-            res.append(",\n".join(child_res))
-            res.append(_ind(indent) + "])")
-        return "\n".join(res)
-
     def get_modrev(self) -> ModRev:
         rev = self.get_revision()
         rev_date = rev.date if rev is not None else None
@@ -6711,6 +6047,9 @@ class Submodule(SchemaNodeInner):
 
     def __str__(self):
         return "Submodule " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Submodule"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -6829,31 +6168,6 @@ class Type(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("base", self.base),
-            ("bit", self.bit),
-            ("enum", self.enum),
-            ("fraction-digits", self.fraction_digits),
-            ("length", self.length),
-            ("path", self.path),
-            ("pattern", self.pattern),
-            ("range", self.range_),
-            ("require-instance", self.require_instance),
-            ("type", self.type_),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Type(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def resolve_union_types(self, context: Context) -> Type:
         if self.name == "union":
             resolved_union_types = []
@@ -6909,6 +6223,9 @@ class Type(SchemaNodeOuter):
 
     def __str__(self):
         return "Type " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Type"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -6987,27 +6304,6 @@ class Typedef(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("type", self.type_),
-            ("default", self.default),
-            ("description", self.description),
-            ("reference", self.reference),
-            ("status", self.status),
-            ("units", self.units),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Typedef(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
@@ -7031,6 +6327,9 @@ class Typedef(SchemaNodeOuter):
 
     def __str__(self):
         return "Typedef " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Typedef"
 
     def _get_argname(self) -> ?str:
         return 'name'
@@ -7120,28 +6419,6 @@ class Uses(SchemaNodeOuter):
             self.description = ref_description
         self.exts.extend(refine.exts)
 
-    def prsrc(self, indent=0):
-        """Print Acton source of this node"""
-        res = []
-        attrs: list[(str, ?value)] = [
-            ("augment", self.augment),
-            ("description", self.description),
-            ("if-feature", self.if_feature),
-            ("reference", self.reference),
-            ("refine", self.refine),
-            ("status", self.status),
-            ("when", self.when),
-            ("exts", self.exts),
-        ]
-        args = ["'" + str(self.name) + "'"]
-        attrs_text = _prsrc_attrs(indent, self.get_attrs())
-        if len(attrs_text) > 0:
-            args.append(_prsrc_attrs(indent, self.get_attrs()))
-        args_text = ", ".join(args)
-        text_line = _ind(indent) + "Uses(" + args_text + ")"
-        res.append(text_line)
-        return "\n".join(res)
-
     def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
@@ -7167,6 +6444,9 @@ class Uses(SchemaNodeOuter):
 
     def __str__(self):
         return "Uses " + self.name
+
+    def _get_class_name(self) -> str:
+        return "Uses"
 
     def _get_argname(self) -> ?str:
         return 'name'

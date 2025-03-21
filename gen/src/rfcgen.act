@@ -288,28 +288,6 @@ def _attr_defval(name, stmt, stms) -> str:
         return "=[]"
     raise ValueError("Unknown cardinality: %s" % cardinality)
 
-header = """
-def _prsrc_attrs(attrs):
-    res = []
-    for attr in attrs:
-        name, value = attr
-        if isinstance(value, list):
-            if len(value) > 0:
-                res.append(name + "=[" + ", ".join(value) + "]")
-        else:
-            if value is not None:
-                res.append(name + "=" + repr(value))
-    return res
-
-def _ind(indent):
-    return "    " * indent
-
-class SchemaNode(object):
-    def prsrc(self, indent=0) -> list[str]:
-        raise NotImplementedError("prsrc")
-
-"""
-
 snode_methods = {
     "action": {
         "get": """    def get(self, name: str, ns: ?str=None) -> SchemaNode:
@@ -1167,48 +1145,6 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("        self.exts.extend(refine.exts)")
             res.append("")
 
-        # -- prsrc
-        res.append("    def prsrc(self, indent=0):")
-        res.append('        """Print Acton source of this node"""')
-        res.append("        res = []")
-
-        args = []
-        res.append("        attrs: list[(str, ?value)] = [")
-        for attr in kwattrs:
-            res.append("            (\"%s\", self.%s)," % (attr, _attr_name(attr)))
-        res.append("            (\"exts\", self.exts),")
-        res.append("        ]")
-
-        if arg_name is not None:
-            res.append("        args = [\"'\" + str(self.%s) + \"'\"]" % _attr_name(arg_name))
-        else:
-            res.append("        args = []")
-        res.append("        attrs_text = _prsrc_attrs(indent, self.get_attrs())")
-        res.append("        if len(attrs_text) > 0:")
-        res.append("            args.append(_prsrc_attrs(indent, self.get_attrs()))")
-        if have_children:
-            res.append("        if len(self.children) > 0:")
-            res.append("            args.append(\"children=[\")")
-        res.append("        args_text = \", \".join(args)")
-        text_prscr_attrs = "        text_line = _ind(indent) + \"%s(\" + args_text" % (_class_name(stmt_name))
-        if not have_children:
-            text_prscr_attrs += " + \")\""
-        res.append(text_prscr_attrs)
-        if have_children:
-            res.append("        if len(self.children) == 0:")
-            res.append("            text_line += ')'")
-        res.append("        res.append(text_line)")
-        if have_children:
-            res.append("        if len(self.children) > 0:")
-            res.append("            child_res = []")
-            res.append("            for child in self.children:")
-            res.append("                child_res.append(child.prsrc(indent+1))")
-            res.append("            res.append(\",\\n\".join(child_res))")
-            res.append("            res.append(_ind(indent) + \"])\")")
-
-        res.append("        return \"\\n\".join(res)")
-        res.append("")
-
         manual_methods = []
         # == Statement specific methods ================================
         for method_name in snode_methods.get_def(stmt_name, {}):
@@ -1242,6 +1178,10 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("    def __str__(self):")
         strret = "\"%s \" + self.%s" % (_class_name(stmt_name), _attr_name(arg_name)) if arg_name is not None else "\"%s\"" % (_class_name(stmt_name))
         res.append("        return " + strret)
+        res.append("")
+
+        res.append("    def _get_class_name(self) -> str:")
+        res.append("        return \"%s\"" % _class_name(stmt_name))
         res.append("")
 
         res.append("    def _get_argname(self) -> ?str:")
