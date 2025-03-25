@@ -217,6 +217,8 @@ class Node(value):
             return "Absent(" + ", ".join(args) + ")"
         elif isinstance(self, List):
             args.insert(0, str(self.keys))
+            if self.user_order:
+                args.append("user_orde=True")
             if len(self.elements) == 0:
                 res.append("List(" + ", ".join(args) + ')')
             else:
@@ -296,7 +298,7 @@ class Node(value):
             return xml
         elif isinstance(self, List):
             xml = ""
-            for elem in self.elements:
+            for elem in self.elements if self.user_order else sorted(self.elements):
                 remove = isinstance(elem, AbsentListElement)
                 xml += _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op if remove else []) + _nl()
                 # Print key leafs first
@@ -680,6 +682,13 @@ class ListElement(Inner):
         def escape_keys(key_val):
             return key_val.replace(",", "\\,")
         return ",".join(map(escape_keys, self.key_vals))
+
+extension ListElement(Ord):
+    def __eq__(a, b):
+        return a.key_str() == b.key_str()
+
+    def __lt__(a, b):
+        return a.key_str() <= b.key_str()
 
 class AbsentListElement(ListElement):
     def __init__(self, key_vals: list[str], ns: ?str=None):
