@@ -242,8 +242,6 @@ class Node(value):
             elif isinstance(self, ListElement):
                 args.insert(0, str(self.key_vals))
                 sname = _ind(indent) + "ListElement"
-            elif isinstance(self, Module):
-                sname = "Module"
 
             if len(self.children) == 0:
                 res.append(sname + "(" + ", ".join(args) + ")")
@@ -290,11 +288,6 @@ class Node(value):
             xml += _indent() + fmt_tag(name, close=True) + _nl()
             return xml
 
-        elif isinstance(self, Module):
-            xml = ""
-            for nm,child in self.children.items():
-                xml += child.to_xmlstr(nm, pretty, indent, either(self.ns, cns))
-            return xml
         elif isinstance(self, List):
             xml = ""
             for elem in self.elements if self.user_order else sorted(self.elements):
@@ -518,14 +511,6 @@ extension Node(Eq):
         if self.ns != other.ns:
             return False
 
-        if isinstance(self, Module) and isinstance(other, Module):
-            if set(self.children.keys()) != set(other.children.keys()):
-                return False
-            for key in self.children.keys():
-                if self.children[key] != other.children[key]:
-                    return False
-            return True
-
         if isinstance(self, Container) and isinstance(other, Container):
             if set(self.children.keys()) != set(other.children.keys()):
                 return False
@@ -628,13 +613,6 @@ extension Node(Eq):
 
 class Inner(Node):
     children: dict[str, Node]
-
-class Module(Inner):
-    def __init__(self, children: dict[str, Node]={}, ns: str, prefix: ?str=None):
-        self.children = children
-        self.ns = ns
-        self.prefix = prefix
-
 
 class Container(Inner):
     def __init__(self, children: dict[str, Node]={}, presence: bool=False, ns: ?str=None, prefix: ?str=None):
@@ -751,7 +729,7 @@ def merge(a: Node, b: Node) -> Node:
     if type(a) != type(b):
         raise ValueError("Cannot merge nodes of different types, type(a) = %s, type(b) = %s" % (str(type(a)), str(type(b))))
 
-    # Helper to merge keyed children (used by Container, Module, and ListElement)
+    # Helper to merge keyed children (used by Container and ListElement)
     def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node]) -> dict[str, Node]:
         result: dict[str, Node] = {}
 
@@ -829,11 +807,6 @@ def merge(a: Node, b: Node) -> Node:
     if isinstance(a, Container) and isinstance(b, Container):
         new_children = merge_keyed_children(a.children, b.children)
         return Container(children=new_children, ns=a.ns)
-
-    elif isinstance(a, Module) and isinstance(b, Module):
-        new_children = merge_keyed_children(a.children, b.children)
-        ns = a.ns
-        return Module(children=new_children, ns=ns if ns is not None else "")
 
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.t != b.t:
@@ -954,7 +927,7 @@ def diff(old: Node, new: Node) -> ?Node:
     if type(old) != type(new):
         raise ValueError("diff called with nodes of different types: %s vs %s" % (str(type(old)), str(type(new))))
 
-    # Helper function for diffing nodes that have children keyed by strings (Module, Container, ListElement)
+    # Helper function for diffing nodes that have children keyed by strings (Container, ListElement)
     def diff_keyed_children(old_children: dict[str, Node], new_children: dict[str, Node]) -> ?dict[str, Node]:
         # We'll produce a new_children_dict with the diff
         result: dict[str, Node] = {}
@@ -1060,14 +1033,7 @@ def diff(old: Node, new: Node) -> ?Node:
 
     # Diff logic for each node type
 
-    if isinstance(old, Module) and isinstance(new, Module):
-        diff_children = diff_keyed_children(old.children, new.children)
-        if diff_children is None:
-            return None
-        ns = new.ns
-        return Module(children=diff_children, ns=ns if ns is not None else "", prefix=new.prefix)
-
-    elif isinstance(old, Container) and isinstance(new, Container):
+    if isinstance(old, Container) and isinstance(new, Container):
         diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
@@ -1225,31 +1191,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
             return None
         return List(old.keys, elements=new_elements, user_order=old.user_order, ns=old.ns, prefix=old.prefix)
 
-    # For Module, ListElement: apply similar logic to preserve unchanged children
-
-    elif isinstance(old, Module) and isinstance(p, Module):
-        new_children: dict[str, Node] = {}
-        for key in old.children:
-            new_children[key] = old.children[key]
-
-        for key in p.children:
-            cpatch = p.children[key]
-            if key in new_children:
-                res = patch(new_children[key], cpatch)
-                if res is not None:
-                    new_children[key] = res
-                else:
-                    del new_children[key]
-            else:
-                if isinstance(cpatch, Absent):
-                    pass
-                else:
-                    new_children[key] = cpatch
-
-        if len(new_children) == 0:
-            return None
-        ns = old.ns
-        return Module(children=new_children, ns=ns if ns is not None else "", prefix=old.prefix)
+    # For ListElement: apply similar logic to preserve unchanged children
 
     elif isinstance(old, ListElement) and isinstance(p, ListElement):
         if old.key_vals != p.key_vals:
@@ -2086,7 +2028,7 @@ def _test_patch_leaflist():
 def _test_diff_and_patch_large_tree():
     # Construct a large 'old' data tree under a Container node
     old = Container(children={
-        "mod1": Module(children={
+        "mod1": Container(children={
             "conf": Container(children={
                 "settings": Container(children={
                     "hostname": Leaf("str", "old-router"),
@@ -2102,9 +2044,9 @@ def _test_diff_and_patch_large_tree():
                         "enabled": Leaf("bool", True)
                     }),
                 ])
-            })
-        }, ns="http://example.com/yang/mod1"),
-        "mod2": Module(children={
+            }, ns="http://example.com/yang/mod1")
+        }),
+        "mod2": Container(children={
             "acl": Container(children={
                 "rules": List(["id"], elements=[
                     ListElement(["10"], children={
@@ -2118,8 +2060,8 @@ def _test_diff_and_patch_large_tree():
                         "dst": Leaf("str", "any"),
                     }),
                 ])
-            })
-        }, ns="http://example.com/yang/mod2"),
+            }, ns="http://example.com/yang/mod2")
+        }),
     })
 
     # Construct a large 'new' data tree under a Container node
@@ -2132,7 +2074,7 @@ def _test_diff_and_patch_large_tree():
     # - a new acl rule 30 is added
     # - add a LeafList in settings "ntp-servers"
     new = Container(children={
-        "mod1": Module(children={
+        "mod1": Container(children={
             "conf": Container(children={
                 "settings": Container(children={
                     "hostname": Leaf("str", "new-router"),
@@ -2150,9 +2092,9 @@ def _test_diff_and_patch_large_tree():
                         "enabled": Leaf("bool", False)
                     }),
                 ])
-            })
-        }, ns="http://example.com/yang/mod1"),
-        "mod2": Module(children={
+            }, ns="http://example.com/yang/mod1")
+        }),
+        "mod2": Container(children={
             "acl": Container(children={
                 "rules": List(["id"], elements=[
                     ListElement(["10"], children={
@@ -2171,8 +2113,8 @@ def _test_diff_and_patch_large_tree():
                         "dst": Leaf("str", "198.51.100.0/24"),
                     }),
                 ])
-            })
-        }, ns="http://example.com/yang/mod2")
+            }, ns="http://example.com/yang/mod2")
+        })
     })
 
     # Compute diff
@@ -2190,7 +2132,7 @@ def _test_diff_and_patch_large_tree():
     #testing.assertEqual(res2, old)
 
 def _test_prsrc():
-    y1 = Module({
+    y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
             "l1": List(["name"], [
@@ -2202,13 +2144,13 @@ def _test_prsrc():
                     "n4": Leaf("int", 4),
                 }),
             ])
-        })
-    }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme")
+    })
 
     return y1.prsrc()
 
 def _test_prsrc_absent():
-    y1 = Module({
+    y1 = Container({
         "foo": Container({
             "a": Absent(),
             "l1": List(["name"], [
@@ -2217,8 +2159,8 @@ def _test_prsrc_absent():
                     "n4": Leaf("int", 4),
                 }),
             ])
-        })
-    }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme")
+    })
 
     return y1.prsrc()
 
@@ -2264,6 +2206,16 @@ def _test_to_xmlstr():
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_root():
+    y1 = Container({
+        "foo": Container({
+            "a": Leaf("int", 1),
+            "b": LeafList(["a", "b", "c"]),
+        }, ns="http://example.com/acme")
+    })
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_module():
     y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
