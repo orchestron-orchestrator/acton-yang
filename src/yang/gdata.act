@@ -244,8 +244,6 @@ class Node(value):
                 sname = _ind(indent) + "ListElement"
             elif isinstance(self, Module):
                 sname = "Module"
-            elif isinstance(self, Root):
-                sname = "Root"
 
             if len(self.children) == 0:
                 res.append(sname + "(" + ", ".join(args) + ")")
@@ -261,7 +259,7 @@ class Node(value):
         else:
             raise ValueError("Unsupported node type in prsrc")
 
-    def to_xmlstr(self, name="top", pretty=True, indent=0, cns:?str=None) -> str:
+    def to_xmlstr(self, name="top", pretty=True, indent=0, cns: ?str=None) -> str:
         def _indent(extra=0):
             if pretty:
                 return "  " * (indent+extra)
@@ -273,25 +271,26 @@ class Node(value):
             return ""
 
         if isinstance(self, Container):
+            child_indent = indent if name == "top" else indent + 1
+            child_cns = None if name == "top" else either(self.ns, cns)
             child_xml = ""
-            for nm,child in self.children.items():
-                child_xml += child.to_xmlstr(nm, pretty, indent + 1)
+            for nm, child in self.children.items():
+                child_xml += child.to_xmlstr(nm, pretty, child_indent)
+            if name == "top":
+                return child_xml
+
             if child_xml == "":
                 if self.presence:
                     return _indent() + fmt_tag(name, either(self.ns, cns), end=True) + _nl()
                 else:
                     return ""
+
             xml = _indent() + fmt_tag(name, either(self.ns, cns)) + _nl()
             xml += child_xml
             xml += _indent() + fmt_tag(name, close=True) + _nl()
             return xml
 
         elif isinstance(self, Module):
-            xml = ""
-            for nm,child in self.children.items():
-                xml += child.to_xmlstr(nm, pretty, indent, either(self.ns, cns))
-            return xml
-        elif isinstance(self, Root):
             xml = ""
             for nm,child in self.children.items():
                 xml += child.to_xmlstr(nm, pretty, indent, either(self.ns, cns))
@@ -519,14 +518,6 @@ extension Node(Eq):
         if self.ns != other.ns:
             return False
 
-        if isinstance(self, Root) and isinstance(other, Root):
-            if set(self.children.keys()) != set(other.children.keys()):
-                return False
-            for key in self.children.keys():
-                if self.children[key] != other.children[key]:
-                    return False
-            return True
-
         if isinstance(self, Module) and isinstance(other, Module):
             if set(self.children.keys()) != set(other.children.keys()):
                 return False
@@ -637,12 +628,6 @@ extension Node(Eq):
 
 class Inner(Node):
     children: dict[str, Node]
-
-class Root(Inner):
-    def __init__(self, children: dict[str, Node]={}, prefix: ?str=None):
-        self.children = children
-        self.ns = None
-        self.prefix = prefix
 
 class Module(Inner):
     def __init__(self, children: dict[str, Node]={}, ns: str, prefix: ?str=None):
@@ -766,7 +751,7 @@ def merge(a: Node, b: Node) -> Node:
     if type(a) != type(b):
         raise ValueError("Cannot merge nodes of different types, type(a) = %s, type(b) = %s" % (str(type(a)), str(type(b))))
 
-    # Helper to merge keyed children (used by Container, Module, Root, and ListElement)
+    # Helper to merge keyed children (used by Container, Module, and ListElement)
     def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node]) -> dict[str, Node]:
         result: dict[str, Node] = {}
 
@@ -849,10 +834,6 @@ def merge(a: Node, b: Node) -> Node:
         new_children = merge_keyed_children(a.children, b.children)
         ns = a.ns
         return Module(children=new_children, ns=ns if ns is not None else "")
-
-    elif isinstance(a, Root) and isinstance(b, Root):
-        new_children = merge_keyed_children(a.children, b.children)
-        return Root(children=new_children)
 
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.t != b.t:
@@ -973,7 +954,7 @@ def diff(old: Node, new: Node) -> ?Node:
     if type(old) != type(new):
         raise ValueError("diff called with nodes of different types: %s vs %s" % (str(type(old)), str(type(new))))
 
-    # Helper function for diffing nodes that have children keyed by strings (Root, Module, Container, ListElement)
+    # Helper function for diffing nodes that have children keyed by strings (Module, Container, ListElement)
     def diff_keyed_children(old_children: dict[str, Node], new_children: dict[str, Node]) -> ?dict[str, Node]:
         # We'll produce a new_children_dict with the diff
         result: dict[str, Node] = {}
@@ -1079,13 +1060,7 @@ def diff(old: Node, new: Node) -> ?Node:
 
     # Diff logic for each node type
 
-    if isinstance(old, Root) and isinstance(new, Root):
-        diff_children = diff_keyed_children(old.children, new.children)
-        if diff_children is None:
-            return None
-        return Root(children=diff_children, prefix=new.prefix)
-
-    elif isinstance(old, Module) and isinstance(new, Module):
+    if isinstance(old, Module) and isinstance(new, Module):
         diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
@@ -1250,29 +1225,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
             return None
         return List(old.keys, elements=new_elements, user_order=old.user_order, ns=old.ns, prefix=old.prefix)
 
-    # For Root, Module, ListElement: apply similar logic to preserve unchanged children
-
-    elif isinstance(old, Root) and isinstance(p, Root):
-        # Similar logic to Container
-        new_children: dict[str, Node] = {}
-        for key in old.children:
-            new_children[key] = old.children[key]
-
-        for key in p.children:
-            cpatch = p.children[key]
-            if key in new_children:
-                res = patch(new_children[key], cpatch)
-                if res is not None:
-                    new_children[key] = res
-                else:
-                    del new_children[key]
-            else:
-                if isinstance(cpatch, Absent):
-                    pass
-                else:
-                    new_children[key] = cpatch
-
-        return Root(children=new_children, prefix=old.prefix)
+    # For Module, ListElement: apply similar logic to preserve unchanged children
 
     elif isinstance(old, Module) and isinstance(p, Module):
         new_children: dict[str, Node] = {}
@@ -2131,8 +2084,8 @@ def _test_patch_leaflist():
     testing.assertEqual(res, exp)
 
 def _test_diff_and_patch_large_tree():
-    # Construct a large 'old' data tree under a Root node
-    old = Root(children={
+    # Construct a large 'old' data tree under a Container node
+    old = Container(children={
         "mod1": Module(children={
             "conf": Container(children={
                 "settings": Container(children={
@@ -2169,7 +2122,7 @@ def _test_diff_and_patch_large_tree():
         }, ns="http://example.com/yang/mod2"),
     })
 
-    # Construct a large 'new' data tree under a Root node
+    # Construct a large 'new' data tree under a Container node
     # Changes from old:
     # - hostname changed from "old-router" to "new-router"
     # - motd removed
@@ -2178,7 +2131,7 @@ def _test_diff_and_patch_large_tree():
     # - mod2 acl rule 20 changes action from deny to drop
     # - a new acl rule 30 is added
     # - add a LeafList in settings "ntp-servers"
-    new = Root(children={
+    new = Container(children={
         "mod1": Module(children={
             "conf": Container(children={
                 "settings": Container(children={
@@ -2270,7 +2223,7 @@ def _test_prsrc_absent():
     return y1.prsrc()
 
 def _test_prsrc_root():
-    y1 = Root({
+    y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
             "b": LeafList(["a", "b", "c"]),
@@ -2280,7 +2233,7 @@ def _test_prsrc_root():
     return y1.prsrc()
 
 def _test_prsrc_leaf_ns():
-    y1 = Root({
+    y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1, ns="http://example.com/foo"),
             "b": Leaf("int", 2)
@@ -2290,7 +2243,7 @@ def _test_prsrc_leaf_ns():
     return y1.prsrc()
 
 def _test_to_xmlstr():
-    y1 = Module({
+    y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
             "l1": List(["name"], [
@@ -2305,13 +2258,13 @@ def _test_to_xmlstr():
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
             "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"])
-        })
-    }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme")
+    })
 
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_root():
-    y1 = Root({
+    y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
             "b": LeafList(["a", "b", "c"]),
@@ -2321,7 +2274,7 @@ def _test_to_xmlstr_root():
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_leaf_ns():
-    y1 = Root({
+    y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1, ns="http://example.com/foo"),
             "b": Leaf("int", 2)
@@ -2331,7 +2284,7 @@ def _test_to_xmlstr_leaf_ns():
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_mixed():
-    y1 = Root({
+    y1 = Container({
         "device": List(["name"], [
             ListElement(["dev1"], {
                 "config": Container({
@@ -2353,13 +2306,13 @@ def _test_to_xmlstr_mixed():
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_root_merge():
-    y1 = Root({
+    y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
             "b": LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme")
     })
-    y2 = Root({
+    y2 = Container({
         "bar": Container({
             "b": Leaf("int", 42),
         }, ns="http://example.com/bar")
@@ -2369,7 +2322,7 @@ def _test_to_xmlstr_root_merge():
     return ym.to_xmlstr()
 
 def _test_to_xmlstr_presence():
-    y1 = Root({
+    y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1)
         }, presence=True, ns="http://example.com/acme")
@@ -2378,7 +2331,7 @@ def _test_to_xmlstr_presence():
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_presence_childless():
-    y1 = Root({
+    y1 = Container({
         "foo": Container(presence=True, ns="http://example.com/acme")
     })
 

@@ -347,7 +347,7 @@ class root(yang.adata.MNode):
             children['tc1'] = _tc1.to_gdata()
         if _li is not None:
             children['li'] = _li.to_gdata()
-        return yang.gdata.Root(children)
+        return yang.gdata.Container(children)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
@@ -369,10 +369,10 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.
         rest_path = path[1:]
         if point == 'foo:tc1':
             child = {'tc1': from_json_path_foo__tc1(jd, rest_path, op) }
-            return yang.gdata.Root(child)
+            return yang.gdata.Container(child)
         if point == 'foo:li':
             child = {'li': from_json_path_foo__li(jd, rest_path, op) }
-            return yang.gdata.Root(child)
+            return yang.gdata.Container(child)
         raise ValueError("Invalid path")
     elif len(path) == 0:
         if op == "merge":
@@ -382,7 +382,7 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.
         raise ValueError("Invalid operation")
     raise ValueError("Unable to resolve path")
 
-mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
+mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
     child_tc1 = jd.get('foo:tc1')
     if child_tc1 is not None and isinstance(child_tc1, dict):
@@ -390,9 +390,9 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Root:
     child_li = jd.get('foo:li')
     if child_li is not None and isinstance(child_li, list):
         children['li'] = from_json_foo__li(child_li)
-    return yang.gdata.Root(children)
+    return yang.gdata.Container(children)
 
-mut def to_json(n: yang.gdata.Root) -> dict[str, ?value]:
+mut def to_json(n: yang.gdata.Container) -> dict[str, ?value]:
     children = {}
     child_tc1 = n.children.get('tc1')
     if child_tc1 is not None:
