@@ -21,7 +21,7 @@ class foo__l1_entry(yang.adata.MNode):
             children['name'] = yang.gdata.Leaf('string', _name)
         if _id is not None:
             children['id'] = yang.gdata.Leaf('string', _id)
-        return yang.gdata.ListElement([yang.gdata.yang_str(self.name)], children)
+        return yang.gdata.Container(children, [yang.gdata.yang_str(self.name)])
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__l1_entry:
@@ -55,7 +55,7 @@ class foo__l1(yang.adata.MNode):
         elements = []
         for e in self.elements:
             e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.ListElement):
+            if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
         return yang.gdata.List(['name'], elements, ns='http://example.com/foo')
 
@@ -75,7 +75,7 @@ class foo__l1(yang.adata.MNode):
         return res
 
 
-mut def from_json_path_foo__l1_element(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.ListElement:
+mut def from_json_path_foo__l1_element(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
     if len(path) == 1:
         point = path[0]
         keys = point.split(",")
@@ -84,7 +84,7 @@ mut def from_json_path_foo__l1_element(jd: value, path: list[str]=[], op: ?str="
         if op == "merge":
             return val
         elif op == "remove":
-            return yang.gdata.AbsentListElement(val.key_vals)
+            return yang.gdata.Absent(val.key)
         raise ValueError("Invalid operation")
     elif len(path) > 1:
         keys = path[0].split(",")
@@ -95,7 +95,7 @@ mut def from_json_path_foo__l1_element(jd: value, path: list[str]=[], op: ?str="
             children[key] = yang.gdata.Leaf("str", keys[idx])
         if point == 'id':
             raise ValueError("Invalid json path to non-inner node")
-        return yang.gdata.ListElement(keys, children)
+        return yang.gdata.Container(children, keys)
     raise ValueError("unreachable - no keys to list element")
 
 mut def from_json_path_foo__l1(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.List:
@@ -117,13 +117,13 @@ mut def from_json_path_foo__l1(jd: value, path: list[str]=[], op: ?str="merge") 
         if op == "merge":
             elements.append(element)
         elif op == "remove":
-            elements.append(yang.gdata.AbsentListElement(element.key_vals))
+            elements.append(yang.gdata.Absent(element.key))
         return yang.gdata.List(['name'], elements)
     elif len(path) > 1:
         return yang.gdata.List(['name'], [from_json_path_foo__l1_element(jd, path, op)])
     raise ValueError("Unable to resolve path, no keys provided")
 
-mut def from_json_foo__l1_element(jd: dict[str, ?value]) -> yang.gdata.ListElement:
+mut def from_json_foo__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     children = {}
     child_name_full = jd.get('foo:name')
     child_name = child_name_full if child_name_full is not None else jd.get('name')
@@ -133,7 +133,7 @@ mut def from_json_foo__l1_element(jd: dict[str, ?value]) -> yang.gdata.ListEleme
     child_id = child_id_full if child_id_full is not None else jd.get('id')
     if child_id is not None:
         children['id'] = from_json_foo__l1__id(child_id)
-    return yang.gdata.ListElement([str(child_name if child_name is not None else "")], children)
+    return yang.gdata.Container(children, [str(child_name if child_name is not None else "")])
 
 mut def from_json_foo__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = []
@@ -142,7 +142,7 @@ mut def from_json_foo__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
             elements.append(from_json_foo__l1_element(e))
     return yang.gdata.List(keys=['name'], elements=elements, user_order=False, ns=None, prefix=None)
 
-mut def to_json_foo__l1_element(n: yang.gdata.ListElement) -> dict[str, ?value]:
+mut def to_json_foo__l1_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
     child_name = n.children.get('name')
     if child_name is not None:
