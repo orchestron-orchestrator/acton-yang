@@ -514,7 +514,7 @@ class DNodeInner(DNode):
             # keys contains a yang spec of the keys, like "k1 k2"
             # which are modeled as attributes of the list entry class and accessed via self.k1, self.k2
             list_keys_str = ", ".join(map(lambda x: "yang.gdata.yang_str(self.%s)" % _safe_name(x), self.key))
-            res.append("        return yang.gdata.ListElement([%s], children)" % (list_keys_str))
+            res.append("        return yang.gdata.Container(children, [%s])" % (list_keys_str))
         elif isinstance(self, DRoot):
             res.append("        return yang.gdata.%s(children)" % (self.gname))
         elif set_ns:
@@ -662,7 +662,7 @@ class DNodeInner(DNode):
             res.append("        elements = []")
             res.append("        for e in self.elements:")
             res.append("            e_gdata = e.to_gdata()")                                # child.namespace != self.namespace
-            res.append("            if isinstance(e_gdata, yang.gdata.ListElement):")
+            res.append("            if isinstance(e_gdata, yang.gdata.Container):")
             res.append("                elements.append(e_gdata)")
             if set_ns:
                 res.append("        return yang.gdata.List(%s, elements, ns='%s')" % (repr(self.key), self.namespace))
@@ -705,7 +705,7 @@ class DNodeInner(DNode):
                 fname += "_" + get_path_name(self)
 
             if isinstance(self, DList):
-                res += ["mut def %s_element(jd: value, path: list[str]=[], op: ?str=\"merge\") -> yang.gdata.ListElement:" % fname]
+                res += ["mut def %s_element(jd: value, path: list[str]=[], op: ?str=\"merge\") -> yang.gdata.Container:" % fname]
                 # Unlike other nodes, where the path is consumed an element at a
                 # time, we are passed the same path as the list itself, so we
                 # can read the key. We are not ready to parse the JSON payload
@@ -735,7 +735,7 @@ class DNodeInner(DNode):
                         res += ["            children['%s'] = from_json_path_%s(jd, rest_path, op)" % (child.name, get_path_name(child))]
                     else:
                         res += ["            raise ValueError(\"Invalid json path to non-inner node\")"]
-                res += ["        return yang.gdata.ListElement(keys, children)"]
+                res += ["        return yang.gdata.Container(children, keys)"]
                 res += ["    raise ValueError(\"unreachable - no keys to list element\")"]
                 res += [""]
 
@@ -800,7 +800,7 @@ class DNodeInner(DNode):
                 fname += "_" + get_path_name(self)
 
             if isinstance(self, DList):
-                res.append("mut def %s_element(jd: dict[str, ?value]) -> yang.gdata.ListElement:" % fname)
+                res.append("mut def %s_element(jd: dict[str, ?value]) -> yang.gdata.Container:" % fname)
             else:
                 res.append("mut def %s(jd: dict[str, ?value]) -> yang.gdata.%s:" % (fname, dnode_to_gd_type(self)))
 
@@ -833,7 +833,7 @@ class DNodeInner(DNode):
 
             if isinstance(self, DList):
                 list_keys_str = ", ".join(map(lambda x: "str(child_%s if child_%s is not None else \"\")" % (_safe_name(x), _safe_name(x)), self.key))
-                res.append("    return yang.gdata.ListElement([%s], children)" % (list_keys_str))
+                res.append("    return yang.gdata.Container(children, [%s])" % (list_keys_str))
             else:
                 res.append("    return yang.gdata.%s(children)" % dnode_to_gd_type(self))
             res.append("")
@@ -871,11 +871,11 @@ class DNodeInner(DNode):
             if isinstance(self, DContainer):
                 res.append("mut def %s(n: yang.gdata.Container) -> dict[str, ?value]:" % fname)
             elif isinstance(self, DModule):
-                res.append("mut def %s(n: yang.gdata.Module) -> dict[str, ?value]:" % fname)
+                res.append("mut def %s(n: yang.gdata.Container) -> dict[str, ?value]:" % fname)
             elif isinstance(self, DRoot):
                 res.append("mut def %s(n: yang.gdata.Container) -> dict[str, ?value]:" % fname)
             elif isinstance(self, DList):
-                res.append("mut def %s_element(n: yang.gdata.ListElement) -> dict[str, ?value]:" % fname)
+                res.append("mut def %s_element(n: yang.gdata.Container) -> dict[str, ?value]:" % fname)
 
             res.append("    children = {}")
             for child in self.children:
@@ -1057,7 +1057,7 @@ class DModule(DNodeInner):
 
     def __init__(self, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension_=[], feature=[], import_=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
         self.name = name
-        self.gname = "Module"
+        self.gname = "Container"
         self.namespace = namespace
         self.prefix = prefix
         if yang_version is not None:

@@ -22,7 +22,7 @@ class foo__c1__li1_entry(yang.adata.MNode):
         _l1 = self.l1
         if _l1 is not None:
             children['l1'] = yang.gdata.Leaf('string', _l1)
-        return yang.gdata.ListElement([yang.gdata.yang_str(self.l1)], children)
+        return yang.gdata.Container(children, [yang.gdata.yang_str(self.l1)])
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__li1_entry:
@@ -56,7 +56,7 @@ class foo__c1__li1(yang.adata.MNode):
         elements = []
         for e in self.elements:
             e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.ListElement):
+            if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
         return yang.gdata.List(['l1'], elements)
 
@@ -76,7 +76,7 @@ class foo__c1__li1(yang.adata.MNode):
         return res
 
 
-mut def from_json_path_foo__c1__li1_element(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.ListElement:
+mut def from_json_path_foo__c1__li1_element(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Container:
     if len(path) == 1:
         point = path[0]
         keys = point.split(",")
@@ -94,7 +94,7 @@ mut def from_json_path_foo__c1__li1_element(jd: value, path: list[str]=[], op: ?
         children: dict[str, yang.gdata.Node] = {}
         for idx, key in enumerate(['l1']):
             children[key] = yang.gdata.Leaf("str", keys[idx])
-        return yang.gdata.ListElement(keys, children)
+        return yang.gdata.Container(children, keys)
     raise ValueError("unreachable - no keys to list element")
 
 mut def from_json_path_foo__c1__li1(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.List:
@@ -122,13 +122,13 @@ mut def from_json_path_foo__c1__li1(jd: value, path: list[str]=[], op: ?str="mer
         return yang.gdata.List(['l1'], [from_json_path_foo__c1__li1_element(jd, path, op)])
     raise ValueError("Unable to resolve path, no keys provided")
 
-mut def from_json_foo__c1__li1_element(jd: dict[str, ?value]) -> yang.gdata.ListElement:
+mut def from_json_foo__c1__li1_element(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
     child_l1_full = jd.get('foo:l1')
     child_l1 = child_l1_full if child_l1_full is not None else jd.get('l1')
     if child_l1 is not None:
         children['l1'] = from_json_foo__c1__li1__l1(child_l1)
-    return yang.gdata.ListElement([str(child_l1 if child_l1 is not None else "")], children)
+    return yang.gdata.Container(children, [str(child_l1 if child_l1 is not None else "")])
 
 mut def from_json_foo__c1__li1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = []
@@ -137,7 +137,7 @@ mut def from_json_foo__c1__li1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
             elements.append(from_json_foo__c1__li1_element(e))
     return yang.gdata.List(keys=['l1'], elements=elements, user_order=False, ns=None, prefix=None)
 
-mut def to_json_foo__c1__li1_element(n: yang.gdata.ListElement) -> dict[str, ?value]:
+mut def to_json_foo__c1__li1_element(n: yang.gdata.Container) -> dict[str, ?value]:
     children = {}
     child_l1 = n.children.get('l1')
     if child_l1 is not None:
