@@ -233,14 +233,14 @@ class Node(value):
         elif isinstance(self, Inner):
             sname = ""
             if isinstance(self, AbsentListElement):
-                args.insert(0, str(self.key_vals))
+                args.insert(0, str(self.key))
                 sname = "AbsentListElement"
             elif isinstance(self, Container):
                 sname = "Container"
                 if self.presence:
                     args.insert(0, "presence=True")
-                if self.key_vals != []:
-                    args.insert(0, str(self.key_vals))
+                if self.key != []:
+                    args.insert(0, str(self.key))
 
             if len(self.children) == 0:
                 res.append(sname + "(" + ", ".join(args) + ")")
@@ -297,7 +297,7 @@ class Node(value):
                 xml += _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op if remove else []) + _nl()
                 # Print key leafs first
                 for key_idx, key_name in enumerate(self.keys):
-                    xml += _indent(1) + "<" + key_name + ">" + str(elem.key_vals[key_idx]) + "</" + key_name + ">" + _nl()
+                    xml += _indent(1) + "<" + key_name + ">" + str(elem.key[key_idx]) + "</" + key_name + ">" + _nl()
                 for nm,child in elem.children.items():
                     if nm in self.keys or remove:
                         continue
@@ -514,7 +514,7 @@ extension Node(Eq):
             return False
 
         if isinstance(self, Container) and isinstance(other, Container):
-            if self.key_vals != other.key_vals:
+            if self.key != other.key:
                 return False
             if set(self.children.keys()) != set(other.children.keys()):
                 return False
@@ -589,16 +589,16 @@ extension Node(Eq):
             for i in range(len(self.elements)):
                 e1 = self.elements[i]
                 e2 = other.elements[i]
-                if not self.user_order and e1.key_vals != e2.key_vals:
+                if not self.user_order and e1.key != e2.key:
                     for e2 in other.elements:
-                        if e1.key_vals == e2.key_vals:
+                        if e1.key == e2.key:
                             break
                 if e1 != e2:
                     return False
             return True
 
         if isinstance(self, AbsentListElement) and isinstance(other, AbsentListElement):
-            return self.key_vals == other.key_vals
+            return self.key == other.key
 
         if isinstance(self, Absent) and isinstance(other, Absent):
             return True
@@ -621,11 +621,9 @@ class List(Node):
         self.prefix = prefix
 
 class Container(Inner):
-    key_vals: list[str] # values of the key leafs
-
-    def __init__(self, children: dict[str, Node]={}, key_vals: list[str]=[], presence: bool=False, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, children: dict[str, Node]={}, key: list[str]=[], presence: bool=False, ns: ?str=None, prefix: ?str=None):
         self.children = children
-        self.key_vals = key_vals
+        self.key = key
         self.presence = presence
         self.ns = ns
         self.prefix = prefix
@@ -633,7 +631,7 @@ class Container(Inner):
     def key_str(self) -> str:
         def escape_keys(key_val):
             return key_val.replace(",", "\\,")
-        return ",".join(map(escape_keys, self.key_vals))
+        return ",".join(map(escape_keys, self.key))
 
 extension Container(Ord):
     def __eq__(a, b):
@@ -643,8 +641,8 @@ extension Container(Ord):
         return a.key_str() <= b.key_str()
 
 class AbsentListElement(Container):
-    def __init__(self, key_vals: list[str], ns: ?str=None, prefix: ?str=None):
-        self.key_vals = key_vals
+    def __init__(self, key: list[str], ns: ?str=None, prefix: ?str=None):
+        self.key = key
         self.children = {}
         self.presence = False
         self.ns = ns
@@ -796,11 +794,11 @@ def merge(a: Node, b: Node) -> Node:
         return result
 
     if isinstance(a, Container) and isinstance(b, Container):
-        if a.key_vals != b.key_vals:
-            raise ValueError("Cannot merge containers with different keys: %s vs %s" % (str(a.key_vals), str(b.key_vals)))
+        if a.key != b.key:
+            raise ValueError("Cannot merge containers with different keys: %s vs %s" % (str(a.key), str(b.key)))
         # Merge keyed children similarly to Container
         new_children = merge_keyed_children(a.children, b.children)
-        return Container(children=new_children, key_vals=a.key_vals, presence=a.presence, ns=a.ns, prefix=a.prefix)
+        return Container(children=new_children, key=a.key, presence=a.presence, ns=a.ns, prefix=a.prefix)
 
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.t != b.t:
@@ -837,7 +835,7 @@ def merge(a: Node, b: Node) -> Node:
                 k = a_elem.key_str()
                 found = False
                 for b_elem in b.elements:
-                    if b_elem.key_vals == a_elem.key_vals:
+                    if b_elem.key == a_elem.key:
                         merged_elem = merge(a_elem, b_elem)
                         if isinstance(merged_elem, Container):
                             new_elements.append(merged_elem)
@@ -872,12 +870,12 @@ def merge(a: Node, b: Node) -> Node:
             def escape_keys(key_val):
                 return key_val.replace(",", "\\,")
             for elem in a.elements:
-                key_str = ",".join(elem.key_vals)
+                key_str = ",".join(elem.key)
                 if key_str not in all_elements:
                     all_elements[key_str] = []
                 all_elements[key_str].append(elem)
             for elem in b.elements:
-                key_str = ",".join(elem.key_vals)
+                key_str = ",".join(elem.key)
                 if key_str not in all_elements:
                     all_elements[key_str] = []
                 all_elements[key_str].append(elem)
@@ -986,7 +984,7 @@ def diff(old: Node, new: Node) -> ?Node:
                     # old element not in new => absent
                     oe = old_map[ok]
                     # AbsentListElement is a ListElement
-                    result.append(AbsentListElement(oe.key_vals, ns=oe.ns))
+                    result.append(AbsentListElement(oe.key, ns=oe.ns))
                     i += 1
                 elif not nk_in_old:
                     # new element not in old => new element
@@ -1003,7 +1001,7 @@ def diff(old: Node, new: Node) -> ?Node:
             ok = old_key_order[i]
             if ok not in new_map:
                 oe = old_map[ok]
-                result.append(AbsentListElement(oe.key_vals, ns=old_list.ns))
+                result.append(AbsentListElement(oe.key, ns=old_list.ns))
             i += 1
 
         # Remaining new elements are new
@@ -1021,12 +1019,12 @@ def diff(old: Node, new: Node) -> ?Node:
     # Diff logic for each node type
 
     if isinstance(old, Container) and isinstance(new, Container):
-        if old.key_vals != new.key_vals:
-            raise ValueError("Container keys differ: %s vs %s" % (str(old.key_vals), str(new.key_vals)))
+        if old.key != new.key:
+            raise ValueError("Container keys differ: %s vs %s" % (str(old.key), str(new.key)))
         diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
-        return Container(children=diff_children, key_vals=new.key_vals, presence=new.presence, ns=new.ns, prefix=new.prefix)
+        return Container(children=diff_children, key=new.key, presence=new.presence, ns=new.ns, prefix=new.prefix)
 
     elif isinstance(old, List) and isinstance(new, List):
         # For lists, we have elements instead of children
@@ -1052,8 +1050,8 @@ def diff(old: Node, new: Node) -> ?Node:
         return None
 
     elif isinstance(old, AbsentListElement) and isinstance(new, AbsentListElement):
-        if old.key_vals != new.key_vals:
-            raise ValueError("AbsentListElement keys differ: %s vs %s" % (str(old.key_vals), str(new.key_vals)))
+        if old.key != new.key:
+            raise ValueError("AbsentListElement keys differ: %s vs %s" % (str(old.key), str(new.key)))
         return None
 
     elif isinstance(old, AbsentListElement) and not isinstance(new, AbsentListElement):
@@ -1083,8 +1081,8 @@ def patch(old: Node, p: ?Node) -> ?Node:
         return None
 
     elif isinstance(old, Container) and isinstance(p, Container):
-        if old.key_vals != p.key_vals:
-            raise ValueError("Container keys differ in patch: %s vs %s" % (str(old.key_vals), str(p.key_vals)))
+        if old.key != p.key:
+            raise ValueError("Container keys differ in patch: %s vs %s" % (str(old.key), str(p.key)))
 
         # Start with old children
         new_children: dict[str, Node] = {}
@@ -1113,7 +1111,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         # No need to remove unchanged nodes; they are already in new_children
         if len(new_children) == 0:
             return None
-        return Container(children=new_children, key_vals=old.key_vals, presence=old.presence, ns=old.ns, prefix=old.prefix)
+        return Container(children=new_children, key=old.key, presence=old.presence, ns=old.ns, prefix=old.prefix)
 
     elif isinstance(old, List) and isinstance(p, List):
         if old.keys != p.keys:
@@ -1191,8 +1189,8 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
     elif isinstance(old, AbsentListElement) and isinstance(p, AbsentListElement):
         # Both absent means element was removed
-        if old.key_vals != p.key_vals:
-            raise ValueError("AbsentListElement keys differ in patch: %s vs %s" % (str(old.key_vals), str(p.key_vals)))
+        if old.key != p.key:
+            raise ValueError("AbsentListElement keys differ in patch: %s vs %s" % (str(old.key), str(p.key)))
         return None
 
     else:
