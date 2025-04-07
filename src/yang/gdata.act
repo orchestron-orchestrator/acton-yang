@@ -1,5 +1,6 @@
 import base64
 import testing
+import json
 import xml
 
 """YANG data
@@ -190,6 +191,14 @@ def yang_str(v) -> str:
         s = s.lower()
     return s
 
+def json_val(v: ?value) -> ?value:
+    if isinstance(v, bytes):
+        return base64.encode(v).decode()
+    if isinstance(v, bool):
+        return str(v).lower()
+    return v
+
+
 def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
     ns_attr = [("xmlns", '"'+ns+'"')] if ns is not None and not close else []
     attr_strs = list(map(lambda x: x.0 + "=" + x.1, ns_attr + attrs))
@@ -267,7 +276,47 @@ class Node(value):
         else:
             raise ValueError("Unsupported node type in prsrc")
 
+    def to_json(self, pretty=True) -> str:
+        """Convert gdata to JSON
+        """
+        return json.encode(self.to_dict(), pretty=pretty)
+
+    def to_dict(self, pretty=True) -> dict[str, ?value]:
+        """Convert gdata to a dict, suitable for JSON serialization
+        """
+        if isinstance(self, Container):
+            child_dict = {}
+            for nm,child in self.children.items():
+                if isinstance(child, Container):
+                    child_dict[nm] = child.to_dict(pretty)
+                elif isinstance(child, Leaf):
+                    child_dict[nm] = json_val(child.val)
+                elif isinstance(child, LeafList):
+                    vals = []
+                    for v in child.vals:
+                        vals.append(json_val(v))
+                    child_dict[nm] = vals
+                elif isinstance(child, List):
+                    elems = []
+                    for elem in child.elements:
+                        if isinstance(elem, Container):
+                            elem_dict = {}
+                            for k, v in dict(zip(child.keys, elem.key)).items():
+                                elem_dict[k] = v
+                            elem_dict.update(elem.to_dict(pretty).items())
+                            elems.append(elem_dict)
+                        else:
+                            raise ValueError("Unexpected list (" + nm + ") element type: " + type(elem))
+                    child_dict[nm] = elems
+                else:
+                    raise ValueError("Unsupported child (" + nm + ") node type in to_dict: " + type(child))
+            return child_dict
+        raise ValueError("Unsupported node type in to_dict: " + type(self))
+
     def to_xmlstr(self, name="top", pretty=True, indent=0, cns: ?str=None) -> str:
+        # TODO: get rid of cns, I don't think it is necessary anymore, right?
+        # TODO: uh, do not use the name "top" for the root node, since it can
+        # conflict with the name of a child node actually named "top"
         def _indent(extra=0):
             if pretty:
                 return "  " * (indent+extra)
@@ -2142,18 +2191,39 @@ def _test_prsrc_leaf_ns():
 
     return y1.prsrc()
 
+def _test_to_json():
+    y1 = Container({
+        "foo": Container({
+            "a": Leaf("int", 1),
+            "l1": List(["name", "name_two"], [
+                Container({
+                    "n1": Leaf("int", 1),
+                    "n2": Leaf("int", 2)
+                }, ["k1", "k1a"]),
+                Container({
+                    "n4": Leaf("int", 4),
+                }, ["k4", "k4a"]),
+            ]),
+            "b": Leaf("bool", False),
+            "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
+            "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"])
+        }, ns="http://example.com/acme")
+    })
+
+    return y1.to_json(pretty=True)
+
 def _test_to_xmlstr():
     y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
-            "l1": List(["name"], [
+            "l1": List(["name", "name_two"], [
                 Container({
                     "n1": Leaf("int", 1),
                     "n2": Leaf("int", 2)
-                }, ["k1"]),
+                }, ["k1", "k1a"]),
                 Container({
                     "n4": Leaf("int", 4),
-                }, ["k4"]),
+                }, ["k4", "k4a"]),
             ]),
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
