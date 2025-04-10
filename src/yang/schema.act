@@ -441,12 +441,6 @@ class DNodeInner(DNode):
                     # NOTE: the default argument for P-container is None, so
                     # although unconditionally set here, it can be None
                     res.append("        self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                if loose or child.presence or optional_subtree(child):
-                    res.append("        self_%s = self.%s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        if self_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("            self_%s._parent = self" % (_unique_safe_name(child.name, child.prefix)))
-                else:
-                    res.append("        self.%s._parent = self" % (_unique_safe_name(child.name, child.prefix)))
             elif isinstance(child, DLeaf):
                 child_default = child.default
                 if not loose and child_default != None:
@@ -465,7 +459,6 @@ class DNodeInner(DNode):
                 res.append("            self.%s = []" % (_unique_safe_name(child.name, child.prefix)))
             elif isinstance(child, DList):
                 res.append("        self.%s = %s(elements=%s)" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
-                res.append("        self.%s._parent = self" % (_unique_safe_name(child.name, child.prefix)))
         if len(self.children) == 0:
             res.append("        pass")
         res.append("")

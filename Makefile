@@ -26,3 +26,9 @@ test:
 test-daclass:
 	cd test/test_data_classes_gen && acton build && out/bin/gen
 	cd test/test_data_classes && acton test
+
+.PHONY: test-golden-update
+test-golden-update:
+	acton test --golden-update
+	cd test/test_data_classes_gen && acton build && out/bin/gen
+	cd test/test_data_classes && acton test --golden-update
