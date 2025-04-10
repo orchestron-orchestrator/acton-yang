@@ -1334,6 +1334,7 @@ class Context(object):
 
 class SchemaNode(object):
     parent: ?SchemaNode
+    mod: ?str
     ns: ?str
     pfx: ?str
     exts: list[Ext]
@@ -1428,19 +1429,12 @@ class SchemaNode(object):
         raise ValueError(f"get_dnode_children() called on non-inner node {type(self)}")
 
     def get_module_name(self) -> str:
-        """Get the module name for the containing module
-
-        That is, climb up the ladder of parents from the current node until we
-        find a module node. This is used to determine the module name for the
-        current node. If we're in a submodule the module name is resolved to
-        the parent module the submodule belongs to.
-        """
+        # TODO: return belongs_to.name for submodule??
         n = self
         for i in range(RECURSION_LIMIT+1):
-            if isinstance(n, Module):
-                return n.name
-            elif isinstance(n, Submodule):
-                return n.belongs_to.module
+            nmod = n.mod
+            if nmod is not None:
+                return nmod
             nparent = n.parent
             if nparent is not None:
                 n = nparent
@@ -1622,7 +1616,7 @@ class SchemaNode(object):
             break
         raise ValueError("Unable to find Module")
 
-    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None) -> SchemaNode:
+    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None) -> SchemaNode:
         """Compile an abstract YANG into a concrete one
         - expand uses / groupings
         - handle augments
@@ -1695,7 +1689,7 @@ class SchemaNode(object):
                     target = get_target(target_base, aug.target_node)
                     if isinstance(target, SchemaNodeInner):
                         # Just move the child to the target
-                        aug.expand_children(context, target, new_ns=aug.get_namespace(), new_pfx=aug.get_prefix())
+                        aug.expand_children(context, target, new_mod=aug.get_module_name(), new_ns=aug.get_namespace(), new_pfx=aug.get_prefix())
                         target.exts.extend(aug.exts)
                     else:
                         raise ValueError("Augment target " + str(target) + " is not an inner node")
@@ -1710,18 +1704,18 @@ class SchemaNode(object):
         else:
             raise ValueError("Node type does not have augment substatements")
 
-    def expand_children(self, context: Context, target: SchemaNodeInner, new_ns: ?str = None, new_pfx: ?str = None):
+    def expand_children(self, context: Context, target: SchemaNodeInner, new_mod: ?str = None, new_ns: ?str = None, new_pfx: ?str = None):
         """Expand abstract children into concrete nodes
         """
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
                 if isinstance(child, Uses):
                     grouping = child.get_grouping(child.name, context)
-                    grouping.expand_children(context, target, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx)
+                    grouping.expand_children(context, target, new_mod if new_mod is not None else target.mod, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx)
                     child.expand_augments(context, target, in_uses=True)
                     child.expand_refines(target)
                 else:
-                    c_child = child.compile(context, new_ns, new_pfx)
+                    c_child = child.compile(context, new_mod, new_ns, new_pfx)
                     c_child.parent = target
                     target.children.append(c_child)
         else:
