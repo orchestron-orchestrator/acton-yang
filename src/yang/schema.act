@@ -765,9 +765,9 @@ class DNodeInner(DNode):
                 res.append("        rest_path = path[1:]")
                 for child in self.children:
                     if top == True or child.namespace != self.namespace:
-                        res.append(f"        if point == '{child.prefix}:{child.name}':")
+                        res.append(f"        if point == '{child.module}:{child.name}':")
                     else:
-                        res.append(f"        if point == '{child.prefix}:{child.name}' or point == '{child.name}':")
+                        res.append(f"        if point == '{child.module}:{child.name}' or point == '{child.name}':")
                     if isinstance(child, DNodeInner):
                         res += [nest(12) + f"child = {{'{child.name}': from_json_path_{pname(child)}(jd, rest_path, op) }}"]
                         res += [nest(12) + "return yang.gdata." + dnode_to_gd_type(self) + "(child)"]
@@ -799,9 +799,9 @@ class DNodeInner(DNode):
             res.append("    children = {}")
             for child in self.children:
                 if top == True or child.namespace != self.namespace:
-                    res.append(f"    child_{usname(child)} = jd.get('{child.prefix}:{child.name}')")
+                    res.append(f"    child_{usname(child)} = jd.get('{child.module}:{child.name}')")
                 else:
-                    res.append(f"    child_{usname(child)}_full = jd.get('{child.prefix}:{child.name}')")
+                    res.append(f"    child_{usname(child)}_full = jd.get('{child.module}:{child.name}')")
                     res.append(f"    child_{usname(child)} = child_{usname(child)}_full if child_{usname(child)}_full is not None else jd.get('{child.name}')")
 
                 if isinstance(child, DContainer):
@@ -864,7 +864,7 @@ class DNodeInner(DNode):
 
             res.append("    children = {}")
             for child in self.children:
-                child_name = (child.prefix + ":" + child.name) if child.namespace != self.namespace else child.name
+                child_name = f"{child.module}:{child.name}" if child.namespace != self.namespace else child.name
                 res.append(f"    child_{usname(child)} = n.children.get('{uname(child)}')")
                 res.append(f"    if child_{usname(child)} is not None:")
                 if isinstance(child, DLeaf):
