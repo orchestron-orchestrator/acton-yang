@@ -310,7 +310,7 @@ class DNode(object):
                     return child
                 elif isinstance(child, DRpc) and child.name == name:
                     return child
-            raise ValueError("Child %s not found" % name)
+            raise ValueError(f"Child {name} not found")
 
         raise ValueError("Unable to get child from non-inner node")
 
@@ -361,11 +361,20 @@ class DNodeInner(DNode):
         def _unique_name(name: str, prefix: str) -> str:
             if name not in child_name_conflicts:
                 return name
-            return "%s:%s" % (prefix, name)
+            return f"{prefix}:{name}"
+
+        def uname(n) -> str:
+            return _unique_name(n.name, n.prefix)
 
         def _unique_safe_name(name: str, prefix: str) -> str:
             unique_name = _unique_name(name, prefix)
             return _safe_name(unique_name).replace(":", "_")
+
+        def usname(n) -> str:
+            return _unique_safe_name(n.name, n.prefix)
+
+        def pname(n):
+            return get_path_name(n)
 
         for child in self.children:
             res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
@@ -375,22 +384,22 @@ class DNodeInner(DNode):
             # - the list itself
             # - the list entry class
             # Here we create the list entry class, the list itself comes later
-            res.append("class %s_entry(yang.adata.MNode):" % get_path_name(self))
+            res.append(f"class {get_path_name(self)}_entry(yang.adata.MNode):")
         else:
-            res.append("class %s(yang.adata.MNode):" % get_path_name(self))
+            res.append(f"class {get_path_name(self)}(yang.adata.MNode):")
 
         for child in self.children:
             if isinstance(child, DLeaf):
-                res.append("    %s: %s" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_acton_type(child, loose)))
+                res.append(f"    {usname(child)}: {yang_leaf_to_acton_type(child, loose)}")
             elif isinstance(child, DLeafList):
-                res.append("    %s: %s" % (_unique_safe_name(child.name, child.prefix), yang_leaflist_to_acton_type(child)))
+                res.append(f"    {usname(child)}: {yang_leaflist_to_acton_type(child)}")
             elif isinstance(child, DContainer):
                 if child.presence:
-                    res.append("    %s: ?%s" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
+                    res.append(f"    {usname(child)}: ?{pname(child)}")
                 else:
-                    res.append("    %s: %s" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
+                    res.append(f"    {usname(child)}: {pname(child)}")
             elif isinstance(child, DNodeInner):
-                res.append("    %s: %s" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
+                res.append(f"    {usname(child)}: {pname(child)}")
             elif isinstance(child, DAnydata):
                 pass # TODO
             elif isinstance(child, DAnyxml):
@@ -409,60 +418,52 @@ class DNodeInner(DNode):
         req_args = []
         opt_args = []
         for child in self.children:
+            child_name = _unique_safe_name(child.name, child.prefix)
             if isinstance(child, DContainer):
                 if loose or child.presence or optional_subtree(child):
-                    opt_args.append("%s: ?%s=None" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
+                    opt_args.append(f"{usname(child)}: ?{get_path_name(child)}=None")
                 else:
-                    req_args.append("%s: %s" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
+                    req_args.append(f"{usname(child)}: {get_path_name(child)}")
             elif isinstance(child, DLeaf):
                 defval = ""
                 child_default = child.default
                 if not loose and child_default != None:
                     defval = "=None"
-                child_arg = "%s: %s%s" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_acton_arg_type(child, loose), defval)
+                child_arg = f"{usname(child)}: {yang_leaf_to_acton_arg_type(child, loose)}{defval}"
                 if is_optional_arg_yang_leaf(child, loose):
                     opt_args.append(child_arg)
                 else:
                     req_args.append(child_arg)
             elif isinstance(child, DLeafList):
-                opt_args.append("%s: ?%s=None" % (_unique_safe_name(child.name, child.prefix), yang_leaflist_to_acton_type(child)))
+                opt_args.append(f"{usname(child)}: ?{yang_leaflist_to_acton_type(child)}=None")
             elif isinstance(child, DList):
-                opt_args.append("%s: list[%s_entry]=[]" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
+                opt_args.append(f"{usname(child)}: list[{get_path_name(child)}_entry]=[]")
 
         init_args_str = ", ".join(["self"] + req_args + opt_args)
-        res.append("    mut def __init__(%s):" % init_args_str)
+        res.append(f"    mut def __init__({init_args_str}):")
         # Set namespace from us
-        res.append("        self._ns = \"%s\"" % self.namespace)
+        res.append(f"        self._ns = '{self.namespace}'")
 
         for child in self.children:
+            child_name = _unique_safe_name(child.name, child.prefix)
             if isinstance(child, DContainer):
                 if (loose or optional_subtree(child)) and not child.presence:
-                    res.append("        if %s is not None:" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("            self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        else:")
-                    res.append("            self.%s = %s()" % (_unique_safe_name(child.name, child.prefix), get_path_name(child)))
+                    res.append(f"        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {get_path_name(child)}()")
                 else:
                     # NOTE: the default argument for P-container is None, so
                     # although unconditionally set here, it can be None
-                    res.append("        self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"        self.{usname(child)} = {usname(child)}")
             elif isinstance(child, DLeaf):
                 child_default = child.default
-                if not loose and child_default != None:
-                    res.append("        if %s != None:" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("            self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        else:")
-                    res.append("            self.%s = %s" % (_unique_safe_name(child.name, child.prefix), prsrc_literal(child.type_.name, child_default)))
+                if not loose and child_default is not None:
+                    res.append(f"        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {prsrc_literal(child.type_.name, child_default)}")
                 else:
-                    res.append("        self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"        self.{usname(child)} = {usname(child)}")
             elif isinstance(child, DLeafList):
-                #res.append("        self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                res.append("        if %s is not None:" % (_unique_safe_name(child.name, child.prefix)))
-                res.append("            self.%s = %s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                res.append("        else:")
-                # TODO: this is where we can set the leaf-list to a default value
-                res.append("            self.%s = []" % (_unique_safe_name(child.name, child.prefix)))
+                # TODO: this is where we can set the leaf-list to a default value, not []
+                res.append(f"        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else []")
             elif isinstance(child, DList):
-                res.append("        self.%s = %s(elements=%s)" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                res.append(f"        self.{usname(child)} = {get_path_name(child)}(elements={usname(child)})")
         if len(self.children) == 0:
             res.append("        pass")
         res.append("")
@@ -471,6 +472,7 @@ class DNodeInner(DNode):
         # for each that takes as arguments the mandatory children of the
         # container
         for child in self.children:
+            child_name = _unique_safe_name(child.name, child.prefix)
             if isinstance(child, DContainer) and child.presence:
                 pc_args = ["self"]
                 for cchild in child.children:
@@ -480,55 +482,55 @@ class DNodeInner(DNode):
                     elif isinstance(cchild, DContainer):
                         if not (loose or optional_subtree(cchild)):
                             pc_args.append(_safe_name(cchild.name))
-                res.append("    mut def create_%s(%s):" % (_unique_safe_name(child.name, child.prefix), ", ".join(pc_args)))
-                res.append("        res = %s(%s)" % (get_path_name(child), ", ".join(pc_args[1:])))
-                res.append("        self.%s = res" % (_unique_safe_name(child.name, child.prefix)))
+                pc_args_str = ", ".join(pc_args)
+                pc_args_str1 = ", ".join(pc_args[1:])
+                res.append(f"    mut def create_{usname(child)}({pc_args_str}):")
+                res.append(f"        res = {pname(child)}({pc_args_str1})")
+                res.append(f"        self.{usname(child)} = res")
                 res.append("        return res")
                 res.append("")
 
         # .to_gdata()
         res.append("    mut def to_gdata(self) -> yang.gdata.Node:")
-
         res.append("        children = {}")
 
         for child in self.children:
             if not isinstance(child, DLeafList):
-                res.append("        _%s = self.%s" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-        for child in self.children:
+                res.append(f"        _{usname(child)} = self.{usname(child)}")
             child_ns = ", ns='" + child.namespace + "'" if child.namespace != self.namespace else ""
             if isinstance(child, DLeafList):
-                res.append("        children['%s'] = yang.gdata.LeafList(self.%s%s)" % (_unique_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix), child_ns))
+                res.append(f"        children['{usname(child)}'] = yang.gdata.LeafList(self.{usname(child)}{child_ns})")
             else:
-                res.append("        if _%s is not None:" % _unique_safe_name(child.name, child.prefix))
+                res.append(f"        if _{usname(child)} is not None:")
                 if isinstance(child, DLeaf):
-                    res.append("            children['%s'] = yang.gdata.Leaf('%s', _%s%s)" % (_unique_name(child.name, child.prefix), child.type_.name, _unique_safe_name(child.name, child.prefix), child_ns))
+                    res.append(f"            children['{uname(child)}'] = yang.gdata.Leaf('{child.type_.name}', _{usname(child)}{child_ns})")
                 elif isinstance(child, DContainer):
-                    res.append("            children['%s'] = _%s.to_gdata()" % (_unique_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
                 elif isinstance(child, DList):
-                    res.append("            children['%s'] = _%s.to_gdata()" % (_unique_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
 
         if isinstance(self, DList):
             # keys contains a yang spec of the keys, like "k1 k2"
             # which are modeled as attributes of the list entry class and accessed via self.k1, self.k2
-            list_keys_str = ", ".join(map(lambda x: "yang.gdata.yang_str(self.%s)" % _safe_name(x), self.key))
-            res.append("        return yang.gdata.Container(children, [%s])" % (list_keys_str))
+            list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{_safe_name(x)})", self.key))
+            res.append(f"        return yang.gdata.Container(children, [{list_keys_str}])")
         elif isinstance(self, DRoot):
-            res.append("        return yang.gdata.%s(children)" % (self.gname))
+            res.append(f"        return yang.gdata.{self.gname}(children)")
         elif set_ns:
             if isinstance(self, DContainer) and self.presence:
-                res.append("        return yang.gdata.%s(children, presence=True, ns='%s')" % (self.gname, self.namespace))
+                res.append(f"        return yang.gdata.{self.gname}(children, presence=True, ns='{self.namespace}')")
             else:
-                res.append("        return yang.gdata.%s(children, ns='%s')" % (self.gname, self.namespace))
+                res.append(f"        return yang.gdata.{self.gname}(children, ns='{self.namespace}')")
         else:
             if isinstance(self, DContainer) and self.presence:
-                res.append("        return yang.gdata.%s(children, presence=True)" % (self.gname))
+                res.append(f"        return yang.gdata.{self.gname}(children, presence=True)")
             else:
-                res.append("        return yang.gdata.%s(children)" % (self.gname))
+                res.append(f"        return yang.gdata.{self.gname}(children)")
         res.append("")
 #
         def _maybe_ns(child: DNode) -> str:
             if child.namespace != self.namespace:
-                return ", \"%s\"" % child.namespace
+                return f", '{child.namespace}'"
             return ""
 
         # .from_gdata()
@@ -536,60 +538,58 @@ class DNodeInner(DNode):
         from_gdata_args_list = []
         from_xml_args_list = []
         for child in self.children:
+            child_name = _unique_safe_name(child.name, child.prefix)
+            child_uname = _unique_name(child.name, child.prefix)
             if isinstance(child, DLeaf):
-                from_gdata_args_list.append("%s=n.get_%s(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child, loose), _unique_name(child.name, child.prefix)))
-                from_xml_args_list.append("%s=yang.gdata.from_xml_%s(n, \"%s\"%s)" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child, loose), child.name, _maybe_ns(child)))
+                from_gdata_args_list.append(f"{usname(child)}=n.get_{yang_leaf_to_getval(child, loose)}('{uname(child)}')")
+                from_xml_args_list.append(f"{usname(child)}=yang.gdata.from_xml_{yang_leaf_to_getval(child, loose)}(n, '{child.name}'{_maybe_ns(child)})")
             elif isinstance(child, DLeafList):
-                from_gdata_args_list.append("%s=n.get_%ss(\"%s\")" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child, loose), _unique_name(child.name, child.prefix)))
-                from_xml_args_list.append("%s=yang.gdata.from_xml_%ss(n, \"%s\"%s)" % (_unique_safe_name(child.name, child.prefix), yang_leaf_to_getval(child, loose), child.name, _maybe_ns(child)))
+                from_gdata_args_list.append(f"{usname(child)}=n.get_{yang_leaf_to_getval(child, loose)}s('{uname(child)}')")
+                from_xml_args_list.append(f"{usname(child)}=yang.gdata.from_xml_{yang_leaf_to_getval(child, loose)}s(n, '{child.name}'{_maybe_ns(child)})")
             elif isinstance(child, DContainer):
                 if loose or child.presence or optional_subtree(child):
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
-                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_opt_child(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
+                    from_gdata_args_list.append(f"{usname(child)}={pname(child)}.from_gdata(n.get_opt_container('{uname(child)}'))")
+                    from_xml_args_list.append(f"{usname(child)}={pname(child)}.from_xml(yang.gdata.get_xml_opt_child(n, '{child.name}'{_maybe_ns(child)}))")
                 else:
-                    from_gdata_args_list.append("%s=%s.from_gdata(n.get_container(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
-                    from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_child(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
+                    from_gdata_args_list.append(f"{usname(child)}={pname(child)}.from_gdata(n.get_container('{uname(child)}'))")
+                    from_xml_args_list.append(f"{usname(child)}={pname(child)}.from_xml(yang.gdata.get_xml_child(n, '{child.name}'{_maybe_ns(child)}))")
             elif isinstance(child, DList):
-                from_gdata_args_list.append("%s=%s.from_gdata(n.get_opt_list(\"%s\"))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), _unique_name(child.name, child.prefix)))
-                from_xml_args_list.append("%s=%s.from_xml(yang.gdata.get_xml_children(n, \"%s\"%s))" % (_unique_safe_name(child.name, child.prefix), get_path_name(child), child.name, _maybe_ns(child)))
+                from_gdata_args_list.append(f"{usname(child)}={pname(child)}.from_gdata(n.get_opt_list('{uname(child)}'))")
+                from_xml_args_list.append(f"{usname(child)}={pname(child)}.from_xml(yang.gdata.get_xml_children(n, '{child.name}'{_maybe_ns(child)}))")
         from_gdata_args = ", ".join(from_gdata_args_list)
         from_xml_args = ", ".join(from_xml_args_list)
         res.append("    @staticmethod")
         if isinstance(self, DList):
-            res.append("    mut def from_gdata(n: yang.gdata.Node) -> %s_entry:" % get_path_name(self))
-            res.append("        return %s_entry(%s)" % (get_path_name(self), from_gdata_args))
+            res.append(f"    mut def from_gdata(n: yang.gdata.Node) -> {pname(self)}_entry:")
+            res.append(f"        return {pname(self)}_entry({from_gdata_args})")
         else:
-            if isinstance(self, DContainer) and self.presence:
-                res.append("    mut def from_gdata(n: ?yang.gdata.Node) -> ?%s:" % get_path_name(self))
-            else:
-                res.append("    mut def from_gdata(n: ?yang.gdata.Node) -> %s:" % get_path_name(self))
+            opt_cnt = True if isinstance(self, DContainer) and self.presence else False
+            res.append(f"    mut def from_gdata(n: ?yang.gdata.Node) -> {'?' if opt_cnt else ''}{pname(self)}:")
             res.append("        if n != None:")
-            res.append("            return %s(%s)" % (get_path_name(self), from_gdata_args))
-            if isinstance(self, DContainer) and self.presence:
+            res.append(f"            return {pname(self)}({from_gdata_args})")
+            if opt_cnt:
                 res.append("        return None")
             elif optional_subtree(self):
-                res.append("        return %s()" % get_path_name(self))
+                res.append(f"        return {pname(self)}()")
             else:
-                res.append("        raise ValueError(\"Missing required subtree %s\")" % get_path_name(self))
+                res.append(f"        raise ValueError('Missing required subtree {pname(self)}')")
         res.append("")
 
         res.append("    @staticmethod")
         if isinstance(self, DList):
-            res.append("    mut def from_xml(n: xml.Node) -> %s_entry:" % get_path_name(self))
-            res.append("        return %s_entry(%s)" % (get_path_name(self), from_xml_args))
+            res.append(f"    mut def from_xml(n: xml.Node) -> {pname(self)}_entry:")
+            res.append(f"        return {pname(self)}_entry({from_xml_args})")
         else:
-            if isinstance(self, DContainer) and self.presence:
-                res.append("    mut def from_xml(n: ?xml.Node) -> ?%s:" % get_path_name(self))
-            else:
-                res.append("    mut def from_xml(n: ?xml.Node) -> %s:" % get_path_name(self))
+            opt_cnt = True if isinstance(self, DContainer) and self.presence else False
+            res.append(f"    mut def from_xml(n: ?xml.Node) -> {'?' if opt_cnt else ''}{pname(self)}:")
             res.append("        if n != None:")
-            res.append("            return %s(%s)" % (get_path_name(self), from_xml_args))
-            if isinstance(self, DContainer) and self.presence:
+            res.append(f"            return {pname(self)}({from_xml_args})")
+            if opt_cnt:
                 res.append("        return None")
             elif optional_subtree(self):
-                res.append("        return %s()" % get_path_name(self))
+                res.append(f"        return {pname(self)}()")
             else:
-                res.append("        raise ValueError(\"Missing required subtree %s\")" % get_path_name(self))
+                res.append(f"        raise ValueError('Missing required subtree {pname(self)}')")
         res.append("")
 
         if isinstance(self, DList):
@@ -597,15 +597,15 @@ class DNodeInner(DNode):
             # - the list itself
             # - the list entry class
             # Here we create the list class, list entry class was created above
-            res.append("class %s(yang.adata.MNode):" % get_path_name(self))
-            res.append("    elements: list[%s_entry]" % get_path_name(self))
+            res.append(f"class {pname(self)}(yang.adata.MNode):")
+            res.append(f"    elements: list[{pname(self)}_entry]")
 
             init_args = ["self"]
             init_args.append("elements=[]")
             init_args_str: str = ", ".join(init_args)
-            res.append("    mut def __init__(%s):" % init_args_str)
+            res.append(f"    mut def __init__({init_args_str}):")
             # Set namespace from us
-            res.append("        self._ns = \"%s\"" % self.namespace)
+            res.append(f"        self._ns = '{self.namespace}'")
             res.append("        self._name = " + repr(self.name))
             res.append("        self.elements = elements")
             res.append("")
@@ -622,8 +622,8 @@ class DNodeInner(DNode):
                 elif isinstance(child, DContainer):
                     if not (loose or optional_subtree(child)):
                         list_key_args.append(_unique_safe_name(child.name, child.prefix))
-            list_create_args = ["self"] + list_key_args
-            res.append("    mut def create(%s):" % (", ".join(list_create_args)))
+            list_create_args_str = ", ".join(["self"] + list_key_args)
+            res.append(f"    mut def create({list_create_args_str}):")
             res.append("        for e in self.elements:")
             res.append("            match = True")
             for key in self.key:
@@ -634,7 +634,7 @@ class DNodeInner(DNode):
                     # Class attribute is a not a "value" Acton type because it
                     # is either not an union or it an union that was resolved
                     # to a single builtin type, it has equality check
-                    res.append("            if e.%s != %s:" % (_safe_name(key), _safe_name(key)))
+                    res.append(f"            if e.{_safe_name(key)} != {_safe_name(key)}:")
                     res.append("                match = False")
                     res.append("                continue")
                 else:
@@ -642,47 +642,48 @@ class DNodeInner(DNode):
                     # we need to first attempt to bind them to a more specific type
                     # TODO: use Acton unions
                     for t in unique_base_types:
-                        res.append("            e_%s = e.%s" % (_safe_name(key), _safe_name(key)))
-                        res.append("            if isinstance(e_%s, %s) and isinstance(%s, %s):" % (_safe_name(key), t, _safe_name(key), t))
-                        res.append("                if e_%s != %s:" % (_safe_name(key), _safe_name(key)))
+                        res.append(f"            e_{_safe_name(key)} = e.{_safe_name(key)}")
+                        res.append(f"            if isinstance(e_{_safe_name(key)}, {t}) and isinstance({_safe_name(key)}, {t}):")
+                        res.append(f"                if e_{_safe_name(key)} != {_safe_name(key)}:")
                         res.append("                    match = False")
                         res.append("                    continue")
             res.append("            if match:")
             res.append("                return e")
             res.append("")
-            res.append("        res = %s_entry(%s)" % (get_path_name(self), ", ".join(list_key_args)))
+            list_key_args_str = ", ".join(list_key_args)
+            res.append(f"        res = {pname(self)}_entry({list_key_args_str})")
             res.append("        self.elements.append(res)")
             res.append("        return res")
             res.append("")
 
-            res.append("    mut def to_gdata(self):" % ())
+            res.append("    mut def to_gdata(self):")
             res.append("        elements = []")
             res.append("        for e in self.elements:")
             res.append("            e_gdata = e.to_gdata()")                                # child.namespace != self.namespace
             res.append("            if isinstance(e_gdata, yang.gdata.Container):")
             res.append("                elements.append(e_gdata)")
             if set_ns:
-                res.append("        return yang.gdata.List(%s, elements, ns='%s')" % (repr(self.key), self.namespace))
+                res.append(f"        return yang.gdata.List({repr(self.key)}, elements, ns='{self.namespace}')")
             else:
-                res.append("        return yang.gdata.List(%s, elements)" % (repr(self.key)))
+                res.append(f"        return yang.gdata.List({repr(self.key)}, elements)")
             res.append("")
 
 #            # .from_gdata()
 #            # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
             res.append("    @staticmethod")
-            res.append("    mut def from_gdata(n: ?yang.gdata.List) -> list[%s_entry]:" % get_path_name(self))
+            res.append(f"    mut def from_gdata(n: ?yang.gdata.List) -> list[{pname(self)}_entry]:")
             res.append("        res = []")
             res.append("        if n is not None:")
             res.append("            for e in n.elements:")
-            res.append("                res.append(%s_entry.from_gdata(e))" % get_path_name(self))
+            res.append(f"                res.append({pname(self)}_entry.from_gdata(e))")
             res.append("        return res")
             #res.append("        return list(map(lambda x: %s_entry.from_gdata(x), n.elements))" % get_path_name(self))
             res.append("")
             res.append("    @staticmethod")
-            res.append("    mut def from_xml(nodes: list[xml.Node]) -> list[%s_entry]:" % get_path_name(self))
+            res.append(f"    mut def from_xml(nodes: list[xml.Node]) -> list[{pname(self)}_entry]:")
             res.append("        res = []")
             res.append("        for node in nodes:")
-            res.append("            res.append(%s_entry.from_xml(node))" % get_path_name(self))
+            res.append(f"            res.append({pname(self)}_entry.from_xml(node))")
             res.append("        return res")
             # TODO: trying to use list(map(lambda)) here results in an error,
             # why? Above code that iterates over n.elements works fine... Error is:
@@ -702,7 +703,7 @@ class DNodeInner(DNode):
                 fname += "_" + get_path_name(self)
 
             if isinstance(self, DList):
-                res += ["mut def %s_element(jd: value, path: list[str]=[], op: ?str=\"merge\") -> yang.gdata.Node:" % fname]
+                res += [f"mut def {fname}_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:"]
                 # Unlike other nodes, where the path is consumed an element at a
                 # time, we are passed the same path as the list itself, so we
                 # can read the key. We are not ready to parse the JSON payload
@@ -711,7 +712,7 @@ class DNodeInner(DNode):
                 res += ["        point = path[0]"]
                 res += ["        keys = point.split(\",\")"]
                 res += ["        jd_dict = yang.gdata.unwrap_dict(jd)"]
-                res += ["        val = from_json_%s_element(jd_dict)" % get_path_name(self)]
+                res += [f"        val = from_json_{pname(self)}_element(jd_dict)"]
                 res += ["        if op == \"merge\":"]
                 res += ["            return val"]
                 res += ["        elif op == \"remove\":"]
@@ -722,21 +723,21 @@ class DNodeInner(DNode):
                 res += ["        point = path[1]"]
                 res += ["        rest_path = path[2:]"]
                 res += ["        children: dict[str, yang.gdata.Node] = {}"]
-                res += ["        for idx, key in enumerate(%s):" % repr(self.key)]
+                res += [f"        for idx, key in enumerate({repr(self.key)}):"]
                 res += ["            children[key] = yang.gdata.Leaf(\"str\", keys[idx])"]
                 for child in self.children:
                     if child.name in self.key:
                         continue
-                    res += ["        if point == '%s':" % child.name]
+                    res += [f"        if point == '{child.name}':"]
                     if isinstance(child, DNodeInner):
-                        res += ["            children['%s'] = from_json_path_%s(jd, rest_path, op)" % (child.name, get_path_name(child))]
+                        res += [f"            children['{child.name}'] = from_json_path_{pname(child)}(jd, rest_path, op)"]
                     else:
                         res += ["            raise ValueError(\"Invalid json path to non-inner node\")"]
                 res += ["        return yang.gdata.Container(children, keys)"]
                 res += ["    raise ValueError(\"unreachable - no keys to list element\")"]
                 res += [""]
 
-                res.append("mut def %s(jd: value, path: list[str]=[], op: ?str=\"merge\") -> yang.gdata.List:" % fname)
+                res.append(f"mut def {fname}(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.List:")
                 res.append("    if len(path) == 1:")
                 res.append("        point = path[0]")
                 # TODO: URI-unescape keys
@@ -745,45 +746,45 @@ class DNodeInner(DNode):
                 res.append("        # Check that all keys are present in payload.")
                 res.append("        # If present, they must equal the keys in the path")
                 res.append("        # If not present, fill in from path")
-                res.append("        for key in %s:" % repr(self.key))
+                res.append(f"        for key in {repr(self.key)}:")
                 res.append("            if key not in jd_dict:")
                 res.append("                jd_dict[key] = keys.pop(0)")
                 res.append("            else:")
                 res.append("                if str(jd_dict[key]) != keys.pop(0):")
                 res.append("                    raise ValueError(\"Key value mismatch between path and payload\")")
-                res.append("        element = from_json_%s_element(jd_dict)" % get_path_name(self))
+                res.append(f"        element = from_json_{pname(self)}_element(jd_dict)")
                 res.append("        elements = []")
                 res.append("        if op == \"merge\":")
                 res.append("            elements.append(element)")
                 res.append("        elif op == \"remove\":")
                 res.append("            elements.append(yang.gdata.Absent(element.key))")
-                res.append("        return yang.gdata.List(%s, elements)" % (repr(self.key)))
+                res.append(f"        return yang.gdata.List({repr(self.key)}, elements)")
                 res.append("    elif len(path) > 1:")
-                res.append("        return yang.gdata.List(%s, [from_json_path_%s_element(jd, path, op)])" % (repr(self.key), get_path_name(self)))
+                res.append(f"        return yang.gdata.List({repr(self.key)}, [from_json_path_{pname(self)}_element(jd, path, op)])")
                 res.append("    raise ValueError(\"Unable to resolve path, no keys provided\")")
 
             else:
-                res.append("mut def %s(jd: value, path: list[str]=[], op: ?str=\"merge\") -> yang.gdata.Node:" % fname)
+                res.append(f"mut def {fname}(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:")
                 res.append("    # path handling")
                 res.append("    if len(path) > 0:")
                 res.append("        point = path[0]")
                 res.append("        rest_path = path[1:]")
                 for child in self.children:
                     if top == True or child.namespace != self.namespace:
-                        res.append("        if point == '%s:%s':" % (child.prefix, child.name))
+                        res.append(f"        if point == '{child.prefix}:{child.name}':")
                     else:
-                        res.append("        if point == '%s:%s' or point == '%s':" % (child.prefix, child.name, child.name))
+                        res.append(f"        if point == '{child.prefix}:{child.name}' or point == '{child.name}':")
                     if isinstance(child, DNodeInner):
-                        res += [nest(12) + "child = {'%s': from_json_path_%s(jd, rest_path, op) }" % (child.name, get_path_name(child))]
+                        res += [nest(12) + f"child = {{'{child.name}': from_json_path_{pname(child)}(jd, rest_path, op) }}"]
                         res += [nest(12) + "return yang.gdata." + dnode_to_gd_type(self) + "(child)"]
                     else:
                         res.append("            raise ValueError(\"Invalid json path to non-inner node\")")
                 res.append("        raise ValueError(\"Invalid path\")")
                 res.append("    elif len(path) == 0:")
-                valfname = "from_json_%s" % get_path_name(self) if not top else "from_json"
+                valfname = f"from_json_{pname(self)}" if not top else "from_json"
                 val_farg = "[jd]" if isinstance(self, DList) else "yang.gdata.unwrap_dict(jd)"
                 res += ["        if op == \"merge\":"]
-                res += ["            return %s(%s)" % (valfname, val_farg)]
+                res += [f"            return {valfname}({val_farg})"]
                 res += ["        elif op == \"remove\":"]
                 res += ["            return yang.gdata.Absent()"]
                 res += ["        raise ValueError(\"Invalid operation\")"]
@@ -797,30 +798,30 @@ class DNodeInner(DNode):
                 fname += "_" + get_path_name(self)
 
             if isinstance(self, DList):
-                res.append("mut def %s_element(jd: dict[str, ?value]) -> yang.gdata.Node:" % fname)
+                res.append(f"mut def {fname}_element(jd: dict[str, ?value]) -> yang.gdata.Node:")
             else:
-                res.append("mut def %s(jd: dict[str, ?value]) -> yang.gdata.%s:" % (fname, dnode_to_gd_type(self)))
+                res.append(f"mut def {fname}(jd: dict[str, ?value]) -> yang.gdata.{dnode_to_gd_type(self)}:")
 
             res.append("    children = {}")
             for child in self.children:
                 if top == True or child.namespace != self.namespace:
-                    res.append("    child_%s = jd.get('%s:%s')" % (_unique_safe_name(child.name, child.prefix), child.prefix, child.name))
+                    res.append(f"    child_{usname(child)} = jd.get('{child.prefix}:{child.name}')")
                 else:
-                    res.append("    child_%s_full = jd.get('%s:%s')" % (_unique_safe_name(child.name, child.prefix), child.prefix, child.name))
-                    res.append("    child_%s = child_%s_full if child_%s_full is not None else jd.get('%s')" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix), child.name))
+                    res.append(f"    child_{usname(child)}_full = jd.get('{child.prefix}:{child.name}')")
+                    res.append(f"    child_{usname(child)} = child_{usname(child)}_full if child_{usname(child)}_full is not None else jd.get('{child.name}')")
 
                 if isinstance(child, DContainer):
-                    res.append("    if child_%s is not None and isinstance(child_%s, dict):" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        children['%s'] = from_json_%s(child_%s)" % (_unique_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"    if child_{usname(child)} is not None and isinstance(child_{usname(child)}, dict):")
+                    res.append(f"        children['{uname(child)}'] = from_json_{pname(child)}(child_{usname(child)})")
                 elif isinstance(child, DList):
-                    res.append("    if child_%s is not None and isinstance(child_%s, list):" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        children['%s'] = from_json_%s(child_%s)" % (_unique_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"    if child_{usname(child)} is not None and isinstance(child_{usname(child)}, list):")
+                    res.append(f"        children['{uname(child)}'] = from_json_{pname(child)}(child_{usname(child)})")
                 elif isinstance(child, DLeafList):
-                    res.append("    if child_%s is not None and isinstance(child_%s, list):" % (_unique_safe_name(child.name, child.prefix), _unique_safe_name(child.name, child.prefix)))
-                    res.append("        children['%s'] = from_json_%s(child_%s)" % (_unique_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"    if child_{usname(child)} is not None and isinstance(child_{usname(child)}, list):")
+                    res.append(f"        children['{uname(child)}'] = from_json_{pname(child)}(child_{usname(child)})")
                 else:
-                    res.append("    if child_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("        children['%s'] = from_json_%s(child_%s)" % (_unique_name(child.name, child.prefix), get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"    if child_{usname(child)} is not None:")
+                    res.append(f"        children['{uname(child)}'] = from_json_{pname(child)}(child_{usname(child)})")
 
             # TODO: need to better handle mandatory nodes... right now I think this JSON parsing is very naive
             #
@@ -829,34 +830,31 @@ class DNodeInner(DNode):
             #    res += ["    yang.gdata.maybe_add(children, '%s', lambda x: from_json_%s(unwrap_dict(x)) if x is not None else None, yang.gdata.take_json_%s(jd, '%s', '%s'))" % (child.name, taker_name(child, key_required=False), child.name, child.prefix)]
 
             if isinstance(self, DList):
-                list_keys_str = ", ".join(map(lambda x: "str(child_%s if child_%s is not None else \"\")" % (_safe_name(x), _safe_name(x)), self.key))
-                res.append("    return yang.gdata.Container(children, [%s])" % (list_keys_str))
+                list_keys_str = ", ".join(map(lambda x: f"str(child_{_safe_name(x)} if child_{_safe_name(x)} is not None else '')", self.key))
+                res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
             else:
-                res.append("    return yang.gdata.%s(children)" % dnode_to_gd_type(self))
+                res.append(f"    return yang.gdata.{dnode_to_gd_type(self)}(children)")
             res.append("")
 
         elif gen_json and isinstance(self, DLeaf):
-            fname = "from_json_" + get_path_name(self)
             res.append("# leaf")
-            res.append("mut def %s(jd: dict[str, ?value]) -> yang.gdata.Leaf:" % fname)
-            res.append("    return yang.gdata.Leaf(jd.get('%s'))" % self.name)
+            res.append(f"mut def from_json_{pname(self)}(jd: dict[str, ?value]) -> yang.gdata.Leaf:")
+            res.append(f"    return yang.gdata.Leaf(jd.get('{self.name}'))")
             res.append("")
 
         elif gen_json and isinstance(self, DLeafList):
-            fname = "from_json_" + get_path_name(self)
             res.append("# leaflist")
-            res.append("mut def %s(jd: dict[str, ?value]) -> yang.gdata.LeafList:" % fname)
-            res.append("    return yang.gdata.LeafList(jd.get('%s'))" % self.name)
+            res.append(f"mut def from_json_{pname(self)}(jd: dict[str, ?value]) -> yang.gdata.LeafList:")
+            res.append(f"    return yang.gdata.LeafList(jd.get('{self.name}'))")
             res.append("")
 
         if gen_json and isinstance(self, DList):
-            fname = "from_json_" + get_path_name(self)
-            res.append("mut def %s(jd: list[dict[str, ?value]]) -> yang.gdata.List:" % fname)
-            res.append("    elements = []")
-            res.append("    for e in jd:")
-            res.append("        if isinstance(e, dict):")
-            res.append("            elements.append(from_json_%s_element(e))" % get_path_name(self))
-            res.append("    return yang.gdata.List(keys=%s, elements=elements, user_order=False, ns=None, prefix=None)" % (repr(self.key)))
+            res.append(f"mut def from_json_{pname(self)}(jd: list[dict[str, ?value]]) -> yang.gdata.List:")
+            res.append(f"    elements = []")
+            res.append(f"    for e in jd:")
+            res.append(f"        if isinstance(e, dict):")
+            res.append(f"            elements.append(from_json_{pname(self)}_element(e))")
+            res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements, user_order=False, ns=None, prefix=None)")
             res.append("")
 
         # to_json(): gdata -> JSON
@@ -866,27 +864,27 @@ class DNodeInner(DNode):
                 fname += "_" + get_path_name(self)
 
             if isinstance(self, DList):
-                res.append("mut def %s_element(n: yang.gdata.Node) -> dict[str, ?value]:" % fname)
+                res.append(f"mut def {fname}_element(n: yang.gdata.Node) -> dict[str, ?value]:")
             else: # DContainer, DModule, DRoot
-                res.append("mut def %s(n: yang.gdata.Node) -> dict[str, ?value]:" % fname)
+                res.append(f"mut def {fname}(n: yang.gdata.Node) -> dict[str, ?value]:")
 
             res.append("    children = {}")
             for child in self.children:
                 child_name = (child.prefix + ":" + child.name) if child.namespace != self.namespace else child.name
-                res.append("    child_%s = n.children.get('%s')" % (_unique_safe_name(child.name, child.prefix), _unique_name(child.name, child.prefix)))
-                res.append("    if child_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
+                res.append(f"    child_{usname(child)} = n.children.get('{uname(child)}')")
+                res.append(f"    if child_{usname(child)} is not None:")
                 if isinstance(child, DLeaf):
-                    res.append("        if isinstance(child_%s, yang.gdata.Leaf):" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("            children['%s'] = child_%s.val" % (child_name, _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.Leaf):")
+                    res.append(f"            children['{child_name}'] = child_{usname(child)}.val")
                 elif isinstance(child, DLeafList):
-                    res.append("        if isinstance(child_%s, yang.gdata.LeafList):" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("            children['%s'] = child_%s.vals" % (child_name, _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.LeafList):")
+                    res.append(f"            children['{child_name}'] = child_{usname(child)}.vals")
                 elif isinstance(child, DContainer):
-                    res.append("        if isinstance(child_%s, yang.gdata.Container):" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("            children['%s'] = to_json_%s(child_%s)" % (child_name, get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.Container):")
+                    res.append(f"            children['{child_name}'] = to_json_{pname(child)}(child_{usname(child)})")
                 elif isinstance(child, DList):
-                    res.append("        if isinstance(child_%s, yang.gdata.List):" % (_unique_safe_name(child.name, child.prefix)))
-                    res.append("            children['%s'] = to_json_%s(child_%s)" % (child_name, get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+                    res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.List):")
+                    res.append(f"            children['{child_name}'] = to_json_{pname(child)}(child_{usname(child)})")
                 else:
                     res.append("        pass")
 #                    res.append("    if child_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
@@ -904,29 +902,29 @@ class DNodeInner(DNode):
 
         elif gen_json and isinstance(self, DLeaf):
             fname = "to_json_" + get_path_name(self)
-            res.append("mut def %s(ll: yang.gdata.Leaf) -> ?value:" % fname)
-            res.append("    return jd.get('%s'))" % self.name)
+            res.append(f"mut def {fname}(ll: yang.gdata.Leaf) -> ?value:")
+            res.append(f"    return jd.get('{self.name}'))")
             res.append("")
 
         elif gen_json and isinstance(self, DLeafList):
             fname = "to_json_" + get_path_name(self)
-            res.append("mut def %s(ll: yang.gdata.LeafList) -> list[value]:" % fname)
-            res.append("    return jd.get('%s'))" % self.name)
+            res.append(f"mut def {fname}(ll: yang.gdata.LeafList) -> list[value]:")
+            res.append(f"    return jd.get('{self.name}'))")
             res.append("")
 
         if gen_json and isinstance(self, DList):
             fname = "to_json_" + get_path_name(self)
-            res.append("mut def %s(n: yang.gdata.List) -> list[dict[str, ?value]]:" % fname)
+            res.append(f"mut def {fname}(n: yang.gdata.List) -> list[dict[str, ?value]]:")
             res.append("    elements = []")
             res.append("    for e in n.elements:")
-            res.append("        elements.append(to_json_%s_element(e))" % get_path_name(self))
+            res.append(f"        elements.append(to_json_{get_path_name(self)}_element(e))")
             res.append("    return elements")
             res.append("")
 
         if top:
             res.append("schema_namespaces: set[str] = {")
             for ns in schema_ns:
-                res.append("    \"%s\"," % ns)
+                res.append(f"    '{ns}',")
             res.append("}")
             res.append("")
 
@@ -1138,10 +1136,11 @@ class DLeaf(DNodeLeaf):
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
             return ""
-        fname = "from_json_" + get_path_name(self)
+        def pname(n):
+            return get_path_name(n)
         res = []
-        res.append("mut def %s(val: value) -> yang.gdata.Leaf:" % fname)
-        res.append("    return yang.gdata.Leaf(\"%s\", val)" % (self.type_.name))
+        res.append(f"mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
+        res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val)")
         res.append("")
         return "\n".join(res)
 
@@ -1178,9 +1177,10 @@ class DLeafList(DNodeLeaf):
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
             return ""
-        fname = "from_json_" + get_path_name(self)
+        def pname(n):
+            return get_path_name(n)
         res = []
-        res.append("mut def %s(val: list[value]) -> yang.gdata.LeafList:" % fname)
+        res.append(f"mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
         res.append("    return yang.gdata.LeafList(val)")
         res.append("")
         return "\n".join(res)
@@ -1316,7 +1316,7 @@ class Context(object):
             mod = self.modules[mod_rev]
             return mod
         except KeyError:
-            raise ValueError("Module %s rev %s not found in compilation context" % (modname, rev if rev is not None else ""))
+            raise ValueError(f"Module {modname} rev {rev} not found in compilation context")
 
     def get_modules(self) -> list[Module]:
         return list(self.modules.values())
@@ -1374,7 +1374,7 @@ class SchemaNode(object):
         raise NotImplementedError('SchemaNode pdc')
 
     mut def to_dnode(self) -> DNode:
-        raise NotImplementedError('SchemaNode to_dschema not implemented for %s' % type(self))
+        raise NotImplementedError(f'SchemaNode to_dschema not implemented for {type(self)}')
 
     def get_dnode_children(self, in_choice: bool=False):
         mut def unset_mandatory(node):
@@ -1415,7 +1415,7 @@ class SchemaNode(object):
                     unset_mandatory(dnode_child)
                 new_children.append(dnode_child)
             return new_children
-        raise ValueError("get_dnode_children() called on non-inner node %s" % type(self))
+        raise ValueError(f"get_dnode_children() called on non-inner node {type(self)}")
 
     def get_namespace(self) -> str:
         n = self
@@ -1514,9 +1514,9 @@ class SchemaNode(object):
                         if isinstance(n, Module):
                             return True
                         else:
-                            raise ValueError("Reached some top data node of type %s" % type(n))
+                            raise ValueError(f"Reached some top data node of type {type(n)}")
             else:
-                raise ValueError("Non-data node %s does not have config statements" % type(n))
+                raise ValueError(f"Non-data node {type(n)} does not have config statements")
             if i > RECURSION_LIMIT:
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find config attribute")
@@ -1567,9 +1567,9 @@ class SchemaNode(object):
                 ext_arg = ext.arg
                 if ext_arg is not None and ext_arg == name:
                     return ext
-            raise ValueError("Child %s not found" % name)
+            raise ValueError(f"Child {name} not found")
 
-        raise ValueError("Unable to get child %s from non-inner node" % name)
+        raise ValueError(f"Unable to get child {name} from non-inner node")
 
     def get_module(self) -> Module:
         """Get the Module for the local module
@@ -1691,10 +1691,10 @@ class SchemaNode(object):
                     c_child.parent = target
                     target.children.append(c_child)
         else:
-            raise ValueError("expand_children() called on non-inner node %s" % type(self))
+            raise ValueError(f"expand_children() called on non-inner node {type(self)}")
 
     mut def apply_refine(self, refine: Refine):
-        raise NotImplementedError('SchemaNode apply_refine not implemented for %s' % type(self))
+        raise NotImplementedError(f'SchemaNode apply_refine not implemented for {type(self)}')
 
     def get_module_by_prefix(self, prefix: str, context: Context) -> Module:
         """Get a Module from the import prefix in the local module"""
@@ -1732,7 +1732,7 @@ class SchemaNode(object):
                 break
             if i == RECURSION_LIMIT:
                 raise ValueError("Recursion limit reached")
-        raise ValueError("Unable to find grouping '%s'" % name)
+        raise ValueError(f"Unable to find grouping '{name}'")
 
     def get_typedef(self, name: str, context: Context) -> Typedef:
         """Find a typedef in the local module or an imported module
@@ -1762,7 +1762,7 @@ class SchemaNode(object):
                 break
             if i == RECURSION_LIMIT:
                 raise ValueError("Recursion limit reached")
-        raise ValueError("Unable to find typedef '%s'" % name)
+        raise ValueError(f"Unable to find typedef '{name}'")
 
     def to_statement(self) -> Statement:
         """Convert this schema node to a Statement
@@ -1779,7 +1779,7 @@ class SchemaNode(object):
                         elif isinstance(av, SchemaNode):
                             stmt.substatements.append(av.to_statement())
                         else:
-                            raise ValueError("Unexpected type in list: %s" % type(av))
+                            raise ValueError(f"Unexpected type in list: {type(av)}")
                 elif isinstance(attr_value, bool):
                     stmt.substatements.append(Statement(attr_name, "true" if attr_value else "false"))
                 else:
@@ -1817,7 +1817,7 @@ class Ext(SchemaNode):
     def from_fullname(fullname: str, arg: ?str=None, exts=[]) -> Ext:
         parts = fullname.split(":", 1)
         if len(parts) != 2:
-            raise ValueError("Invalid extension name %s, extensions must always have a prefix like: foo:bar 'test';" % fullname)
+            raise ValueError(f"Invalid extension name {fullname}, extensions must always have a prefix like: foo:bar 'test';")
         return Ext(parts[0], parts[1], None)
 
     def _get_class_name(self):
@@ -1879,7 +1879,7 @@ def take_bool(stmts: list[Statement], kw: str) -> bool:
             return True
         elif v == "false":
             return False
-    raise ValueError("No %s in stmts" % kw)
+    raise ValueError(f"No {kw} in stmts")
 
 def take_opt_int(stmts: list[Statement], kw: str) -> ?int:
     v = take_opt_str(stmts, kw)
@@ -1890,7 +1890,7 @@ def take_int(stmts: list[Statement], kw: str) -> int:
     v = take_opt_str(stmts, kw)
     if v is not None:
         return int(v)
-    raise ValueError("No %s in stmts" % kw)
+    raise ValueError(f"No {kw} in stmts")
 
 def take_opt_str(stmts: list[Statement], kw: str) -> ?str:
     for i in range(len(stmts)):
@@ -1907,7 +1907,7 @@ def take_str(stmts: list[Statement], kw: str) -> str:
             if arg is not None:
                 del stmts[i]
                 return arg
-    raise ValueError("No %s in stmts" % kw)
+    raise ValueError(f"No {kw} in stmts")
 
 def take_yang_version(stmts: list[Statement]) -> float:
     v = take_opt_str(stmts, "yang-version")
@@ -2101,7 +2101,7 @@ def taker_name(n: DNode, loose: bool=False, key_required=True) -> str:
     if isinstance(n, DLeafList):
         # TODO: optional?
         return yang_type_to_acton_type(n.type_) + "s"
-    raise ValueError("unreachable - unknown node type %s" % type(n))
+    raise ValueError(f"unreachable - unknown node type {type(n)}")
 
 def yang_leaf_to_getval(leaf: DNodeLeaf, loose: bool) -> str:
     optional = is_optional_arg_yang_leaf(leaf, loose)
@@ -2111,7 +2111,7 @@ def yang_leaf_to_getval(leaf: DNodeLeaf, loose: bool) -> str:
 
 def yang_leaflist_to_acton_type(leaf: DLeafList) -> str:
     t = yang_type_to_acton_type(leaf.type_)
-    return "list[%s]" % t
+    return f"list[{t}]"
 
 
 def yang_typename_to_acton_type(type_name: str) -> str:
@@ -2191,12 +2191,12 @@ def yang_type_to_acton_type(t: ?Type) -> str:
             if all(map(lambda x: x in {"int8", "int16", "int32", "int64"}, unique_base_types)):
                 max_size = max(list(map(lambda x: int(x[3:]), unique_base_types)))
                 # TODO: once we have integer subtyping, return largest necessary iXX type
-                #return "i%d" % max_size
+                #return f"i{max_size}"
                 return "int"
             elif all(map(lambda x: x in {"uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
                 max_size = max(list(map(lambda x: int(x[4:]), unique_base_types)))
                 # TODO: once we have integer subtyping, return largest necessary uXX type
-                #return "u%d" % max_size
+                #return f"u{max_size}"
                 return "int"
             elif all(map(lambda x: x in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
                 # We have a union of a mix of signed and unsigned integers, so let's find the largest
@@ -2215,7 +2215,7 @@ def yang_type_to_acton_type(t: ?Type) -> str:
                     # Need to use our int (a.k.a. "bigint")
                     return "int"
                 # TODO: once we have integer subtyping, return largest necessary iXX type
-                #return "i%d" % max_size
+                #return f"i{max_size}"
                 return "int"
 
             # TODO: use atom when union consists of types that we represent with Acton built-in types
@@ -2239,7 +2239,7 @@ def prsrc_literal(ytype: str, value: str) -> str:
     elif ytype == "binary":
         # Binary values are encoded as base64 strings in YANG and NETCONF, but
         # stored as Acton bytes, so we need to decode it first
-        return "base64.decode(\"%s\".encode())" % value
+        return f"base64.decode('{value}'.encode())"
     elif ytype == "string":
         return '"' + value.replace('"', '\\"') + '"'
     elif ytype == "union":
@@ -2338,7 +2338,7 @@ def get_path_name(dnode: DNode) -> str:
                 if dnode.name not in sibling_names_conflicts:
                     self_unique_name = dnode.name
                 else:
-                    self_unique_name = "%s:%s" % (dnode.prefix, dnode.name)
+                    self_unique_name = f"{dnode.prefix}:{dnode.name}"
                 dnode = parent
         path.append(self_unique_name.replace("-", "_").replace(".", "_").replace(":", "_"))
         if parent is None:
