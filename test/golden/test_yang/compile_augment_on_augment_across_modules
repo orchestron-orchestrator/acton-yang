@@ -8,29 +8,29 @@ import yang.gdata
 
 
 mut def from_json_foo__c1__l1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf("string", val)
+    return yang.gdata.Leaf('string', val)
 
 mut def from_json_foo__c1__c2__l2(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf("string", val)
+    return yang.gdata.Leaf('string', val)
 
 mut def from_json_foo__c1__c2__l3(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf("string", val)
+    return yang.gdata.Leaf('string', val)
 
 class foo__c1__c2(yang.adata.MNode):
     l2: ?str
     l3: ?str
 
     mut def __init__(self, l2: ?str, l3: ?str):
-        self._ns = "http://example.com/bar"
+        self._ns = 'http://example.com/bar'
         self.l2 = l2
         self.l3 = l3
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
         _l2 = self.l2
-        _l3 = self.l3
         if _l2 is not None:
             children['l2'] = yang.gdata.Leaf('string', _l2)
+        _l3 = self.l3
         if _l3 is not None:
             children['l3'] = yang.gdata.Leaf('string', _l3, ns='http://example.com/baz')
         return yang.gdata.Container(children, ns='http://example.com/bar')
@@ -38,17 +38,17 @@ class foo__c1__c2(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1__c2:
         if n != None:
-            return foo__c1__c2(l2=n.get_opt_str("l2"), l3=n.get_opt_str("l3"))
+            return foo__c1__c2(l2=n.get_opt_str('l2'), l3=n.get_opt_str('l3'))
         return foo__c1__c2()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> foo__c1__c2:
         if n != None:
-            return foo__c1__c2(l2=yang.gdata.from_xml_opt_str(n, "l2"), l3=yang.gdata.from_xml_opt_str(n, "l3", "http://example.com/baz"))
+            return foo__c1__c2(l2=yang.gdata.from_xml_opt_str(n, 'l2'), l3=yang.gdata.from_xml_opt_str(n, 'l3', 'http://example.com/baz'))
         return foo__c1__c2()
 
 
-mut def from_json_path_foo__c1__c2(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+mut def from_json_path_foo__c1__c2(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
         point = path[0]
@@ -94,22 +94,16 @@ class foo__c1(yang.adata.MNode):
     c2: foo__c1__c2
 
     mut def __init__(self, l1: ?str, c2: ?foo__c1__c2=None):
-        self._ns = "http://example.com/foo"
+        self._ns = 'http://example.com/foo'
         self.l1 = l1
-        if c2 is not None:
-            self.c2 = c2
-        else:
-            self.c2 = foo__c1__c2()
-        self_c2 = self.c2
-        if self_c2 is not None:
-            self_c2._parent = self
+        self.c2 = c2 if c2 is not None else foo__c1__c2()
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
         _l1 = self.l1
-        _c2 = self.c2
         if _l1 is not None:
             children['l1'] = yang.gdata.Leaf('string', _l1)
+        _c2 = self.c2
         if _c2 is not None:
             children['c2'] = _c2.to_gdata()
         return yang.gdata.Container(children, ns='http://example.com/foo')
@@ -117,17 +111,17 @@ class foo__c1(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
         if n != None:
-            return foo__c1(l1=n.get_opt_str("l1"), c2=foo__c1__c2.from_gdata(n.get_opt_container("c2")))
+            return foo__c1(l1=n.get_opt_str('l1'), c2=foo__c1__c2.from_gdata(n.get_opt_container('c2')))
         return foo__c1()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> foo__c1:
         if n != None:
-            return foo__c1(l1=yang.gdata.from_xml_opt_str(n, "l1"), c2=foo__c1__c2.from_xml(yang.gdata.get_xml_opt_child(n, "c2", "http://example.com/bar")))
+            return foo__c1(l1=yang.gdata.from_xml_opt_str(n, 'l1'), c2=foo__c1__c2.from_xml(yang.gdata.get_xml_opt_child(n, 'c2', 'http://example.com/bar')))
         return foo__c1()
 
 
-mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
         point = path[0]
@@ -173,14 +167,8 @@ class root(yang.adata.MNode):
     c1: foo__c1
 
     mut def __init__(self, c1: ?foo__c1=None):
-        self._ns = ""
-        if c1 is not None:
-            self.c1 = c1
-        else:
-            self.c1 = foo__c1()
-        self_c1 = self.c1
-        if self_c1 is not None:
-            self_c1._parent = self
+        self._ns = ''
+        self.c1 = c1 if c1 is not None else foo__c1()
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
@@ -192,17 +180,17 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_gdata(n.get_opt_container("c1")))
+            return root(c1=foo__c1.from_gdata(n.get_opt_container('c1')))
         return root()
 
     @staticmethod
     mut def from_xml(n: ?xml.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, "c1", "http://example.com/foo")))
+            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, 'c1', 'http://example.com/foo')))
         return root()
 
 
-mut def from_json_path(jd: value, path: list[str]=[], op: ?str="merge") -> yang.gdata.Node:
+mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
         point = path[0]
@@ -235,7 +223,7 @@ mut def to_json(n: yang.gdata.Node) -> dict[str, ?value]:
     return children
 
 schema_namespaces: set[str] = {
-    "http://example.com/baz",
-    "http://example.com/foo",
-    "http://example.com/bar",
+    'http://example.com/baz',
+    'http://example.com/foo',
+    'http://example.com/bar',
 }
