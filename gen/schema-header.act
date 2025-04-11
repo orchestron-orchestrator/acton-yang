@@ -384,9 +384,9 @@ class DNodeInner(DNode):
             # - the list itself
             # - the list entry class
             # Here we create the list entry class, the list itself comes later
-            res.append(f"class {get_path_name(self)}_entry(yang.adata.MNode):")
+            res.append(f"class {pname(self)}_entry(yang.adata.MNode):")
         else:
-            res.append(f"class {get_path_name(self)}(yang.adata.MNode):")
+            res.append(f"class {pname(self)}(yang.adata.MNode):")
 
         for child in self.children:
             if isinstance(child, DLeaf):
@@ -421,9 +421,9 @@ class DNodeInner(DNode):
             child_name = _unique_safe_name(child.name, child.prefix)
             if isinstance(child, DContainer):
                 if loose or child.presence or optional_subtree(child):
-                    opt_args.append(f"{usname(child)}: ?{get_path_name(child)}=None")
+                    opt_args.append(f"{usname(child)}: ?{pname(child)}=None")
                 else:
-                    req_args.append(f"{usname(child)}: {get_path_name(child)}")
+                    req_args.append(f"{usname(child)}: {pname(child)}")
             elif isinstance(child, DLeaf):
                 defval = ""
                 child_default = child.default
@@ -437,7 +437,7 @@ class DNodeInner(DNode):
             elif isinstance(child, DLeafList):
                 opt_args.append(f"{usname(child)}: ?{yang_leaflist_to_acton_type(child)}=None")
             elif isinstance(child, DList):
-                opt_args.append(f"{usname(child)}: list[{get_path_name(child)}_entry]=[]")
+                opt_args.append(f"{usname(child)}: list[{pname(child)}_entry]=[]")
 
         init_args_str = ", ".join(["self"] + req_args + opt_args)
         res.append(f"    mut def __init__({init_args_str}):")
@@ -448,7 +448,7 @@ class DNodeInner(DNode):
             child_name = _unique_safe_name(child.name, child.prefix)
             if isinstance(child, DContainer):
                 if (loose or optional_subtree(child)) and not child.presence:
-                    res.append(f"        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {get_path_name(child)}()")
+                    res.append(f"        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {pname(child)}()")
                 else:
                     # NOTE: the default argument for P-container is None, so
                     # although unconditionally set here, it can be None
@@ -463,7 +463,7 @@ class DNodeInner(DNode):
                 # TODO: this is where we can set the leaf-list to a default value, not []
                 res.append(f"        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else []")
             elif isinstance(child, DList):
-                res.append(f"        self.{usname(child)} = {get_path_name(child)}(elements={usname(child)})")
+                res.append(f"        self.{usname(child)} = {pname(child)}(elements={usname(child)})")
         if len(self.children) == 0:
             res.append("        pass")
         res.append("")
@@ -677,7 +677,7 @@ class DNodeInner(DNode):
             res.append("            for e in n.elements:")
             res.append(f"                res.append({pname(self)}_entry.from_gdata(e))")
             res.append("        return res")
-            #res.append("        return list(map(lambda x: %s_entry.from_gdata(x), n.elements))" % get_path_name(self))
+            #res.append("        return list(map(lambda x: %s_entry.from_gdata(x), n.elements))" % pname(self))
             res.append("")
             res.append("    @staticmethod")
             res.append(f"    mut def from_xml(nodes: list[xml.Node]) -> list[{pname(self)}_entry]:")
@@ -690,7 +690,7 @@ class DNodeInner(DNode):
             # ERROR: Error when compiling y_cfs module: Type error
             # mut must be a subclass of pure
             #
-            #res.append("        return list(map(lambda x: %s_entry.from_xml(x), nodes))" % get_path_name(self))
+            #res.append("        return list(map(lambda x: %s_entry.from_xml(x), nodes))" % pname(self))
             res.append("")
         res.append("")
 
@@ -700,7 +700,7 @@ class DNodeInner(DNode):
         if gen_json and isinstance(self, DNodeInner):
             fname = "from_json_path"
             if not top:
-                fname += "_" + get_path_name(self)
+                fname += "_" + pname(self)
 
             if isinstance(self, DList):
                 res += [f"mut def {fname}_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:"]
@@ -795,7 +795,7 @@ class DNodeInner(DNode):
         if gen_json and isinstance(self, DNodeInner):
             fname = "from_json"
             if not top:
-                fname += "_" + get_path_name(self)
+                fname += "_" + pname(self)
 
             if isinstance(self, DList):
                 res.append(f"mut def {fname}_element(jd: dict[str, ?value]) -> yang.gdata.Node:")
@@ -861,7 +861,7 @@ class DNodeInner(DNode):
         if gen_json and isinstance(self, DNodeInner):
             fname = "to_json"
             if not top:
-                fname += "_" + get_path_name(self)
+                fname += "_" + pname(self)
 
             if isinstance(self, DList):
                 res.append(f"mut def {fname}_element(n: yang.gdata.Node) -> dict[str, ?value]:")
@@ -888,7 +888,7 @@ class DNodeInner(DNode):
                 else:
                     res.append("        pass")
 #                    res.append("    if child_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
-#                    res.append("        children['%s'] = to_json_%s(child_%s)" % (child.name, get_path_name(child), _unique_safe_name(child.name, child.prefix)))
+#                    res.append("        children['%s'] = to_json_%s(child_%s)" % (child.name, pname(child), _unique_safe_name(child.name, child.prefix)))
 
             if isinstance(self, DContainer):
                 res.append("    return children")
@@ -901,23 +901,23 @@ class DNodeInner(DNode):
             res.append("")
 
         elif gen_json and isinstance(self, DLeaf):
-            fname = "to_json_" + get_path_name(self)
+            fname = "to_json_" + pname(self)
             res.append(f"mut def {fname}(ll: yang.gdata.Leaf) -> ?value:")
             res.append(f"    return jd.get('{self.name}'))")
             res.append("")
 
         elif gen_json and isinstance(self, DLeafList):
-            fname = "to_json_" + get_path_name(self)
+            fname = "to_json_" + pname(self)
             res.append(f"mut def {fname}(ll: yang.gdata.LeafList) -> list[value]:")
             res.append(f"    return jd.get('{self.name}'))")
             res.append("")
 
         if gen_json and isinstance(self, DList):
-            fname = "to_json_" + get_path_name(self)
+            fname = "to_json_" + pname(self)
             res.append(f"mut def {fname}(n: yang.gdata.List) -> list[dict[str, ?value]]:")
             res.append("    elements = []")
             res.append("    for e in n.elements:")
-            res.append(f"        elements.append(to_json_{get_path_name(self)}_element(e))")
+            res.append(f"        elements.append(to_json_{pname(self)}_element(e))")
             res.append("    return elements")
             res.append("")
 
