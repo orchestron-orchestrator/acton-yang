@@ -472,7 +472,6 @@ class DNodeInner(DNode):
         # for each that takes as arguments the mandatory children of the
         # container
         for child in self.children:
-            child_name = _unique_safe_name(child.name, child.prefix)
             if isinstance(child, DContainer) and child.presence:
                 pc_args = ["self"]
                 for cchild in child.children:
@@ -499,7 +498,7 @@ class DNodeInner(DNode):
                 res.append(f"        _{usname(child)} = self.{usname(child)}")
             child_ns = ", ns='" + child.namespace + "'" if child.namespace != self.namespace else ""
             if isinstance(child, DLeafList):
-                res.append(f"        children['{usname(child)}'] = yang.gdata.LeafList(self.{usname(child)}{child_ns})")
+                res.append(f"        children['{uname(child)}'] = yang.gdata.LeafList(self.{usname(child)}{child_ns})")
             else:
                 res.append(f"        if _{usname(child)} is not None:")
                 if isinstance(child, DLeaf):
@@ -538,8 +537,6 @@ class DNodeInner(DNode):
         from_gdata_args_list = []
         from_xml_args_list = []
         for child in self.children:
-            child_name = _unique_safe_name(child.name, child.prefix)
-            child_uname = _unique_name(child.name, child.prefix)
             if isinstance(child, DLeaf):
                 from_gdata_args_list.append(f"{usname(child)}=n.get_{yang_leaf_to_getval(child, loose)}('{uname(child)}')")
                 from_xml_args_list.append(f"{usname(child)}=yang.gdata.from_xml_{yang_leaf_to_getval(child, loose)}(n, '{child.name}'{_maybe_ns(child)})")
