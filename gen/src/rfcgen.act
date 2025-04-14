@@ -304,7 +304,7 @@ snode_methods = {
         return SchemaNode.get(self, name, ns)
 
 """,
-        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
+        "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
@@ -323,6 +323,7 @@ snode_methods = {
                      reference=self.reference,
                      status=self.status,
                      exts=self.exts,
+                     mod=new_mod if new_mod is not None else self.mod,
                      ns=new_ns if new_ns is not None else self.ns,
                      pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns, new_pfx)
@@ -331,6 +332,7 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DAction:
         new_dnode = DAction(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -354,6 +356,7 @@ snode_methods = {
     "anydata": {
         "to_dnode": """    def to_dnode(self) -> DAnydata:
         return DAnydata(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -373,6 +376,7 @@ snode_methods = {
     "anyxml": {
         "to_dnode": """    def to_dnode(self) -> DAnyxml:
         return DAnyxml(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -399,6 +403,7 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DContainer:
         new_dnode = DContainer(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -422,6 +427,7 @@ snode_methods = {
     "input": {
         "to_dnode": """    def to_dnode(self) -> DInput:
         new_dnode = DInput(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             must=self.must,
@@ -478,6 +484,7 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DModule:
         new_dnode = DModule(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -500,6 +507,7 @@ snode_methods = {
     "notification": {
         "to_dnode": """    def to_dnode(self) -> DNotification:
         new_dnode = DNotification(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -544,6 +552,7 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DList:
         new_dnode = DList(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -568,7 +577,7 @@ snode_methods = {
     },
     "leaf": {
         # TODO: keep track of constraints in the derived type(s) that we resolve
-        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
+        "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -592,6 +601,7 @@ snode_methods = {
                    units=new_units,
                    when=self.when,
                    exts=self.exts,
+                   mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx)
 
@@ -600,6 +610,7 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DLeaf:
         return DLeaf(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -621,7 +632,7 @@ snode_methods = {
     },
     "leaf-list": {
         # TODO: keep track of constraints in the derived type(s) that we resolve
-        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
+        "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_units = self.units
@@ -643,6 +654,7 @@ snode_methods = {
                        units=new_units,
                        when=self.when,
                        exts=self.exts,
+                       mod=new_mod if new_mod is not None else self.mod,
                        ns=new_ns if new_ns is not None else self.ns,
                        pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
@@ -664,6 +676,7 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DLeafList:
         return DLeafList(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -687,6 +700,7 @@ snode_methods = {
     "output": {
         "to_dnode": """    def to_dnode(self) -> DOutput:
         new_dnode = DOutput(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             must=self.must,
@@ -718,7 +732,7 @@ snode_methods = {
         return SchemaNode.get(self, name, ns)
 
 """,
-        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
+        "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         self_input = self.input
         self_output = self.output
         # new_input = self_input.compile(context) if self_input is not None else None # actonc codegen pre-evaluates before None-check
@@ -737,6 +751,7 @@ snode_methods = {
                   reference=self.reference,
                   status=self.status,
                   exts=self.exts,
+                  mod=new_mod if new_mod is not None else self.mod,
                   ns=new_ns if new_ns is not None else self.ns,
                   pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns, new_pfx)
@@ -745,6 +760,7 @@ snode_methods = {
 """,
         "to_dnode": """    def to_dnode(self) -> DRpc:
         new_dnode = DRpc(
+            module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             name=self.name,
@@ -822,7 +838,7 @@ snode_methods = {
 """,
     },
     "typedef": {
-        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
+        "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -846,7 +862,7 @@ snode_methods = {
 """,
     },
     "uses": {
-        "compile": """    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):
+        "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
 """,
@@ -1026,24 +1042,32 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             init_attrs.append("children=[]")
         if "parent" not in set(cattrs):
             init_attrs.append("parent=None")
+        if "mod" not in set(cattrs):
+            init_attrs.append("mod=None")
         if "ns" not in set(cattrs):
             init_attrs.append("ns=None")
         if "pfx" not in set(cattrs):
             init_attrs.append("pfx=None")
         res.append("    def __init__(" + ", ".join(init_attrs) + "):")
         res.append("        self.parent = parent")
+        res.append("        new_mod = mod")
         res.append("        new_ns = ns")
         res.append("        new_pfx = pfx")
         if stmt_name == "module":
+            res.append("        if new_mod is None:")
+            res.append("            new_mod = name")
             res.append("        if new_ns is None:")
             res.append("            new_ns = namespace")
             res.append("        if new_pfx is None:")
             res.append("            new_pfx = prefix")
         else:
+            res.append("        if new_mod is None and parent is not None:")
+            res.append("            new_mod = parent.mod")
             res.append("        if new_ns is None and parent is not None:")
             res.append("            new_ns = parent.ns")
             res.append("        if new_pfx is None and parent is not None:")
             res.append("            new_pfx = parent.pfx")
+        res.append("        self.mod = new_mod")
         res.append("        self.ns = new_ns")
         res.append("        self.pfx = new_pfx")
 #        res.append("        self.cname = \"%s\"" % _class_name(stmt_name))
@@ -1058,6 +1082,9 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                     if substmt.cardinality == "0..1":
                         res.append("        if %s is not None:" % _attr_name(substmt.name))
                         res.append("            %s.parent = self" % _attr_name(substmt.name))
+                        res.append("            n_mod = %s.mod" % _attr_name(substmt.name))
+                        res.append("            if n_mod is None:")
+                        res.append("                %s.mod = self.mod" % _attr_name(substmt.name))
                         res.append("            n_ns = %s.ns" % _attr_name(substmt.name))
                         res.append("            if n_ns is None:")
                         res.append("                %s.ns = self.ns" % _attr_name(substmt.name))
@@ -1066,6 +1093,9 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                         res.append("                %s.pfx = self.pfx" % _attr_name(substmt.name))
                     elif substmt.cardinality == "1":
                         res.append("        %s.parent = self" % _attr_name(substmt.name))
+                        res.append("        n_mod = %s.mod" % _attr_name(substmt.name))
+                        res.append("        if n_mod is None:")
+                        res.append("            %s.mod = self.mod" % _attr_name(substmt.name))
                         res.append("        n_ns = %s.ns" % _attr_name(substmt.name))
                         res.append("        if n_ns is None:")
                         res.append("            %s.ns = self.ns" % _attr_name(substmt.name))
@@ -1075,6 +1105,9 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                     elif substmt.cardinality == "0..n":
                         res.append("        for n in %s:" % _attr_name(substmt.name))
                         res.append("            n.parent = self")
+                        res.append("            n_mod = n.mod")
+                        res.append("            if n_mod is None:")
+                        res.append("                n.mod = self.mod")
                         res.append("            n_ns = n.ns")
                         res.append("            if n_ns is None:")
                         res.append("                n.ns = self.ns")
@@ -1093,6 +1126,9 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         if have_children:
             res.append("        for n in children:")
             res.append("            n.parent = self")
+            res.append("            n_mod = n.mod")
+            res.append("            if n_mod is None:")
+            res.append("                n.mod = self.mod")
             res.append("            n_ns = n.ns")
             res.append("            if n_ns is None:")
             res.append("                n.ns = self.ns")
@@ -1156,19 +1192,20 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
 
         # -- compile
         if "compile" not in manual_methods:
-            res.append("    def compile(self, context: Context, new_ns: ?str=None, new_pfx: ?str=None):")
+            res.append("    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):")
             new_args = []
             if arg_name is not None:
                 new_args += ["self." + _attr_name(arg_name)]
             new_args += list(map(lambda x: "%s=self.%s" % (_attr_name(x), _attr_name(x)), kwattrs))
             new_args.append("exts=self.exts")
             if stmt_name not in {"module", "submodule"}:
+                new_args.append("mod=new_mod if new_mod is not None else self.mod")
                 new_args.append("ns=new_ns if new_ns is not None else self.ns")
                 new_args.append("pfx=new_pfx if new_pfx is not None else self.pfx")
 
             res.append("        new = %s(%s)" % (_class_name(stmt_name), (",\n               " + " " * len(_class_name(stmt_name))).join(new_args)))
             if have_children:
-                res.append("        self.expand_children(context, new, new_ns)")
+                res.append("        self.expand_children(context, new, new_mod, new_ns, new_pfx)")
             for substmt in stmt.substmts.values():
                 if substmt.name == "augment":
                     res.append("        new.expand_augments(context)")

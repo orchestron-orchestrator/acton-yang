@@ -43,7 +43,7 @@ def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str, loose
 ys_one = """module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
-    prefix "foo";
+    prefix "f";
     container tc1 {
         leaf l1 {
             type string;
@@ -74,7 +74,8 @@ ys_one = """module foo {
 ys_foo = """module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
-    prefix "foo";
+    prefix "f";
+    include qux;
     grouping g1 {
         leaf l1 {
             type string;
@@ -226,13 +227,13 @@ ys_bar = """module bar {
     namespace "http://example.com/bar";
     prefix "bar";
     import foo {
-        prefix "foo";
+        prefix "f";
     }
-    augment /foo:c1 {
-        // create a conflict with /foo:c1/l1
-        uses foo:g1;
+    augment /f:c1 {
+        // create a conflict with /f:c1/l1
+        uses f:g1;
     }
-    augment /foo:c.dot {
+    augment /f:c.dot {
         leaf l.dot2 {
             type string;
         }
@@ -242,12 +243,30 @@ ys_bar = """module bar {
             type string;
         }
     }
-    augment /foo:conflict {
+    augment /f:conflict {
         leaf foo {
             type string;
         }
         container inner {
             presence "inner presence from bar";
+        }
+    }
+}"""
+
+ys_qux = """submodule qux {
+    yang-version "1.1";
+    belongs-to foo {
+        prefix "f";
+    }
+    // Must not conflict with /f:c1
+    container c2 {
+        leaf l1 {
+            type string;
+        }
+    }
+    augment /f:c1 {
+        leaf l4 {
+            type string;
         }
     }
 }"""
@@ -317,7 +336,7 @@ ys_basics = """module basics {
 actor main(env: Env):
     wfcap = file.WriteFileCap(file.FileCap(env.cap))
     yang_to_act(wfcap, yangs=[ys_one], filename="../test_data_classes/src/yang_one.act")
-    yang_to_act(wfcap, yangs=[ys_foo, ys_bar], filename="../test_data_classes/src/yang_foo.act")
-    yang_to_act(wfcap, yangs=[ys_foo, ys_bar], filename="../test_data_classes/src/yang_foo_loose.act", loose=True)
+    yang_to_act(wfcap, yangs=[ys_foo, ys_qux, ys_bar], filename="../test_data_classes/src/yang_foo.act")
+    yang_to_act(wfcap, yangs=[ys_foo, ys_qux, ys_bar], filename="../test_data_classes/src/yang_foo_loose.act", loose=True)
     yang_to_act(wfcap, yangs=[ys_basics], filename="../test_data_classes/src/yang_basics.act")
     env.exit(0)
