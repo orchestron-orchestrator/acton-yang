@@ -72,7 +72,7 @@ mut def from_json_foo__tc1(jd: dict[str, ?value]) -> yang.gdata.Container:
     child_l2 = jd.get('l2')
     if child_l2 is not None:
         children['l2'] = from_json_foo__tc1__l2(child_l2)
-    return yang.gdata.Container(children, ns='http://example.com/foo', prefix='f')
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 mut def to_json_foo__tc1(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -220,7 +220,7 @@ class foo__li(yang.adata.MNode):
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements, ns='http://example.com/foo')
+        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', module='foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__li_entry]:
@@ -247,7 +247,7 @@ mut def from_json_path_foo__li_element(jd: value, path: list[str]=[], op: ?str='
         if op == "merge":
             return val
         elif op == "remove":
-            return yang.gdata.Absent(val.key, ns='http://example.com/foo', prefix='f')
+            return yang.gdata.Absent(val.key, ns='http://example.com/foo', module='foo')
         raise ValueError("Invalid operation")
     elif len(path) > 1:
         keys = path[0].split(",")
@@ -257,7 +257,7 @@ mut def from_json_path_foo__li_element(jd: value, path: list[str]=[], op: ?str='
         children['name'] = from_json_foo__li__name(keys[0])
         if point == 'c1':
             children['c1'] = from_json_path_foo__li__c1(jd, rest_path, op)
-        return yang.gdata.Container(children, keys, ns='http://example.com/foo', prefix='f')
+        return yang.gdata.Container(children, keys, ns='http://example.com/foo', module='foo')
     raise ValueError("unreachable - no keys to list element")
 
 mut def from_json_path_foo__li(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.List:
@@ -280,9 +280,9 @@ mut def from_json_path_foo__li(jd: value, path: list[str]=[], op: ?str='merge') 
             elements.append(element)
         elif op == "remove":
             elements.append(yang.gdata.Absent(element.key))
-        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', prefix='f')
+        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', module='foo')
     elif len(path) > 1:
-        return yang.gdata.List(['name'], [from_json_path_foo__li_element(jd, path, op)], ns='http://example.com/foo', prefix='f')
+        return yang.gdata.List(['name'], [from_json_path_foo__li_element(jd, path, op)], ns='http://example.com/foo', module='foo')
     raise ValueError("Unable to resolve path, no keys provided")
 
 mut def from_json_foo__li_element(jd: dict[str, ?value]) -> yang.gdata.Node:
@@ -293,14 +293,14 @@ mut def from_json_foo__li_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     child_c1 = jd.get('c1')
     if child_c1 is not None and isinstance(child_c1, dict):
         children['c1'] = from_json_foo__li__c1(child_c1)
-    return yang.gdata.Container(children, [str(child_name if child_name is not None else '')], ns='http://example.com/foo', prefix='f')
+    return yang.gdata.Container(children, [str(child_name if child_name is not None else '')], ns='http://example.com/foo', module='foo')
 
 mut def from_json_foo__li(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = []
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__li_element(e))
-    return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', prefix='f')
+    return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
 
 mut def to_json_foo__li_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
