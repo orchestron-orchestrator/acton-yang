@@ -199,6 +199,13 @@ def json_val(yang_type: str, v: ?value) -> ?value:
     return v
 
 
+def fmt_json_name(name, module=None):
+    name_without_prefix = name.split(":")[-1]
+    if module is not None:
+        return f"{module}:{name_without_prefix}"
+    return name_without_prefix
+
+
 def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
     ns_attr = [("xmlns", '"'+ns+'"')] if ns is not None and not close else []
     attr_strs = list(map(lambda x: x.0 + "=" + x.1, ns_attr + attrs))
@@ -301,14 +308,14 @@ class Node(value):
             child_dict = {}
             for nm,child in self.children.items():
                 if isinstance(child, Container):
-                    child_dict[nm] = child.to_dict(pretty)
+                    child_dict[fmt_json_name(nm, child.module)] = child.to_dict(pretty)
                 elif isinstance(child, Leaf):
-                    child_dict[nm] = json_val(child.t, child.val)
+                    child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val)
                 elif isinstance(child, LeafList):
                     vals = []
                     for v in child.vals if child.user_order else vals_list_sorted(child.vals):
                         vals.append(json_val(child.t, v))
-                    child_dict[nm] = vals
+                    child_dict[fmt_json_name(nm, child.module)] = vals
                 elif isinstance(child, List):
                     elems = []
                     for elem in child.elements if child.user_order else sorted(child.elements):
@@ -320,7 +327,7 @@ class Node(value):
                             elems.append(elem_dict)
                         else:
                             raise ValueError("Unexpected list (" + nm + ") element type: " + type(elem))
-                    child_dict[nm] = elems
+                    child_dict[fmt_json_name(nm, child.module)] = elems
                 else:
                     raise ValueError("Unsupported child (" + nm + ") node type in to_dict: " + type(child))
             return child_dict
