@@ -493,19 +493,15 @@ class DNodeInner(DNode):
             # keys contains a yang spec of the keys, like "k1 k2"
             # which are modeled as attributes of the list entry class and accessed via self.k1, self.k2
             list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{_safe_name(x)})", self.key))
+            # No namespace qualifiers for the list entry "container" node - it is the same as the parent list node
             res.append(f"        return yang.gdata.Container(children, [{list_keys_str}])")
         elif isinstance(self, DRoot):
+            # No namespace qualifiers for the artifical root node
             res.append(f"        return yang.gdata.{self.gname}(children)")
-        elif set_ns:
-            if isinstance(self, DContainer) and self.presence:
-                res.append(f"        return yang.gdata.{self.gname}(children, presence=True, ns='{self.namespace}')")
-            else:
-                res.append(f"        return yang.gdata.{self.gname}(children, ns='{self.namespace}')")
+        elif isinstance(self, DContainer) and self.presence:
+            res.append(f"        return yang.gdata.{self.gname}(children, presence=True{gdata_nsq})")
         else:
-            if isinstance(self, DContainer) and self.presence:
-                res.append(f"        return yang.gdata.{self.gname}(children, presence=True)")
-            else:
-                res.append(f"        return yang.gdata.{self.gname}(children)")
+            res.append(f"        return yang.gdata.{self.gname}(children{gdata_nsq})")
         res.append("")
 #
         def _maybe_ns(child: DNode) -> str:
