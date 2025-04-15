@@ -60,14 +60,6 @@ mut def from_json_bar__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
         children['l1'] = from_json_bar__c1__l1(child_l1)
     return yang.gdata.Container(children, ns='http://example.com/bar', module='bar')
 
-mut def to_json_bar__c1(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_l1 = n.children.get('l1')
-    if child_l1 is not None:
-        if isinstance(child_l1, yang.gdata.Leaf):
-            children['l1'] = child_l1.val
-    return children
-
 mut def from_json_foo__c1__l1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
@@ -120,14 +112,6 @@ mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     if child_l1 is not None:
         children['l1'] = from_json_foo__c1__l1(child_l1)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
-
-mut def to_json_foo__c1(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_l1 = n.children.get('l1')
-    if child_l1 is not None:
-        if isinstance(child_l1, yang.gdata.Leaf):
-            children['l1'] = child_l1.val
-    return children
 
 class root(yang.adata.MNode):
     bar_c1: bar__c1
@@ -190,18 +174,6 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     if child_foo_c1 is not None and isinstance(child_foo_c1, dict):
         children['foo:c1'] = from_json_foo__c1(child_foo_c1)
     return yang.gdata.Container(children)
-
-mut def to_json(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_bar_c1 = n.children.get('bar:c1')
-    if child_bar_c1 is not None:
-        if isinstance(child_bar_c1, yang.gdata.Container):
-            children['bar:c1'] = to_json_bar__c1(child_bar_c1)
-    child_foo_c1 = n.children.get('foo:c1')
-    if child_foo_c1 is not None:
-        if isinstance(child_foo_c1, yang.gdata.Container):
-            children['foo:c1'] = to_json_foo__c1(child_foo_c1)
-    return children
 
 schema_namespaces: set[str] = {
     'http://example.com/foo',
