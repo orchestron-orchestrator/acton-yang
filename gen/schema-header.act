@@ -721,16 +721,16 @@ class DNodeInner(DNode):
                 res += ["        point = path[1]"]
                 res += ["        rest_path = path[2:]"]
                 res += ["        children: dict[str, yang.gdata.Node] = {}"]
-                res += [f"        for idx, key in enumerate({repr(self.key)}):"]
-                res += ["            children[key] = yang.gdata.Leaf(\"str\", keys[idx])"]
                 for child in self.children:
-                    if child.name in self.key:
-                        continue
-                    res += [f"        if point == '{child.name}':"]
-                    if isinstance(child, DNodeInner):
-                        res += [f"            children['{child.name}'] = from_json_path_{pname(child)}(jd, rest_path, op)"]
-                    else:
-                        res += ["            raise ValueError(\"Invalid json path to non-inner node\")"]
+                    try:
+                        idx = self.key.index(child.name)
+                        res += [f"        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
+                    except KeyError:
+                        res += [f"        if point == '{child.name}':"]
+                        if isinstance(child, DNodeInner):
+                            res += [f"            children['{uname(child)}'] = from_json_path_{pname(child)}(jd, rest_path, op)"]
+                        else:
+                            res += ["            raise ValueError(\"Invalid json path to non-inner node\")"]
                 res += ["        return yang.gdata.Container(children, keys)"]
                 res += ["    raise ValueError(\"unreachable - no keys to list element\")"]
                 res += [""]
