@@ -224,8 +224,13 @@ class Node(value):
         return ",".join(map(escape_keys, self.key))
 
     def prsrc(self, indent=0, name="") -> str:
+        args = []
         sns = self.ns
-        args = ["ns='" + sns + "'"] if sns is not None else []
+        if sns is not None:
+            args += [f"ns='{sns}'"]
+        smodule = self.module
+        if smodule is not None:
+            args += [f"module='{smodule}'"]
         res = []
         if isinstance(self, Leaf):
             args.insert(0, f"'{str(self.t)}'")
@@ -1601,7 +1606,7 @@ def _test_merge1():
                 "n4": Leaf("int", 4),
             }, ["k4"]),
         ])
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     y2 = Container({
         "b": Leaf("int", 2),
@@ -1613,7 +1618,7 @@ def _test_merge1():
             }, ["k2"]),
         ]),
         "d": LeafList("str", ["a", "b", "c"])
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     res = merge(y1, y2)
 
@@ -1635,7 +1640,7 @@ def _test_merge1():
             }, ["k4"]),
         ]),
         "d": LeafList("str", ["a", "b", "c"])
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res.prsrc(), exp.prsrc())
 
@@ -1656,7 +1661,7 @@ def _test_merge_list1():
         Container({
             "n1": Leaf("int", 1)
         }, ["last"]),
-    ], user_order=True, ns="http://example.com/acme")
+    ], user_order=True, ns="http://example.com/acme", module="acme")
 
     y2 = List(["name"], [
         Container({}, ["breaker"]),
@@ -1670,7 +1675,7 @@ def _test_merge_list1():
             "n1": Leaf("int", 1)
         }, ["common"]),
         Container({}, ["last"])
-    ], user_order=True, ns="http://example.com/acme")
+    ], user_order=True, ns="http://example.com/acme", module="acme")
 
     exp = List(["name"], [
         Container({
@@ -1695,7 +1700,7 @@ def _test_merge_list1():
         Container({
             "n1": Leaf("int", 1)
         }, ["third"]),
-    ], user_order=True, ns="http://example.com/acme")
+    ], user_order=True, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(exp, merge(y1, y2))
 
@@ -1758,12 +1763,12 @@ def _test_diff_no_change():
     old = Container({
         "a": Leaf("int", 1),
         "b": Leaf("int", 2)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     new = Container({
         "a": Leaf("int", 1),
         "b": Leaf("int", 2)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
     testing.assertEqual(d, None)
@@ -1775,18 +1780,18 @@ def _test_diff_leaf_change():
     old = Container({
         "a": Leaf("int", 1),
         "b": Leaf("int", 2)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     new = Container({
         "a": Leaf("int", 42), # Changed from 1 to 42
         "b": Leaf("int", 2)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     exp = Container({
         "a": Leaf("int", 42)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
@@ -1798,19 +1803,19 @@ def _test_diff_node_removal():
         "a": Leaf("int", 1),
         "c": Leaf("int", 3),
         "d": Leaf("int", 4)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     new = Container({
         "a": Leaf("int", 1),
         "d": Leaf("int", 4)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # c is removed
     exp = Container({
         "c": Absent()
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
@@ -1826,20 +1831,20 @@ def _test_diff_elem_removal():
         Container({
             "n4": Leaf("int", 4),
         }, ["k4"]),
-    ], ns="http://example.com/acme")
+    ], ns="http://example.com/acme", module="acme")
 
     new = List(["name"], [
         Container({
             "n4": Leaf("int", 4),
         }, ["k4"]),
-    ], ns="http://example.com/acme")
+    ], ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # k1 is removed
     exp = List(["name"], [
         Absent(["k1"]),
-    ], ns="http://example.com/acme")
+    ], ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
@@ -1848,19 +1853,19 @@ def _test_diff_node_addition():
     """
     old = Container({
         "a": Leaf("int", 1)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     new = Container({
         "a": Leaf("int", 1),
         "e": Leaf("int", 5)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # e is new
     exp = Container({
         "e": Leaf("int", 5)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
@@ -1870,17 +1875,17 @@ def _test_diff_leaflist():
     """
     old = Container({
         "l": LeafList("str", ["a", "b", "c"])
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     new = Container({
         "l": LeafList("str", ["a", "x", "c", "d"]) # "b" changed to "x" and "d" added
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     exp = Container({
         "l": LeafList("str", ["a", "x", "c", "d"])
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
@@ -1893,13 +1898,13 @@ def _test_diff_complex_ordering():
         "a": Leaf("int", 1),
         "b": Leaf("int", 2),
         "c": Leaf("int", 3)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     new = Container({
         "a": Leaf("int", 1),
         "c": Leaf("int", 3),
         "d": Leaf("int", 4)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
@@ -1907,7 +1912,7 @@ def _test_diff_complex_ordering():
     exp = Container({
         "b": Absent(),
         "d": Leaf("int", 4)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
@@ -1915,7 +1920,7 @@ def _test_patch_no_change():
     old = Container({
         "a": Leaf("int", 1),
         "b": Leaf("int", 2),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     # diff is None means no changes
     p = None
@@ -1927,19 +1932,19 @@ def _test_patch_leaf_change():
     old = Container({
         "a": Leaf("int", 1),
         "b": Leaf("int", 2),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     # Suppose we want to change leaf 'a' from 1 to 42
     # diff would look like this:
     p = Container({
         "a": Leaf("int", 42),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
         "a": Leaf("int", 42),
         "b": Leaf("int", 2),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
@@ -1947,18 +1952,18 @@ def _test_patch_node_removal():
     old = Container({
         "a": Leaf("int", 1),
         "c": Leaf("int", 3),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     # Suppose we remove 'c'
     # patch would be:
     p = Container({
         "c": Absent()
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
         "a": Leaf("int", 1),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
@@ -1971,20 +1976,20 @@ def _test_patch_elem_removal():
         Container({
             "n4": Leaf("int", 4),
         }, ["k4"]),
-    ], ns="http://example.com/acme")
+    ], ns="http://example.com/acme", module="acme")
 
     # Suppose we remove 'k1'
     # patch would be:
     p = List(["name"], [
         Absent(["k1"]),
-    ], ns="http://example.com/acme")
+    ], ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = List(["name"], [
         Container({
             "n4": Leaf("int", 4),
         }, ["k4"]),
-    ], ns="http://example.com/acme")
+    ], ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
@@ -2003,18 +2008,18 @@ def _test_patch_elem_removal2():
 def _test_patch_node_addition():
     old = Container({
         "a": Leaf("int", 1),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     # Add a new leaf 'e':
     p = Container({
         "e": Leaf("int", 5)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
         "a": Leaf("int", 1),
         "e": Leaf("int", 5),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
@@ -2024,39 +2029,39 @@ def _test_patch_complex_ordering():
         "a": Leaf("int", 1),
         "b": Leaf("int", 2),
         "c": Leaf("int", 3),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     # new: a, c, d
     # diff: remove b, add d
     p = Container({
         "b": Absent(),
         "d": Leaf("int", 4)
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
         "a": Leaf("int", 1),
         "c": Leaf("int", 3),
         "d": Leaf("int", 4),
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
 def _test_patch_leaflist():
     old = Container({
         "l": LeafList("str", ["a", "b", "c"])
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     # new: l = [a, x, c, d]
     # diff would be a leaflist replace:
     p = Container({
         "l": LeafList("str", ["a", "x", "c", "d"])
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
         "l": LeafList("str", ["a", "x", "c", "d"])
-    }, ns="http://example.com/acme")
+    }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
@@ -2079,7 +2084,7 @@ def _test_diff_and_patch_large_tree():
                         "enabled": Leaf("bool", True)
                     }, ["eth1"]),
                 ])
-            }, ns="http://example.com/yang/mod1")
+            }, ns="http://example.com/yang/mod1", module="mod1")
         }),
         "mod2": Container(children={
             "acl": Container(children={
@@ -2095,7 +2100,7 @@ def _test_diff_and_patch_large_tree():
                         "dst": Leaf("str", "any"),
                     }, ["20"]),
                 ])
-            }, ns="http://example.com/yang/mod2")
+            }, ns="http://example.com/yang/mod2", module="mod2")
         }),
     })
 
@@ -2127,7 +2132,7 @@ def _test_diff_and_patch_large_tree():
                         "enabled": Leaf("bool", False)
                     }, ["eth2"]),
                 ])
-            }, ns="http://example.com/yang/mod1")
+            }, ns="http://example.com/yang/mod1", module="mod1")
         }),
         "mod2": Container(children={
             "acl": Container(children={
@@ -2148,7 +2153,7 @@ def _test_diff_and_patch_large_tree():
                         "dst": Leaf("str", "198.51.100.0/24"),
                     }, ["30"]),
                 ])
-            }, ns="http://example.com/yang/mod2")
+            }, ns="http://example.com/yang/mod2", module="mod2")
         })
     })
 
@@ -2179,7 +2184,7 @@ def _test_prsrc():
                     "n4": Leaf("int", 4),
                 }, ["k4"]),
             ])
-        }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme", module="acme")
     })
 
     return y1.prsrc()
@@ -2194,7 +2199,7 @@ def _test_prsrc_absent():
                     "n4": Leaf("int", 4),
                 }, ["k4"]),
             ])
-        }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme", module="acme")
     })
 
     return y1.prsrc()
@@ -2204,7 +2209,7 @@ def _test_prsrc_root():
         "foo": Container({
             "a": Leaf("int", 1),
             "b": LeafList("str", ["a", "b", "c"]),
-        }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme", module="acme")
     })
 
     return y1.prsrc()
@@ -2212,9 +2217,9 @@ def _test_prsrc_root():
 def _test_prsrc_leaf_ns():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1, ns="http://example.com/foo"),
+            "a": Leaf("int", 1, ns="http://example.com/foo", module="foo"),
             "b": Leaf("int", 2)
-        }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme", module="acme")
     })
 
     return y1.prsrc()
@@ -2274,7 +2279,7 @@ def _test_to_xmlstr_root():
         "foo": Container({
             "a": Leaf("int", 1),
             "b": LeafList("binary", ["a", "b", "c"]),
-        }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme", module="acme")
     })
 
     return y1.to_xmlstr()
@@ -2284,7 +2289,7 @@ def _test_to_xmlstr_module():
         "foo": Container({
             "a": Leaf("int", 1),
             "b": LeafList("str", ["a", "b", "c"]),
-        }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme", module="acme")
     })
 
     return y1.to_xmlstr()
@@ -2292,9 +2297,9 @@ def _test_to_xmlstr_module():
 def _test_to_xmlstr_leaf_ns():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1, ns="http://example.com/foo"),
+            "a": Leaf("int", 1, ns="http://example.com/foo", module="foo"),
             "b": Leaf("int", 2)
-        }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme", module="acme")
     })
 
     return y1.to_xmlstr()
@@ -2326,12 +2331,12 @@ def _test_to_xmlstr_root_merge():
         "foo": Container({
             "a": Leaf("int", 1),
             "b": LeafList("str", ["a", "b", "c"]),
-        }, ns="http://example.com/acme")
+        }, ns="http://example.com/acme", module="acme")
     })
     y2 = Container({
         "bar": Container({
             "b": Leaf("int", 42),
-        }, ns="http://example.com/bar")
+        }, ns="http://example.com/bar", module="bar")
     })
     ym = merge(y1, y2)
 
@@ -2341,14 +2346,14 @@ def _test_to_xmlstr_presence():
     y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1)
-        }, presence=True, ns="http://example.com/acme")
+        }, presence=True, ns="http://example.com/acme", module="acme")
     })
 
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_presence_childless():
     y1 = Container({
-        "foo": Container(presence=True, ns="http://example.com/acme")
+        "foo": Container(presence=True, ns="http://example.com/acme", module="acme")
     })
 
     return y1.to_xmlstr()
