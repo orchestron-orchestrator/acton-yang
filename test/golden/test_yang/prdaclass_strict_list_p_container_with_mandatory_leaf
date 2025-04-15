@@ -147,7 +147,7 @@ mut def from_json_path_foo__l1_element(jd: value, path: list[str]=[], op: ?str='
         if op == "merge":
             return val
         elif op == "remove":
-            return yang.gdata.Absent(val.key)
+            return yang.gdata.Absent(val.key, ns='http://example.com/foo', prefix='foo')
         raise ValueError("Invalid operation")
     elif len(path) > 1:
         keys = path[0].split(",")
@@ -157,7 +157,7 @@ mut def from_json_path_foo__l1_element(jd: value, path: list[str]=[], op: ?str='
         children['name'] = from_json_foo__l1__name(keys[0])
         if point == 'bar':
             children['bar'] = from_json_path_foo__l1__bar(jd, rest_path, op)
-        return yang.gdata.Container(children, keys)
+        return yang.gdata.Container(children, keys, ns='http://example.com/foo', prefix='foo')
     raise ValueError("unreachable - no keys to list element")
 
 mut def from_json_path_foo__l1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.List:
@@ -180,9 +180,9 @@ mut def from_json_path_foo__l1(jd: value, path: list[str]=[], op: ?str='merge') 
             elements.append(element)
         elif op == "remove":
             elements.append(yang.gdata.Absent(element.key))
-        return yang.gdata.List(['name'], elements)
+        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', prefix='foo')
     elif len(path) > 1:
-        return yang.gdata.List(['name'], [from_json_path_foo__l1_element(jd, path, op)])
+        return yang.gdata.List(['name'], [from_json_path_foo__l1_element(jd, path, op)], ns='http://example.com/foo', prefix='foo')
     raise ValueError("Unable to resolve path, no keys provided")
 
 mut def from_json_foo__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
@@ -193,14 +193,14 @@ mut def from_json_foo__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     child_bar = jd.get('bar')
     if child_bar is not None and isinstance(child_bar, dict):
         children['bar'] = from_json_foo__l1__bar(child_bar)
-    return yang.gdata.Container(children, [str(child_name if child_name is not None else '')])
+    return yang.gdata.Container(children, [str(child_name if child_name is not None else '')], ns='http://example.com/foo', prefix='foo')
 
 mut def from_json_foo__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = []
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__l1_element(e))
-    return yang.gdata.List(keys=['name'], elements=elements, ns=None, prefix=None)
+    return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', prefix='foo')
 
 mut def to_json_foo__l1_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}

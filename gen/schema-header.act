@@ -675,6 +675,9 @@ class DNodeInner(DNode):
         res.append("")
 
         # == JSON serde ================================
+        # include namespace qualifier(s) iff child namespace is different from
+        # parent, unless we're to top containing node with no namespace
+        nsq = f", ns='{self.namespace}', prefix='{self.prefix}'" if not top and set_ns else ""
 
         # from_json(): from JSON -> gdata
         if gen_json and isinstance(self, DNodeInner):
@@ -696,7 +699,7 @@ class DNodeInner(DNode):
                 res += ["        if op == \"merge\":"]
                 res += ["            return val"]
                 res += ["        elif op == \"remove\":"]
-                res += ["            return yang.gdata.Absent(val.key)"]
+                res += [f"            return yang.gdata.Absent(val.key{nsq})"]
                 res += ["        raise ValueError(\"Invalid operation\")"]
                 res += ["    elif len(path) > 1:"]
                 res += ["        keys = path[0].split(\",\")"]
@@ -716,7 +719,7 @@ class DNodeInner(DNode):
                             res += [f"            children['{uname(child)}'] = from_json_path_{pname(child)}(jd, rest_path, op)"]
                         else:
                             res += ["            raise ValueError(\"Invalid json path to non-inner node\")"]
-                res += ["        return yang.gdata.Container(children, keys)"]
+                res += [f"        return yang.gdata.Container(children, keys{nsq})"]
                 res += ["    raise ValueError(\"unreachable - no keys to list element\")"]
                 res += [""]
 
@@ -741,9 +744,9 @@ class DNodeInner(DNode):
                 res.append("            elements.append(element)")
                 res.append("        elif op == \"remove\":")
                 res.append("            elements.append(yang.gdata.Absent(element.key))")
-                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)})")
+                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)}{nsq})")
                 res.append("    elif len(path) > 1:")
-                res.append(f"        return yang.gdata.List({repr(self.key)}, [from_json_path_{pname(self)}_element(jd, path, op)]{maybe_user_order(self)})")
+                res.append(f"        return yang.gdata.List({repr(self.key)}, [from_json_path_{pname(self)}_element(jd, path, op)]{maybe_user_order(self)}{nsq})")
                 res.append("    raise ValueError(\"Unable to resolve path, no keys provided\")")
 
             else:
@@ -759,7 +762,7 @@ class DNodeInner(DNode):
                         res.append(f"        if point == '{child.name}':")
                     if isinstance(child, DNodeInner):
                         res += [nest(12) + f"child = {{'{child.name}': from_json_path_{pname(child)}(jd, rest_path, op) }}"]
-                        res += [nest(12) + "return yang.gdata." + self.gname + "(child)"]
+                        res += [nest(12) + "return yang.gdata." + self.gname + f"(child{nsq})"]
                     else:
                         res.append("            raise ValueError(\"Invalid json path to non-inner node\")")
                 res.append("        raise ValueError(\"Invalid path\")")
@@ -813,9 +816,9 @@ class DNodeInner(DNode):
 
             if isinstance(self, DList):
                 list_keys_str = ", ".join(map(lambda x: f"str(child_{_safe_name(x)} if child_{_safe_name(x)} is not None else '')", self.key))
-                res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
+                res.append(f"    return yang.gdata.Container(children, [{list_keys_str}]{nsq})")
             else:
-                res.append(f"    return yang.gdata.{self.gname}(children)")
+                res.append(f"    return yang.gdata.{self.gname}(children{nsq})")
             res.append("")
 
         if gen_json and isinstance(self, DList):
@@ -824,7 +827,7 @@ class DNodeInner(DNode):
             res.append(f"    for e in jd:")
             res.append(f"        if isinstance(e, dict):")
             res.append(f"            elements.append(from_json_{pname(self)}_element(e))")
-            res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}, ns=None, prefix=None)")
+            res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{nsq})")
             res.append("")
 
         # to_json(): gdata -> JSON
@@ -1116,10 +1119,13 @@ class DLeaf(DNodeLeaf):
             return ""
         def pname(n):
             return get_path_name(n)
+        # include namespace qualifier(s) iff child namespace is different from
+        # parent, unless we're to top containing node with no namespace
+        nsq = f", ns='{self.namespace}', prefix='{self.prefix}'" if not top and set_ns else ""
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
-            res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val)")
+            res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val{nsq})")
             res.append("")
         return "\n".join(res)
 
@@ -1160,10 +1166,13 @@ class DLeafList(DNodeLeaf):
         def pname(n):
             return get_path_name(n)
         maybe_user_order = ", user_order=True" if self.ordered_by == "user" else ""
+        # include namespace qualifier(s) iff child namespace is different from
+        # parent, unless we're to top containing node with no namespace
+        nsq = f", ns='{self.namespace}', prefix='{self.prefix}'" if not top and set_ns else ""
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            res.append(f"    return yang.gdata.LeafList(val{maybe_user_order})")
+            res.append(f"    return yang.gdata.LeafList(val{maybe_user_order}{nsq})")
             res.append("")
         return "\n".join(res)
 
