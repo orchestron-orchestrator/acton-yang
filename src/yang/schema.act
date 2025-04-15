@@ -239,34 +239,6 @@ def optional_subtree(node: DNodeInner) -> bool:
                 return False
     return True
 
-def dnode_to_gd_type(node: DNode) -> str:
-    """Convert DNode to GData type
-    """
-    if isinstance(node, DLeaf):
-        return "Leaf"
-    elif isinstance(node, DLeafList):
-        return "LeafList"
-    elif isinstance(node, DContainer):
-        return "Container"
-    elif isinstance(node, DList):
-        return "List"
-    elif isinstance(node, DAnydata):
-        return "Anydata"
-    elif isinstance(node, DAnyxml):
-        return "Anyxml"
-    elif isinstance(node, DAction):
-        return "Action"
-    elif isinstance(node, DRoot):
-        return "Container"
-    elif isinstance(node, DRpc):
-        return "Rpc"
-    elif isinstance(node, DInput):
-        return "Input"
-    elif isinstance(node, DOutput):
-        return "Output"
-    else:
-        raise ValueError("Unknown node type: " + str(type(node)))
-
 def nest(n):
     return " " * n
 
@@ -770,7 +742,7 @@ class DNodeInner(DNode):
                         res.append(f"        if point == '{child.module}:{child.name}' or point == '{child.name}':")
                     if isinstance(child, DNodeInner):
                         res += [nest(12) + f"child = {{'{child.name}': from_json_path_{pname(child)}(jd, rest_path, op) }}"]
-                        res += [nest(12) + "return yang.gdata." + dnode_to_gd_type(self) + "(child)"]
+                        res += [nest(12) + "return yang.gdata." + self.gname + "(child)"]
                     else:
                         res.append("            raise ValueError(\"Invalid json path to non-inner node\")")
                 res.append("        raise ValueError(\"Invalid path\")")
@@ -794,7 +766,7 @@ class DNodeInner(DNode):
             if isinstance(self, DList):
                 res.append(f"mut def {fname}_element(jd: dict[str, ?value]) -> yang.gdata.Node:")
             else:
-                res.append(f"mut def {fname}(jd: dict[str, ?value]) -> yang.gdata.{dnode_to_gd_type(self)}:")
+                res.append(f"mut def {fname}(jd: dict[str, ?value]) -> yang.gdata.{self.gname}:")
 
             res.append("    children = {}")
             for child in self.children:
@@ -827,7 +799,7 @@ class DNodeInner(DNode):
                 list_keys_str = ", ".join(map(lambda x: f"str(child_{_safe_name(x)} if child_{_safe_name(x)} is not None else '')", self.key))
                 res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
             else:
-                res.append(f"    return yang.gdata.{dnode_to_gd_type(self)}(children)")
+                res.append(f"    return yang.gdata.{self.gname}(children)")
             res.append("")
 
         elif gen_json and isinstance(self, DLeaf):
