@@ -14,7 +14,7 @@ mut def from_json_foo__c1__c2__l2(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
 mut def from_json_foo__c1__c2__l3(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    return yang.gdata.Leaf('string', val, ns='http://example.com/baz', module='baz')
 
 class foo__c1__c2(yang.adata.MNode):
     l2: ?str
@@ -32,7 +32,7 @@ class foo__c1__c2(yang.adata.MNode):
             children['l2'] = yang.gdata.Leaf('string', _l2)
         _l3 = self.l3
         if _l3 is not None:
-            children['l3'] = yang.gdata.Leaf('string', _l3, ns='http://example.com/baz')
+            children['l3'] = yang.gdata.Leaf('string', _l3, ns='http://example.com/baz', module='baz')
         return yang.gdata.Container(children, ns='http://example.com/bar')
 
     @staticmethod
@@ -74,7 +74,7 @@ mut def from_json_foo__c1__c2(jd: dict[str, ?value]) -> yang.gdata.Container:
     child_l3 = jd.get('baz:l3')
     if child_l3 is not None:
         children['l3'] = from_json_foo__c1__c2__l3(child_l3)
-    return yang.gdata.Container(children)
+    return yang.gdata.Container(children, ns='http://example.com/bar', module='bar')
 
 mut def to_json_foo__c1__c2(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -129,7 +129,7 @@ mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') 
             raise ValueError("Invalid json path to non-inner node")
         if point == 'bar:c2':
             child = {'c2': from_json_path_foo__c1__c2(jd, rest_path, op) }
-            return yang.gdata.Container(child)
+            return yang.gdata.Container(child, ns='http://example.com/foo', module='foo')
         raise ValueError("Invalid path")
     elif len(path) == 0:
         if op == "merge":
@@ -147,7 +147,7 @@ mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     child_c2 = jd.get('bar:c2')
     if child_c2 is not None and isinstance(child_c2, dict):
         children['c2'] = from_json_foo__c1__c2(child_c2)
-    return yang.gdata.Container(children)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 mut def to_json_foo__c1(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}

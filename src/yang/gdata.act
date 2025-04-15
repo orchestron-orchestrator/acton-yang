@@ -214,7 +214,7 @@ empty_key = []
 
 class Node(value):
     ns: ?str
-    prefix: ?str
+    module: ?str
     key: list[str] # values of the key leafs
     children: dict[str, Node]
 
@@ -624,43 +624,43 @@ class List(Node):
     elements: list[Node]
     user_order: bool
 
-    def __init__(self, keys: list[str], elements: list[Node]=[], user_order=False, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, keys: list[str], elements: list[Node]=[], user_order=False, ns: ?str=None, module: ?str=None):
         self.key = empty_key
         self.keys = keys
         self.elements = elements
         self.user_order = user_order
         self.ns = ns
-        self.prefix = prefix
+        self.module = module
 
 class Container(Node):
-    def __init__(self, children: dict[str, Node]={}, key: list[str]=[], presence: bool=False, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, children: dict[str, Node]={}, key: list[str]=[], presence: bool=False, ns: ?str=None, module: ?str=None):
         self.children = children
         self.key = key
         self.presence = presence
         self.ns = ns
-        self.prefix = prefix
+        self.module = module
 
 class Leaf(Node):
     t: str
     val: value
 
-    def __init__(self, t: str, val: value, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None):
         self.key = empty_key
         self.t = t
         self.val = val
         self.ns = ns
-        self.prefix = prefix
+        self.module = module
 
 class LeafList(Node):
     t: str
     vals: list[value]
     user_order: bool
 
-    def __init__(self, t: str, vals: list[value], user_order=False, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, t:str, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None):
         self.key = empty_key
         self.t = t
         self.ns = ns
-        self.prefix = prefix
+        self.module = module
         self.vals = vals
         self.user_order = user_order
 
@@ -672,10 +672,10 @@ class Absent(Node):
     Absent is declarative / idempotent, meaning that if the target to be removed
     / made absent is not present, no error is raised.
     """
-    def __init__(self, key: list[str]=[], ns: ?str=None, prefix: ?str=None):
+    def __init__(self, key: list[str]=[], ns: ?str=None, module: ?str=None):
         self.key = key
         self.ns = ns
-        self.prefix = prefix
+        self.module = module
         self.children = {}
 
 class Delete(Node):
@@ -684,10 +684,10 @@ class Delete(Node):
 
     Unlike Absent / remove, Delete of a non-existent node is a failure.
     """
-    def __init__(self, key: list[str]=[], ns: ?str=None, prefix: ?str=None):
+    def __init__(self, key: list[str]=[], ns: ?str=None, module: ?str=None):
         self.key = key
         self.ns = ns
-        self.prefix = prefix
+        self.module = module
         self.children = {}
 
 class Create(Node):
@@ -696,20 +696,20 @@ class Create(Node):
 
     Unlike the default implicit merge, Create of an existing node is a failure.
     """
-    def __init__(self, children={}, key: list[str]=[], ns: ?str=None, prefix: ?str=None):
+    def __init__(self, children={}, key: list[str]=[], ns: ?str=None, module: ?str=None):
         self.key = key
         self.ns = ns
-        self.prefix = prefix
+        self.module = module
         self.children = children
 
 class Replace(Node):
     """Imperative replace of a node
     NETCONF replace operation maps to Replace
     """
-    def __init__(self, children={}, key: list[str]=[], ns: ?str=None, prefix: ?str=None):
+    def __init__(self, children={}, key: list[str]=[], ns: ?str=None, module: ?str=None):
         self.key = key
         self.ns = ns
-        self.prefix = prefix
+        self.module = module
         self.children = children
 
 
@@ -889,7 +889,7 @@ def merge(a: Node, b: Node) -> Node:
             raise ValueError("Cannot merge containers with different keys: %s vs %s" % (str(a.key), str(b.key)))
         # Merge keyed children similarly to Container
         new_children = merge_keyed_children(a.children, b.children)
-        return Container(children=new_children, key=a.key, presence=a.presence, ns=a.ns, prefix=a.prefix)
+        return Container(children=new_children, key=a.key, presence=a.presence, ns=a.ns, module=a.module)
 
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.t != b.t:
@@ -952,7 +952,7 @@ def merge(a: Node, b: Node) -> Node:
                     new_elements.append(b_elem)
                     existing_keys[bk] = True
 
-            return List(a.keys, new_elements, user_order=a.user_order, ns=a.ns, prefix=a.prefix)
+            return List(a.keys, new_elements, user_order=a.user_order, ns=a.ns, module=a.module)
         else:
             # user_order = False
             # Keep the original merging logic since it sorts by keys, not order
@@ -1111,14 +1111,14 @@ def diff(old: Node, new: Node) -> ?Node:
         diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
-        return Container(children=diff_children, key=new.key, presence=new.presence, ns=new.ns, prefix=new.prefix)
+        return Container(children=diff_children, key=new.key, presence=new.presence, ns=new.ns, module=new.module)
 
     elif isinstance(old, List) and isinstance(new, List):
         # For lists, we have elements instead of children
         result = diff_list_elements(old, new)
         if result is None:
             return None
-        return List(new.keys, elements=result, user_order=new.user_order, ns=new.ns, prefix=new.prefix)
+        return List(new.keys, elements=result, user_order=new.user_order, ns=new.ns, module=new.module)
 
     elif isinstance(old, Leaf) and isinstance(new, Leaf):
         if old.t != new.t:
@@ -1182,7 +1182,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         # No need to remove unchanged nodes; they are already in new_children
         if len(new_children) == 0:
             return None
-        return Container(children=new_children, key=old.key, presence=old.presence, ns=old.ns, prefix=old.prefix)
+        return Container(children=new_children, key=old.key, presence=old.presence, ns=old.ns, module=old.module)
 
     elif isinstance(old, List) and isinstance(p, List):
         if old.keys != p.keys:
@@ -1242,7 +1242,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
         if len(new_elements) == 0:
             return None
-        return List(old.keys, elements=new_elements, user_order=old.user_order, ns=old.ns, prefix=old.prefix)
+        return List(old.keys, elements=new_elements, user_order=old.user_order, ns=old.ns, module=old.module)
 
     elif isinstance(old, Leaf) and isinstance(p, Leaf):
         # Patch leaf replaces old leaf value

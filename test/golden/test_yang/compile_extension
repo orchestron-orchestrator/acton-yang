@@ -146,7 +146,7 @@ mut def from_json_foo__c1__things(jd: list[dict[str, ?value]]) -> yang.gdata.Lis
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__c1__things_element(e))
-    return yang.gdata.List(keys=['name'], elements=elements, ns=None, prefix=None)
+    return yang.gdata.List(keys=['name'], elements=elements)
 
 mut def to_json_foo__c1__things_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -200,7 +200,7 @@ mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') 
         rest_path = path[1:]
         if point == 'things':
             child = {'things': from_json_path_foo__c1__things(jd, rest_path, op) }
-            return yang.gdata.Container(child)
+            return yang.gdata.Container(child, ns='http://example.com/foo', module='foo')
         raise ValueError("Invalid path")
     elif len(path) == 0:
         if op == "merge":
@@ -215,7 +215,7 @@ mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     child_things = jd.get('things')
     if child_things is not None and isinstance(child_things, list):
         children['things'] = from_json_foo__c1__things(child_things)
-    return yang.gdata.Container(children)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 mut def to_json_foo__c1(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}

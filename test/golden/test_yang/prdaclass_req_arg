@@ -132,7 +132,7 @@ class foo__l1(yang.adata.MNode):
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements, ns='http://example.com/foo')
+        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', module='foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__l1_entry]:
@@ -194,9 +194,9 @@ mut def from_json_path_foo__l1(jd: value, path: list[str]=[], op: ?str='merge') 
             elements.append(element)
         elif op == "remove":
             elements.append(yang.gdata.Absent(element.key))
-        return yang.gdata.List(['name'], elements)
+        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', module='foo')
     elif len(path) > 1:
-        return yang.gdata.List(['name'], [from_json_path_foo__l1_element(jd, path, op)])
+        return yang.gdata.List(['name'], [from_json_path_foo__l1_element(jd, path, op)], ns='http://example.com/foo', module='foo')
     raise ValueError("Unable to resolve path, no keys provided")
 
 mut def from_json_foo__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
@@ -217,7 +217,7 @@ mut def from_json_foo__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__l1_element(e))
-    return yang.gdata.List(keys=['name'], elements=elements, ns=None, prefix=None)
+    return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
 
 mut def to_json_foo__l1_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}

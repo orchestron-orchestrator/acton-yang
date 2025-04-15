@@ -466,6 +466,11 @@ class DNodeInner(DNode):
                 res.append("        return res")
                 res.append("")
 
+        # Include namespace qualifier(s) iff our namespace is different than our
+        # parent, unless we're the top containing node with no namespace
+        # TODO: is DRoot the only top containing node with no namespace?!
+        gdata_nsq = f", ns='{self.namespace}', module='{self.module}'" if set_ns and self.namespace != "" else ""
+
         # .to_gdata()
         res.append("    mut def to_gdata(self) -> yang.gdata.Node:")
         res.append("        children = {}")
@@ -473,9 +478,8 @@ class DNodeInner(DNode):
         for child in self.children:
             if not isinstance(child, DLeafList):
                 res.append(f"        _{usname(child)} = self.{usname(child)}")
-            # No namespace qualifiers for direct descendants of the list node - it is the same as the parent list node
-            if top == True and not isinstance(self, DList) or child.namespace != self.namespace:
-                child_ns = f", ns='{child.namespace}'"
+            if child.namespace != self.namespace:
+                child_ns = f", ns='{child.namespace}', module='{child.module}'"
             else:
                 child_ns = ""
             if isinstance(child, DLeafList):
@@ -641,7 +645,7 @@ class DNodeInner(DNode):
             res.append("            if isinstance(e_gdata, yang.gdata.Container):")
             res.append("                elements.append(e_gdata)")
             if set_ns:
-                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)}, ns='{self.namespace}')")
+                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)}, ns='{self.namespace}', module='{self.module}')")
             else:
                 res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)})")
             res.append("")
@@ -694,7 +698,7 @@ class DNodeInner(DNode):
                 res += ["        if op == \"merge\":"]
                 res += ["            return val"]
                 res += ["        elif op == \"remove\":"]
-                res += ["            return yang.gdata.Absent(val.key)"]
+                res += [f"            return yang.gdata.Absent(val.key)"]
                 res += ["        raise ValueError(\"Invalid operation\")"]
                 res += ["    elif len(path) > 1:"]
                 res += ["        keys = path[0].split(\",\")"]
@@ -714,7 +718,7 @@ class DNodeInner(DNode):
                             res += [f"            children['{uname(child)}'] = from_json_path_{pname(child)}(jd, rest_path, op)"]
                         else:
                             res += ["            raise ValueError(\"Invalid json path to non-inner node\")"]
-                res += ["        return yang.gdata.Container(children, keys)"]
+                res += [f"        return yang.gdata.Container(children, keys)"]
                 res += ["    raise ValueError(\"unreachable - no keys to list element\")"]
                 res += [""]
 
@@ -739,9 +743,9 @@ class DNodeInner(DNode):
                 res.append("            elements.append(element)")
                 res.append("        elif op == \"remove\":")
                 res.append("            elements.append(yang.gdata.Absent(element.key))")
-                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)})")
+                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)}{gdata_nsq})")
                 res.append("    elif len(path) > 1:")
-                res.append(f"        return yang.gdata.List({repr(self.key)}, [from_json_path_{pname(self)}_element(jd, path, op)]{maybe_user_order(self)})")
+                res.append(f"        return yang.gdata.List({repr(self.key)}, [from_json_path_{pname(self)}_element(jd, path, op)]{maybe_user_order(self)}{gdata_nsq})")
                 res.append("    raise ValueError(\"Unable to resolve path, no keys provided\")")
 
             else:
@@ -757,7 +761,7 @@ class DNodeInner(DNode):
                         res.append(f"        if point == '{child.name}':")
                     if isinstance(child, DNodeInner):
                         res += [nest(12) + f"child = {{'{uname(child)}': from_json_path_{pname(child)}(jd, rest_path, op) }}"]
-                        res += [nest(12) + "return yang.gdata." + self.gname + "(child)"]
+                        res += [nest(12) + "return yang.gdata." + self.gname + f"(child{gdata_nsq})"]
                     else:
                         res.append("            raise ValueError(\"Invalid json path to non-inner node\")")
                 res.append("        raise ValueError(\"Invalid path\")")
@@ -813,7 +817,7 @@ class DNodeInner(DNode):
                 list_keys_str = ", ".join(map(lambda x: f"str(child_{_safe_name(x)} if child_{_safe_name(x)} is not None else '')", self.key))
                 res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
             else:
-                res.append(f"    return yang.gdata.{self.gname}(children)")
+                res.append(f"    return yang.gdata.{self.gname}(children{gdata_nsq})")
             res.append("")
 
         if gen_json and isinstance(self, DList):
@@ -822,7 +826,7 @@ class DNodeInner(DNode):
             res.append(f"    for e in jd:")
             res.append(f"        if isinstance(e, dict):")
             res.append(f"            elements.append(from_json_{pname(self)}_element(e))")
-            res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}, ns=None, prefix=None)")
+            res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
             res.append("")
 
         # to_json(): gdata -> JSON
@@ -1120,13 +1124,16 @@ class DLeaf(DNodeLeaf):
             return ""
         def pname(n):
             return get_path_name(n)
+        # Include namespace qualifier(s) iff our namespace is different than our
+        # parent
+        gdata_nsq = f", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
             if self.type_.name == "int64" or self.type_.name == "uint64":
                 res.append("    if isinstance(val, str):")
-                res.append(f"        return yang.gdata.Leaf('{self.type_.name}', int(val))")
-            res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val)")
+                res.append(f"        return yang.gdata.Leaf('{self.type_.name}', int(val){gdata_nsq})")
+            res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
         return "\n".join(res)
 
@@ -1167,6 +1174,9 @@ class DLeafList(DNodeLeaf):
         def pname(n):
             return get_path_name(n)
         maybe_user_order = ", user_order=True" if self.ordered_by == "user" else ""
+        # Include namespace qualifier(s) iff our namespace is different than our
+        # parent
+        gdata_nsq = f", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
@@ -1178,9 +1188,9 @@ class DLeafList(DNodeLeaf):
                 res.append("             int_vals.append(int(v))")
                 res.append("        else:")
                 res.append("             int_vals.append(v)")
-                res.append(f"    return yang.gdata.LeafList('{self.type_.name}', int_vals{maybe_user_order})")
+                res.append(f"    return yang.gdata.LeafList('{self.type_.name}', int_vals{maybe_user_order}{gdata_nsq})")
             else:
-                res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order})")
+                res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
         return "\n".join(res)
 
