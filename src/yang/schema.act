@@ -694,7 +694,10 @@ class DNodeInner(DNode):
                         idx = self.key.index(child.name)
                         res += [f"        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
                     except KeyError:
-                        res += [f"        if point == '{child.name}':"]
+                        if top or child.namespace != self.namespace:
+                            res += [f"        if point == '{child.module}:{child.name}':"]
+                        else:
+                            res += [f"        if point == '{child.name}':"]
                         if isinstance(child, DNodeInner):
                             res += [f"            children['{uname(child)}'] = from_json_path_{pname(child)}(jd, rest_path, op)"]
                         else:
@@ -739,7 +742,7 @@ class DNodeInner(DNode):
                     if top == True or child.namespace != self.namespace:
                         res.append(f"        if point == '{child.module}:{child.name}':")
                     else:
-                        res.append(f"        if point == '{child.module}:{child.name}' or point == '{child.name}':")
+                        res.append(f"        if point == '{child.name}':")
                     if isinstance(child, DNodeInner):
                         res += [nest(12) + f"child = {{'{child.name}': from_json_path_{pname(child)}(jd, rest_path, op) }}"]
                         res += [nest(12) + "return yang.gdata." + self.gname + "(child)"]
@@ -773,8 +776,7 @@ class DNodeInner(DNode):
                 if top == True or child.namespace != self.namespace:
                     res.append(f"    child_{usname(child)} = jd.get('{child.module}:{child.name}')")
                 else:
-                    res.append(f"    child_{usname(child)}_full = jd.get('{child.module}:{child.name}')")
-                    res.append(f"    child_{usname(child)} = child_{usname(child)}_full if child_{usname(child)}_full is not None else jd.get('{child.name}')")
+                    res.append(f"    child_{usname(child)} = jd.get('{child.name}')")
 
                 if isinstance(child, DContainer):
                     res.append(f"    if child_{usname(child)} is not None and isinstance(child_{usname(child)}, dict):")
