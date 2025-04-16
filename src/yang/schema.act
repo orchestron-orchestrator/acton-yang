@@ -465,7 +465,7 @@ class DNodeInner(DNode):
         for child in self.children:
             if not isinstance(child, DLeafList):
                 res.append(f"        _{usname(child)} = self.{usname(child)}")
-            child_ns = ", ns='" + child.namespace + "'" if child.namespace != self.namespace else ""
+            child_ns = ", ns='" + child.namespace + "'" if top or child.namespace != self.namespace else ""
             if isinstance(child, DLeafList):
                 res.append(f"        children['{uname(child)}'] = yang.gdata.LeafList(self.{usname(child)}{child_ns})")
             else:
@@ -497,7 +497,7 @@ class DNodeInner(DNode):
         res.append("")
 #
         def _maybe_ns(child: DNode) -> str:
-            if child.namespace != self.namespace:
+            if top or child.namespace != self.namespace:
                 return f", '{child.namespace}'"
             return ""
 
@@ -694,7 +694,10 @@ class DNodeInner(DNode):
                         idx = self.key.index(child.name)
                         res += [f"        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
                     except KeyError:
-                        res += [f"        if point == '{child.name}':"]
+                        if top or child.namespace != self.namespace:
+                            res += [f"        if point == '{child.module}:{child.name}':"]
+                        else:
+                            res += [f"        if point == '{child.name}':"]
                         if isinstance(child, DNodeInner):
                             res += [f"            children['{uname(child)}'] = from_json_path_{pname(child)}(jd, rest_path, op)"]
                         else:
@@ -736,10 +739,10 @@ class DNodeInner(DNode):
                 res.append("        point = path[0]")
                 res.append("        rest_path = path[1:]")
                 for child in self.children:
-                    if top == True or child.namespace != self.namespace:
+                    if top or child.namespace != self.namespace:
                         res.append(f"        if point == '{child.module}:{child.name}':")
                     else:
-                        res.append(f"        if point == '{child.module}:{child.name}' or point == '{child.name}':")
+                        res.append(f"        if point == '{child.name}':")
                     if isinstance(child, DNodeInner):
                         res += [nest(12) + f"child = {{'{child.name}': from_json_path_{pname(child)}(jd, rest_path, op) }}"]
                         res += [nest(12) + "return yang.gdata." + self.gname + "(child)"]
@@ -770,11 +773,10 @@ class DNodeInner(DNode):
 
             res.append("    children = {}")
             for child in self.children:
-                if top == True or child.namespace != self.namespace:
+                if top or child.namespace != self.namespace:
                     res.append(f"    child_{usname(child)} = jd.get('{child.module}:{child.name}')")
                 else:
-                    res.append(f"    child_{usname(child)}_full = jd.get('{child.module}:{child.name}')")
-                    res.append(f"    child_{usname(child)} = child_{usname(child)}_full if child_{usname(child)}_full is not None else jd.get('{child.name}')")
+                    res.append(f"    child_{usname(child)} = jd.get('{child.name}')")
 
                 if isinstance(child, DContainer):
                     res.append(f"    if child_{usname(child)} is not None and isinstance(child_{usname(child)}, dict):")
@@ -836,7 +838,7 @@ class DNodeInner(DNode):
 
             res.append("    children = {}")
             for child in self.children:
-                child_name = f"{child.module}:{child.name}" if child.namespace != self.namespace else child.name
+                child_name = f"{child.module}:{child.name}" if top or child.namespace != self.namespace else child.name
                 res.append(f"    child_{usname(child)} = n.children.get('{uname(child)}')")
                 res.append(f"    if child_{usname(child)} is not None:")
                 if isinstance(child, DLeaf):
