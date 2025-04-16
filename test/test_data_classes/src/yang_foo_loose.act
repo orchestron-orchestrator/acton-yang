@@ -76,7 +76,7 @@ class foo__c1__li(yang.adata.MNode):
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements)
+        return yang.gdata.List(['name'], elements, user_order=True)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__c1__li_entry]:
@@ -136,9 +136,9 @@ mut def from_json_path_foo__c1__li(jd: value, path: list[str]=[], op: ?str='merg
             elements.append(element)
         elif op == "remove":
             elements.append(yang.gdata.Absent(element.key))
-        return yang.gdata.List(['name'], elements)
+        return yang.gdata.List(['name'], elements, user_order=True)
     elif len(path) > 1:
-        return yang.gdata.List(['name'], [from_json_path_foo__c1__li_element(jd, path, op)])
+        return yang.gdata.List(['name'], [from_json_path_foo__c1__li_element(jd, path, op)], user_order=True)
     raise ValueError("Unable to resolve path, no keys provided")
 
 mut def from_json_foo__c1__li_element(jd: dict[str, ?value]) -> yang.gdata.Node:
@@ -156,7 +156,7 @@ mut def from_json_foo__c1__li(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__c1__li_element(e))
-    return yang.gdata.List(keys=['name'], elements=elements, user_order=False, ns=None, prefix=None)
+    return yang.gdata.List(keys=['name'], elements=elements, user_order=True, ns=None, prefix=None)
 
 mut def to_json_foo__c1__li_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -848,7 +848,7 @@ mut def from_json_foo__cc__death(jd: list[dict[str, ?value]]) -> yang.gdata.List
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__cc__death_element(e))
-    return yang.gdata.List(keys=['name'], elements=elements, user_order=False, ns=None, prefix=None)
+    return yang.gdata.List(keys=['name'], elements=elements, ns=None, prefix=None)
 
 mut def to_json_foo__cc__death_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -1271,7 +1271,7 @@ mut def from_json_foo__special(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__special_element(e))
-    return yang.gdata.List(keys=['yes'], elements=elements, user_order=False, ns=None, prefix=None)
+    return yang.gdata.List(keys=['yes'], elements=elements, ns=None, prefix=None)
 
 mut def to_json_foo__special_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -1450,7 +1450,7 @@ mut def from_json_foo__nested__inner__li1__li2(jd: list[dict[str, ?value]]) -> y
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__nested__inner__li1__li2_element(e))
-    return yang.gdata.List(keys=['key1', 'key2'], elements=elements, user_order=False, ns=None, prefix=None)
+    return yang.gdata.List(keys=['key1', 'key2'], elements=elements, ns=None, prefix=None)
 
 mut def to_json_foo__nested__inner__li1__li2_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -1617,7 +1617,7 @@ mut def from_json_foo__nested__inner__li1(jd: list[dict[str, ?value]]) -> yang.g
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__nested__inner__li1_element(e))
-    return yang.gdata.List(keys=['name'], elements=elements, user_order=False, ns=None, prefix=None)
+    return yang.gdata.List(keys=['name'], elements=elements, ns=None, prefix=None)
 
 mut def to_json_foo__nested__inner__li1_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -1941,7 +1941,7 @@ mut def from_json_foo__li_union(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__li_union_element(e))
-    return yang.gdata.List(keys=['k1', 'k2', 'k3'], elements=elements, user_order=False, ns=None, prefix=None)
+    return yang.gdata.List(keys=['k1', 'k2', 'k3'], elements=elements, ns=None, prefix=None)
 
 mut def to_json_foo__li_union_element(n: yang.gdata.Node) -> dict[str, ?value]:
     children = {}
@@ -2508,6 +2508,7 @@ def src_yang():
             type empty;
         }
         list li {
+            ordered-by user;
             key name;
             leaf name {
                 type string;
@@ -2696,7 +2697,7 @@ def src_schema():
         Leaf('l1', type_=Type('string')),
         Leaf('l3', type_=Type('uint64')),
         Leaf('l_empty', type_=Type('empty')),
-        List('li', key='name', children=[
+        List('li', key='name', ordered_by='user', children=[
             Leaf('name', type_=Type('string')),
             Leaf('val', type_=Type('string'))
         ]),
@@ -2811,7 +2812,7 @@ def src_schema_compiled():
         Leaf('l1', type_=Type('string')),
         Leaf('l3', type_=Type('uint64')),
         Leaf('l_empty', type_=Type('empty')),
-        List('li', key='name', children=[
+        List('li', key='name', ordered_by='user', children=[
             Leaf('name', type_=Type('string')),
             Leaf('val', type_=Type('string'))
         ]),
