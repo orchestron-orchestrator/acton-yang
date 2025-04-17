@@ -1209,28 +1209,35 @@ def patch(old: Node, p: ?Node) -> ?Node:
                     old_map[k] = pelem
 
         # Rebuild elements in final order
-        # Start with old's original order for unchanged and patched elements
-        final_key_order = []
-        chosen = {}
-        for e in old.elements:
-            k = e.key_str()
-            if k in old_map:
-                final_key_order.append(k)
-                chosen[k] = True
-
-        # Now check if patch introduced new elements not in old.
-        # Add them in the order they appear in patch.
-        for pelem in patch_elems:
-            if isinstance(pelem, Absent):
-                continue
-            k = pelem.key_str()
-            if k in old_map and k not in chosen:
-                final_key_order.append(k)
-                chosen[k] = True
-
         new_elements: list[Node] = []
-        for k in final_key_order:
-            new_elements.append(old_map[k])
+
+        if old.user_order:
+            # Start with old's original order for unchanged and patched elements
+            final_key_order = []
+            chosen = {}
+            for e in old.elements:
+                k = e.key_str()
+                if k in old_map:
+                    final_key_order.append(k)
+                    chosen[k] = True
+
+            # Now check if patch introduced new elements not in old.
+            # Add them in the order they appear in patch.
+            for pelem in patch_elems:
+                if isinstance(pelem, Absent):
+                    continue
+                k = pelem.key_str()
+                if k in old_map and k not in chosen:
+                    final_key_order.append(k)
+                    chosen[k] = True
+
+            # Build the elements list in the determined order
+            for k in final_key_order:
+                new_elements.append(old_map[k])
+        else:
+            # For user_order=False lists, sort elements by their keys
+            for k in sorted(old_map.keys()):
+                new_elements.append(old_map[k])
 
         if len(new_elements) == 0:
             return None
