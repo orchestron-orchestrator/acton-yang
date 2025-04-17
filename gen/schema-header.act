@@ -475,7 +475,11 @@ class DNodeInner(DNode):
         for child in self.children:
             if not isinstance(child, DLeafList):
                 res.append(f"        _{usname(child)} = self.{usname(child)}")
-            child_ns = ", ns='" + child.namespace + "'" if top or child.namespace != self.namespace else ""
+            # No namespace qualifiers for direct descendants of the list node - it is the same as the parent list node
+            if top == True and not isinstance(self, DList) or child.namespace != self.namespace:
+                child_ns = f", ns='{child.namespace}'"
+            else:
+                child_ns = ""
             if isinstance(child, DLeafList):
                 res.append(f"        children['{uname(child)}'] = yang.gdata.LeafList(self.{usname(child)}{maybe_user_order_ll(child)}{child_ns})")
             else:
@@ -635,7 +639,7 @@ class DNodeInner(DNode):
             res.append("    mut def to_gdata(self):")
             res.append("        elements = []")
             res.append("        for e in self.elements:")
-            res.append("            e_gdata = e.to_gdata()")                                # child.namespace != self.namespace
+            res.append("            e_gdata = e.to_gdata()")
             res.append("            if isinstance(e_gdata, yang.gdata.Container):")
             res.append("                elements.append(e_gdata)")
             if set_ns:
@@ -704,7 +708,7 @@ class DNodeInner(DNode):
                         idx = self.key.index(child.name)
                         res += [f"        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
                     except KeyError:
-                        if top or child.namespace != self.namespace:
+                        if child.namespace != self.namespace:
                             res += [f"        if point == '{child.module}:{child.name}':"]
                         else:
                             res += [f"        if point == '{child.name}':"]
