@@ -231,7 +231,9 @@ class Node(value):
             args.insert(0, str(self.val))
             return "Leaf(" + ", ".join(args) + ")"
         elif isinstance(self, LeafList):
-            args.insert(0, str(self.vals))
+            args.insert(0, str(self.vals if self.user_order else vals_list_sorted(self.vals)))
+            if self.user_order:
+                args.append("user_order=True")
             return "LeafList(" + ", ".join(args) + ")"
         elif isinstance(self, Absent):
             if self.key != []:
@@ -247,7 +249,7 @@ class Node(value):
                 args.append("elements=[")
                 res.append("List(" + ", ".join(args))
                 child_res = []
-                for elem in self.elements:
+                for elem in self.elements if self.user_order else sorted(self.elements):
                     child_res.append(_ind(indent+1) + elem.prsrc(indent+1))
                 res.append(",\n".join(child_res))
                 res.append(_ind(indent) + "])")
@@ -293,12 +295,12 @@ class Node(value):
                     child_dict[nm] = json_val(child.val)
                 elif isinstance(child, LeafList):
                     vals = []
-                    for v in child.vals:
+                    for v in child.vals if child.user_order else vals_list_sorted(child.vals):
                         vals.append(json_val(v))
                     child_dict[nm] = vals
                 elif isinstance(child, List):
                     elems = []
-                    for elem in child.elements:
+                    for elem in child.elements if child.user_order else sorted(child.elements):
                         if isinstance(elem, Container):
                             elem_dict = {}
                             for k, v in dict(zip(child.keys, elem.key)).items():
@@ -379,7 +381,7 @@ class Node(value):
             return xml
         elif isinstance(self, LeafList):
             xml = ""
-            for val in self.vals:
+            for val in self.vals if self.user_order else vals_list_sorted(self.vals):
                 v = yang_str(val)
                 xml += _indent() + fmt_tag(name, either(self.ns, cns)) + v + fmt_tag(name, close=True) + _nl()
             return xml
@@ -581,62 +583,10 @@ extension Node(Ord):
             return True
 
         if isinstance(self, Leaf) and isinstance(other, Leaf):
-            selfval = self.val
-            otherval = other.val
-            if isinstance(selfval, int) and isinstance(otherval, int):
-                return selfval == otherval
-            if isinstance(selfval, str) and isinstance(otherval, str):
-                return selfval == otherval
-            if isinstance(selfval, bool) and isinstance(otherval, bool):
-                return selfval == otherval
-            if isinstance(selfval, float) and isinstance(otherval, float):
-                return selfval == otherval
-            # YANG uint8 is stored as u16 since we don't have u8.
-            if isinstance(selfval, u16) and isinstance(otherval, u16):
-                return selfval == otherval
-            if isinstance(selfval, u32) and isinstance(otherval, u32):
-                return selfval == otherval
-            if isinstance(selfval, u64) and isinstance(otherval, u64):
-                return selfval == otherval
-            # YANG int8 is stored as i16 since we don't have i8.
-            if isinstance(selfval, i16) and isinstance(otherval, i16):
-                return selfval == otherval
-            if isinstance(selfval, i32) and isinstance(otherval, i32):
-                return selfval == otherval
-            if isinstance(selfval, i64) and isinstance(otherval, i64):
-                return selfval == otherval
-            raise ValueError("Unsupported value type in Leaf node comparison: " + type(selfval) + " == " + type(otherval))
+            return vals_equal(self.val, other.val)
 
         if isinstance(self, LeafList) and isinstance(other, LeafList):
-            if len(self.vals) != len(other.vals):
-                return False
-            for i in range(len(self.vals)):
-                selfval = self.vals[i]
-                otherval = other.vals[i]
-                if isinstance(selfval, int) and isinstance(otherval, int):
-                    return selfval == otherval
-                if isinstance(selfval, str) and isinstance(otherval, str):
-                    return selfval == otherval
-                if isinstance(selfval, bool) and isinstance(otherval, bool):
-                    return selfval == otherval
-                if isinstance(selfval, float) and isinstance(otherval, float):
-                    return selfval == otherval
-                # YANG uint8 is stored as u16 since we don't have u8.
-                if isinstance(selfval, u16) and isinstance(otherval, u16):
-                    return selfval == otherval
-                if isinstance(selfval, u32) and isinstance(otherval, u32):
-                    return selfval == otherval
-                if isinstance(selfval, u64) and isinstance(otherval, u64):
-                    return selfval == otherval
-                # YANG int8 is stored as i16 since we don't have i8.
-                if isinstance(selfval, i16) and isinstance(otherval, i16):
-                    return selfval == otherval
-                if isinstance(selfval, i32) and isinstance(otherval, i32):
-                    return selfval == otherval
-                if isinstance(selfval, i64) and isinstance(otherval, i64):
-                    return selfval == otherval
-                raise ValueError("Unsupported value type in Leaf node comparison: " + type(selfval) + " == " + type(otherval))
-            return True
+            return vals_list_equal(self.vals, other.vals)
 
         if isinstance(self, List) and isinstance(other, List):
             if self.keys != other.keys:
@@ -697,12 +647,14 @@ class Leaf(Node):
 
 class LeafList(Node):
     vals: list[value]
+    user_order: bool
 
-    def __init__(self, vals: list[value], ns: ?str=None, prefix: ?str=None):
+    def __init__(self, vals: list[value], user_order=False, ns: ?str=None, prefix: ?str=None):
         self.key = empty_key
         self.ns = ns
         self.prefix = prefix
         self.vals = vals
+        self.user_order = user_order
 
 class Absent(Node):
     """Declarative definition of the absence of a node
@@ -781,9 +733,7 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, i64) and isinstance(b, i64):
         return a == b
-
-    # Unhandled or mismatched types are considered not equal
-    return False
+    raise ValueError(f"Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
 
 # For leaf-lists we need to compare a list of values
 def vals_list_equal(a: list[value], b: list[value]) -> bool:
@@ -793,6 +743,60 @@ def vals_list_equal(a: list[value], b: list[value]) -> bool:
         if not vals_equal(a[i], b[i]):
             return False
     return True
+
+def vals_less_than(a: value, b: value) -> bool:
+    # Compare known leaf value types
+    if isinstance(a, int) and isinstance(b, int):
+        return a < b
+    if isinstance(a, bool) and isinstance(b, bool):
+        return not a  # False (0) before True (1)
+    if isinstance(a, float) and isinstance(b, float):
+        return a < b
+    if isinstance(a, str) and isinstance(b, str):
+        return a < b
+    # TODO: Add support for u8 and i8
+    #if isinstance(a, u8) and isinstance(b, u8):
+    #    return a < b
+    if isinstance(a, u16) and isinstance(b, u16):
+        return a < b
+    if isinstance(a, u32) and isinstance(b, u32):
+        return a < b
+    if isinstance(a, u64) and isinstance(b, u64):
+        return a < b
+    # TODO: Add support for u8 and i8
+    #if isinstance(a, i8) and isinstance(b, i8):
+    #    return a < b
+    if isinstance(a, i16) and isinstance(b, i16):
+        return a < b
+    if isinstance(a, i32) and isinstance(b, i32):
+        return a < b
+    if isinstance(a, i64) and isinstance(b, i64):
+        return a < b
+    raise ValueError(f"Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
+
+def vals_list_sorted(a: list[value]) -> list[value]:
+    """Sort a list of values, comparing only values of the same type
+
+    Uses an insertion sort implementation that respects type safety
+    by only comparing values of the same type.
+    """
+    n = len(a)
+    if n <= 1:
+        return a
+
+    result = a.copy()  # Create a copy to avoid modifying the input list
+
+    # Insertion sort implementation
+    for i in range(1, n):
+        key = result[i]
+        j = i - 1
+        # Move elements that are greater than key to one position ahead
+        while j >= 0 and not vals_less_than(result[j], key):
+            result[j + 1] = result[j]
+            j -= 1
+        result[j + 1] = key
+
+    return result
 
 def merge(a: Node, b: Node) -> Node:
     if type(a) != type(b):
@@ -1724,6 +1728,18 @@ def _test_eq_list_user_order():
             "x": Leaf("int", 1)
         }, ["a"])
     ])
+    testing.assertEqual(l1, l1)
+    testing.assertNotEqual(l1, l2)
+
+def _test_vals_list_sorted():
+    l1 = LeafList(["a", "b", "c"])
+    l2 = LeafList(["c", "b", "a"])
+    testing.assertEqual(l1.prsrc(), l1.prsrc())
+    testing.assertEqual(l1.prsrc(), l2.prsrc())
+
+def _test_eq_leaf_list_user_order():
+    l1 = LeafList(["a", "b", "c"], user_order=True)
+    l2 = LeafList(["c", "b", "a"], user_order=True)
     testing.assertEqual(l1, l1)
     testing.assertNotEqual(l1, l2)
 
