@@ -1,0 +1,156 @@
+import testing
+
+import yang
+import yang.schema
+import yang.parser
+
+
+# TODO: move this closer to yang.schema.DNode?
+def get_schema_nodeid(nodes: list[yang.schema.DNode]) -> str:
+    """Get the absolute-schema-nodeid path from a list of schema nodes.
+
+    The absolute-schema-nodeid is defined in RFC7950 as a "/" separated list of
+    schema nodes starting from the top. For example, /foo:c1/l1 refers to a
+    node called l1, child of c1 defined in the foo module.
+    """
+    path = [""]
+    no_root = list(filter(lambda n: not isinstance(n, yang.schema.DRoot), nodes))
+    for i, node in enumerate(no_root):
+        if i == 0:
+            prefix = f"{node.prefix}:"
+        else:
+            parent = no_root[i-1]
+            if isinstance(parent, yang.schema.DNodeInner):
+                siblings = filter(lambda n: node.name == n.name, parent.children)
+                if len(list(siblings)) > 1:
+                    prefix = f"{node.prefix}:"
+                else:
+                    prefix =""
+            else:
+                raise ValueError(f"Node {parent} is not a DNodeInner")
+        path.append(f"{prefix}{node.name}")
+    return "/".join(path)
+
+mut def remove_list_user_order(node: yang.schema.DNode, filter_paths=[]) -> None:
+    """Remove "ordered-by user" from target (leaf-)list nodes in the schema tree.
+
+    This modifies the schema in place.
+
+    JUNOS YANG use "ordered-by user" for leaf-lists and lists in many places,
+    even where the order of elements should not have any effect on the applied
+    configuration. This is a pain to deal with when the transforms write the
+    data in a different order.
+
+    The second argument is an optional list of paths to filter on. If present
+    only the nodes listed will be modified. Each element is a string path to a
+    list node consisting of all preceeding named schema nodes, including the
+    module name.
+    """
+
+    def is_interesting(path_parts: list[yang.schema.DNode]) -> bool:
+        if not filter_paths:
+            return True
+        if get_schema_nodeid(path_parts) in filter_paths:
+            return True
+        return False
+
+    def remove_list_user_order_filtered(node: yang.schema.DNode, path=[]) -> None:
+        """Remove "ordered-by user" from target (leaf-)list nodes in the schema tree."""
+        new_path = path + [node]
+        if isinstance(node, yang.schema.DList):
+            if is_interesting(new_path) and node.ordered_by == "user":
+                print(f'Removing "ordered-by user" from {get_schema_nodeid(new_path)}', err=True)
+                node.ordered_by = "system"
+        elif isinstance(node, yang.schema.DLeafList):
+            if is_interesting(new_path) and node.ordered_by == "user":
+                print(f'Removing "ordered-by user" from {get_schema_nodeid(new_path)}', err=True)
+                node.ordered_by = "system"
+        if isinstance(node, yang.schema.DNodeInner):
+            for child in node.children:
+                remove_list_user_order_filtered(child, new_path)
+
+    remove_list_user_order_filtered(node)
+
+test_yang = """module test_yang {
+  yang-version "1.1";
+  namespace "http://example.com/test_yang";
+  prefix "test_yang";
+  description "test yang module";
+  import ietf-inet-types {
+    prefix "inet";
+    revision-date 2013-07-15;
+  }
+  container c1 {
+    description "container 1";
+    list l1 {
+      ordered-by user;
+      key "k1";
+      leaf k1 {
+        type string;
+      }
+      leaf-list l2 {
+        type string;
+        ordered-by user;
+      }
+    }
+  }
+  list l3 {
+    description "list 3";
+    key "k1";
+    leaf k1 {
+      type string;
+    }
+  }
+  rpc rpc1 {
+    description "rpc 1";
+    input {
+      leaf-list l1 {
+        type string;
+        ordered-by user;
+      }
+    }
+    output {
+      list l1 {
+        key "k1";
+        leaf k1 {
+          type string;
+        }
+        ordered-by user;
+      }
+    }
+  }
+}
+"""
+
+def _test_remove_list_user_order():
+    root = yang.compile([test_yang])
+    remove_list_user_order(root)
+    l1 = root.get("c1").get("l1")
+    l2 = root.get("c1").get("l1").get("l2")
+    l3 = root.get("l3")
+    # rpc_in = root.get("rpc1").get("input").get("l1")
+    # rpc_out = root.get("rpc1").get("output").get("l1")
+    if isinstance(l1, yang.schema.DList) and isinstance(l2, yang.schema.DLeafList) and isinstance(l3, yang.schema.DList):
+        testing.assertEqual(l1.ordered_by, "system")
+        testing.assertEqual(l2.ordered_by, "system")
+        testing.assertEqual(l3.ordered_by, "system")
+        # testing.assertEqual(rpc_in.ordered_by, "system")
+        # testing.assertEqual(rpc_out.ordered_by, "system")
+
+def _test_remove_list_user_order_filtered():
+    root = yang.compile([test_yang])
+    remove_list_user_order(root, ["/test_yang:c1/l1", "/test_yang:rpc1/input/l1"])
+    l1 = root.get("c1").get("l1")
+    l2 = root.get("c1").get("l1").get("l2")
+    l3 = root.get("l3")
+    # rpc_in = root.get("rpc1").get("input").get("l1")
+    # rpc_out = root.get("rpc1").get("output").get("l1")
+    if isinstance(l1, yang.schema.DList) and isinstance(l2, yang.schema.DLeafList) and isinstance(l3, yang.schema.DList):
+        testing.assertEqual(l1.ordered_by, "system")
+        testing.assertEqual(l2.ordered_by, "user")
+        testing.assertEqual(l3.ordered_by, "system")
+        # testing.assertEqual(rpc_in.ordered_by, "system")
+        # testing.assertEqual(rpc_out.ordered_by, "user")
+
+actor main(env):
+    _test_remove_list_user_order_filtered()
