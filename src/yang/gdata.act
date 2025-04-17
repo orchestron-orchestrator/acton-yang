@@ -231,7 +231,7 @@ class Node(value):
             args.insert(0, str(self.val))
             return "Leaf(" + ", ".join(args) + ")"
         elif isinstance(self, LeafList):
-            args.insert(0, str(self.vals if self.user_order else vals_list_sorted(self.vals)))
+            args.insert(0, str(self.vals))
             if self.user_order:
                 args.append("user_order=True")
             return "LeafList(" + ", ".join(args) + ")"
@@ -249,7 +249,7 @@ class Node(value):
                 args.append("elements=[")
                 res.append("List(" + ", ".join(args))
                 child_res = []
-                for elem in self.elements if self.user_order else sorted(self.elements):
+                for elem in self.elements:
                     child_res.append(_ind(indent+1) + elem.prsrc(indent+1))
                 res.append(",\n".join(child_res))
                 res.append(_ind(indent) + "])")
@@ -1741,8 +1741,12 @@ def _test_eq_list_user_order():
 def _test_vals_list_sorted():
     l1 = LeafList(["a", "b", "c"])
     l2 = LeafList(["c", "b", "a"])
-    testing.assertEqual(l1.prsrc(), l1.prsrc())
-    testing.assertEqual(l1.prsrc(), l2.prsrc())
+    # Technically this is "invalid" gdata since the elements are not in the
+    # system sorted order. But we don't care about that here, we just want to
+    # check whether the (XML, JSON) output is ordered.
+    testing.assertEqual(l1.to_xmlstr(), l1.to_xmlstr())
+    testing.assertEqual(l1.to_xmlstr(), l2.to_xmlstr())
+    testing.assertEqual(l1.to_json(), l1.to_json())
 
 def _test_eq_leaf_list_user_order():
     l1 = LeafList(["a", "b", "c"], user_order=True)
