@@ -135,6 +135,12 @@ test_yang = """module test_yang {
       }
     }
   }
+  list li1 {
+    key k1;
+    leaf k1 {
+      type string;
+    }
+  }
   rpc rpc1 {
     description "rpc 1";
     input {
@@ -2124,4 +2130,24 @@ def _test_prdaclass_dot():
 }"""
     root = yang.compile([ys_base])
     src = root.prdaclass()
+    return src
+
+def _test_prdaclass_top_list():
+    ys_base = """module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    list l1 {
+        key name;
+        leaf name {
+            type string;
+        }
+        leaf id {
+            type string;
+        }
+    }
+}"""
+    root = yang.compile([ys_base])
+    l1 = root.get("l1")
+    src = l1.prdaclass()
     return src

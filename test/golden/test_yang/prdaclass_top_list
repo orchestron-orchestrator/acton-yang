@@ -1,0 +1,153 @@
+import base64
+import json
+import xml
+import yang.adata
+import yang.gdata
+
+# == This file is generated ==
+
+
+mut def from_json_foo__l1__name(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_json_foo__l1__id(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+class foo__l1_entry(yang.adata.MNode):
+    name: str
+    id: ?str
+
+    mut def __init__(self, name: str, id: ?str):
+        self._ns = 'http://example.com/foo'
+        self.name = name
+        self.id = id
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _name = self.name
+        if _name is not None:
+            children['name'] = yang.gdata.Leaf('string', _name)
+        _id = self.id
+        if _id is not None:
+            children['id'] = yang.gdata.Leaf('string', _id)
+        return yang.gdata.Container(children, [yang.gdata.yang_str(self.name)])
+
+    @staticmethod
+    mut def from_gdata(n: yang.gdata.Node) -> foo__l1_entry:
+        return foo__l1_entry(name=n.get_str('name'), id=n.get_opt_str('id'))
+
+    @staticmethod
+    mut def from_xml(n: xml.Node) -> foo__l1_entry:
+        return foo__l1_entry(name=yang.gdata.from_xml_str(n, 'name'), id=yang.gdata.from_xml_opt_str(n, 'id'))
+
+class foo__l1(yang.adata.MNode):
+    elements: list[foo__l1_entry]
+    mut def __init__(self, elements=[]):
+        self._ns = 'http://example.com/foo'
+        self._name = 'l1'
+        self.elements = elements
+
+    mut def create(self, name):
+        for e in self.elements:
+            match = True
+            if e.name != name:
+                match = False
+                continue
+            if match:
+                return e
+
+        res = foo__l1_entry(name)
+        self.elements.append(res)
+        return res
+
+    mut def to_gdata(self):
+        elements = []
+        for e in self.elements:
+            e_gdata = e.to_gdata()
+            if isinstance(e_gdata, yang.gdata.Container):
+                elements.append(e_gdata)
+        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', module='foo')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.List) -> list[foo__l1_entry]:
+        res = []
+        if n is not None:
+            for e in n.elements:
+                res.append(foo__l1_entry.from_gdata(e))
+        return res
+
+    @staticmethod
+    mut def from_xml(nodes: list[xml.Node]) -> list[foo__l1_entry]:
+        res = []
+        for node in nodes:
+            res.append(foo__l1_entry.from_xml(node))
+        return res
+
+
+mut def from_json_path_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    if len(path) == 1:
+        point = path[0]
+        keys = point.split(",")
+        jd_dict = yang.gdata.unwrap_dict(jd)
+        val = from_json_foo__l1_element(jd_dict)
+        if op == "merge":
+            return val
+        elif op == "remove":
+            return yang.gdata.Absent(val.key)
+        raise ValueError("Invalid operation")
+    elif len(path) > 1:
+        keys = path[0].split(",")
+        point = path[1]
+        rest_path = path[2:]
+        children: dict[str, yang.gdata.Node] = {}
+        children['name'] = from_json_foo__l1__name(keys[0])
+        if point == 'id':
+            raise ValueError("Invalid json path to non-inner node")
+        return yang.gdata.Container(children, keys)
+    raise ValueError("unreachable - no keys to list element")
+
+mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.List:
+    if len(path) == 1:
+        point = path[0]
+        keys = point.split(",")
+        jd_dict = yang.gdata.unwrap_dict(jd)
+        # Check that all keys are present in payload.
+        # If present, they must equal the keys in the path
+        # If not present, fill in from path
+        for key in ['name']:
+            if key not in jd_dict:
+                jd_dict[key] = keys.pop(0)
+            else:
+                if str(jd_dict[key]) != keys.pop(0):
+                    raise ValueError("Key value mismatch between path and payload")
+        element = from_json_foo__l1_element(jd_dict)
+        elements = []
+        if op == "merge":
+            elements.append(element)
+        elif op == "remove":
+            elements.append(yang.gdata.Absent(element.key))
+        return yang.gdata.List(['name'], elements)
+    elif len(path) > 1:
+        return yang.gdata.List(['name'], [from_json_path_foo__l1_element(jd, path, op)])
+    raise ValueError("Unable to resolve path, no keys provided")
+
+mut def from_json_element(jd: dict[str, ?value]) -> yang.gdata.Node:
+    children = {}
+    child_name = jd.get('foo:name')
+    if child_name is not None:
+        children['name'] = from_json_foo__l1__name(child_name)
+    child_id = jd.get('foo:id')
+    if child_id is not None:
+        children['id'] = from_json_foo__l1__id(child_id)
+    return yang.gdata.Container(children, [str(child_name if child_name is not None else '')])
+
+mut def from_json_foo__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
+    elements = []
+    for e in jd:
+        if isinstance(e, dict):
+            elements.append(from_json_foo__l1_element(e))
+    return yang.gdata.List(keys=['name'], elements=elements)
+
+schema_namespaces: set[str] = {
+    'http://example.com/foo',
+}
