@@ -2105,7 +2105,8 @@ def _test_diff_and_patch_large_tree():
     # - eth1 is removed
     # - a new interface eth2 is added
     # - mod2 acl rule 20 changes action from deny to drop
-    # - a new acl rule 30 is added
+    # - a new acl rule 15 is added (should be added between rules 10 and 20)
+    # - a new acl rule 30 is added (should be added after rule 20)
     # - add a LeafList in settings "ntp-servers"
     new = Container(children={
         "mod1": Container(children={
@@ -2137,6 +2138,11 @@ def _test_diff_and_patch_large_tree():
                         "dst": Leaf("str", "10.0.1.0/24"),
                     }, ["10"]),
                     Container({
+                        "action": Leaf("str", "permit"),
+                        "src": Leaf("str", "172.30.0.0/24"),
+                        "dst": Leaf("str", "172.31.0.0/24"),
+                    }, ["15"]), # new rule between 10 and 20
+                    Container({
                         "action": Leaf("str", "drop"),  # changed from deny
                         "src": Leaf("str", "any"),
                         "dst": Leaf("str", "any"),
@@ -2145,7 +2151,7 @@ def _test_diff_and_patch_large_tree():
                         "action": Leaf("str", "permit"),
                         "src": Leaf("str", "192.0.2.0/24"),
                         "dst": Leaf("str", "198.51.100.0/24"),
-                    }, ["30"]),
+                    }, ["30"]), # new last rule
                 ])
             }, ns="http://example.com/yang/mod2")
         })
