@@ -583,62 +583,10 @@ extension Node(Ord):
             return True
 
         if isinstance(self, Leaf) and isinstance(other, Leaf):
-            selfval = self.val
-            otherval = other.val
-            if isinstance(selfval, int) and isinstance(otherval, int):
-                return selfval == otherval
-            if isinstance(selfval, str) and isinstance(otherval, str):
-                return selfval == otherval
-            if isinstance(selfval, bool) and isinstance(otherval, bool):
-                return selfval == otherval
-            if isinstance(selfval, float) and isinstance(otherval, float):
-                return selfval == otherval
-            # YANG uint8 is stored as u16 since we don't have u8.
-            if isinstance(selfval, u16) and isinstance(otherval, u16):
-                return selfval == otherval
-            if isinstance(selfval, u32) and isinstance(otherval, u32):
-                return selfval == otherval
-            if isinstance(selfval, u64) and isinstance(otherval, u64):
-                return selfval == otherval
-            # YANG int8 is stored as i16 since we don't have i8.
-            if isinstance(selfval, i16) and isinstance(otherval, i16):
-                return selfval == otherval
-            if isinstance(selfval, i32) and isinstance(otherval, i32):
-                return selfval == otherval
-            if isinstance(selfval, i64) and isinstance(otherval, i64):
-                return selfval == otherval
-            raise ValueError("Unsupported value type in Leaf node comparison: " + type(selfval) + " == " + type(otherval))
+            return vals_equal(self.val, other.val)
 
         if isinstance(self, LeafList) and isinstance(other, LeafList):
-            if len(self.vals) != len(other.vals):
-                return False
-            for i in range(len(self.vals)):
-                selfval = self.vals[i]
-                otherval = other.vals[i]
-                if isinstance(selfval, int) and isinstance(otherval, int):
-                    return selfval == otherval
-                if isinstance(selfval, str) and isinstance(otherval, str):
-                    return selfval == otherval
-                if isinstance(selfval, bool) and isinstance(otherval, bool):
-                    return selfval == otherval
-                if isinstance(selfval, float) and isinstance(otherval, float):
-                    return selfval == otherval
-                # YANG uint8 is stored as u16 since we don't have u8.
-                if isinstance(selfval, u16) and isinstance(otherval, u16):
-                    return selfval == otherval
-                if isinstance(selfval, u32) and isinstance(otherval, u32):
-                    return selfval == otherval
-                if isinstance(selfval, u64) and isinstance(otherval, u64):
-                    return selfval == otherval
-                # YANG int8 is stored as i16 since we don't have i8.
-                if isinstance(selfval, i16) and isinstance(otherval, i16):
-                    return selfval == otherval
-                if isinstance(selfval, i32) and isinstance(otherval, i32):
-                    return selfval == otherval
-                if isinstance(selfval, i64) and isinstance(otherval, i64):
-                    return selfval == otherval
-                raise ValueError("Unsupported value type in Leaf node comparison: " + type(selfval) + " == " + type(otherval))
-            return True
+            return vals_list_equal(self.vals, other.vals)
 
         if isinstance(self, List) and isinstance(other, List):
             if self.keys != other.keys:
@@ -785,9 +733,7 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, i64) and isinstance(b, i64):
         return a == b
-
-    # Unhandled or mismatched types are considered not equal
-    return False
+    raise ValueError(f"Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
 
 # For leaf-lists we need to compare a list of values
 def vals_list_equal(a: list[value], b: list[value]) -> bool:
