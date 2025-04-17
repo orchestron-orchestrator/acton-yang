@@ -1739,11 +1739,17 @@ def _test_eq_list_user_order():
     testing.assertNotEqual(l1, l2)
 
 def _test_vals_list_sorted():
-    l1 = LeafList(["a", "b", "c"])
-    l2 = LeafList(["c", "b", "a"])
+    # TODO: refactor Node.to_json() to work for scalar values. As a workaround
+    # this leaf-list is wrapped in a container
+    l1 = Container({
+        "x": LeafList(["a", "b", "c"])
+    })
     # Technically this is "invalid" gdata since the elements are not in the
     # system sorted order. But we don't care about that here, we just want to
     # check whether the (XML, JSON) output is ordered.
+    l2 = Container({
+        "x": LeafList(["c", "b", "a"])
+    })
     testing.assertEqual(l1.to_xmlstr(), l1.to_xmlstr())
     testing.assertEqual(l1.to_xmlstr(), l2.to_xmlstr())
     testing.assertEqual(l1.to_json(), l1.to_json())
