@@ -1001,7 +1001,7 @@ def merge(a: Node, b: Node) -> Node:
                 else:
                     raise ValueError("unreachable, new_elem should always be a Container")
 
-            return List(a.keys, new_elements, ns=a.ns)
+            return List(a.keys, new_elements, ns=a.ns, module=a.module)
 
     elif isinstance(a, Absent) and isinstance(b, Absent):
         # Both absent is odd in a merge scenario, but let's just return absent
@@ -1030,7 +1030,7 @@ def diff(old: Node, new: Node) -> ?Node:
                 result[k] = nchild
         for k,ochild in old_children.items():
             if k not in new_children:
-                result[k] = Absent(ns=ochild.ns)
+                result[k] = Absent(ns=ochild.ns, module=ochild.module)
 
         if len(result) == 0:
             return None
@@ -1083,7 +1083,7 @@ def diff(old: Node, new: Node) -> ?Node:
                 if not ok_in_new:
                     # old element not in new => absent
                     oe = old_map[ok]
-                    result.append(Absent(oe.key, ns=oe.ns))
+                    result.append(Absent(oe.key, ns=oe.ns, module=oe.module))
                     i += 1
                 elif not nk_in_old:
                     # new element not in old => new element
@@ -1100,7 +1100,7 @@ def diff(old: Node, new: Node) -> ?Node:
             ok = old_key_order[i]
             if ok not in new_map:
                 oe = old_map[ok]
-                result.append(Absent(oe.key, ns=old_list.ns))
+                result.append(Absent(oe.key, ns=old_list.ns, module=old_list.module))
             i += 1
 
         # Remaining new elements are new
