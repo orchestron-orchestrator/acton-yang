@@ -479,7 +479,7 @@ class DNodeInner(DNode):
             else:
                 child_ns = ""
             if isinstance(child, DLeafList):
-                res.append(f"        children['{uname(child)}'] = yang.gdata.LeafList(self.{usname(child)}{maybe_user_order_ll(child)}{child_ns})")
+                res.append(f"        children['{uname(child)}'] = yang.gdata.LeafList('{child.type_.name}', self.{usname(child)}{maybe_user_order_ll(child)}{child_ns})")
             else:
                 res.append(f"        if _{usname(child)} is not None:")
                 if isinstance(child, DLeaf):
@@ -1173,7 +1173,7 @@ class DLeafList(DNodeLeaf):
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            res.append(f"    return yang.gdata.LeafList(val{maybe_user_order})")
+            res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order})")
             res.append("")
         return "\n".join(res)
 
