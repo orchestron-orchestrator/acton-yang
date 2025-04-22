@@ -851,10 +851,16 @@ class DNodeInner(DNode):
                 res.append(f"    if child_{usname(child)} is not None:")
                 if isinstance(child, DLeaf):
                     res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.Leaf):")
-                    res.append(f"            children['{child_name}'] = child_{usname(child)}.val")
+                    if child.type_.name == "int64" or child.type_.name == "uint64":
+                        res.append(f"            children['{child_name}'] = str(child_{usname(child)}.val)")
+                    else:
+                        res.append(f"            children['{child_name}'] = child_{usname(child)}.val")
                 elif isinstance(child, DLeafList):
                     res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.LeafList):")
-                    res.append(f"            children['{child_name}'] = child_{usname(child)}.vals")
+                    if child.type_.name == "int64" or child.type_.name == "uint64":
+                        res.append(f"            children['{child_name}'] = list(map(str, child_{usname(child)}.vals))")
+                    else:
+                        res.append(f"            children['{child_name}'] = child_{usname(child)}.vals")
                 elif isinstance(child, DContainer):
                     res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.Container):")
                     res.append(f"            children['{child_name}'] = to_json_{pname(child)}(child_{usname(child)})")

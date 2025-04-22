@@ -191,9 +191,11 @@ def yang_str(v) -> str:
         s = s.lower()
     return s
 
-def json_val(v: ?value) -> ?value:
+def json_val(yang_type: str, v: ?value) -> ?value:
     if isinstance(v, bytes):
         return base64.encode(v).decode()
+    if yang_type == "int64" or yang_type == "uint64":
+        return str(v)
     return v
 
 
@@ -290,11 +292,11 @@ class Node(value):
                 if isinstance(child, Container):
                     child_dict[nm] = child.to_dict(pretty)
                 elif isinstance(child, Leaf):
-                    child_dict[nm] = json_val(child.val)
+                    child_dict[nm] = json_val(child.t, child.val)
                 elif isinstance(child, LeafList):
                     vals = []
                     for v in child.vals if child.user_order else vals_list_sorted(child.vals):
-                        vals.append(json_val(v))
+                        vals.append(json_val(child.t, v))
                     child_dict[nm] = vals
                 elif isinstance(child, List):
                     elems = []
@@ -2227,6 +2229,7 @@ def _test_to_json():
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
             "llb": LeafList("binary", [b"Hello Acton \xf0\x9f\xab\xa1"]),
+            "c": Leaf("uint64", 18446744073709551615),
         }, ns="http://example.com/acme")
     })
 
@@ -2248,6 +2251,7 @@ def _test_to_xmlstr():
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
             "llb": LeafList("binary", [b"Hello Acton \xf0\x9f\xab\xa1"]),
+            "c": Leaf("uint64", 18446744073709551615),
         }, ns="http://example.com/acme")
     })
 
