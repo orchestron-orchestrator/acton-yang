@@ -12,6 +12,8 @@ mut def from_json_foo__c1__f_l1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
 mut def from_json_foo__c1__l3(val: value) -> yang.gdata.Leaf:
+    if isinstance(val, str):
+        return yang.gdata.Leaf('uint64', int(val))
     return yang.gdata.Leaf('uint64', val)
 
 mut def from_json_foo__c1__l_empty(val: value) -> yang.gdata.Leaf:
@@ -177,7 +179,13 @@ mut def to_json_foo__c1__li(n: yang.gdata.List) -> list[dict[str, ?value]]:
     return elements
 
 mut def from_json_foo__c1__ll_uint64(val: list[value]) -> yang.gdata.LeafList:
-    return yang.gdata.LeafList('uint64', val)
+    int_vals = []
+    for v in val:
+        if isinstance(v, str):
+             int_vals.append(int(v))
+        else:
+             int_vals.append(v)
+    return yang.gdata.LeafList('uint64', int_vals)
 
 mut def from_json_foo__c1__ll_str(val: list[value]) -> yang.gdata.LeafList:
     return yang.gdata.LeafList('string', val)
