@@ -191,9 +191,11 @@ def yang_str(v) -> str:
         s = s.lower()
     return s
 
-def json_val(v: ?value) -> ?value:
+def json_val(yang_type: str, v: ?value) -> ?value:
     if isinstance(v, bytes):
         return base64.encode(v).decode()
+    if yang_type == "int64" or yang_type == "uint64":
+        return str(v)
     return v
 
 
@@ -290,11 +292,11 @@ class Node(value):
                 if isinstance(child, Container):
                     child_dict[nm] = child.to_dict(pretty)
                 elif isinstance(child, Leaf):
-                    child_dict[nm] = json_val(child.val)
+                    child_dict[nm] = json_val(child.t, child.val)
                 elif isinstance(child, LeafList):
                     vals = []
                     for v in child.vals if child.user_order else vals_list_sorted(child.vals):
-                        vals.append(json_val(v))
+                        vals.append(json_val(child.t, v))
                     child_dict[nm] = vals
                 elif isinstance(child, List):
                     elems = []
@@ -644,11 +646,13 @@ class Leaf(Node):
         self.prefix = prefix
 
 class LeafList(Node):
+    t: str
     vals: list[value]
     user_order: bool
 
-    def __init__(self, vals: list[value], user_order=False, ns: ?str=None, prefix: ?str=None):
+    def __init__(self, t: str, vals: list[value], user_order=False, ns: ?str=None, prefix: ?str=None):
         self.key = empty_key
+        self.t = t
         self.ns = ns
         self.prefix = prefix
         self.vals = vals
@@ -1602,7 +1606,7 @@ def _test_merge1():
                 "n3": Leaf("int", 3)
             }, ["k2"]),
         ]),
-        "d": LeafList(["a", "b", "c"])
+        "d": LeafList("str", ["a", "b", "c"])
     }, ns="http://example.com/acme")
 
     res = merge(y1, y2)
@@ -1624,7 +1628,7 @@ def _test_merge1():
                 "n4": Leaf("int", 4),
             }, ["k4"]),
         ]),
-        "d": LeafList(["a", "b", "c"])
+        "d": LeafList("str", ["a", "b", "c"])
     }, ns="http://example.com/acme")
 
     testing.assertEqual(res.prsrc(), exp.prsrc())
@@ -1730,14 +1734,14 @@ def _test_eq_list_user_order():
     testing.assertNotEqual(l1, l2)
 
 def _test_vals_list_sorted():
-    l1 = LeafList(["a", "b", "c"])
-    l2 = LeafList(["c", "b", "a"])
+    l1 = LeafList("str", ["a", "b", "c"])
+    l2 = LeafList("str", ["c", "b", "a"])
     testing.assertEqual(l1.prsrc(), l1.prsrc())
     testing.assertEqual(l1.prsrc(), l2.prsrc())
 
 def _test_eq_leaf_list_user_order():
-    l1 = LeafList(["a", "b", "c"], user_order=True)
-    l2 = LeafList(["c", "b", "a"], user_order=True)
+    l1 = LeafList("str", ["a", "b", "c"], user_order=True)
+    l2 = LeafList("str", ["c", "b", "a"], user_order=True)
     testing.assertEqual(l1, l1)
     testing.assertNotEqual(l1, l2)
 
@@ -1859,17 +1863,17 @@ def _test_diff_leaflist():
     added.
     """
     old = Container({
-        "l": LeafList(["a", "b", "c"])
+        "l": LeafList("str", ["a", "b", "c"])
     }, ns="http://example.com/acme")
 
     new = Container({
-        "l": LeafList(["a", "x", "c", "d"]) # "b" changed to "x" and "d" added
+        "l": LeafList("str", ["a", "x", "c", "d"]) # "b" changed to "x" and "d" added
     }, ns="http://example.com/acme")
 
     d = diff(old, new)
 
     exp = Container({
-        "l": LeafList(["a", "x", "c", "d"])
+        "l": LeafList("str", ["a", "x", "c", "d"])
     }, ns="http://example.com/acme")
 
     testing.assertEqual(d, exp)
@@ -2034,18 +2038,18 @@ def _test_patch_complex_ordering():
 
 def _test_patch_leaflist():
     old = Container({
-        "l": LeafList(["a", "b", "c"])
+        "l": LeafList("str", ["a", "b", "c"])
     }, ns="http://example.com/acme")
 
     # new: l = [a, x, c, d]
     # diff would be a leaflist replace:
     p = Container({
-        "l": LeafList(["a", "x", "c", "d"])
+        "l": LeafList("str", ["a", "x", "c", "d"])
     }, ns="http://example.com/acme")
 
     res = patch(old, p)
     exp = Container({
-        "l": LeafList(["a", "x", "c", "d"])
+        "l": LeafList("str", ["a", "x", "c", "d"])
     }, ns="http://example.com/acme")
 
     testing.assertEqual(res, exp)
@@ -2104,7 +2108,7 @@ def _test_diff_and_patch_large_tree():
                 "settings": Container(children={
                     "hostname": Leaf("str", "new-router"),
                     # motd removed
-                    "ntp-servers": LeafList(["192.168.100.1", "192.168.100.2"])
+                    "ntp-servers": LeafList("str", ["192.168.100.1", "192.168.100.2"])
                 }),
                 "interfaces": List(["name"], elements=[
                     Container({
@@ -2193,7 +2197,7 @@ def _test_prsrc_root():
     y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
-            "b": LeafList(["a", "b", "c"]),
+            "b": LeafList("str", ["a", "b", "c"]),
         }, ns="http://example.com/acme")
     })
 
@@ -2224,7 +2228,8 @@ def _test_to_json():
             ]),
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
-            "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"])
+            "llb": LeafList("binary", [b"Hello Acton \xf0\x9f\xab\xa1"]),
+            "c": Leaf("uint64", 18446744073709551615),
         }, ns="http://example.com/acme")
     })
 
@@ -2245,7 +2250,8 @@ def _test_to_xmlstr():
             ]),
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
-            "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"])
+            "llb": LeafList("binary", [b"Hello Acton \xf0\x9f\xab\xa1"]),
+            "c": Leaf("uint64", 18446744073709551615),
         }, ns="http://example.com/acme")
     })
 
@@ -2255,7 +2261,7 @@ def _test_to_xmlstr_root():
     y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
-            "b": LeafList(["a", "b", "c"]),
+            "b": LeafList("binary", ["a", "b", "c"]),
         }, ns="http://example.com/acme")
     })
 
@@ -2265,7 +2271,7 @@ def _test_to_xmlstr_module():
     y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
-            "b": LeafList(["a", "b", "c"]),
+            "b": LeafList("str", ["a", "b", "c"]),
         }, ns="http://example.com/acme")
     })
 
@@ -2307,7 +2313,7 @@ def _test_to_xmlstr_root_merge():
     y1 = Container({
         "foo": Container({
             "a": Leaf("int", 1),
-            "b": LeafList(["a", "b", "c"]),
+            "b": LeafList("str", ["a", "b", "c"]),
         }, ns="http://example.com/acme")
     })
     y2 = Container({
