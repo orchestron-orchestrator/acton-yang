@@ -448,6 +448,104 @@ def _test_empty_presence():
     return xml_out_text
 
 # JSON
+
+# TODO: "l_empty": [null],
+# TODO: uint64 as string: https://www.rfc-editor.org/rfc/rfc7951.html#section-6.1
+json_full = {
+    "foo:c1": {
+        "l1": "foo-foo",
+        # "l3": 18446744073709551615,
+        "l3": 4,
+        "li": [
+            {
+                "name": "tuta",
+                "val": "baba"
+            }
+        ],
+        "ll_uint64": [4, 42],
+        "ll_str": ["kava", "čaj"],
+        "l4": "foo-qux",
+        "bar:l1": "foo-bar",
+        "bar:l2": "bar"
+    },
+    "foo:pc1": {
+        "foo": {
+            "l1": ["SGVsbG8gQWN0b24g8J+roQ=="]
+        }
+    },
+    "foo:pc2": {
+        "foo": {
+            "l_mandatory": "baz"
+        }
+    },
+    "foo:c.dot": {
+        "l.dot1": "who put that here?!"
+    },
+    "foo:cc": {
+        "cake": "cake"
+    },
+    "foo:conflict": {
+        "foo": "foo-foo",
+        "inner": {},
+        "bar:foo": "foo-augmented-from-bar",
+        "bar:inner": {}
+    },
+    "foo:special": [
+        {
+            "yes": True
+        }
+    ],
+    "foo:nested": {
+        "inner": {
+            "foo": "WINNING",
+            "li1": [
+                {
+                    "name": "AAA",
+                    "bar": "WINNING",
+                    "li2": [
+                        {
+                            "key1": "BBB",
+                            "key2": "CCC",
+                            "baz": "WINNING"
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "foo:li-union": [
+        {
+            "k1": "first",
+            "k2": 4,
+            "k3": "SGVsbG8gQWN0b24g8J+roQ=="
+        },
+        {
+            "k1": "second",
+            "k2": "unlimited",
+            "k3": "SGVsbG8gQWN0b24g8J+roQ=="
+        },
+        {
+            "k1": "third",
+            "k2": "aGk=",
+            "k3": "SGVsbG8gQWN0b24g8J+roQ=="
+        }
+    ],
+    "foo:c2": {
+        "l1": "foo-qux"
+    },
+    "bar:conflict":
+    {
+        "foo": "foo-bar"
+    }
+}
+
+def _test_foo_from_json_full():
+    gdata_json = yang_foo.from_json(json_full)
+    print(gdata_json.prsrc(), err=True)
+    json_out = json.encode(yang_foo.to_json(gdata_json))
+    testing.assertEqual(json.encode(json_full), json_out)
+    return gdata_json.prsrc()
+
 def _test_from_json():
     """Test mandatory field handling - success case"""
     json_data = {
