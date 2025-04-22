@@ -624,6 +624,63 @@ def _test_json_path_nested():
     testing.assertEqual(gda.prsrc(), gdb.prsrc())
     return gdb.prsrc()
 
+def _test_json_path_conflict():
+    jda = {
+        "foo:nested": {
+            "inner": {
+                "li1": [
+                    {
+                        "name": "AAA",
+                        "bar": "WINNING",
+                        "bar:bar": "WINNING2"
+                    }
+                ]
+            },
+        }
+    }
+    gda = yang_foo.from_json(jda)
+
+    jdb = {
+        "bar": "WINNING",
+        "bar:bar": "WINNING2"
+    }
+    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(gda.prsrc(), gdb.prsrc())
+    return gdb.prsrc()
+
+def _test_json_path_conflict_other():
+    jda = {
+        "foo:nested": {
+            "bar:inner": {
+                "foo": "WINNING",
+            }
+        }
+    }
+    gda = yang_foo.from_json(jda)
+
+    jdb = {
+        "foo": "WINNING"
+    }
+    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "bar:inner"])
+    testing.assertEqual(gda.prsrc(), gdb.prsrc())
+    return gdb.prsrc()
+
+def _test_json_path_conflict_supefluous_namespace_qualifier():
+    jda = {
+        "foo:nested": {
+            "inner": {
+                "foo": "WINNING"
+            }
+        }
+    }
+    gda = yang_foo.from_json(jda)
+    try:
+        # We must not use the namespace qualifier on the inner container
+        # because it is defined in the same module as its parent
+        yang_foo.from_json_path({}, ["foo:nested", "foo:inner"])
+    except ValueError as e:
+        if str(e) != "ValueError: Invalid path":
+            testing.error("Expected exception on invalid path")
 
 def _test_json_path_remove():
     gd = yang_foo.from_json_path({}, ["foo:nested", "inner"], "remove")
