@@ -1135,6 +1135,9 @@ class DLeaf(DNodeLeaf):
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
+            if self.type_.name == "int64" or self.type_.name == "uint64":
+                res.append("    if isinstance(val, str):")
+                res.append(f"        return yang.gdata.Leaf('{self.type_.name}', int(val))")
             res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val)")
             res.append("")
         return "\n".join(res)
@@ -1179,7 +1182,17 @@ class DLeafList(DNodeLeaf):
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order})")
+            if self.type_.name == "int64" or self.type_.name == "uint64":
+            # We must check each value in the list to see if it is a 64-bit number encoded as a string
+                res.append("    int_vals = []")
+                res.append("    for v in val:")
+                res.append("        if isinstance(v, str):")
+                res.append("             int_vals.append(int(v))")
+                res.append("        else:")
+                res.append("             int_vals.append(v)")
+                res.append(f"    return yang.gdata.LeafList('{self.type_.name}', int_vals{maybe_user_order})")
+            else:
+                res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order})")
             res.append("")
         return "\n".join(res)
 
