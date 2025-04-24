@@ -57,14 +57,6 @@ mut def from_json_foo__c__li__bar(jd: dict[str, ?value]) -> yang.gdata.Container
         children['man'] = from_json_foo__c__li__bar__man(child_man)
     return yang.gdata.Container(children)
 
-mut def to_json_foo__c__li__bar(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_man = n.children.get('man')
-    if child_man is not None:
-        if isinstance(child_man, yang.gdata.Leaf):
-            children['man'] = child_man.val
-    return children
-
 class foo__c__li_entry(yang.adata.MNode):
     name: str
     foo: str
@@ -209,25 +201,3 @@ mut def from_json_foo__c__li(jd: list[dict[str, ?value]]) -> yang.gdata.List:
         if isinstance(e, dict):
             elements.append(from_json_foo__c__li_element(e))
     return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
-
-mut def to_json_foo__c__li_element(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_name = n.children.get('name')
-    if child_name is not None:
-        if isinstance(child_name, yang.gdata.Leaf):
-            children['name'] = child_name.val
-    child_foo = n.children.get('foo')
-    if child_foo is not None:
-        if isinstance(child_foo, yang.gdata.Leaf):
-            children['foo'] = child_foo.val
-    child_bar = n.children.get('bar')
-    if child_bar is not None:
-        if isinstance(child_bar, yang.gdata.Container):
-            children['bar'] = to_json_foo__c__li__bar(child_bar)
-    return children
-
-mut def to_json_foo__c__li(n: yang.gdata.List) -> list[dict[str, ?value]]:
-    elements = []
-    for e in n.elements:
-        elements.append(to_json_foo__c__li_element(e))
-    return elements

@@ -66,14 +66,6 @@ mut def from_json_foo__l1__bar(jd: dict[str, ?value]) -> yang.gdata.Container:
         children['hi'] = from_json_foo__l1__bar__hi(child_hi)
     return yang.gdata.Container(children)
 
-mut def to_json_foo__l1__bar(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_hi = n.children.get('hi')
-    if child_hi is not None:
-        if isinstance(child_hi, yang.gdata.Leaf):
-            children['hi'] = child_hi.val
-    return children
-
 class foo__l1_entry(yang.adata.MNode):
     name: str
     id: ?str
@@ -219,28 +211,6 @@ mut def from_json_foo__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
             elements.append(from_json_foo__l1_element(e))
     return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
 
-mut def to_json_foo__l1_element(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_name = n.children.get('name')
-    if child_name is not None:
-        if isinstance(child_name, yang.gdata.Leaf):
-            children['name'] = child_name.val
-    child_id = n.children.get('id')
-    if child_id is not None:
-        if isinstance(child_id, yang.gdata.Leaf):
-            children['id'] = child_id.val
-    child_bar = n.children.get('bar')
-    if child_bar is not None:
-        if isinstance(child_bar, yang.gdata.Container):
-            children['bar'] = to_json_foo__l1__bar(child_bar)
-    return children
-
-mut def to_json_foo__l1(n: yang.gdata.List) -> list[dict[str, ?value]]:
-    elements = []
-    for e in n.elements:
-        elements.append(to_json_foo__l1_element(e))
-    return elements
-
 class root(yang.adata.MNode):
     l1: foo__l1
 
@@ -291,14 +261,6 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     if child_l1 is not None and isinstance(child_l1, list):
         children['l1'] = from_json_foo__l1(child_l1)
     return yang.gdata.Container(children)
-
-mut def to_json(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_l1 = n.children.get('l1')
-    if child_l1 is not None:
-        if isinstance(child_l1, yang.gdata.List):
-            children['foo:l1'] = to_json_foo__l1(child_l1)
-    return children
 
 schema_namespaces: set[str] = {
     'http://example.com/foo',

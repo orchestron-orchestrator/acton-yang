@@ -148,24 +148,6 @@ mut def from_json_foo__c1__things(jd: list[dict[str, ?value]]) -> yang.gdata.Lis
             elements.append(from_json_foo__c1__things_element(e))
     return yang.gdata.List(keys=['name'], elements=elements)
 
-mut def to_json_foo__c1__things_element(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_name = n.children.get('name')
-    if child_name is not None:
-        if isinstance(child_name, yang.gdata.Leaf):
-            children['name'] = child_name.val
-    child_id = n.children.get('id')
-    if child_id is not None:
-        if isinstance(child_id, yang.gdata.Leaf):
-            children['id'] = child_id.val
-    return children
-
-mut def to_json_foo__c1__things(n: yang.gdata.List) -> list[dict[str, ?value]]:
-    elements = []
-    for e in n.elements:
-        elements.append(to_json_foo__c1__things_element(e))
-    return elements
-
 class foo__c1(yang.adata.MNode):
     things: foo__c1__things
 
@@ -217,14 +199,6 @@ mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
         children['things'] = from_json_foo__c1__things(child_things)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
-mut def to_json_foo__c1(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_things = n.children.get('things')
-    if child_things is not None:
-        if isinstance(child_things, yang.gdata.List):
-            children['things'] = to_json_foo__c1__things(child_things)
-    return children
-
 class root(yang.adata.MNode):
     c1: foo__c1
 
@@ -275,14 +249,6 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     if child_c1 is not None and isinstance(child_c1, dict):
         children['c1'] = from_json_foo__c1(child_c1)
     return yang.gdata.Container(children)
-
-mut def to_json(n: yang.gdata.Node) -> dict[str, ?value]:
-    children = {}
-    child_c1 = n.children.get('c1')
-    if child_c1 is not None:
-        if isinstance(child_c1, yang.gdata.Container):
-            children['foo:c1'] = to_json_foo__c1(child_c1)
-    return children
 
 schema_namespaces: set[str] = {
     'http://example.com/foo',
