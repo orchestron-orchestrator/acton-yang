@@ -1455,27 +1455,18 @@ def maybe_add(target: dict[str, value], key: str, val: ?value) -> None:
     if val is not None:
         target[key] = val
 
-def take_json_opt_value(jd: dict[str, value], name: str, prefix: ?str=None) -> ?value:
-    print("jd: ", jd)
-    full_name = (prefix + ":" + name) if prefix is not None else name
-    fname = jd.get(full_name)
-    if fname is not None:
-        print("fname: ", fname)
-        return fname
-    sname = jd.get(name)
-    print("sname: ", sname)
-    return sname
+def take_json_opt_value(jd: dict[str, ?value], name: str, module: ?str=None) -> ?value:
+    full_name = f"{module}:{name}" if module is not None else name
+    return jd.get(full_name)
 
-def take_json_value(jd: dict[str, value], name: str, prefix: ?str=None) -> value:
-    full_name = (prefix + ":" + name) if prefix is not None else name
-    val = take_json_opt_value(jd, name, prefix)
+def take_json_value(jd: dict[str, ?value], name: str, module: ?str=None) -> value:
+    val = take_json_opt_value(jd, name, module)
     if val is not None:
         return val
-    raise ValueError("Cannot find json child with name " + full_name)
+    raise ValueError("Cannot find json child with name " + name)
 
-def take_json_opt_cnt(jd: dict[str, value], name: str, prefix: ?str=None) -> ?dict[str, value]:
-    child = take_json_opt_value(jd, name, prefix)
-    print("child: ", child)
+def take_json_opt_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> ?dict[str, value]:
+    child = take_json_opt_value(jd, name, module)
     if child is not None:
         try:
             return unwrap_dict(child)
@@ -1483,14 +1474,14 @@ def take_json_opt_cnt(jd: dict[str, value], name: str, prefix: ?str=None) -> ?di
             raise ValueError("Expected a dictionary for " + name)
     return None
 
-def take_json_cnt(jd: dict[str, value], name: str, prefix: ?str=None) -> dict[str, value]:
-    val = take_json_opt_cnt(jd, name, prefix)
+def take_json_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> dict[str, value]:
+    val = take_json_opt_cnt(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json child with name " + name)
 
-def take_json_opt_list(jd: dict[str, value], name: str, prefix: ?str=None) -> ?list[dict[str, value]]:
-    child = take_json_opt_value(jd, name, prefix)
+def take_json_opt_list(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[dict[str, value]]:
+    child = take_json_opt_value(jd, name, module)
     if child is not None:
         try:
             return unwrap_list(child)
@@ -1498,28 +1489,28 @@ def take_json_opt_list(jd: dict[str, value], name: str, prefix: ?str=None) -> ?l
             raise ValueError("Expected a list for " + name)
     return None
 
-def take_json_list(jd: dict[str, value], name: str, prefix: ?str=None) -> list[dict[str, value]]:
-    val = take_json_opt_list(jd, name, prefix)
+def take_json_list(jd: dict[str, ?value], name: str, module: ?str=None) -> list[dict[str, value]]:
+    val = take_json_opt_list(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json list with name " + name)
 
-def take_json_opt_str(jd: dict[str, value], name: str, prefix: ?str=None) -> ?str:
-    child = take_json_opt_value(jd, name, prefix)
+def take_json_opt_str(jd: dict[str, ?value], name: str, module: ?str=None) -> ?str:
+    child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, str):
             return child
         raise ValueError("Expected a string for " + name)
     return None
 
-def take_json_str(jd: dict[str, value], name: str, prefix: ?str=None) -> str:
-    val = take_json_opt_str(jd, name, prefix)
+def take_json_str(jd: dict[str, ?value], name: str, module: ?str=None) -> str:
+    val = take_json_opt_str(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json str child with name: " + name)
 
-def take_json_strs(jd: dict[str, value], name: str, prefix: ?str=None) -> list[str]:
-    child = take_json_opt_value(jd, name, prefix)
+def take_json_opt_strs(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[str]:
+    child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, list):
             if len(child) == 0:
@@ -1529,46 +1520,115 @@ def take_json_strs(jd: dict[str, value], name: str, prefix: ?str=None) -> list[s
                 return child
             raise ValueError(name + "is a list of wrong type, should be str, not " + str(type(elem)))
         raise ValueError(name + "is not a list of strings")
-    return []
+    return None
 
-def take_json_opt_int(jd: dict[str, value], name: str, prefix: ?str=None) -> ?int:
-    child = take_json_opt_value(jd, name, prefix)
+def take_json_strs(jd: dict[str, ?value], name: str, module: ?str=None) -> list[str]:
+    val = take_json_opt_strs(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json str child with name " + name)
+
+def take_json_opt_int(jd: dict[str, ?value], name: str, module: ?str=None) -> ?int:
+    child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, int):
             return child
+        # TODO: strings are only allowed / mandated for 64-bit numbers!
+        elif isinstance(child, str):
+            return int(child)
         raise ValueError("Expected an int for " + name)
     return None
 
-def take_json_int(jd: dict[str, value], name: str, prefix: ?str=None) -> int:
-    val = take_json_opt_int(jd, name, prefix)
+def take_json_int(jd: dict[str, ?value], name: str, module: ?str=None) -> int:
+    val = take_json_opt_int(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json int child with name " + name)
 
-def take_json_ints(jd: dict[str, value], name: str, prefix: ?str=None) -> list[int]:
-    child = take_json_opt_value(jd, name, prefix)
+def take_json_opt_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[int]:
+    child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, list):
             if len(child) == 0:
                 return []
             elem = child[0]
-            if isinstance(elem, int):
-                return child
-            raise ValueError(name + "is a list of wrong type, should be int, not " + str(type(elem)))
+            int_vals = []
+            for c in child:
+                if isinstance(c, int):
+                    int_vals.append(c)
+                elif isinstance(c, str):
+                    int_vals.append(int(c))
+                else:
+                    raise ValueError(name + "is a list of wrong type, should be int, not " + str(type(elem)))
+            return int_vals
         raise ValueError(name + "is not a list of ints")
-    return []
+    return None
 
+def take_json_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> list[int]:
+    val = take_json_opt_ints(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json int child with name " + name)
 
-def take_json_opt_bool(jd: dict[str, value], name: str, prefix: ?str=None) -> ?bool:
-    child = take_json_opt_value(jd, name, prefix)
+def take_json_opt_float(jd: dict[str, ?value], name: str, module: ?str=None) -> ?float:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, float):
+            return child
+
+def take_json_float(jd: dict[str, ?value], name: str, module: ?str=None) -> float:
+    val = take_json_opt_float(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json float child with name " + name)
+    return 13.37 # bah, get C error otherwise
+
+def take_json_opt_bool(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bool:
+    child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, bool):
             return child
         raise ValueError("Expected a bool for " + name)
     return None
 
-def take_json_bool(jd: dict[str, value], name: str, prefix: ?str=None) -> bool:
-    val = take_json_opt_bool(jd, name, prefix)
+def take_json_bool(jd: dict[str, ?value], name: str, module: ?str=None) -> bool:
+    val = take_json_opt_bool(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json child with name " + name)
+
+def take_json_opt_bytes(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bytes:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, str):
+            return base64.decode(child.encode())
+        raise ValueError("Expected a base64 encoded str for " + name)
+    return None
+
+def take_json_bytes(jd: dict[str, ?value], name: str, module: ?str=None) -> bytes:
+    val = take_json_opt_bytes(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json child with name " + name)
+
+def take_json_opt_bytess(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[bytes]:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, list):
+            if len(child) == 0:
+                return []
+            decoded = []
+            for c in child:
+                if isinstance(c, str):
+                    decoded.append(base64.decode(c.encode()))
+                else:
+                    raise ValueError(name + "is a list of wrong type, should be base64 encoded strings, not " + str(type(c)))
+            return decoded
+        raise ValueError(name + "is not a list of bytes")
+    return []
+
+def take_json_bytess(jd: dict[str, ?value], name: str, module: ?str=None) -> list[bytes]:
+    val = take_json_opt_bytess(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json child with name " + name)

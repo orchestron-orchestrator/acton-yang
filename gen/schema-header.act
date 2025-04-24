@@ -2045,11 +2045,11 @@ def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, loose: bool=False) -> str:
 
 def taker_name(n: DNode, loose: bool=False, key_required=True) -> str:
     if isinstance(n, DContainer):
-        optional = loose or optional_subtree(n)
+        optional = loose or n.presence or optional_subtree(n)
         optional_str = "opt_" if optional else ""
         return optional_str + "cnt"
     if isinstance(n, DList):
-        optional = loose or optional_subtree(n)
+        optional = loose or optional_subtree(n) or n.min_elements == 0
         optional_str = "opt_" if optional else ""
         return optional_str + "list"
     if isinstance(n, DLeaf):
@@ -2057,8 +2057,9 @@ def taker_name(n: DNode, loose: bool=False, key_required=True) -> str:
         optional_str = "opt_" if optional else ""
         return optional_str + yang_type_to_acton_type(n.type_)
     if isinstance(n, DLeafList):
-        # TODO: optional?
-        return yang_type_to_acton_type(n.type_) + "s"
+        optional = loose or n.min_elements == 0
+        optional_str = "opt_" if optional else ""
+        return optional_str + yang_type_to_acton_type(n.type_) + "s"
     raise ValueError(f"unreachable - unknown node type {type(n)}")
 
 def yang_leaf_to_getval(leaf: DNodeLeaf, loose: bool) -> str:
