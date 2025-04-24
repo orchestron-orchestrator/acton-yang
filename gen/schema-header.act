@@ -295,7 +295,7 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def prdaclass(self, loose=False, top: bool=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
         if self.namespace != "":
@@ -823,76 +823,6 @@ class DNodeInner(DNode):
             res.append(f"        if isinstance(e, dict):")
             res.append(f"            elements.append(from_json_{pname(self)}_element(e))")
             res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
-            res.append("")
-
-        # to_json(): gdata -> JSON
-        if gen_json and isinstance(self, DNodeInner):
-            fname = "to_json"
-            if not top:
-                fname += "_" + pname(self)
-
-            if isinstance(self, DList):
-                res.append(f"mut def {fname}_element(n: yang.gdata.Node) -> dict[str, ?value]:")
-            else: # DContainer, DModule, DRoot
-                res.append(f"mut def {fname}(n: yang.gdata.Node) -> dict[str, ?value]:")
-
-            res.append("    children = {}")
-            for child in self.children:
-                child_name = f"{child.module}:{child.name}" if top or child.namespace != self.namespace else child.name
-                res.append(f"    child_{usname(child)} = n.children.get('{uname(child)}')")
-                res.append(f"    if child_{usname(child)} is not None:")
-                if isinstance(child, DLeaf):
-                    res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.Leaf):")
-                    if child.type_.name == "int64" or child.type_.name == "uint64":
-                        res.append(f"            children['{child_name}'] = str(child_{usname(child)}.val)")
-                    else:
-                        res.append(f"            children['{child_name}'] = child_{usname(child)}.val")
-                elif isinstance(child, DLeafList):
-                    res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.LeafList):")
-                    if child.type_.name == "int64" or child.type_.name == "uint64":
-                        res.append(f"            children['{child_name}'] = list(map(str, child_{usname(child)}.vals))")
-                    else:
-                        res.append(f"            children['{child_name}'] = child_{usname(child)}.vals")
-                elif isinstance(child, DContainer):
-                    res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.Container):")
-                    res.append(f"            children['{child_name}'] = to_json_{pname(child)}(child_{usname(child)})")
-                elif isinstance(child, DList):
-                    res.append(f"        if isinstance(child_{usname(child)}, yang.gdata.List):")
-                    res.append(f"            children['{child_name}'] = to_json_{pname(child)}(child_{usname(child)})")
-                else:
-                    res.append("        pass")
-#                    res.append("    if child_%s is not None:" % (_unique_safe_name(child.name, child.prefix)))
-#                    res.append("        children['%s'] = to_json_%s(child_%s)" % (child.name, pname(child), _unique_safe_name(child.name, child.prefix)))
-
-            if isinstance(self, DContainer):
-                res.append("    return children")
-            elif isinstance(self, DModule):
-                res.append("    return children")
-            elif isinstance(self, DRoot):
-                res.append("    return children")
-            elif isinstance(self, DList):
-                res.append("    return children")
-            res.append("")
-
-        elif gen_json and isinstance(self, DLeaf):
-            fname = "to_json_" + pname(self)
-            res.append(f"mut def {fname}(ll: yang.gdata.Leaf) -> ?value:")
-            res.append(f"    return jd.get('{self.name}'))")
-            res.append("")
-
-        elif gen_json and isinstance(self, DLeafList):
-            fname = "to_json_" + pname(self)
-            res.append(f"mut def {fname}(ll: yang.gdata.LeafList) -> list[value]:")
-            res.append(f"    return jd.get('{self.name}'))")
-            res.append("")
-
-        if gen_json and isinstance(self, DList):
-            fname = "to_json_" + pname(self)
-            res.append(f"mut def {fname}(n: yang.gdata.List) -> list[dict[str, ?value]]:")
-            res.append("    elements = []")
-            res.append("    for e in n.elements:")
-            res.append(f"        elements.append(to_json_{pname(self)}_element(e))")
-            res.append("    return elements")
             res.append("")
 
         if top:
