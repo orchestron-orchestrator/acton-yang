@@ -332,6 +332,15 @@ class DNodeInner(DNode):
         def pname(n):
             return get_path_name(n)
 
+        def us_list_key():
+            """Convert list key names (DList.key) to their unique safe names
+
+            We use the containing list node prefix since the list keys must be
+            defined in the same namespace as the list."""
+            if isinstance(self, DList):
+                return list(map(lambda x: unique_namer.unique_safe_name(x, self.prefix), self.key))
+            raise ValueError(f"{self} not a list node")
+
         def maybe_user_order(n: DList):
             return ", user_order=True" if n.ordered_by == "user" else ""
 
@@ -479,7 +488,7 @@ class DNodeInner(DNode):
         if isinstance(self, DList):
             # keys contains a yang spec of the keys, like "k1 k2"
             # which are modeled as attributes of the list entry class and accessed via self.k1, self.k2
-            list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{_safe_name(x)})", self.key))
+            list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{x})", us_list_key()))
             # No namespace qualifiers for the list entry "container" node - it is the same as the parent list node
             res.append(f"        return yang.gdata.Container(children, [{list_keys_str}])")
         elif isinstance(self, DRoot):
