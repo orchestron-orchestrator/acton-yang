@@ -802,7 +802,9 @@ class DNodeInner(DNode):
             #    res += ["    yang.gdata.maybe_add(children, '%s', lambda x: from_json_%s(unwrap_dict(x)) if x is not None else None, yang.gdata.take_json_%s(jd, '%s', '%s'))" % (child.name, taker_name(child, key_required=False), child.name, child.prefix)]
 
             if isinstance(self, DList):
-                list_keys_str = ", ".join(map(lambda x: f"str(child_{_safe_name(x)} if child_{_safe_name(x)} is not None else '')", self.key))
+                # Collect keys leaf values in a list of strings by using the
+                # non-optional local variables defined above.
+                list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(child_{x})", us_list_key()))
                 res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
             else:
                 res.append(f"    return yang.gdata.{self.gname}(children{gdata_nsq})")
