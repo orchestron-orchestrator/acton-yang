@@ -442,14 +442,16 @@ class DNodeInner(DNode):
         # container
         for child in self.children:
             if isinstance(child, DContainer) and child.presence:
+                # We must generate unique safe names for this node children too
+                child_unique_namer = _UniqueNamer(child)
                 pc_args = ["self"]
                 for cchild in child.children:
                     if isinstance(cchild, DLeaf):
                         if cchild.mandatory:
-                            pc_args.append(_safe_name(cchild.name))
+                            pc_args.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
                     elif isinstance(cchild, DContainer):
                         if not (loose or optional_subtree(cchild)):
-                            pc_args.append(_safe_name(cchild.name))
+                            pc_args.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
                 pc_args_str = ", ".join(pc_args)
                 pc_args_str1 = ", ".join(pc_args[1:])
                 res.append(f"    mut def create_{usname(child)}({pc_args_str}):")

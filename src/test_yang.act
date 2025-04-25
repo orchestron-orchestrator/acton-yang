@@ -1775,6 +1775,46 @@ def _test_prdaclass_strict_list_mandatory():
     src = l1.prdaclass(top=False)
     return src
 
+def _test_prdaclass_strict_p_container_with_mandatory_leaf():
+    ys = """module foo {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+  container foo {
+    presence "foo presence";
+    container bar {
+      presence "bar presence";
+      leaf l1 {
+        type string;
+        mandatory true;
+      }
+    }
+  }
+}"""
+
+    ys_bar = """module bar {
+  yang-version "1.1";
+  namespace "http://example.com/bar";
+  prefix "bar";
+  import foo {
+    prefix "foo";
+  }
+  augment "/foo:foo/bar" {
+    // conflicts with /foo:foo/bar/l1
+    leaf l1 {
+      type string;
+      mandatory true;
+    }
+    leaf l2 {
+      type string;
+      mandatory true;
+    }
+  }
+}"""
+    root = yang.compile([ys, ys_bar])
+    src = root.prdaclass()
+    return src
+
 def _test_prdaclass_strict_list_p_container_with_mandatory_leaf():
     ys = """module foo {
     yang-version "1.1";
