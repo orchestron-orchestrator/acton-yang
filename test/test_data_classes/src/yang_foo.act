@@ -19,38 +19,46 @@ mut def from_json_foo__c1__l3(val: value) -> yang.gdata.Leaf:
 mut def from_json_foo__c1__l_empty(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('empty', val)
 
-mut def from_json_foo__c1__li__name(val: value) -> yang.gdata.Leaf:
+mut def from_json_foo__c1__li__f_name(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
+
+mut def from_json_foo__c1__li__bar_name(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val, ns='http://example.com/bar', module='bar')
 
 mut def from_json_foo__c1__li__val(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
 class foo__c1__li_entry(yang.adata.MNode):
-    name: str
+    f_name: str
+    bar_name: str
     val: ?str
 
-    mut def __init__(self, name: str, val: ?str):
+    mut def __init__(self, f_name: str, bar_name: str, val: ?str):
         self._ns = 'http://example.com/foo'
-        self.name = name
+        self.f_name = f_name
+        self.bar_name = bar_name
         self.val = val
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        _name = self.name
-        if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
+        _f_name = self.f_name
+        if _f_name is not None:
+            children['f:name'] = yang.gdata.Leaf('string', _f_name)
+        _bar_name = self.bar_name
+        if _bar_name is not None:
+            children['bar:name'] = yang.gdata.Leaf('string', _bar_name, ns='http://example.com/bar', module='bar')
         _val = self.val
         if _val is not None:
             children['val'] = yang.gdata.Leaf('string', _val)
-        return yang.gdata.Container(children, [str(self.name)])
+        return yang.gdata.Container(children, [str(self.f_name)])
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__li_entry:
-        return foo__c1__li_entry(name=n.get_str('name'), val=n.get_opt_str('val'))
+        return foo__c1__li_entry(f_name=n.get_str('f:name'), bar_name=n.get_str('bar:name'), val=n.get_opt_str('val'))
 
     @staticmethod
     mut def from_xml(n: xml.Node) -> foo__c1__li_entry:
-        return foo__c1__li_entry(name=yang.gdata.from_xml_str(n, 'name'), val=yang.gdata.from_xml_opt_str(n, 'val'))
+        return foo__c1__li_entry(f_name=yang.gdata.from_xml_str(n, 'name'), bar_name=yang.gdata.from_xml_str(n, 'name', 'http://example.com/bar'), val=yang.gdata.from_xml_opt_str(n, 'val'))
 
 class foo__c1__li(yang.adata.MNode):
     elements: list[foo__c1__li_entry]
@@ -59,16 +67,16 @@ class foo__c1__li(yang.adata.MNode):
         self._name = 'li'
         self.elements = elements
 
-    mut def create(self, name):
+    mut def create(self, f_name, bar_name):
         for e in self.elements:
             match = True
-            if e.name != name:
+            if e.f_name != f_name:
                 match = False
                 continue
             if match:
                 return e
 
-        res = foo__c1__li_entry(name)
+        res = foo__c1__li_entry(f_name, bar_name)
         self.elements.append(res)
         return res
 
@@ -78,7 +86,7 @@ class foo__c1__li(yang.adata.MNode):
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements, user_order=True)
+        return yang.gdata.List(['f:name'], elements, user_order=True)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__c1__li_entry]:
@@ -112,7 +120,8 @@ mut def from_json_path_foo__c1__li_element(jd: value, path: list[str]=[], op: ?s
         point = path[1]
         rest_path = path[2:]
         children: dict[str, yang.gdata.Node] = {}
-        children['name'] = from_json_foo__c1__li__name(keys[0])
+        children['f:name'] = from_json_foo__c1__li__f_name(keys[0])
+        children['bar:name'] = from_json_foo__c1__li__bar_name(keys[0])
         if point == 'val':
             raise ValueError("Invalid json path to non-inner node")
         return yang.gdata.Container(children, keys)
@@ -138,27 +147,30 @@ mut def from_json_path_foo__c1__li(jd: value, path: list[str]=[], op: ?str='merg
             elements.append(element)
         elif op == "remove":
             elements.append(yang.gdata.Absent(element.key))
-        return yang.gdata.List(['name'], elements, user_order=True)
+        return yang.gdata.List(['f:name'], elements, user_order=True)
     elif len(path) > 1:
-        return yang.gdata.List(['name'], [from_json_path_foo__c1__li_element(jd, path, op)], user_order=True)
+        return yang.gdata.List(['f:name'], [from_json_path_foo__c1__li_element(jd, path, op)], user_order=True)
     raise ValueError("Unable to resolve path, no keys provided")
 
 mut def from_json_foo__c1__li_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     children = {}
-    child_name = jd.get('name')
-    if child_name is not None:
-        children['name'] = from_json_foo__c1__li__name(child_name)
+    child_f_name = jd.get('name')
+    if child_f_name is not None:
+        children['f:name'] = from_json_foo__c1__li__f_name(child_f_name)
+    child_bar_name = jd.get('bar:name')
+    if child_bar_name is not None:
+        children['bar:name'] = from_json_foo__c1__li__bar_name(child_bar_name)
     child_val = jd.get('val')
     if child_val is not None:
         children['val'] = from_json_foo__c1__li__val(child_val)
-    return yang.gdata.Container(children, [str(child_name)])
+    return yang.gdata.Container(children, [str(child_f_name)])
 
 mut def from_json_foo__c1__li(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = []
     for e in jd:
         if isinstance(e, dict):
             elements.append(from_json_foo__c1__li_element(e))
-    return yang.gdata.List(keys=['name'], elements=elements, user_order=True)
+    return yang.gdata.List(keys=['f:name'], elements=elements, user_order=True)
 
 mut def from_json_foo__c1__ll_uint64(val: list[value]) -> yang.gdata.LeafList:
     int_vals = []
@@ -2396,6 +2408,13 @@ def src_yang():
         // create a conflict with /f:c1/l1
         uses f:g1;
     }
+    augment /f:c1/li {
+        // create a conflict with /f:c1/li/name (key leaf)
+        leaf name {
+            type string;
+            mandatory true;
+        }
+    }
     augment /f:c.dot {
         leaf l.dot2 {
             type string;
@@ -2529,6 +2548,9 @@ def src_schema():
         Augment('/f:c1', children=[
             Uses('f:g1')
         ]),
+        Augment('/f:c1/li', children=[
+            Leaf('name', type_=Type('string'), mandatory=True)
+        ]),
         Augment('/f:c.dot', children=[
             Leaf('l.dot2', type_=Type('string'))
         ]),
@@ -2568,7 +2590,8 @@ def src_schema_compiled():
         Leaf('l_empty', type_=Type('empty')),
         List('li', key='name', ordered_by='user', children=[
             Leaf('name', type_=Type('string')),
-            Leaf('val', type_=Type('string'))
+            Leaf('val', type_=Type('string')),
+            Leaf('name', type_=Type('string'), mandatory=True)
         ]),
         LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
@@ -2656,6 +2679,9 @@ def src_schema_compiled():
     ], augment=[
         Augment('/f:c1', children=[
             Uses('f:g1')
+        ]),
+        Augment('/f:c1/li', children=[
+            Leaf('name', type_=Type('string'), mandatory=True)
         ]),
         Augment('/f:c.dot', children=[
             Leaf('l.dot2', type_=Type('string'))
