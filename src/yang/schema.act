@@ -332,6 +332,15 @@ class DNodeInner(DNode):
         def pname(n):
             return get_path_name(n)
 
+        def us_list_key():
+            """Convert list key names (DList.key) to their unique safe names
+
+            We use the containing list node prefix since the list keys must be
+            defined in the same namespace as the list."""
+            if isinstance(self, DList):
+                return list(map(lambda x: unique_namer.unique_safe_name(x, self.prefix), self.key))
+            raise ValueError(f"{self} not a list node")
+
         def maybe_user_order(n: DList):
             return ", user_order=True" if n.ordered_by == "user" else ""
 
@@ -433,14 +442,16 @@ class DNodeInner(DNode):
         # container
         for child in self.children:
             if isinstance(child, DContainer) and child.presence:
+                # We must generate unique safe names for this node children too
+                child_unique_namer = _UniqueNamer(child)
                 pc_args = ["self"]
                 for cchild in child.children:
                     if isinstance(cchild, DLeaf):
                         if cchild.mandatory:
-                            pc_args.append(_safe_name(cchild.name))
+                            pc_args.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
                     elif isinstance(cchild, DContainer):
                         if not (loose or optional_subtree(cchild)):
-                            pc_args.append(_safe_name(cchild.name))
+                            pc_args.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
                 pc_args_str = ", ".join(pc_args)
                 pc_args_str1 = ", ".join(pc_args[1:])
                 res.append(f"    mut def create_{usname(child)}({pc_args_str}):")
@@ -479,7 +490,7 @@ class DNodeInner(DNode):
         if isinstance(self, DList):
             # keys contains a yang spec of the keys, like "k1 k2"
             # which are modeled as attributes of the list entry class and accessed via self.k1, self.k2
-            list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{_safe_name(x)})", self.key))
+            list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{x})", us_list_key()))
             # No namespace qualifiers for the list entry "container" node - it is the same as the parent list node
             res.append(f"        return yang.gdata.Container(children, [{list_keys_str}])")
         elif isinstance(self, DRoot):
@@ -571,12 +582,14 @@ class DNodeInner(DNode):
             res.append("        self.elements = elements")
             res.append("")
 
-            list_key_args = list(map(lambda x: _safe_name(x), self.key))
+            # list_key_args contains the list keys names and also any
+            # non-optional children. We use unique safe names for both to avoid conflicts.
+            list_key_args = us_list_key()
             list_key_types = {}
             for child in self.children:
                 if isinstance(child, DLeaf):
-                    if child.name in self.key:
-                        list_key_types[child.name] = child.type_
+                    if usname(child) in list_key_args:
+                        list_key_types[usname(child)] = child.type_
                         continue
                     if child.mandatory:
                         list_key_args.append(usname(child))
@@ -587,15 +600,15 @@ class DNodeInner(DNode):
             res.append(f"    mut def create({list_create_args_str}):")
             res.append("        for e in self.elements:")
             res.append("            match = True")
-            for key in self.key:
+            for us_key in us_list_key():
                 unique_base_types = set()
-                for t in list_key_types[key].type_:
+                for t in list_key_types[us_key].type_:
                     unique_base_types.add(yang_type_to_acton_type(t))
                 if len(unique_base_types) <= 1:
                     # Class attribute is a not a "value" Acton type because it
                     # is either not an union or it an union that was resolved
                     # to a single builtin type, it has equality check
-                    res.append(f"            if e.{_safe_name(key)} != {_safe_name(key)}:")
+                    res.append(f"            if e.{us_key} != {us_key}:")
                     res.append("                match = False")
                     res.append("                continue")
                 else:
@@ -603,9 +616,9 @@ class DNodeInner(DNode):
                     # we need to first attempt to bind them to a more specific type
                     # TODO: use Acton unions
                     for t in unique_base_types:
-                        res.append(f"            e_{_safe_name(key)} = e.{_safe_name(key)}")
-                        res.append(f"            if isinstance(e_{_safe_name(key)}, {t}) and isinstance({_safe_name(key)}, {t}):")
-                        res.append(f"                if e_{_safe_name(key)} != {_safe_name(key)}:")
+                        res.append(f"            e_{us_key} = e.{us_key}")
+                        res.append(f"            if isinstance(e_{us_key}, {t}) and isinstance({us_key}, {t}):")
+                        res.append(f"                if e_{us_key} != {us_key}:")
                         res.append("                    match = False")
                         res.append("                    continue")
             res.append("            if match:")
@@ -793,7 +806,9 @@ class DNodeInner(DNode):
             #    res += ["    yang.gdata.maybe_add(children, '%s', lambda x: from_json_%s(unwrap_dict(x)) if x is not None else None, yang.gdata.take_json_%s(jd, '%s', '%s'))" % (child.name, taker_name(child, key_required=False), child.name, child.prefix)]
 
             if isinstance(self, DList):
-                list_keys_str = ", ".join(map(lambda x: f"str(child_{_safe_name(x)} if child_{_safe_name(x)} is not None else '')", self.key))
+                # Collect keys leaf values in a list of strings by using the
+                # non-optional local variables defined above.
+                list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(child_{x})", us_list_key()))
                 res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
             else:
                 res.append(f"    return yang.gdata.{self.gname}(children{gdata_nsq})")
