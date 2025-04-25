@@ -580,12 +580,14 @@ class DNodeInner(DNode):
             res.append("        self.elements = elements")
             res.append("")
 
-            list_key_args = list(map(lambda x: _safe_name(x), self.key))
+            # list_key_args contains the list keys names and also any
+            # non-optional children. We use unique safe names for both to avoid conflicts.
+            list_key_args = us_list_key()
             list_key_types = {}
             for child in self.children:
                 if isinstance(child, DLeaf):
-                    if child.name in self.key:
-                        list_key_types[child.name] = child.type_
+                    if usname(child) in list_key_args:
+                        list_key_types[usname(child)] = child.type_
                         continue
                     if child.mandatory:
                         list_key_args.append(usname(child))
@@ -596,15 +598,15 @@ class DNodeInner(DNode):
             res.append(f"    mut def create({list_create_args_str}):")
             res.append("        for e in self.elements:")
             res.append("            match = True")
-            for key in self.key:
+            for us_key in us_list_key():
                 unique_base_types = set()
-                for t in list_key_types[key].type_:
+                for t in list_key_types[us_key].type_:
                     unique_base_types.add(yang_type_to_acton_type(t))
                 if len(unique_base_types) <= 1:
                     # Class attribute is a not a "value" Acton type because it
                     # is either not an union or it an union that was resolved
                     # to a single builtin type, it has equality check
-                    res.append(f"            if e.{_safe_name(key)} != {_safe_name(key)}:")
+                    res.append(f"            if e.{us_key} != {us_key}:")
                     res.append("                match = False")
                     res.append("                continue")
                 else:
@@ -612,9 +614,9 @@ class DNodeInner(DNode):
                     # we need to first attempt to bind them to a more specific type
                     # TODO: use Acton unions
                     for t in unique_base_types:
-                        res.append(f"            e_{_safe_name(key)} = e.{_safe_name(key)}")
-                        res.append(f"            if isinstance(e_{_safe_name(key)}, {t}) and isinstance({_safe_name(key)}, {t}):")
-                        res.append(f"                if e_{_safe_name(key)} != {_safe_name(key)}:")
+                        res.append(f"            e_{us_key} = e.{us_key}")
+                        res.append(f"            if isinstance(e_{us_key}, {t}) and isinstance({us_key}, {t}):")
+                        res.append(f"                if e_{us_key} != {us_key}:")
                         res.append("                    match = False")
                         res.append("                    continue")
             res.append("            if match:")
