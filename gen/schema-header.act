@@ -336,14 +336,19 @@ class DNodeInner(DNode):
         def pname(n):
             return get_path_name(n)
 
-        def us_list_key():
+        def u_list_key(n: DList):
+            """Convert list key names (DList.key) to their unique names
+
+            We use the containing list node prefix since the list keys must be
+            defined in the same namespace as the list."""
+            return list(map(lambda x: unique_namer.unique_name(x, n.prefix), n.key))
+
+        def us_list_key(n: DList):
             """Convert list key names (DList.key) to their unique safe names
 
             We use the containing list node prefix since the list keys must be
             defined in the same namespace as the list."""
-            if isinstance(self, DList):
-                return list(map(lambda x: unique_namer.unique_safe_name(x, self.prefix), self.key))
-            raise ValueError(f"{self} not a list node")
+            return list(map(lambda x: unique_namer.unique_safe_name(x, n.prefix), n.key))
 
         def maybe_user_order(n: DList):
             return ", user_order=True" if n.ordered_by == "user" else ""
@@ -494,7 +499,7 @@ class DNodeInner(DNode):
         if isinstance(self, DList):
             # keys contains a yang spec of the keys, like "k1 k2"
             # which are modeled as attributes of the list entry class and accessed via self.k1, self.k2
-            list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{x})", us_list_key()))
+            list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{x})", us_list_key(self)))
             # No namespace qualifiers for the list entry "container" node - it is the same as the parent list node
             res.append(f"        return yang.gdata.Container(children, [{list_keys_str}])")
         elif isinstance(self, DRoot):
@@ -588,7 +593,7 @@ class DNodeInner(DNode):
 
             # list_key_args contains the list keys names and also any
             # non-optional children. We use unique safe names for both to avoid conflicts.
-            list_key_args = us_list_key()
+            list_key_args = us_list_key(self)
             list_key_types = {}
             for child in self.children:
                 if isinstance(child, DLeaf):
@@ -604,7 +609,7 @@ class DNodeInner(DNode):
             res.append(f"    mut def create({list_create_args_str}):")
             res.append("        for e in self.elements:")
             res.append("            match = True")
-            for us_key in us_list_key():
+            for us_key in us_list_key(self):
                 unique_base_types = set()
                 for t in list_key_types[us_key].type_:
                     unique_base_types.add(yang_type_to_acton_type(t))
@@ -641,9 +646,9 @@ class DNodeInner(DNode):
             res.append("            if isinstance(e_gdata, yang.gdata.Container):")
             res.append("                elements.append(e_gdata)")
             if set_ns:
-                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)}, ns='{self.namespace}', module='{self.module}')")
+                res.append(f"        return yang.gdata.List({repr(u_list_key(self))}, elements{maybe_user_order(self)}, ns='{self.namespace}', module='{self.module}')")
             else:
-                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)})")
+                res.append(f"        return yang.gdata.List({repr(u_list_key(self))}, elements{maybe_user_order(self)})")
             res.append("")
 
 #            # .from_gdata()
@@ -739,9 +744,9 @@ class DNodeInner(DNode):
                 res.append("            elements.append(element)")
                 res.append("        elif op == \"remove\":")
                 res.append("            elements.append(yang.gdata.Absent(element.key))")
-                res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)}{gdata_nsq})")
+                res.append(f"        return yang.gdata.List({repr(u_list_key(self))}, elements{maybe_user_order(self)}{gdata_nsq})")
                 res.append("    elif len(path) > 1:")
-                res.append(f"        return yang.gdata.List({repr(self.key)}, [from_json_path_{pname(self)}_element(jd, path, op)]{maybe_user_order(self)}{gdata_nsq})")
+                res.append(f"        return yang.gdata.List({repr(u_list_key(self))}, [from_json_path_{pname(self)}_element(jd, path, op)]{maybe_user_order(self)}{gdata_nsq})")
                 res.append("    raise ValueError(\"Unable to resolve path, no keys provided\")")
 
             else:
@@ -812,7 +817,7 @@ class DNodeInner(DNode):
             if isinstance(self, DList):
                 # Collect keys leaf values in a list of strings by using the
                 # non-optional local variables defined above.
-                list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(child_{x})", us_list_key()))
+                list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(child_{x})", us_list_key(self)))
                 res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
             else:
                 res.append(f"    return yang.gdata.{self.gname}(children{gdata_nsq})")
@@ -824,7 +829,7 @@ class DNodeInner(DNode):
             res.append(f"    for e in jd:")
             res.append(f"        if isinstance(e, dict):")
             res.append(f"            elements.append(from_json_{pname(self)}_element(e))")
-            res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
+            res.append(f"    return yang.gdata.List(keys={repr(u_list_key(self))}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
             res.append("")
 
         if top:
