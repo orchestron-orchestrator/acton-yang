@@ -222,13 +222,17 @@ empty_key = []
 class Node(value):
     ns: ?str
     module: ?str
-    key: list[str] # values of the key leafs
     children: dict[str, Node]
 
-    def key_str(self) -> str:
+    def key_str(self, key_names: list[str]) -> str:
         def escape_keys(key_val):
             return key_val.replace(",", "\\,")
-        return ",".join(map(escape_keys, self.key))
+        keys = map(lambda kn: str(self.get_leaf(kn).val), key_names)
+        return ",".join(map(escape_keys, keys))
+
+    def key_children(self, key_names: list[str]) -> dict[str, Leaf]:
+        keys = map(lambda kn: (kn, self.get_leaf(kn)), key_names)
+        return dict(keys)
 
     def prsrc(self, indent=0, name="") -> str:
         args = []
@@ -254,9 +258,21 @@ class Node(value):
                 args.append("user_order=True")
             return "LeafList(" + ", ".join(args) + ")"
         elif isinstance(self, Absent):
-            if self.key != []:
-                args.insert(0, str(self.key))
-            return "Absent(" + ", ".join(args) + ")"
+            sname = "Absent"
+            if len(self.children) == 0:
+                res.append(sname + "(" + ", ".join(args) + ")")
+            else:
+                child_res = []
+                for nm,child in self.children.items():
+                    child_res.append(_ind(indent+1) + "'" + nm + "': " + child.prsrc(indent+1, nm))
+                res.append(sname + "({")
+                res.append(",\n".join(child_res))
+
+                args_str = ""
+                if len(args) > 0:
+                    args_str = ", " + ", ".join(args)
+                res.append(_ind(indent) + "}" + args_str + ")")
+            return "\n".join(res)
         elif isinstance(self, List):
             args.insert(0, str(self.keys))
             if self.user_order:
@@ -267,7 +283,7 @@ class Node(value):
                 args.append("elements=[")
                 res.append("List(" + ", ".join(args))
                 child_res = []
-                for elem in self.elements if self.user_order else sorted(self.elements):
+                for elem in self.elements if self.user_order else sorted_elements(self.elements, self.keys):
                     child_res.append(_ind(indent+1) + elem.prsrc(indent+1))
                 res.append(",\n".join(child_res))
                 res.append(_ind(indent) + "])")
@@ -276,9 +292,6 @@ class Node(value):
             sname = "Container"
             if self.presence:
                 args.insert(0, "presence=True")
-            if self.key != []:
-                args.insert(0, str(self.key))
-
             if len(self.children) == 0:
                 res.append(sname + "(" + ", ".join(args) + ")")
             else:
@@ -325,7 +338,7 @@ class Node(value):
                     child_dict[fmt_json_name(nm, child.module)] = vals
                 elif isinstance(child, List):
                     elems = []
-                    for elem in child.elements if child.user_order else sorted(child.elements):
+                    for elem in child.elements if child.user_order else sorted_elements(child.elements, child.keys):
                         if isinstance(elem, Container):
                             elem_dict = {}
                             for k, v in dict(zip(child.keys, elem.key)).items():
@@ -376,7 +389,7 @@ class Node(value):
 
         elif isinstance(self, List):
             xml = ""
-            for elem in self.elements if self.user_order else sorted(self.elements):
+            for elem in self.elements if self.user_order else sorted_elements(self.elements, self.keys):
                 remove = isinstance(elem, Absent)
                 xml += _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op if remove else []) + _nl()
                 # Print key leafs first
@@ -419,10 +432,10 @@ class Node(value):
         l = self.get_opt_leaf(name)
         if l != None:
             return l
-        raise ValueError("Cannot find leaf child with name: " + name)
+        raise ValueError(f"Cannot find leaf child in {self} with name: " + name)
 
     def get_opt_leaf(self, name) -> ?Leaf:
-        if isinstance(self, Container):
+        if isinstance(self, Container) or isinstance(self, Absent):
             for nm,child in self.children.items():
                 if isinstance(child, Leaf) and nm == name:
                     return child
@@ -592,14 +605,12 @@ class Node(value):
         except ValueError:
             return []
 
-extension Node(Ord):
+extension Node(Eq):
     def __eq__(self, other: Node) -> bool:
         if self.ns != other.ns:
             return False
 
         if isinstance(self, Container) and isinstance(other, Container):
-            if self.key != other.key:
-                return False
             if set(self.children.keys()) != set(other.children.keys()):
                 return False
             for key in self.children.keys():
@@ -621,21 +632,23 @@ extension Node(Ord):
             for i in range(len(self.elements)):
                 e1 = self.elements[i]
                 e2 = other.elements[i]
-                if not self.user_order and e1.key != e2.key:
+                if not self.user_order and e1.key_str(self.keys) != e2.key_str(other.keys):
                     for e2 in other.elements:
-                        if e1.key == e2.key:
+                        if e1.key_str(self.keys) == e2.key_str(other.keys):
                             break
                 if e1 != e2:
                     return False
             return True
 
         if isinstance(self, Absent) and isinstance(other, Absent):
-            return self.key == other.key
+            if set(self.children.keys()) != set(other.children.keys()):
+                return False
+            for key in self.children.keys():
+                if self.children[key] != other.children[key]:
+                    return False
+            return True
 
         return False
-
-    def __lt__(a, b):
-        return a.key_str() <= b.key_str()
 
 
 class List(Node):
@@ -652,9 +665,8 @@ class List(Node):
         self.module = module
 
 class Container(Node):
-    def __init__(self, children: dict[str, Node]={}, key: list[str]=[], presence: bool=False, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[str, Node]={}, presence: bool=False, ns: ?str=None, module: ?str=None):
         self.children = children
-        self.key = key
         self.presence = presence
         self.ns = ns
         self.module = module
@@ -691,11 +703,10 @@ class Absent(Node):
     Absent is declarative / idempotent, meaning that if the target to be removed
     / made absent is not present, no error is raised.
     """
-    def __init__(self, key: list[str]=[], ns: ?str=None, module: ?str=None):
-        self.key = key
+    def __init__(self, children: dict[str, Node]={}, ns: ?str=None, module: ?str=None):
         self.ns = ns
         self.module = module
-        self.children = {}
+        self.children = children
 
 class Delete(Node):
     """Imperative delete of a node
@@ -731,6 +742,14 @@ class Replace(Node):
         self.module = module
         self.children = children
 
+def sorted_elements(elements, key_names):
+    keys = list(map(lambda elem: elem.key_str(key_names), elements))
+    key_map = dict(zip(keys, elements))
+    sorted_keys = sorted(keys)
+    res = []
+    for key in sorted_keys:
+        res.append(key_map[key])
+    return res
 
 def vals_equal(a: value, b: value) -> bool:
     # Compare known leaf value types
@@ -908,11 +927,9 @@ def merge(a: Node, b: Node) -> Node:
         return result
 
     if isinstance(a, Container) and isinstance(b, Container):
-        if a.key != b.key:
-            raise ValueError("Cannot merge containers with different keys: %s vs %s" % (str(a.key), str(b.key)))
         # Merge keyed children similarly to Container
         new_children = merge_keyed_children(a.children, b.children)
-        return Container(children=new_children, key=a.key, presence=a.presence, ns=a.ns, module=a.module)
+        return Container(children=new_children, presence=a.presence, ns=a.ns, module=a.module)
 
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.t != b.t:
@@ -942,14 +959,14 @@ def merge(a: Node, b: Node) -> Node:
 
             old_map = {}
             for e in a.elements:
-                old_map[e.key_str()] = e
+                old_map[e.key_str(a.keys)] = e
 
             # Start with elements from a, merge if present in b
             for a_elem in a.elements:
-                k = a_elem.key_str()
+                k = a_elem.key_str(a.keys)
                 found = False
                 for b_elem in b.elements:
-                    if b_elem.key == a_elem.key:
+                    if b_elem.key_str(b.keys) == a_elem.key_str(a.keys):
                         merged_elem = merge(a_elem, b_elem)
                         if isinstance(merged_elem, Container):
                             new_elements.append(merged_elem)
@@ -968,9 +985,9 @@ def merge(a: Node, b: Node) -> Node:
             # For now, we just append them at the end.
             existing_keys = {}
             for e in new_elements:
-                existing_keys[e.key_str()] = True
+                existing_keys[e.key_str(a.keys)] = True
             for b_elem in b.elements:
-                bk = b_elem.key_str()
+                bk = b_elem.key_str(b.keys)
                 if bk not in existing_keys:
                     new_elements.append(b_elem)
                     existing_keys[bk] = True
@@ -984,12 +1001,12 @@ def merge(a: Node, b: Node) -> Node:
             def escape_keys(key_val):
                 return key_val.replace(",", "\\,")
             for elem in a.elements:
-                key_str = ",".join(elem.key)
+                key_str = elem.key_str(a.keys)
                 if key_str not in all_elements:
                     all_elements[key_str] = []
                 all_elements[key_str].append(elem)
             for elem in b.elements:
-                key_str = ",".join(elem.key)
+                key_str = elem.key_str(b.keys)
                 if key_str not in all_elements:
                     all_elements[key_str] = []
                 all_elements[key_str].append(elem)
@@ -1047,6 +1064,19 @@ def diff(old: Node, new: Node) -> ?Node:
             return None
         return result
 
+    # Helper function for diffing list elements (specialized Container nodes)
+    # that *must* always include the key leaf children
+    def diff_list_element(old_element: Node, new_element: Node, keys: list[str]) -> ?Node:
+        # Diff of element Container nodes will only contain the actual
+        # differences, skipping keys which are equal in both
+        entry_diff = diff(old_element, new_element)
+        if entry_diff is not None:
+            # Update the entry to include key leaf children
+            for key in keys:
+                entry_diff.children[key] = old_element.get_leaf(key)
+            return entry_diff
+        return None
+
     # Helper function for diffing Lists which have ordered elements
     def diff_list_elements(old_list: List, new_list: List) -> ?list[Node]:
 
@@ -1057,14 +1087,14 @@ def diff(old: Node, new: Node) -> ?Node:
         old_map = {}
         old_key_order = []
         for e in old_list.elements:
-            k = e.key_str()
+            k = e.key_str(old_list.keys)
             old_map[k] = e
             old_key_order.append(k)
 
         new_map = {}
         new_key_order = []
         for e in new_list.elements:
-            nk = e.key_str()
+            nk = e.key_str(new_list.keys)
             new_map[nk] = e
             new_key_order.append(nk)
 
@@ -1079,12 +1109,9 @@ def diff(old: Node, new: Node) -> ?Node:
 
             if ok == nk:
                 # same element key
-                elem_diff = diff(old_map[ok], new_map[nk])
-                if elem_diff != None:
-                    if isinstance(elem_diff, Absent):
-                        raise ValueError("Absent returned from diff in list elements")
-                    elif isinstance(elem_diff, Container):
-                        result.append(elem_diff)
+                elem_diff = diff_list_element(old_map[ok], new_map[nk], old_list.keys)
+                if elem_diff is not None:
+                    result.append(elem_diff)
                 i += 1
                 j += 1
             else:
@@ -1094,7 +1121,7 @@ def diff(old: Node, new: Node) -> ?Node:
                 if not ok_in_new:
                     # old element not in new => absent
                     oe = old_map[ok]
-                    result.append(Absent(oe.key))
+                    result.append(Absent(oe.key_children(old_list.keys)))
                     i += 1
                 elif not nk_in_old:
                     # new element not in old => new element
@@ -1111,7 +1138,7 @@ def diff(old: Node, new: Node) -> ?Node:
             ok = old_key_order[i]
             if ok not in new_map:
                 oe = old_map[ok]
-                result.append(Absent(oe.key))
+                result.append(Absent(oe.key_children(old_list.keys)))
             i += 1
 
         # Remaining new elements are new
@@ -1129,12 +1156,10 @@ def diff(old: Node, new: Node) -> ?Node:
     # Diff logic for each node type
 
     if isinstance(old, Container) and isinstance(new, Container):
-        if old.key != new.key:
-            raise ValueError("Container keys differ: %s vs %s" % (str(old.key), str(new.key)))
         diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
-        return Container(children=diff_children, key=new.key, presence=new.presence, ns=new.ns, module=new.module)
+        return Container(children=diff_children, presence=new.presence, ns=new.ns, module=new.module)
 
     elif isinstance(old, List) and isinstance(new, List):
         # For lists, we have elements instead of children
@@ -1157,8 +1182,10 @@ def diff(old: Node, new: Node) -> ?Node:
         return new
 
     elif isinstance(old, Absent) and isinstance(new, Absent):
-        if old.key != new.key:
-            raise ValueError("Absent keys differ: %s vs %s" % (str(old.key), str(new.key)))
+        diff_children = diff_keyed_children(old.children, new.children)
+        if diff_children is not None:
+            # TODO: can't call key_str(list_keys) without our parent List node!?
+            raise ValueError("Absent keys differ: %s vs %s" % (str(old.children), str(new.children)))
         return None
 
     else:
@@ -1172,12 +1199,14 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
     if isinstance(p, Absent):
         # Patch says remove this node
+        if isinstance(old, Absent):
+            # Both absent means node was removed
+            if p.children != old.children:
+                # TODO: can't call key_str(list_keys) without our parent List node!?
+                raise ValueError("Absent keys differ in patch: %s vs %s" % (str(old.children), str(p.children)))
         return None
 
     elif isinstance(old, Container) and isinstance(p, Container):
-        if old.key != p.key:
-            raise ValueError("Container keys differ in patch: %s vs %s" % (str(old.key), str(p.key)))
-
         # Start with old children
         new_children: dict[str, Node] = {}
         for key in old.children:
@@ -1205,7 +1234,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         # No need to remove unchanged nodes; they are already in new_children
         if len(new_children) == 0:
             return None
-        return Container(children=new_children, key=old.key, presence=old.presence, ns=old.ns, module=old.module)
+        return Container(children=new_children, presence=old.presence, ns=old.ns, module=old.module)
 
     elif isinstance(old, List) and isinstance(p, List):
         if old.keys != p.keys:
@@ -1213,7 +1242,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
         old_map = {}
         for e in old.elements:
-            k = e.key_str()
+            k = e.key_str(old.keys)
             old_map[k] = e
 
         # Apply patch elements
@@ -1221,12 +1250,12 @@ def patch(old: Node, p: ?Node) -> ?Node:
         for pelem in patch_elems:
             if isinstance(pelem, Absent):
                 # Remove this element if it exists
-                k = pelem.key_str()
+                k = pelem.key_str(p.keys)
                 if k in old_map:
                     del old_map[k]
             else:
                 # pelem is a ListElement
-                k = pelem.key_str()
+                k = pelem.key_str(p.keys)
                 if k in old_map:
                     # Patch existing element
                     res = patch(old_map[k], pelem)
@@ -1244,7 +1273,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         final_key_order = []
         chosen = {}
         for e in old.elements:
-            k = e.key_str()
+            k = e.key_str(old.keys)
             if k in old_map:
                 final_key_order.append(k)
                 chosen[k] = True
@@ -1254,7 +1283,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         for pelem in patch_elems:
             if isinstance(pelem, Absent):
                 continue
-            k = pelem.key_str()
+            k = pelem.key_str(p.keys)
             if k in old_map and k not in chosen:
                 final_key_order.append(k)
                 chosen[k] = True
@@ -1279,8 +1308,6 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
     elif isinstance(old, Absent) and isinstance(p, Absent):
         # Both absent means node was removed
-        if old.key != p.key:
-            raise ValueError("Absent keys differ in patch: %s vs %s" % (str(old.key), str(p.key)))
         return None
 
     else:
@@ -1764,12 +1791,14 @@ def _test_merge1():
         "a": Leaf("int", 1),
         "l1": List(["name"], [
             Container({
+                "name": Leaf("str", "k1"),
                 "n1": Leaf("int", 1),
                 "n2": Leaf("int", 2)
-            }, ["k1"]),
+            }),
             Container({
+                "name": Leaf("str", "k4"),
                 "n4": Leaf("int", 4),
-            }, ["k4"]),
+            }),
         ])
     }, ns="http://example.com/acme", module="acme")
 
@@ -1778,9 +1807,10 @@ def _test_merge1():
         "c": Leaf("int", 3),
         "l1": List(["name"], [
             Container({
+                "name": Leaf("str", "k2"),
                 "n1": Leaf("int", 1),
                 "n3": Leaf("int", 3)
-            }, ["k2"]),
+            }),
         ]),
         "d": LeafList("str", ["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
@@ -1793,16 +1823,19 @@ def _test_merge1():
         "c": Leaf("int", 3),
         "l1": List(["name"], [
             Container({
+                "name": Leaf("str", "k1"),
                 "n1": Leaf("int", 1),
                 "n2": Leaf("int", 2)
-            }, ["k1"]),
+            }),
             Container({
+                "name": Leaf("str", "k2"),
                 "n1": Leaf("int", 1),
                 "n3": Leaf("int", 3)
-            }, ["k2"]),
+            }),
             Container({
+                "name": Leaf("str", "k4"),
                 "n4": Leaf("int", 4),
-            }, ["k4"]),
+            }),
         ]),
         "d": LeafList("str", ["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
@@ -1812,59 +1845,78 @@ def _test_merge1():
 def _test_merge_list1():
     y1 = List(["name"], [
         Container({
+            "name": Leaf("str", "first"),
             "n1": Leaf("int", 1)
-        }, ["first"]),
+        }),
         Container({
+            "name": Leaf("str", "breaker"),
             "n1": Leaf("int", 1)
-        }, ["breaker"]),
+        }),
         Container({
+            "name": Leaf("str", "fourth"),
             "n1": Leaf("int", 1)
-        }, ["fourth"]),
+        }),
         Container({
+            "name": Leaf("str", "common"),
             "n2": Leaf("int", 2)
-        }, ["common"]),
+        }),
         Container({
+            "name": Leaf("str", "last"),
             "n1": Leaf("int", 1)
-        }, ["last"]),
+        }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
     y2 = List(["name"], [
-        Container({}, ["breaker"]),
         Container({
-            "n1": Leaf("int", 1)
-        }, ["second"]),
+            "name": Leaf("str", "breaker")
+        }),
         Container({
+            "name": Leaf("str", "second"),
             "n1": Leaf("int", 1)
-        }, ["third"]),
+        }),
         Container({
+            "name": Leaf("str", "third"),
             "n1": Leaf("int", 1)
-        }, ["common"]),
-        Container({}, ["last"])
+        }),
+        Container({
+            "name": Leaf("str", "common"),
+            "n1": Leaf("int", 1)
+        }),
+        Container({
+            "name": Leaf("str", "last")
+        })
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
     exp = List(["name"], [
         Container({
+            "name": Leaf("str", "first"),
             "n1": Leaf("int", 1)
-        }, ["first"]),
+        }),
         Container({
+            "name": Leaf("str", "breaker"),
             "n1": Leaf("int", 1)
-        }, ["breaker"]),
+        }),
         Container({
+            "name": Leaf("str", "fourth"),
             "n1": Leaf("int", 1)
-        }, ["fourth"]),
+        }),
         Container({
+            "name": Leaf("str", "common"),
             "n2": Leaf("int", 2),
             "n1": Leaf("int", 1)
-        }, ["common"]),
+        }),
         Container({
+            "name": Leaf("str", "last"),
             "n1": Leaf("int", 1)
-        }, ["last"]),
+        }),
         Container({
+            "name": Leaf("str", "second"),
             "n1": Leaf("int", 1)
-        }, ["second"]),
+        }),
         Container({
+            "name": Leaf("str", "third"),
             "n1": Leaf("int", 1)
-        }, ["third"]),
+        }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(exp, merge(y1, y2))
@@ -1872,19 +1924,23 @@ def _test_merge_list1():
 def _test_eq_list():
     l1 = List(["name"], [
         Container({
+            "name": Leaf("str", "a"),
             "x": Leaf("int", 1)
-        }, ["a"]),
+        }),
         Container({
+            "name": Leaf("str", "b"),
             "x": Leaf("int", 2)
-        }, ["b"])
+        })
     ])
     l2 = List(["name"], [
         Container({
+            "name": Leaf("str", "b"),
             "x": Leaf("int", 2)
-        }, ["b"]),
+        }),
         Container({
+            "name": Leaf("str", "a"),
             "x": Leaf("int", 1)
-        }, ["a"])
+        })
     ])
     testing.assertEqual(l1, l1)
     testing.assertEqual(l1, l2)
@@ -1893,18 +1949,18 @@ def _test_eq_list_user_order():
     l1 = List(["name"], user_order=True, elements=[
         Container({
             "x": Leaf("int", 1)
-        }, ["a"]),
+        }),
         Container({
             "x": Leaf("int", 2)
-        }, ["b"])
+        })
     ])
     l2 = List(["name"], user_order=True, elements=[
         Container({
             "x": Leaf("int", 2)
-        }, ["b"]),
+        }),
         Container({
             "x": Leaf("int", 1)
-        }, ["a"])
+        })
     ])
     testing.assertEqual(l1, l1)
     testing.assertNotEqual(l1, l2)
@@ -1985,30 +2041,35 @@ def _test_diff_node_removal():
     testing.assertEqual(d, exp)
 
 def _test_diff_elem_removal():
-    """A list element k1 is removed from old to new. We expect an Absent(["k1"])
+    """A list element k1 is removed from old to new. We expect an Absent("k1")
     node in the diff at the place where k1 was.
     """
     old = List(["name"], [
         Container({
+            "name": Leaf("str", "k1"),
             "n1": Leaf("int", 1),
-            "n2": Leaf("int", 2)
-        }, ["k1"]),
+            "n2": Leaf("int", 2),
+        }),
         Container({
+            "name": Leaf("str", "k4"),
             "n4": Leaf("int", 4),
-        }, ["k4"]),
+        }),
     ], ns="http://example.com/acme", module="acme")
 
     new = List(["name"], [
         Container({
+            "name": Leaf("str", "k4"),
             "n4": Leaf("int", 4),
-        }, ["k4"]),
+        }),
     ], ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # k1 is removed
     exp = List(["name"], [
-        Absent(["k1"]),
+        Absent({
+            "name": Leaf("str", "k1")
+        })
     ], ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2135,25 +2196,30 @@ def _test_patch_node_removal():
 def _test_patch_elem_removal():
     old = List(["name"], [
         Container({
+            "name": Leaf("str", "k1"),
             "n1": Leaf("int", 1),
             "n2": Leaf("int", 2)
-        }, ["k1"]),
+        }),
         Container({
+            "name": Leaf("str", "k4"),
             "n4": Leaf("int", 4),
-        }, ["k4"]),
+        }),
     ], ns="http://example.com/acme", module="acme")
 
     # Suppose we remove 'k1'
     # patch would be:
     p = List(["name"], [
-        Absent(["k1"]),
+        Absent({
+            "name": Leaf("str", "k1")
+        })
     ], ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = List(["name"], [
         Container({
+            "name": Leaf("str", "k4"),
             "n4": Leaf("int", 4),
-        }, ["k4"]),
+        }),
     ], ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
@@ -2162,9 +2228,11 @@ def _test_patch_elem_removal2():
     old = Container({
         "n1": Leaf("int", 1),
         "n2": Leaf("int", 2)
-    }, ["k1"])
+    })
 
-    p = Absent(["k1"])
+    p = Absent({
+        "name": Leaf("str", "k1")
+    })
 
     res = patch(old, p)
 
@@ -2241,13 +2309,15 @@ def _test_diff_and_patch_large_tree():
                 }),
                 "interfaces": List(["name"], elements=[
                     Container({
+                        "name": Leaf("str", "eth0"),
                         "desc": Leaf("str", "Uplink interface"),
                         "enabled": Leaf("bool", True)
-                    }, ["eth0"]),
+                    }),
                     Container({
+                        "name": Leaf("str", "eth1"),
                         "desc": Leaf("str", "Internal interface"),
                         "enabled": Leaf("bool", True)
-                    }, ["eth1"]),
+                    }),
                 ])
             }, ns="http://example.com/yang/mod1", module="mod1")
         }),
@@ -2255,15 +2325,17 @@ def _test_diff_and_patch_large_tree():
             "acl": Container(children={
                 "rules": List(["id"], elements=[
                     Container({
+                        "id": Leaf("int", 10),
                         "action": Leaf("str", "permit"),
                         "src": Leaf("str", "10.0.0.0/24"),
                         "dst": Leaf("str", "10.0.1.0/24"),
-                    }, ["10"]),
+                    }),
                     Container({
+                        "id": Leaf("int", 20),
                         "action": Leaf("str", "deny"),
                         "src": Leaf("str", "any"),
                         "dst": Leaf("str", "any"),
-                    }, ["20"]),
+                    }),
                 ])
             }, ns="http://example.com/yang/mod2", module="mod2")
         }),
@@ -2288,14 +2360,16 @@ def _test_diff_and_patch_large_tree():
                 }),
                 "interfaces": List(["name"], elements=[
                     Container({
+                        "name": Leaf("str", "eth0"),
                         "desc": Leaf("str", "Uplink interface"),
                         "enabled": Leaf("bool", True)
-                    }, ["eth0"]),
+                    }),
                     # eth1 removed
                     Container({
+                        "name": Leaf("str", "eth2"),
                         "desc": Leaf("str", "DMZ interface"),
                         "enabled": Leaf("bool", False)
-                    }, ["eth2"]),
+                    }),
                 ])
             }, ns="http://example.com/yang/mod1", module="mod1")
         }),
@@ -2303,27 +2377,35 @@ def _test_diff_and_patch_large_tree():
             "acl": Container(children={
                 "rules": List(["id"], elements=[
                     Container({
+                        "id": Leaf("int", 10),
                         "action": Leaf("str", "permit"),
                         "src": Leaf("str", "10.0.0.0/24"),
                         "dst": Leaf("str", "10.0.1.0/24"),
-                    }, ["10"]),
+                    }),
                     Container({
+                        "id": Leaf("int", 20),
                         "action": Leaf("str", "drop"),  # changed from deny
                         "src": Leaf("str", "any"),
                         "dst": Leaf("str", "any"),
-                    }, ["20"]),
+                    }),
                     Container({
+                        "id": Leaf("int", 30),
                         "action": Leaf("str", "permit"),
                         "src": Leaf("str", "192.0.2.0/24"),
                         "dst": Leaf("str", "198.51.100.0/24"),
-                    }, ["30"]),
+                    }),
                 ])
             }, ns="http://example.com/yang/mod2", module="mod2")
         })
     })
 
     # Compute diff
+    print("Old: ", old.prsrc())
     d = diff(old, new)
+    if d is not None:
+        print("Diff result: ", d.prsrc())
+    else:
+        print("Diff result: None")
 
     # Check that patching old with d results in new
     res = patch(old, d)
@@ -2342,12 +2424,14 @@ def _test_prsrc():
             "a": Leaf("int", 1),
             "l1": List(["name"], [
                 Container({
+                    "name": Leaf("str", "k1"),
                     "n1": Leaf("int", 1),
                     "n2": Leaf("int", 2)
-                }, ["k1"]),
+                }),
                 Container({
+                    "name": Leaf("str", "k4"),
                     "n4": Leaf("int", 4),
-                }, ["k4"]),
+                }),
             ])
         }, ns="http://example.com/acme", module="acme")
     })
@@ -2359,10 +2443,13 @@ def _test_prsrc_absent():
         "foo": Container({
             "a": Absent(),
             "l1": List(["name"], [
-                Absent(["k1"]),
+                Absent({
+                    "name": Leaf("str", "k1")
+                }),
                 Container({
+                    "name": Leaf("str", "k4"),
                     "n4": Leaf("int", 4),
-                }, ["k4"]),
+                }),
             ])
         }, ns="http://example.com/acme", module="acme")
     })
@@ -2397,10 +2484,10 @@ def _test_to_json():
                 Container({
                     "n1": Leaf("int", 1),
                     "n2": Leaf("int", 2)
-                }, ["k1", "k1a"]),
+                }),
                 Container({
                     "n4": Leaf("int", 4),
-                }, ["k4", "k4a"]),
+                }),
             ]),
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
@@ -2430,10 +2517,10 @@ def _test_to_xmlstr():
                 Container({
                     "n1": Leaf("int", 1),
                     "n2": Leaf("int", 2)
-                }, ["k1", "k1a"]),
+                }),
                 Container({
                     "n4": Leaf("int", 4),
-                }, ["k4", "k4a"]),
+                }),
             ]),
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
@@ -2486,14 +2573,14 @@ def _test_to_xmlstr_mixed():
                         "system-network-name": Leaf("str", "dev1")
                     }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
                 }),
-            }, ["dev1"]),
+            }),
             Container({
                 "config": Container({
                     "hostname": Container({
                         "system-network-name": Leaf("str", "dev2")
                     }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
                 }),
-            }, ["dev2"]),
+            }),
         ], ns="http://orchestron.org/yang/orchestron-device.yang")
     })
 
