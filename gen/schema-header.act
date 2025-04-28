@@ -492,11 +492,9 @@ class DNodeInner(DNode):
                     res.append(f"            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
 
         if isinstance(self, DList):
-            # keys contains a yang spec of the keys, like "k1 k2"
-            # which are modeled as attributes of the list entry class and accessed via self.k1, self.k2
-            list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(self.{x})", us_list_key()))
-            # No namespace qualifiers for the list entry "container" node - it is the same as the parent list node
-            res.append(f"        return yang.gdata.Container(children, [{list_keys_str}])")
+            # List element is a Container, but it needs no namespace qualifiers
+            # because it must belong to the same module as the list
+            res.append("        return yang.gdata.Container(children)")
         elif isinstance(self, DRoot):
             # No namespace qualifiers for the artifical root node
             res.append(f"        return yang.gdata.{self.gname}(children)")
@@ -656,10 +654,9 @@ class DNodeInner(DNode):
                 res.append(f"    yang.gdata.maybe_add(children, '{uname(child)}', from_xml_{pname(child)}, child_{usname(child)})")
 
             if isinstance(self, DList):
-                # Collect keys leaf values in a list of strings by using the
-                # non-optional local variables defined above.
-                list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(child_{x})", us_list_key()))
-                res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
+                # List element is a Container, but it needs no namespace qualifiers
+                # because it must belong to the same module as the list
+                res.append("    return yang.gdata.Container(children)")
             elif isinstance(self, DContainer) and self.presence:
                 res.append(f"    return yang.gdata.{self.gname}(children, presence=True{gdata_nsq})")
             else:
@@ -696,7 +693,7 @@ class DNodeInner(DNode):
                 res += ["        if op == \"merge\":"]
                 res += ["            return val"]
                 res += ["        elif op == \"remove\":"]
-                res += [f"            return yang.gdata.Absent(val.key)"]
+                res += [f"            return yang.gdata.Absent(val.key_children({repr(self.key)}))"]
                 res += ["        raise ValueError(\"Invalid operation\")"]
                 res += ["    elif len(path) > 1:"]
                 res += ["        keys = path[0].split(\",\")"]
@@ -716,7 +713,7 @@ class DNodeInner(DNode):
                             res += [f"            children['{uname(child)}'] = from_json_path_{pname(child)}(jd, rest_path, op)"]
                         else:
                             res += ["            raise ValueError(\"Invalid json path to non-inner node\")"]
-                res += [f"        return yang.gdata.Container(children, keys)"]
+                res += [f"        return yang.gdata.Container(children)"]
                 res += ["    raise ValueError(\"unreachable - no keys to list element\")"]
                 res += [""]
 
@@ -740,7 +737,7 @@ class DNodeInner(DNode):
                 res.append("        if op == \"merge\":")
                 res.append("            elements.append(element)")
                 res.append("        elif op == \"remove\":")
-                res.append("            elements.append(yang.gdata.Absent(element.key))")
+                res.append(f"            elements.append(yang.gdata.Absent(element.key_children({repr(self.key)})))")
                 res.append(f"        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)}{gdata_nsq})")
                 res.append("    elif len(path) > 1:")
                 res.append(f"        return yang.gdata.List({repr(self.key)}, [from_json_path_{pname(self)}_element(jd, path, op)]{maybe_user_order(self)}{gdata_nsq})")
@@ -794,10 +791,9 @@ class DNodeInner(DNode):
                 res.append(f"    yang.gdata.maybe_add(children, '{uname(child)}', from_json_{pname(child)}, child_{usname(child)})")
 
             if isinstance(self, DList):
-                # Collect keys leaf values in a list of strings by using the
-                # non-optional local variables defined above.
-                list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(child_{x})", us_list_key()))
-                res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
+                # List element is a Container, but it needs no namespace qualifiers
+                # because it must belong to the same module as the list
+                res.append("    return yang.gdata.Container(children)")
             elif isinstance(self, DContainer) and self.presence:
                 res.append(f"    return yang.gdata.{self.gname}(children, presence=True{gdata_nsq})")
             else:
