@@ -1,4 +1,5 @@
 
+import file
 import testing
 import json
 import xml
@@ -84,9 +85,8 @@ def _test_mandatory2():
 #     }
 # }
 
-def _test_foo_from_xml_full():
-    # TODO: add <l_empty/>
-    xml_text = """<data>
+# TODO: add <l_empty/>
+xml_text_full = """<data>
 <c1 xmlns="http://example.com/foo">
   <l1>foo-foo</l1>
   <l3>18446744073709551615</l3>
@@ -120,9 +120,9 @@ def _test_foo_from_xml_full():
 </cc>
 <conflict xmlns="http://example.com/foo">
   <foo>foo-foo</foo>
-  <inner></inner>
+  <inner/>
   <foo xmlns="http://example.com/bar">foo-augmented-from-bar</foo>
-  <inner xmlns="http://example.com/bar"></inner>
+  <inner xmlns="http://example.com/bar"/>
 </conflict>
 <special xmlns="http://example.com/foo">
   <yes>true</yes>
@@ -149,7 +149,9 @@ def _test_foo_from_xml_full():
   <foo>foo-bar</foo>
 </conflict>
 </data>"""
-    xml_in = xml.decode(xml_text)
+
+def _test_foo_from_xml_full():
+    xml_in = xml.decode(xml_text_full)
     d = yang_foo_root.from_xml(xml_in)
     g = d.to_gdata()
     print(g.prsrc(), err=True)
@@ -157,6 +159,16 @@ def _test_foo_from_xml_full():
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
     return d.to_gdata().prsrc()
+
+def _test_gdata_source_roundtrip_xml_full(t: testing.EnvT):
+    wfcap = file.WriteFileCap(file.FileCap(t.env.cap))
+    xml_in = xml.decode(xml_text_full)
+    d = yang_foo_root.from_xml(xml_in)
+    g = d.to_gdata()
+    wf = file.WriteFile(wfcap, "../test_gdata_source_roundtrip/src/xml_full.act")
+    await async wf.write(f"from yang.gdata import *\n\nxml_full = {g.prsrc()}".encode())
+    await async wf.close()
+    t.success()
 
 def _test_foo_from_xml1():
     """"""
