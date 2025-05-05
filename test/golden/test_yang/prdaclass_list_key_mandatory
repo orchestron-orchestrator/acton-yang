@@ -1,6 +1,9 @@
 mut def from_json_foo__l1__name(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
+mut def from_xml_foo__l1__name(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
 class foo__l1_entry(yang.adata.MNode):
     name: str
 
@@ -66,6 +69,18 @@ class foo__l1(yang.adata.MNode):
             res.append(foo__l1_entry.from_xml(node))
         return res
 
+
+mut def from_xml_foo__l1_element(node: xml.Node) -> yang.gdata.Node:
+    children = {}
+    child_name = yang.gdata.from_xml_str(node, 'name')
+    yang.gdata.maybe_add(children, 'name', from_xml_foo__l1__name, child_name)
+    return yang.gdata.Container(children, [yang.gdata.yang_str(child_name)])
+
+mut def from_xml_foo__l1(nodes: list[xml.Node]) -> yang.gdata.List:
+    elements = []
+    for e in nodes:
+        elements.append(from_xml_foo__l1_element(e))
+    return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
 
 mut def from_json_path_foo__l1_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     if len(path) == 1:

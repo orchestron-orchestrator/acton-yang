@@ -10,6 +10,9 @@ import yang.gdata
 mut def from_json_foo__c1__l1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
+mut def from_xml_foo__c1__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
 class foo__c1(yang.adata.MNode):
     l1: ?str
 
@@ -37,6 +40,12 @@ class foo__c1(yang.adata.MNode):
         return foo__c1()
 
 
+mut def from_xml_foo__c1(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l1 = yang.gdata.from_xml_opt_str(node, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_xml_foo__c1__l1, child_l1)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+
 mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
@@ -60,6 +69,9 @@ mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 mut def from_json_foo__pc1__foo__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__pc1__foo__l1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
 class foo__pc1__foo(yang.adata.MNode):
@@ -88,6 +100,12 @@ class foo__pc1__foo(yang.adata.MNode):
             return foo__pc1__foo(l1=yang.gdata.from_xml_opt_str(n, 'l1'))
         return foo__pc1__foo()
 
+
+mut def from_xml_foo__pc1__foo(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l1 = yang.gdata.from_xml_opt_str(node, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_xml_foo__pc1__foo__l1, child_l1)
+    return yang.gdata.Container(children)
 
 mut def from_json_path_foo__pc1__foo(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
@@ -137,6 +155,12 @@ class foo__pc1(yang.adata.MNode):
             return foo__pc1(foo=foo__pc1__foo.from_xml(yang.gdata.get_xml_opt_child(n, 'foo')))
         return None
 
+
+mut def from_xml_foo__pc1(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_foo = yang.gdata.from_xml_opt_cnt(node, 'foo')
+    yang.gdata.maybe_add(children, 'foo', from_xml_foo__pc1__foo, child_foo)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 mut def from_json_path_foo__pc1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
@@ -197,6 +221,14 @@ class root(yang.adata.MNode):
             return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, 'c1', 'http://example.com/foo')), pc1=foo__pc1.from_xml(yang.gdata.get_xml_opt_child(n, 'pc1', 'http://example.com/foo')))
         return root()
 
+
+mut def from_xml(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_c1 = yang.gdata.from_xml_opt_cnt(node, 'c1', 'http://example.com/foo')
+    yang.gdata.maybe_add(children, 'c1', from_xml_foo__c1, child_c1)
+    child_pc1 = yang.gdata.from_xml_opt_cnt(node, 'pc1', 'http://example.com/foo')
+    yang.gdata.maybe_add(children, 'pc1', from_xml_foo__pc1, child_pc1)
+    return yang.gdata.Container(children)
 
 mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling

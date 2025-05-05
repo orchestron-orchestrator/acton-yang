@@ -10,6 +10,9 @@ import yang.gdata
 mut def from_json_foo__l1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('union', val, ns='http://example.com/foo', module='foo')
 
+mut def from_xml_foo__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('union', val, ns='http://example.com/foo', module='foo')
+
 class root(yang.adata.MNode):
     l1: value
 
@@ -36,6 +39,12 @@ class root(yang.adata.MNode):
             return root(l1=yang.gdata.from_xml_opt_value(n, 'l1', 'http://example.com/foo'))
         return root()
 
+
+mut def from_xml(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l1 = yang.gdata.from_xml_opt_value(node, 'l1', 'http://example.com/foo')
+    yang.gdata.maybe_add(children, 'l1', from_xml_foo__l1, child_l1)
+    return yang.gdata.Container(children)
 
 mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling

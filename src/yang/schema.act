@@ -668,6 +668,44 @@ class DNodeInner(DNode):
             res.append("")
         res.append("")
 
+        # == XML serde ================================
+
+        # from_xml(): from XML -> gdata
+        if gen_xml and isinstance(self, DNodeInner):
+            fname = "from_xml"
+            if not top:
+                fname += "_" + pname(self)
+
+            if isinstance(self, DList):
+                res.append(f"mut def {fname}_element(node: xml.Node) -> yang.gdata.Node:")
+            else:
+                res.append(f"mut def {fname}(node: xml.Node) -> yang.gdata.{self.gname}:")
+
+            res.append("    children = {}")
+            for child in self.children:
+                maybe_ns = f", '{child.namespace}'" if child.namespace != self.namespace else ""
+                # TODO: no need for local variables when we switch from the
+                # gdata.Container.key attribute to key_str() method
+                res.append(f"    child_{usname(child)} = yang.gdata.from_xml_{taker_name(child, loose=loose)}(node, '{child.name}'{maybe_ns})")
+                res.append(f"    yang.gdata.maybe_add(children, '{uname(child)}', from_xml_{pname(child)}, child_{usname(child)})")
+
+            if isinstance(self, DList):
+                # Collect keys leaf values in a list of strings by using the
+                # non-optional local variables defined above.
+                list_keys_str = ", ".join(map(lambda x: f"yang.gdata.yang_str(child_{x})", us_list_key()))
+                res.append(f"    return yang.gdata.Container(children, [{list_keys_str}])")
+            else:
+                res.append(f"    return yang.gdata.{self.gname}(children{gdata_nsq})")
+            res.append("")
+
+        if gen_xml and isinstance(self, DList):
+            res.append(f"mut def from_xml_{pname(self)}(nodes: list[xml.Node]) -> yang.gdata.List:")
+            res.append(f"    elements = []")
+            res.append(f"    for e in nodes:")
+            res.append(f"        elements.append(from_xml_{pname(self)}_element(e))")
+            res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
+            res.append("")
+
         # == JSON serde ================================
 
         # from_json(): from JSON -> gdata
@@ -1041,6 +1079,10 @@ class DLeaf(DNodeLeaf):
                 res.append(f"        return yang.gdata.Leaf('{self.type_.name}', int(val){gdata_nsq})")
             res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
+        if gen_xml:
+            res.append(f"mut def from_xml_{pname(self)}(val: value) -> yang.gdata.Leaf:")
+            res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
+            res.append("")
         return "\n".join(res)
 
 
@@ -1097,6 +1139,10 @@ class DLeafList(DNodeLeaf):
                 res.append(f"    return yang.gdata.LeafList('{self.type_.name}', int_vals{maybe_user_order}{gdata_nsq})")
             else:
                 res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
+            res.append("")
+        if gen_xml:
+            res.append(f"mut def from_xml_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
+            res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
         return "\n".join(res)
 

@@ -10,6 +10,9 @@ import yang.gdata
 mut def from_json_foo__ieee_802_3__ieee_802_3(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
+mut def from_xml_foo__ieee_802_3__ieee_802_3(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
 class foo__ieee_802_3(yang.adata.MNode):
     ieee_802_3: ?str
 
@@ -36,6 +39,12 @@ class foo__ieee_802_3(yang.adata.MNode):
             return foo__ieee_802_3(ieee_802_3=yang.gdata.from_xml_opt_str(n, 'ieee-802.3'))
         return foo__ieee_802_3()
 
+
+mut def from_xml_foo__ieee_802_3(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_ieee_802_3 = yang.gdata.from_xml_opt_str(node, 'ieee-802.3')
+    yang.gdata.maybe_add(children, 'ieee-802.3', from_xml_foo__ieee_802_3__ieee_802_3, child_ieee_802_3)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 mut def from_json_path_foo__ieee_802_3(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
@@ -85,6 +94,12 @@ class root(yang.adata.MNode):
             return root(ieee_802_3=foo__ieee_802_3.from_xml(yang.gdata.get_xml_opt_child(n, 'ieee-802.3', 'http://example.com/foo')))
         return root()
 
+
+mut def from_xml(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_ieee_802_3 = yang.gdata.from_xml_opt_cnt(node, 'ieee-802.3', 'http://example.com/foo')
+    yang.gdata.maybe_add(children, 'ieee-802.3', from_xml_foo__ieee_802_3, child_ieee_802_3)
+    return yang.gdata.Container(children)
 
 mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling

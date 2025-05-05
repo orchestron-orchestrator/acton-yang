@@ -1324,6 +1324,21 @@ def get_xml_children(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
             res.append(child)
     return res
 
+def from_xml_opt_list(n: xml.Node, name: str, ns: ?str) -> ?list[xml.Node]:
+    return get_xml_children(n, name, ns)
+
+def from_xml_list(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
+    r = from_xml_opt_list(n, name, ns)
+    if r is not None:
+        return r
+    raise ValueError("Cannot find xml child with name " + name)
+
+def from_xml_opt_cnt(n: xml.Node, name: str, ns: ?str) -> ?xml.Node:
+    return get_xml_opt_child(n, name, ns)
+
+def from_xml_cnt(n: xml.Node, name: str, ns: ?str) -> xml.Node:
+    return get_xml_child(n, name, ns)
+
 def from_xml_opt_bool(n: xml.Node, name: str, ns: ?str) -> ?bool:
     try:
         text = get_xml_child(n, name, ns).text
@@ -1410,6 +1425,12 @@ def from_xml_value(n: xml.Node, name: str, ns: ?str) -> value:
     raise ValueError("Cannot find xml child with name " + name)
 
 # plural
+def from_xml_strs(n: xml.Node, name: str, ns: ?str) -> list[str]:
+    r = from_xml_opt_strs(n, name, ns)
+    if r is not None:
+        return r
+    raise ValueError("Cannot find xml child with name " + name)
+
 def from_xml_opt_strs(n: xml.Node, name: str, ns: ?str) -> list[str]:
     res = []
     for child in get_xml_children(n, name, ns):
