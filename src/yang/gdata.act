@@ -191,7 +191,7 @@ def yang_str(v) -> str:
         s = s.lower()
     return s
 
-def json_val(yang_type: str, v: value) -> ?value:
+def json_val(yang_type: str, v: ?value) -> ?value:
     if isinstance(v, bytes):
         return base64.encode(v).decode()
     if yang_type == "int64" or yang_type == "uint64":
@@ -321,9 +321,8 @@ class Node(value):
                     for elem in child.elements if child.user_order else sorted(child.elements):
                         if isinstance(elem, Container):
                             elem_dict = {}
-                            for key_name in child.keys:
-                                key_leaf = elem.get_leaf(key_name)
-                                elem_dict[fmt_json_name(key_name)] = json_val(key_leaf.t, key_leaf.val)
+                            for k, v in dict(zip(child.keys, elem.key)).items():
+                                elem_dict[k] = v
                             elem_dict.update(elem.to_dict(pretty).items())
                             elems.append(elem_dict)
                         else:
@@ -374,10 +373,8 @@ class Node(value):
                 remove = isinstance(elem, Absent)
                 xml += _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op if remove else []) + _nl()
                 # Print key leafs first
-                for key_name in self.keys:
-                    key_leaf = elem.get_leaf(key_name)
-                    v = yang_str(key_leaf.val)
-                    xml += _indent(1) + fmt_tag(key_name) + v + fmt_tag(key_name, close=True) + _nl()
+                for key_idx, key_name in enumerate(self.keys):
+                    xml += _indent(1) + "<" + key_name + ">" + str(elem.key[key_idx]) + "</" + key_name + ">" + _nl()
                 for nm,child in elem.children.items():
                     if nm in self.keys or remove:
                         continue
@@ -2240,14 +2237,10 @@ def _test_to_json():
             "a": Leaf("int", 1),
             "l1": List(["name", "name_two"], [
                 Container({
-                    "name": Leaf("str", "k1"),
-                    "name_two": Leaf("str", "k1a"),
                     "n1": Leaf("int", 1),
                     "n2": Leaf("int", 2)
                 }, ["k1", "k1a"]),
                 Container({
-                    "name": Leaf("str", "k4"),
-                    "name_two": Leaf("str", "k4a"),
                     "n4": Leaf("int", 4),
                 }, ["k4", "k4a"]),
             ]),
@@ -2269,14 +2262,10 @@ def _test_to_xmlstr():
             "a": Leaf("int", 1),
             "l1": List(["name", "name_two"], [
                 Container({
-                    "name": Leaf("str", "k1"),
-                    "name_two": Leaf("str", "k1a"),
                     "n1": Leaf("int", 1),
                     "n2": Leaf("int", 2)
                 }, ["k1", "k1a"]),
                 Container({
-                    "name": Leaf("str", "k4"),
-                    "name_two": Leaf("str", "k4a"),
                     "n4": Leaf("int", 4),
                 }, ["k4", "k4a"]),
             ]),
@@ -2326,7 +2315,6 @@ def _test_to_xmlstr_mixed():
     y1 = Container({
         "device": List(["name"], [
             Container({
-                "name": Leaf("str", "dev1"),
                 "config": Container({
                     "hostname": Container({
                         "system-network-name": Leaf("str", "dev1")
@@ -2334,7 +2322,6 @@ def _test_to_xmlstr_mixed():
                 }),
             }, ["dev1"]),
             Container({
-                "name": Leaf("str", "dev2"),
                 "config": Container({
                     "hostname": Container({
                         "system-network-name": Leaf("str", "dev2")
