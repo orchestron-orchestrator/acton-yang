@@ -124,12 +124,10 @@ mut def from_json_path_foo__l1(jd: value, path: list[str]=[], op: ?str='merge') 
 
 mut def from_json_foo__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     children = {}
-    child_name = jd.get('name')
-    if child_name is not None:
-        children['name'] = from_json_foo__l1__name(child_name)
-    child_id = jd.get('id')
-    if child_id is not None:
-        children['id'] = from_json_foo__l1__id(child_id)
+    child_name = yang.gdata.take_json_str(jd, 'name')
+    yang.gdata.maybe_add(children, 'name', from_json_foo__l1__name, child_name)
+    child_id = yang.gdata.take_json_opt_str(jd, 'id')
+    yang.gdata.maybe_add(children, 'id', from_json_foo__l1__id, child_id)
     return yang.gdata.Container(children, [yang.gdata.yang_str(child_name)])
 
 mut def from_json_foo__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:

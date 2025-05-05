@@ -75,15 +75,12 @@ mut def from_json_path_foo__foo__bar(jd: value, path: list[str]=[], op: ?str='me
 
 mut def from_json_foo__foo__bar(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_foo_l1 = jd.get('l1')
-    if child_foo_l1 is not None:
-        children['foo:l1'] = from_json_foo__foo__bar__foo_l1(child_foo_l1)
-    child_bar_l1 = jd.get('bar:l1')
-    if child_bar_l1 is not None:
-        children['bar:l1'] = from_json_foo__foo__bar__bar_l1(child_bar_l1)
-    child_l2 = jd.get('bar:l2')
-    if child_l2 is not None:
-        children['l2'] = from_json_foo__foo__bar__l2(child_l2)
+    child_foo_l1 = yang.gdata.take_json_str(jd, 'l1')
+    yang.gdata.maybe_add(children, 'foo:l1', from_json_foo__foo__bar__foo_l1, child_foo_l1)
+    child_bar_l1 = yang.gdata.take_json_str(jd, 'l1', 'bar')
+    yang.gdata.maybe_add(children, 'bar:l1', from_json_foo__foo__bar__bar_l1, child_bar_l1)
+    child_l2 = yang.gdata.take_json_str(jd, 'l2', 'bar')
+    yang.gdata.maybe_add(children, 'l2', from_json_foo__foo__bar__l2, child_l2)
     return yang.gdata.Container(children)
 
 class foo__foo(yang.adata.MNode):
@@ -137,9 +134,8 @@ mut def from_json_path_foo__foo(jd: value, path: list[str]=[], op: ?str='merge')
 
 mut def from_json_foo__foo(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_bar = jd.get('bar')
-    if child_bar is not None and isinstance(child_bar, dict):
-        children['bar'] = from_json_foo__foo__bar(child_bar)
+    child_bar = yang.gdata.take_json_opt_cnt(jd, 'bar')
+    yang.gdata.maybe_add(children, 'bar', from_json_foo__foo__bar, child_bar)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 class root(yang.adata.MNode):
@@ -193,9 +189,8 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.
 
 mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_foo = jd.get('foo:foo')
-    if child_foo is not None and isinstance(child_foo, dict):
-        children['foo'] = from_json_foo__foo(child_foo)
+    child_foo = yang.gdata.take_json_opt_cnt(jd, 'foo', 'foo')
+    yang.gdata.maybe_add(children, 'foo', from_json_foo__foo, child_foo)
     return yang.gdata.Container(children)
 
 schema_namespaces: set[str] = {

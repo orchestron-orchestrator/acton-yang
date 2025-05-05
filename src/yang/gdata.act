@@ -1451,9 +1451,9 @@ def from_xml_opt_ints(n: xml.Node, name: str, ns: ?str) -> list[int]:
 #def from_xml_u16(n: xml.Node, name: str) -> u16:
 #    return u16(get_xml_child_text(n, name))
 
-def maybe_add(target: dict[str, value], key: str, val: ?value) -> None:
+mut def maybe_add[T](target: dict[str, Node], key: str, taker: mut(T) -> Node, val: ?T) -> None:
     if val is not None:
-        target[key] = val
+        target[key] = taker(val)
 
 def take_json_opt_value(jd: dict[str, ?value], name: str, module: ?str=None) -> ?value:
     full_name = f"{module}:{name}" if module is not None else name
@@ -1465,7 +1465,7 @@ def take_json_value(jd: dict[str, ?value], name: str, module: ?str=None) -> valu
         return val
     raise ValueError("Cannot find json child with name " + name)
 
-def take_json_opt_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> ?dict[str, value]:
+def take_json_opt_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> ?dict[str, ?value]:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         try:
@@ -1474,13 +1474,13 @@ def take_json_opt_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> ?d
             raise ValueError("Expected a dictionary for " + name)
     return None
 
-def take_json_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> dict[str, value]:
+def take_json_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> dict[str, ?value]:
     val = take_json_opt_cnt(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json child with name " + name)
 
-def take_json_opt_list(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[dict[str, value]]:
+def take_json_opt_list(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[dict[str, ?value]]:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         try:
@@ -1489,7 +1489,7 @@ def take_json_opt_list(jd: dict[str, ?value], name: str, module: ?str=None) -> ?
             raise ValueError("Expected a list for " + name)
     return None
 
-def take_json_list(jd: dict[str, ?value], name: str, module: ?str=None) -> list[dict[str, value]]:
+def take_json_list(jd: dict[str, ?value], name: str, module: ?str=None) -> list[dict[str, ?value]]:
     val = take_json_opt_list(jd, name, module)
     if val is not None:
         return val

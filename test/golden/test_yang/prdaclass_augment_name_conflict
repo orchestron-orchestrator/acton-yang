@@ -56,10 +56,8 @@ mut def from_json_path_base__c1(jd: value, path: list[str]=[], op: ?str='merge')
 
 mut def from_json_base__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_bar_foo = jd.get('bar:foo')
-    if child_bar_foo is not None:
-        children['bar:foo'] = from_json_base__c1__bar_foo(child_bar_foo)
-    child_foo_foo = jd.get('foo:foo')
-    if child_foo_foo is not None:
-        children['foo:foo'] = from_json_base__c1__foo_foo(child_foo_foo)
+    child_bar_foo = yang.gdata.take_json_opt_str(jd, 'foo', 'bar')
+    yang.gdata.maybe_add(children, 'bar:foo', from_json_base__c1__bar_foo, child_bar_foo)
+    child_foo_foo = yang.gdata.take_json_opt_str(jd, 'foo', 'foo')
+    yang.gdata.maybe_add(children, 'foo:foo', from_json_base__c1__foo_foo, child_foo_foo)
     return yang.gdata.Container(children, ns='http://example.com/base', module='base')

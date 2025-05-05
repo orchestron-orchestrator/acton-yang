@@ -133,12 +133,10 @@ mut def from_json_path_foo__c1__things(jd: value, path: list[str]=[], op: ?str='
 
 mut def from_json_foo__c1__things_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     children = {}
-    child_name = jd.get('name')
-    if child_name is not None:
-        children['name'] = from_json_foo__c1__things__name(child_name)
-    child_id = jd.get('id')
-    if child_id is not None:
-        children['id'] = from_json_foo__c1__things__id(child_id)
+    child_name = yang.gdata.take_json_str(jd, 'name')
+    yang.gdata.maybe_add(children, 'name', from_json_foo__c1__things__name, child_name)
+    child_id = yang.gdata.take_json_opt_str(jd, 'id')
+    yang.gdata.maybe_add(children, 'id', from_json_foo__c1__things__id, child_id)
     return yang.gdata.Container(children, [yang.gdata.yang_str(child_name)])
 
 mut def from_json_foo__c1__things(jd: list[dict[str, ?value]]) -> yang.gdata.List:
@@ -194,9 +192,8 @@ mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') 
 
 mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_things = jd.get('things')
-    if child_things is not None and isinstance(child_things, list):
-        children['things'] = from_json_foo__c1__things(child_things)
+    child_things = yang.gdata.take_json_opt_list(jd, 'things')
+    yang.gdata.maybe_add(children, 'things', from_json_foo__c1__things, child_things)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 class root(yang.adata.MNode):
@@ -245,9 +242,8 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.
 
 mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_c1 = jd.get('foo:c1')
-    if child_c1 is not None and isinstance(child_c1, dict):
-        children['c1'] = from_json_foo__c1(child_c1)
+    child_c1 = yang.gdata.take_json_opt_cnt(jd, 'c1', 'foo')
+    yang.gdata.maybe_add(children, 'c1', from_json_foo__c1, child_c1)
     return yang.gdata.Container(children)
 
 schema_namespaces: set[str] = {
