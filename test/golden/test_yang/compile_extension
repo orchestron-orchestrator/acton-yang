@@ -42,10 +42,6 @@ class foo__c1__things_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__things_entry:
         return foo__c1__things_entry(name=n.get_str('name'), id=n.get_opt_str('id'))
 
-    @staticmethod
-    mut def from_xml(n: xml.Node) -> foo__c1__things_entry:
-        return foo__c1__things_entry(name=yang.gdata.from_xml_str(n, 'name'), id=yang.gdata.from_xml_opt_str(n, 'id'))
-
 class foo__c1__things(yang.adata.MNode):
     elements: list[foo__c1__things_entry]
     mut def __init__(self, elements=[]):
@@ -80,13 +76,6 @@ class foo__c1__things(yang.adata.MNode):
         if n is not None:
             for e in n.elements:
                 res.append(foo__c1__things_entry.from_gdata(e))
-        return res
-
-    @staticmethod
-    mut def from_xml(nodes: list[xml.Node]) -> list[foo__c1__things_entry]:
-        res = []
-        for node in nodes:
-            res.append(foo__c1__things_entry.from_xml(node))
         return res
 
 
@@ -186,12 +175,6 @@ class foo__c1(yang.adata.MNode):
             return foo__c1(things=foo__c1__things.from_gdata(n.get_opt_list('things')))
         return foo__c1()
 
-    @staticmethod
-    mut def from_xml(n: ?xml.Node) -> foo__c1:
-        if n != None:
-            return foo__c1(things=foo__c1__things.from_xml(yang.gdata.get_xml_children(n, 'things')))
-        return foo__c1()
-
 
 mut def from_xml_foo__c1(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -240,12 +223,6 @@ class root(yang.adata.MNode):
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n != None:
             return root(c1=foo__c1.from_gdata(n.get_opt_container('c1')))
-        return root()
-
-    @staticmethod
-    mut def from_xml(n: ?xml.Node) -> root:
-        if n != None:
-            return root(c1=foo__c1.from_xml(yang.gdata.get_xml_opt_child(n, 'c1', 'http://example.com/foo')))
         return root()
 
 
