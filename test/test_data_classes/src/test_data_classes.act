@@ -363,8 +363,8 @@ def _test_empty_false():
     r.c1.l_empty = False
     return r.to_gdata().to_xmlstr()
 
-def _test_leaf_defaults():
-    r = yang_basics.root()
+
+def basics_leaf_defaults(r):
     testing.assertEqual(r.c.l_str_def, "foo")
     testing.assertEqual(r.c.l_uint64_def, 1234567890)
     testing.assertEqual(r.c.l_str_def_quoted, '"foo"')
@@ -397,38 +397,29 @@ def _test_leaf_defaults():
     else:
         raise ValueError("Expected str, got %s" % type(ude))
 
+def _test_leaf_defaults():
+    r = yang_basics.root()
+    basics_leaf_defaults(r)
+
 def _test_leaf_default_from_xml():
     xml_text = """<data><c xmlns="http://example.com/basics"/></data>"""
     xml_in = xml.decode(xml_text)
     r = yang_basics.root.from_xml(xml_in)
-    testing.assertEqual(r.c.l_str_def, "foo")
-    testing.assertEqual(r.c.l_str_def_quoted, '"foo"')
-    testing.assertEqual(r.c.l_uint64_def, 1234567890)
-    uds = r.c.l_union_def_str
-    if isinstance(uds, str):
-        testing.assertEqual(uds, "foo")
-    else:
-        raise ValueError("Expected str, got %s" % type(uds))
-    udi = r.c.l_union_def_int
-    if isinstance(udi, int):
-        testing.assertEqual(udi, 1234567890)
-    else:
-        raise ValueError("Expected int, got %s" % type(udi))
-    udf = r.c.l_union_def_float
-    if isinstance(udf, float):
-        testing.assertEqual(udf, 1.23)
-    else:
-        raise ValueError("Expected float, got %s" % type(udf))
-    udb = r.c.l_union_def_bool
-    if isinstance(udb, bool):
-        testing.assertEqual(udb, False)
-    else:
-        raise ValueError("Expected bool, got %s" % type(udb))
-    ude = r.c.l_union_def_enumeration
-    if isinstance(ude, str):
-        testing.assertEqual(ude, "unlimited")
-    else:
-        raise ValueError("Expected str, got %s" % type(ude))
+    basics_leaf_defaults(r)
+
+def _test_leaf_default_from_json():
+    json_text = """{"basics:c": {}}"""
+    json_in = json.decode(json_text)
+    gd = yang_basics.from_json(json_in)
+    r = yang_basics.root.from_gdata(gd)
+    basics_leaf_defaults(r)
+
+def _test_leaf_default_from_gdata():
+    gd = yang.gdata.Container(children={
+        "c": yang.gdata.Container(children={})
+    })
+    r = yang_basics.root.from_gdata(gd)
+    basics_leaf_defaults(r)
 
 def _test_union_default_other_type():
     # set union leaf to value of a different Acton type than default
