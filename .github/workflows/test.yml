@@ -21,3 +21,29 @@ jobs:
       - run: make test-daclass
       # another diff check because test-daclass also generates code
       - run: git diff --exit-code
+
+  test-orchestron:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actonlang/setup-acton@v1
+        with:
+          channel: 'tip'
+      - name: "Check out orchestron repository code"
+        uses: actions/checkout@v4
+        with:
+          repository: orchestron-orchestrator/orchestron
+      - name: "Update yang library dependency"
+      # We use the commit SHA for both the main orchestron app and gen_dmc, to ensure we're getting the same Zig package hash in both
+        run: |
+          acton pkg add https://github.com/orchestron-orchestrator/acton-yang/archive/${{ github.sha }}.zip yang
+          cd gen_dmc
+          acton pkg add https://github.com/orchestron-orchestrator/acton-yang/archive/${{ github.sha }}.zip yang
+      - name: "Regenerate orchestron adata"
+        run: |
+          make
+          git diff
+      - name: "Run orchestron tests"
+        run: |
+          acton test
+          acton test perf
