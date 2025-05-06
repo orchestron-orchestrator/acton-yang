@@ -15,20 +15,20 @@ import yang_basics
 def _test_mandatory1():
     xml_text = """<data><tc1 xmlns="http://example.com/foo"><l1>foo</l1></tc1></data>"""
     # This should work, because we provide a value for the mandatory leaf l1
-    r = yang_one.root.from_xml(xml.decode(xml_text))
+    r = yang_one.from_xml(xml.decode(xml_text))
     # This should not work
     try:
-        r = yang_one.root.from_xml(xml.decode(xml_text))
+        r = yang_one.from_xml(xml.decode(xml_text))
     except ValueError as e:
         pass
 
 def _test_mandatory2():
     # This should work, because we provide a value for the mandatory leaf l1
     xml_text = """<data><tc1 xmlns="http://example.com/foo"><l1>foo</l1></tc1><li xmlns="http://example.com/foo"><name>foo</name><c1><l1>foo</l1></c1></li></data>"""
-    r = yang_one.root.from_xml(xml.decode(xml_text))
+    r = yang_one.from_xml(xml.decode(xml_text))
     # This should not work
     try:
-        r = yang_one.root.from_xml(xml.decode(xml_text))
+        r = yang_one.from_xml(xml.decode(xml_text))
     except ValueError as e:
         pass
 
@@ -152,21 +152,43 @@ xml_text_full = """<data>
 
 def _test_foo_from_xml_full():
     xml_in = xml.decode(xml_text_full)
-    d = yang_foo_root.from_xml(xml_in)
-    g = d.to_gdata()
-    print(g.prsrc(), err=True)
-    xml_out_text = g.to_xmlstr()
+    gd1 = yang_foo.from_xml(xml_in)
+    # In this test we also use the gdata to "fill in" the foo module adata
+    # classes and then compare the result of adata.to_gdata() with the input.
+    ad = yang_foo_root.from_gdata(gd1)
+    gd2 = ad.to_gdata()
+    print(gd1.prsrc(), err=True)
+    gdiff = yang.gdata.diff(gd1, gd2)
+    # TODO: (XML -> gdata) -> adata -> gdata differs from XML -> gdata in that
+    # it includes "default" (empty) containers and lists. We could improve
+    # adata.to_gdata() methods to skip empty subtrees ...
+    # testing.assertEqual(gd1, gd2)
+    if gdiff is not None:
+        diff = """Container({
+  'nested': Container({
+    'f:inner': Container({
+      'li1': List(['name'])
+    }),
+    'bar:inner': Container(ns='http://example.com/bar', module='bar')
+  }, ns='http://example.com/foo', module='foo'),
+  'state': Container({
+    'c1': Container()
+  }, ns='http://example.com/foo', module='foo')
+})"""
+        testing.assertEqual(gdiff.prsrc(), diff)
+    else:
+        testing.assertNotNone(gdiff)
+    xml_out_text = gd1.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
-    return d.to_gdata().prsrc()
+    return gd1.prsrc()
 
 def _test_gdata_source_roundtrip_xml_full(t: testing.EnvT):
     wfcap = file.WriteFileCap(file.FileCap(t.env.cap))
     xml_in = xml.decode(xml_text_full)
-    d = yang_foo_root.from_xml(xml_in)
-    g = d.to_gdata()
+    gd = yang_foo.from_xml(xml_in)
     wf = file.WriteFile(wfcap, "../test_gdata_source_roundtrip/src/xml_full.act")
-    await async wf.write(f"from yang.gdata import *\n\nxml_full = {g.prsrc()}".encode())
+    await async wf.write(f"from yang.gdata import *\n\nxml_full = {gd.prsrc()}".encode())
     await async wf.close()
     t.success()
 
@@ -180,8 +202,8 @@ def _test_foo_from_xml1():
 </pc1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    d = yang_foo_root.from_xml(xml_in)
-    xml_out_text = d.to_gdata().to_xmlstr()
+    gd = yang_foo.from_xml(xml_in)
+    xml_out_text = gd.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
 
@@ -191,17 +213,18 @@ def _test_foo_from_xml_pc1():
 <pc1 xmlns="http://example.com/foo"></pc1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    d = yang_foo_root.from_xml(xml_in)
-    pc1 = d.pc1
-    if pc1 is not None:
-        present = True
+    gd = yang_foo.from_xml(xml_in)
+    print(gd.prsrc(), err=True)
+    pc1_gdata = gd.get_opt_container("pc1")
+    if pc1_gdata is not None:
+        testing.assertTrue(pc1_gdata.presence)
     else:
-        present = False
-    testing.assertEqual(present, True)
-    g = d.to_gdata()
-    gc = g.prsrc()
-    print(gc, err=True)
-    xml_out_text = g.to_xmlstr()
+        testing.error("pc1 not found in gdata")
+    ad = yang_foo_root.from_gdata(gd)
+    pc1 = ad.pc1
+    if pc1 is None:
+        testing.error("pc1 not found in adata")
+    xml_out_text = gd.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
 
@@ -212,7 +235,7 @@ def _test_foo_from_xml_pc2():
 </data>"""
     xml_in = xml.decode(xml_text)
     try:
-        d = yang_foo_root.from_xml(xml_in)
+        gd = yang_foo.from_xml(xml_in)
         testing.error("Expected exception on missing mandatory leaf")
     except ValueError as e:
         if str(e) != "ValueError: Cannot find xml child with name foo":
@@ -227,17 +250,17 @@ def _test_foo_from_xml2():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    d = yang_foo_root.from_xml(xml_in)
-    pc1 = d.pc1
+    gd = yang_foo.from_xml(xml_in)
+    print(gd.prsrc(), err=True)
+    # The sibling presence container pc1 must not appear here
+    pc1_gdata = gd.get_opt_container("pc1")
+    if pc1_gdata is not None:
+        testing.error("pc1 found in gdata")
+    ad = yang_foo_root.from_gdata(gd)
+    pc1 = ad.pc1
     if pc1 is not None:
-        present = True
-    else:
-        present = False
-    testing.assertEqual(present, False)
-    g = d.to_gdata()
-    gc = g.prsrc()
-    print(gc, err=True)
-    xml_out_text = g.to_xmlstr()
+        testing.error("pc1 found in adata")
+    xml_out_text = gd.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
 
@@ -249,8 +272,8 @@ def _test_foo_from_xml_leaf_ns():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    d = yang_foo_root.from_xml(xml_in)
-    xml_out_text = d.to_gdata().to_xmlstr()
+    gd = yang_foo.from_xml(xml_in)
+    xml_out_text = gd.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     #testing.assertEqual(xml_in.encode(), xml_out.encode())
     return xml_out_text
@@ -263,8 +286,8 @@ def _test_foo_from_xml_named_ns():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    d = yang_foo_root.from_xml(xml_in)
-    xml_out_text = d.to_gdata().to_xmlstr()
+    gd = yang_foo.from_xml(xml_in)
+    xml_out_text = gd.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     #testing.assertEqual(xml_in.encode(), xml_out.encode())
     return xml_out_text
@@ -277,8 +300,8 @@ def _test_foo_from_xml_dots():
 </c.dot>
 </data>"""
     xml_in = xml.decode(xml_text)
-    d = yang_foo_root.from_xml(xml_in)
-    xml_out_text = d.to_gdata().to_xmlstr()
+    gd = yang_foo.from_xml(xml_in)
+    xml_out_text = gd.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     #testing.assertEqual(xml_in.encode(), xml_out.encode())
     return xml_out_text
@@ -302,7 +325,8 @@ def _test_foo_from_xml_li_union():
 </li-union>
 </data>"""
     xml_in = xml.decode(xml_text)
-    root = yang_foo_root.from_xml(xml_in)
+    gd = yang_foo.from_xml(xml_in)
+    root = yang_foo_root.from_gdata(gd)
 
     li1 = root.li_union.elements[0]
     testing.assertEqual(li1.k1, "first")
@@ -342,9 +366,12 @@ def _test_foo_from_gdata_int():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    d = yang_foo_root.from_xml(xml_in)
-    testing.assertEqual(d.c1.l3, 1337)
-    gd = d.to_gdata()
+    gd = yang_foo.from_xml(xml_in)
+    l3 = gd.get_container("c1").get_leaf("l3").val
+    if isinstance(l3, int):
+        testing.assertEqual(l3, 1337)
+    else:
+        testing.error("l3 in gdata is not an int")
     nr = yang_foo_root.from_gdata(gd)
     testing.assertEqual(nr.c1.l3, 1337)
 
@@ -416,7 +443,8 @@ def _test_leaf_defaults():
 def _test_leaf_default_from_xml():
     xml_text = """<data><c xmlns="http://example.com/basics"/></data>"""
     xml_in = xml.decode(xml_text)
-    r = yang_basics.root.from_xml(xml_in)
+    gd = yang_basics.from_xml(xml_in)
+    r = yang_basics.root.from_gdata(gd)
     basics_leaf_defaults(r)
 
 def _test_leaf_default_from_json():
@@ -444,8 +472,10 @@ def _test_union_default_other_type():
 def _test_empty_presence():
     xml_text = """<data><empty-presence xmlns="http://example.com/foo"/></data>"""
     xml_in = xml.decode(xml_text)
-    d = yang_foo_root.from_xml(xml_in)
-    xml_out_text = d.to_gdata().to_xmlstr()
+    gd = yang_foo.from_xml(xml_in)
+    ad = yang_foo_root.from_gdata(gd)
+    testing.assertNotNone(ad.empty_presence)
+    xml_out_text = gd.to_xmlstr()
     xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
     # testing.assertEqual(xml_in.encode(), xml_out.encode())
     return xml_out_text
