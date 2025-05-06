@@ -46,9 +46,8 @@ mut def from_json_path_base__c1__base_c2(jd: value, path: list[str]=[], op: ?str
 
 mut def from_json_base__c1__base_c2(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_foo = jd.get('foo')
-    if child_foo is not None:
-        children['foo'] = from_json_base__c1__base_c2__foo(child_foo)
+    child_foo = yang.gdata.take_json_opt_str(jd, 'foo')
+    yang.gdata.maybe_add(children, 'foo', from_json_base__c1__base_c2__foo, child_foo)
     return yang.gdata.Container(children)
 
 mut def from_json_base__c1__foo_c2__foo(val: value) -> yang.gdata.Leaf:
@@ -99,9 +98,8 @@ mut def from_json_path_base__c1__foo_c2(jd: value, path: list[str]=[], op: ?str=
 
 mut def from_json_base__c1__foo_c2(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_foo = jd.get('foo')
-    if child_foo is not None:
-        children['foo'] = from_json_base__c1__foo_c2__foo(child_foo)
+    child_foo = yang.gdata.take_json_opt_str(jd, 'foo')
+    yang.gdata.maybe_add(children, 'foo', from_json_base__c1__foo_c2__foo, child_foo)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 class base__c1(yang.adata.MNode):
@@ -158,12 +156,10 @@ mut def from_json_path_base__c1(jd: value, path: list[str]=[], op: ?str='merge')
 
 mut def from_json_base__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_base_c2 = jd.get('c2')
-    if child_base_c2 is not None and isinstance(child_base_c2, dict):
-        children['base:c2'] = from_json_base__c1__base_c2(child_base_c2)
-    child_foo_c2 = jd.get('foo:c2')
-    if child_foo_c2 is not None and isinstance(child_foo_c2, dict):
-        children['foo:c2'] = from_json_base__c1__foo_c2(child_foo_c2)
+    child_base_c2 = yang.gdata.take_json_opt_cnt(jd, 'c2')
+    yang.gdata.maybe_add(children, 'base:c2', from_json_base__c1__base_c2, child_base_c2)
+    child_foo_c2 = yang.gdata.take_json_opt_cnt(jd, 'c2', 'foo')
+    yang.gdata.maybe_add(children, 'foo:c2', from_json_base__c1__foo_c2, child_foo_c2)
     return yang.gdata.Container(children, ns='http://example.com/base', module='base')
 
 class root(yang.adata.MNode):
@@ -212,7 +208,6 @@ mut def from_json_path_root(jd: value, path: list[str]=[], op: ?str='merge') -> 
 
 mut def from_json_root(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_c1 = jd.get('base:c1')
-    if child_c1 is not None and isinstance(child_c1, dict):
-        children['c1'] = from_json_base__c1(child_c1)
+    child_c1 = yang.gdata.take_json_opt_cnt(jd, 'c1', 'base')
+    yang.gdata.maybe_add(children, 'c1', from_json_base__c1, child_c1)
     return yang.gdata.Container(children)

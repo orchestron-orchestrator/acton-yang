@@ -55,9 +55,8 @@ mut def from_json_path_acme_foo_bar__c1(jd: value, path: list[str]=[], op: ?str=
 
 mut def from_json_acme_foo_bar__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_l1 = jd.get('l1')
-    if child_l1 is not None:
-        children['l1'] = from_json_acme_foo_bar__c1__l1(child_l1)
+    child_l1 = yang.gdata.take_json_opt_str(jd, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_json_acme_foo_bar__c1__l1, child_l1)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='acme_foo-bar')
 
 class root(yang.adata.MNode):
@@ -106,9 +105,8 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.
 
 mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_c1 = jd.get('acme_foo-bar:c1')
-    if child_c1 is not None and isinstance(child_c1, dict):
-        children['c1'] = from_json_acme_foo_bar__c1(child_c1)
+    child_c1 = yang.gdata.take_json_opt_cnt(jd, 'c1', 'acme_foo-bar')
+    yang.gdata.maybe_add(children, 'c1', from_json_acme_foo_bar__c1, child_c1)
     return yang.gdata.Container(children)
 
 schema_namespaces: set[str] = {

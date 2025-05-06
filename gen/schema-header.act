@@ -785,29 +785,11 @@ class DNodeInner(DNode):
 
             res.append("    children = {}")
             for child in self.children:
-                if child.namespace != self.namespace:
-                    res.append(f"    child_{usname(child)} = jd.get('{child.module}:{child.name}')")
-                else:
-                    res.append(f"    child_{usname(child)} = jd.get('{child.name}')")
-
-                if isinstance(child, DContainer):
-                    res.append(f"    if child_{usname(child)} is not None and isinstance(child_{usname(child)}, dict):")
-                    res.append(f"        children['{uname(child)}'] = from_json_{pname(child)}(child_{usname(child)})")
-                elif isinstance(child, DList):
-                    res.append(f"    if child_{usname(child)} is not None and isinstance(child_{usname(child)}, list):")
-                    res.append(f"        children['{uname(child)}'] = from_json_{pname(child)}(child_{usname(child)})")
-                elif isinstance(child, DLeafList):
-                    res.append(f"    if child_{usname(child)} is not None and isinstance(child_{usname(child)}, list):")
-                    res.append(f"        children['{uname(child)}'] = from_json_{pname(child)}(child_{usname(child)})")
-                else:
-                    res.append(f"    if child_{usname(child)} is not None:")
-                    res.append(f"        children['{uname(child)}'] = from_json_{pname(child)}(child_{usname(child)})")
-
-            # TODO: need to better handle mandatory nodes... right now I think this JSON parsing is very naive
-            #
-            # TODO: can we do something like this instead and avoid local variables?
-            #for child in self.children:
-            #    res += ["    yang.gdata.maybe_add(children, '%s', lambda x: from_json_%s(unwrap_dict(x)) if x is not None else None, yang.gdata.take_json_%s(jd, '%s', '%s'))" % (child.name, taker_name(child, key_required=False), child.name, child.prefix)]
+                maybe_module = f", '{child.module}'" if child.namespace != self.namespace else ""
+                # TODO: no need for local variables when we switch from the
+                # gdata.Container.key attribute to key_str() method
+                res.append(f"    child_{usname(child)} = yang.gdata.take_json_{taker_name(child, loose=loose)}(jd, '{child.name}'{maybe_module})")
+                res.append(f"    yang.gdata.maybe_add(children, '{uname(child)}', from_json_{pname(child)}, child_{usname(child)})")
 
             if isinstance(self, DList):
                 # Collect keys leaf values in a list of strings by using the
@@ -2045,20 +2027,21 @@ def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, loose: bool=False) -> str:
 
 def taker_name(n: DNode, loose: bool=False, key_required=True) -> str:
     if isinstance(n, DContainer):
-        optional = loose or optional_subtree(n)
+        optional = loose or n.presence or optional_subtree(n)
         optional_str = "opt_" if optional else ""
         return optional_str + "cnt"
     if isinstance(n, DList):
-        optional = loose or optional_subtree(n)
+        optional = loose or optional_subtree(n) or n.min_elements == 0
         optional_str = "opt_" if optional else ""
         return optional_str + "list"
     if isinstance(n, DLeaf):
-        optional = is_optional_yang_leaf(n)
+        optional = is_optional_arg_yang_leaf(n)
         optional_str = "opt_" if optional else ""
         return optional_str + yang_type_to_acton_type(n.type_)
     if isinstance(n, DLeafList):
-        # TODO: optional?
-        return yang_type_to_acton_type(n.type_) + "s"
+        optional = loose or n.min_elements == 0
+        optional_str = "opt_" if optional else ""
+        return optional_str + yang_type_to_acton_type(n.type_) + "s"
     raise ValueError(f"unreachable - unknown node type {type(n)}")
 
 def yang_leaf_to_getval(leaf: DNodeLeaf, loose: bool) -> str:

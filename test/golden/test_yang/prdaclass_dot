@@ -55,9 +55,8 @@ mut def from_json_path_foo__ieee_802_3(jd: value, path: list[str]=[], op: ?str='
 
 mut def from_json_foo__ieee_802_3(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_ieee_802_3 = jd.get('ieee-802.3')
-    if child_ieee_802_3 is not None:
-        children['ieee-802.3'] = from_json_foo__ieee_802_3__ieee_802_3(child_ieee_802_3)
+    child_ieee_802_3 = yang.gdata.take_json_opt_str(jd, 'ieee-802.3')
+    yang.gdata.maybe_add(children, 'ieee-802.3', from_json_foo__ieee_802_3__ieee_802_3, child_ieee_802_3)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 class root(yang.adata.MNode):
@@ -106,9 +105,8 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.
 
 mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_ieee_802_3 = jd.get('foo:ieee-802.3')
-    if child_ieee_802_3 is not None and isinstance(child_ieee_802_3, dict):
-        children['ieee-802.3'] = from_json_foo__ieee_802_3(child_ieee_802_3)
+    child_ieee_802_3 = yang.gdata.take_json_opt_cnt(jd, 'ieee-802.3', 'foo')
+    yang.gdata.maybe_add(children, 'ieee-802.3', from_json_foo__ieee_802_3, child_ieee_802_3)
     return yang.gdata.Container(children)
 
 schema_namespaces: set[str] = {
