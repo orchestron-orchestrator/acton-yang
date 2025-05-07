@@ -11,7 +11,13 @@ import yang.gdata
 mut def from_json_foo__tc1__l1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
+mut def from_xml_foo__tc1__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
 mut def from_json_foo__tc1__l2(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__tc1__l2(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
 class foo__tc1(yang.adata.MNode):
@@ -39,12 +45,14 @@ class foo__tc1(yang.adata.MNode):
             return foo__tc1(l1=n.get_str('l1'), l2=n.get_opt_str('l2'))
         raise ValueError('Missing required subtree foo__tc1')
 
-    @staticmethod
-    mut def from_xml(n: ?xml.Node) -> foo__tc1:
-        if n != None:
-            return foo__tc1(l1=yang.gdata.from_xml_str(n, 'l1'), l2=yang.gdata.from_xml_opt_str(n, 'l2'))
-        raise ValueError('Missing required subtree foo__tc1')
 
+mut def from_xml_foo__tc1(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l1 = yang.gdata.from_xml_str(node, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_xml_foo__tc1__l1, child_l1)
+    child_l2 = yang.gdata.from_xml_opt_str(node, 'l2')
+    yang.gdata.maybe_add(children, 'l2', from_xml_foo__tc1__l2, child_l2)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 mut def from_json_path_foo__tc1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
@@ -75,10 +83,19 @@ mut def from_json_foo__tc1(jd: dict[str, ?value]) -> yang.gdata.Container:
 mut def from_json_foo__li__name(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
+mut def from_xml_foo__li__name(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
 mut def from_json_foo__li__c1__l1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
+mut def from_xml_foo__li__c1__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
 mut def from_json_foo__li__c1__l2(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__li__c1__l2(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
 class foo__li__c1(yang.adata.MNode):
@@ -106,12 +123,14 @@ class foo__li__c1(yang.adata.MNode):
             return foo__li__c1(l1=n.get_str('l1'), l2=n.get_opt_str('l2'))
         raise ValueError('Missing required subtree foo__li__c1')
 
-    @staticmethod
-    mut def from_xml(n: ?xml.Node) -> foo__li__c1:
-        if n != None:
-            return foo__li__c1(l1=yang.gdata.from_xml_str(n, 'l1'), l2=yang.gdata.from_xml_opt_str(n, 'l2'))
-        raise ValueError('Missing required subtree foo__li__c1')
 
+mut def from_xml_foo__li__c1(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l1 = yang.gdata.from_xml_str(node, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_xml_foo__li__c1__l1, child_l1)
+    child_l2 = yang.gdata.from_xml_opt_str(node, 'l2')
+    yang.gdata.maybe_add(children, 'l2', from_xml_foo__li__c1__l2, child_l2)
+    return yang.gdata.Container(children)
 
 mut def from_json_path_foo__li__c1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
@@ -162,10 +181,6 @@ class foo__li_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_entry:
         return foo__li_entry(name=n.get_str('name'), c1=foo__li__c1.from_gdata(n.get_container('c1')))
 
-    @staticmethod
-    mut def from_xml(n: xml.Node) -> foo__li_entry:
-        return foo__li_entry(name=yang.gdata.from_xml_str(n, 'name'), c1=foo__li__c1.from_xml(yang.gdata.get_xml_child(n, 'c1')))
-
 class foo__li(yang.adata.MNode):
     elements: list[foo__li_entry]
     mut def __init__(self, elements=[]):
@@ -202,13 +217,20 @@ class foo__li(yang.adata.MNode):
                 res.append(foo__li_entry.from_gdata(e))
         return res
 
-    @staticmethod
-    mut def from_xml(nodes: list[xml.Node]) -> list[foo__li_entry]:
-        res = []
-        for node in nodes:
-            res.append(foo__li_entry.from_xml(node))
-        return res
 
+mut def from_xml_foo__li_element(node: xml.Node) -> yang.gdata.Node:
+    children = {}
+    child_name = yang.gdata.from_xml_str(node, 'name')
+    yang.gdata.maybe_add(children, 'name', from_xml_foo__li__name, child_name)
+    child_c1 = yang.gdata.from_xml_cnt(node, 'c1')
+    yang.gdata.maybe_add(children, 'c1', from_xml_foo__li__c1, child_c1)
+    return yang.gdata.Container(children, [yang.gdata.yang_str(child_name)])
+
+mut def from_xml_foo__li(nodes: list[xml.Node]) -> yang.gdata.List:
+    elements = []
+    for e in nodes:
+        elements.append(from_xml_foo__li_element(e))
+    return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
 
 mut def from_json_path_foo__li_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     if len(path) == 1:
@@ -297,12 +319,14 @@ class root(yang.adata.MNode):
             return root(tc1=foo__tc1.from_gdata(n.get_container('tc1')), li=foo__li.from_gdata(n.get_opt_list('li')))
         raise ValueError('Missing required subtree root')
 
-    @staticmethod
-    mut def from_xml(n: ?xml.Node) -> root:
-        if n != None:
-            return root(tc1=foo__tc1.from_xml(yang.gdata.get_xml_child(n, 'tc1', 'http://example.com/foo')), li=foo__li.from_xml(yang.gdata.get_xml_children(n, 'li', 'http://example.com/foo')))
-        raise ValueError('Missing required subtree root')
 
+mut def from_xml(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_tc1 = yang.gdata.from_xml_cnt(node, 'tc1', 'http://example.com/foo')
+    yang.gdata.maybe_add(children, 'tc1', from_xml_foo__tc1, child_tc1)
+    child_li = yang.gdata.from_xml_opt_list(node, 'li', 'http://example.com/foo')
+    yang.gdata.maybe_add(children, 'li', from_xml_foo__li, child_li)
+    return yang.gdata.Container(children)
 
 mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
