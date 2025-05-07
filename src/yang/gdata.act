@@ -1364,6 +1364,16 @@ def from_xml_bool(n: xml.Node, name: str, ns: ?str) -> bool:
         return r
     raise ValueError("Cannot find xml child with name " + name)
 
+def from_xml_opt_empty(n: xml.Node, name: str, ns: ?str) -> ?bool:
+    try:
+        text = get_xml_child(n, name, ns).text
+    except ValueError:
+        return None
+    else:
+        if text == "":
+            return True
+        raise ValueError("Expected an empty string for empty leaf " + name + ", got " + str(text))
+
 def from_xml_float(n: xml.Node, name: str, ns: ?str) -> float:
     text = get_xml_child(n, name, ns).text
     if text is not None:
@@ -1588,8 +1598,6 @@ def take_json_opt_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> ?
             for c in child:
                 if isinstance(c, int):
                     int_vals.append(c)
-                elif isinstance(c, str):
-                    int_vals.append(int(c))
                 else:
                     raise ValueError(name + "is a list of wrong type, should be int, not " + str(type(elem)))
             return int_vals
@@ -1601,6 +1609,43 @@ def take_json_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> list[
     if val is not None:
         return val
     raise ValueError("Cannot find json int child with name " + name)
+
+def take_json_opt_int64(jd: dict[str, ?value], name: str, module: ?str=None) -> ?int:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, str):
+            return int(child)
+        raise ValueError("Expected a string for 64-bit number " + name)
+    return None
+
+def take_json_int64(jd: dict[str, ?value], name: str, module: ?str=None) -> int:
+    val = take_json_opt_int64(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json int64 child with name " + name)
+
+def take_json_opt_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[int]:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, list):
+            if len(child) == 0:
+                return []
+            elem = child[0]
+            int_vals = []
+            for c in child:
+                if isinstance(c, str):
+                    int_vals.append(int(c))
+                else:
+                    raise ValueError(name + "is a list of wrong type, should be str, not " + str(type(elem)))
+            return int_vals
+        raise ValueError(name + "is not a list of 64-bit numbers")
+    return None
+
+def take_json_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> list[int]:
+    val = take_json_opt_int64s(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json int64 child with name " + name)
 
 def take_json_opt_float(jd: dict[str, ?value], name: str, module: ?str=None) -> ?float:
     child = take_json_opt_value(jd, name, module)
@@ -1628,6 +1673,16 @@ def take_json_bool(jd: dict[str, ?value], name: str, module: ?str=None) -> bool:
     if val is not None:
         return val
     raise ValueError("Cannot find json child with name " + name)
+
+def take_json_opt_empty(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bool:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, list) and len(child) == 1:
+            v = child[0]
+            if v is None:
+                return True
+        raise ValueError("Expected a [null] for empty leaf " + name)
+    return None
 
 def take_json_opt_bytes(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bytes:
     child = take_json_opt_value(jd, name, module)
