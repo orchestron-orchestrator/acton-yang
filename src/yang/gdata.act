@@ -310,7 +310,14 @@ class Node(value):
                 if isinstance(child, Container):
                     child_dict[fmt_json_name(nm, child.module)] = child.to_dict(pretty)
                 elif isinstance(child, Leaf):
-                    child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val)
+                    # "empty" type is encoded as an array with a null element "[null]"
+                    if child.t == "empty":
+                        v = child.val
+                        if isinstance(v, bool):
+                            if v == True:
+                                child_dict[fmt_json_name(nm, child.module)] = [None]
+                    else:
+                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val)
                 elif isinstance(child, LeafList):
                     vals = []
                     for v in child.vals if child.user_order else vals_list_sorted(child.vals):
@@ -2341,6 +2348,14 @@ def _test_to_json():
 
     return y1.to_json(pretty=True)
 
+def _test_to_json_empty_leaf():
+    y1 = Container({
+        "e1": Leaf("empty", True),
+        "e2": Leaf("empty", False)
+    })
+
+    return y1.to_json(pretty=True)
+
 def _test_to_xmlstr():
     y1 = Container({
         "acme:foo": Container({
@@ -2446,6 +2461,14 @@ def _test_to_xmlstr_presence():
 def _test_to_xmlstr_presence_childless():
     y1 = Container({
         "foo": Container(presence=True, ns="http://example.com/acme", module="acme")
+    })
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_empty_leaf():
+    y1 = Container({
+        "e1": Leaf("empty", True),
+        "e2": Leaf("empty", False)
     })
 
     return y1.to_xmlstr()
