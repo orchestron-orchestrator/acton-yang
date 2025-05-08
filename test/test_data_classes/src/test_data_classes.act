@@ -85,11 +85,11 @@ def _test_mandatory2():
 #     }
 # }
 
-# TODO: add <l_empty/>
 xml_text_full = """<data>
 <c1 xmlns="http://example.com/foo">
   <l1>foo-foo</l1>
   <l3>18446744073709551615</l3>
+  <l_empty/>
   <li>
     <name>tuta</name>
     <val>baba</val>
@@ -350,6 +350,24 @@ def _test_foo_from_xml_li_union():
         testing.assertEqual(k2, "aGk=")
     testing.assertEqual(li1.k3, "Hello Acton 🫡".encode())
 
+def _test_foo_from_xml_empty_leaf():
+    """"""
+    xml_text = """<data>
+<c1 xmlns="http://example.com/foo">
+  <l_empty/>
+</c1>
+</data>"""
+    xml_in = xml.decode(xml_text)
+    gd = yang_foo.from_xml(xml_in)
+    ad = yang_foo_root.from_gdata(gd)
+    testing.assertNotNone(ad.c1.l_empty)
+    l_empty = ad.c1.l_empty
+    if l_empty is not None:
+        testing.assertTrue(l_empty)
+    xml_out_text = gd.to_xmlstr()
+    xml_out = xml.decode("<data>\n" + xml_out_text + "</data>")
+    testing.assertEqual(xml_in.encode(), xml_out.encode())
+
 def _test_list_create_idempotency():
     r = yang_foo_root()
     e1 = r.c1.li.create("a")
@@ -576,6 +594,18 @@ def _test_foo_from_json_full():
     json_out = gdata_json.to_json()
     testing.assertEqual(json.encode(json_full, pretty=True), json_out)
     return gdata_json.prsrc()
+
+def _test_foo_from_json_empty_leaf():
+    json_text = """{"foo:c1":{"l_empty":[null]}}"""
+    json_in = json.decode(json_text)
+    gdata_json = yang_foo.from_json(json_in)
+    ad = yang_foo_root.from_gdata(gdata_json)
+    testing.assertNotNone(ad.c1.l_empty)
+    l_empty = ad.c1.l_empty
+    if l_empty is not None:
+        testing.assertTrue(l_empty)
+    json_out_text = gdata_json.to_json(pretty=False)
+    testing.assertEqual(json_text, json_out_text)
 
 def _test_from_json():
     """Test mandatory field handling - success case"""

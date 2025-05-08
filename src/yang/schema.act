@@ -648,7 +648,7 @@ class DNodeInner(DNode):
                 maybe_ns = f", '{child.namespace}'" if child.namespace != self.namespace else ""
                 # TODO: no need for local variables when we switch from the
                 # gdata.Container.key attribute to key_str() method
-                res.append(f"    child_{usname(child)} = yang.gdata.from_xml_{taker_name(child, loose=loose)}(node, '{child.name}'{maybe_ns})")
+                res.append(f"    child_{usname(child)} = yang.gdata.{taker_name(child, 'xml', loose=loose)}(node, '{child.name}'{maybe_ns})")
                 res.append(f"    yang.gdata.maybe_add(children, '{uname(child)}', from_xml_{pname(child)}, child_{usname(child)})")
 
             if isinstance(self, DList):
@@ -786,7 +786,7 @@ class DNodeInner(DNode):
                 maybe_module = f", '{child.module}'" if child.namespace != self.namespace else ""
                 # TODO: no need for local variables when we switch from the
                 # gdata.Container.key attribute to key_str() method
-                res.append(f"    child_{usname(child)} = yang.gdata.take_json_{taker_name(child, loose=loose)}(jd, '{child.name}'{maybe_module})")
+                res.append(f"    child_{usname(child)} = yang.gdata.{taker_name(child, 'json', loose=loose)}(jd, '{child.name}'{maybe_module})")
                 res.append(f"    yang.gdata.maybe_add(children, '{uname(child)}', from_json_{pname(child)}, child_{usname(child)})")
 
             if isinstance(self, DList):
@@ -1040,9 +1040,6 @@ class DLeaf(DNodeLeaf):
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
-            if self.type_.name == "int64" or self.type_.name == "uint64":
-                res.append("    if isinstance(val, str):")
-                res.append(f"        return yang.gdata.Leaf('{self.type_.name}', int(val){gdata_nsq})")
             res.append(f"    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
         if gen_xml:
@@ -1094,17 +1091,7 @@ class DLeafList(DNodeLeaf):
         res = []
         if gen_json:
             res.append(f"mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            if self.type_.name == "int64" or self.type_.name == "uint64":
-            # We must check each value in the list to see if it is a 64-bit number encoded as a string
-                res.append("    int_vals = []")
-                res.append("    for v in val:")
-                res.append("        if isinstance(v, str):")
-                res.append("             int_vals.append(int(v))")
-                res.append("        else:")
-                res.append("             int_vals.append(v)")
-                res.append(f"    return yang.gdata.LeafList('{self.type_.name}', int_vals{maybe_user_order}{gdata_nsq})")
-            else:
-                res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
+            res.append(f"    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
         if gen_xml:
             res.append(f"mut def from_xml_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
@@ -2033,23 +2020,36 @@ def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, loose: bool=False) -> str:
     t = yang_type_to_acton_type(leaf.type_)
     return optional_str + t
 
-def taker_name(n: DNode, loose: bool=False, key_required=True) -> str:
+def taker_name(n: DNode, input_format: str, loose: bool=False) -> str:
+    taker_prefix = ""
+    if input_format == "xml":
+        taker_prefix = "from_xml_"
+    elif input_format == "json":
+        taker_prefix = "take_json_"
+    else:
+        raise ValueError(f"Unknown input format {input_format}")
     if isinstance(n, DContainer):
         optional = loose or n.presence or optional_subtree(n)
         optional_str = "opt_" if optional else ""
-        return optional_str + "cnt"
+        return taker_prefix + optional_str + "cnt"
     if isinstance(n, DList):
         optional = loose or optional_subtree(n) or n.min_elements == 0
         optional_str = "opt_" if optional else ""
-        return optional_str + "list"
+        return taker_prefix + optional_str + "list"
     if isinstance(n, DLeaf):
         optional = is_optional_arg_yang_leaf(n)
         optional_str = "opt_" if optional else ""
-        return optional_str + yang_type_to_acton_type(n.type_)
+        if n.type_.name == "empty":
+            return taker_prefix + optional_str + "empty"
+        if input_format == "json" and n.type_.name == "uint64" or n.type_.name == "int64":
+            return taker_prefix + optional_str + "int64"
+        return taker_prefix + optional_str + yang_type_to_acton_type(n.type_)
     if isinstance(n, DLeafList):
         optional = loose or n.min_elements == 0
         optional_str = "opt_" if optional else ""
-        return optional_str + yang_type_to_acton_type(n.type_) + "s"
+        if input_format == "json" and n.type_.name == "uint64" or n.type_.name == "int64":
+            return taker_prefix + optional_str + "int64s"
+        return taker_prefix + optional_str + yang_type_to_acton_type(n.type_) + "s"
     raise ValueError(f"unreachable - unknown node type {type(n)}")
 
 def yang_leaf_to_getval(leaf: DNodeLeaf, loose: bool) -> str:
