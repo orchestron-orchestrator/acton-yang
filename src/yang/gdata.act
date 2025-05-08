@@ -1336,7 +1336,10 @@ def get_xml_children(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
     return res
 
 def from_xml_opt_list(n: xml.Node, name: str, ns: ?str) -> ?list[xml.Node]:
-    return get_xml_children(n, name, ns)
+    r = get_xml_children(n, name, ns)
+    if len(r) == 0:
+        return None
+    return r
 
 def from_xml_list(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
     r = from_xml_opt_list(n, name, ns)
@@ -1452,36 +1455,44 @@ def from_xml_strs(n: xml.Node, name: str, ns: ?str) -> list[str]:
         return r
     raise ValueError("Cannot find xml child with name " + name)
 
-def from_xml_opt_strs(n: xml.Node, name: str, ns: ?str) -> list[str]:
+def from_xml_opt_strs(n: xml.Node, name: str, ns: ?str) -> ?list[str]:
     res = []
     for child in get_xml_children(n, name, ns):
         ctext = child.text
         if ctext is not None:
             res.append(ctext)
+    if len(res) == 0:
+        return None
     return res
 
-def from_xml_opt_bytess(n: xml.Node, name: str, ns: ?str) -> list[bytes]:
+def from_xml_opt_bytess(n: xml.Node, name: str, ns: ?str) -> ?list[bytes]:
     res = []
     for child in get_xml_children(n, name, ns):
         ctext = child.text
         if ctext is not None:
             res.append(base64.decode(ctext.encode()))
+    if len(res) == 0:
+        return None
     return res
 
-def from_xml_opt_values(n: xml.Node, name: str, ns: ?str) -> list[value]:
+def from_xml_opt_values(n: xml.Node, name: str, ns: ?str) -> ?list[value]:
     res = []
     for child in get_xml_children(n, name, ns):
         ctext = child.text
         if isinstance(ctext, value):
             res.append(ctext)
+    if len(res) == 0:
+        return None
     return res
 
-def from_xml_opt_ints(n: xml.Node, name: str, ns: ?str) -> list[int]:
+def from_xml_opt_ints(n: xml.Node, name: str, ns: ?str) -> ?list[int]:
     res = []
     for child in get_xml_children(n, name, ns):
         ctext = child.text
         if ctext is not None:
             res.append(int(ctext))
+    if len(res) == 0:
+        return None
     return res
 
 #def from_xml_opt_u16(n: xml.Node, name: str) -> ?u16:
@@ -1712,7 +1723,7 @@ def take_json_opt_bytess(jd: dict[str, ?value], name: str, module: ?str=None) ->
                     raise ValueError(name + "is a list of wrong type, should be base64 encoded strings, not " + str(type(c)))
             return decoded
         raise ValueError(name + "is not a list of bytes")
-    return []
+    return None
 
 def take_json_bytess(jd: dict[str, ?value], name: str, module: ?str=None) -> list[bytes]:
     val = take_json_opt_bytess(jd, name, module)
