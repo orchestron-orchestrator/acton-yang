@@ -824,7 +824,6 @@ class DNodeInner(DNode):
 
 class DNodeLeaf(DNode):
     if_feature: list[str]
-    mandatory: bool
     must: list[Must]
     status: ?str
     type_: Type
@@ -1003,6 +1002,7 @@ class DList(DNodeInner):
 
 class DLeaf(DNodeLeaf):
     default: ?str
+    mandatory: bool
     units: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
@@ -1963,23 +1963,24 @@ def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
     """
     optional = True
 
-    # Mandatory leaf in YANG model are non-optional in Acton
-    mandatory = False
-    leafmandatory = leaf.mandatory
-    if leafmandatory != None:
-        mandatory = leafmandatory
-
-    has_default = False
     if isinstance(leaf, DLeaf):
-        if leaf.default != None:
-            has_default = True
+        # Mandatory leaf in YANG model are non-optional in Acton
+        mandatory = False
+        leafmandatory = leaf.mandatory
+        if leafmandatory != None:
+            mandatory = leafmandatory
 
-    leaf_list_min_elements = False
-    if isinstance(leaf, DLeafList):
+        has_default = False
+        if isinstance(leaf, DLeaf):
+            if leaf.default != None:
+                has_default = True
+
+        optional = not (mandatory or has_default)
+
+    elif isinstance(leaf, DLeafList):
         if leaf.min_elements > 0:
-            leaf_list_min_elements = True
+            optional = False
 
-    optional = not (mandatory or has_default or leaf_list_min_elements)
     # But with loose validation, even mandatory YANG leaves are optional!
     if loose:
         optional = True
