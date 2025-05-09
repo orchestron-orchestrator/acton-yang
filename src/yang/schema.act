@@ -1970,7 +1970,12 @@ def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
         if leaf.default != None:
             has_default = True
 
-    optional = not (mandatory or has_default)
+    leaf_list_min_elements = False
+    if isinstance(leaf, DLeafList):
+        if leaf.min_elements > 0:
+            leaf_list_min_elements = True
+
+    optional = not (mandatory or has_default or leaf_list_min_elements)
     # But with loose validation, even mandatory YANG leaves are optional!
     if loose:
         optional = True
@@ -2033,7 +2038,7 @@ def taker_name(n: DNode, input_format: str, loose: bool=False) -> str:
         optional_str = "opt_" if optional else ""
         return taker_prefix + optional_str + "cnt"
     if isinstance(n, DList):
-        optional = loose or optional_subtree(n) or n.min_elements == 0
+        optional = loose or n.min_elements == 0
         optional_str = "opt_" if optional else ""
         return taker_prefix + optional_str + "list"
     if isinstance(n, DLeaf):
