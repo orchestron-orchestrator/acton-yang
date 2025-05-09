@@ -1974,7 +1974,12 @@ def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
         if leaf.default != None:
             has_default = True
 
-    optional = not (mandatory or has_default)
+    leaf_list_min_elements = False
+    if isinstance(leaf, DLeafList):
+        if leaf.min_elements > 0:
+            leaf_list_min_elements = True
+
+    optional = not (mandatory or has_default or leaf_list_min_elements)
     # But with loose validation, even mandatory YANG leaves are optional!
     if loose:
         optional = True
