@@ -47,7 +47,7 @@ class foo__c1__l1_entry(yang.adata.MNode):
         _l1 = self.l1
         if _l1 is not None:
             children['l1'] = yang.gdata.Leaf('string', _l1)
-        return yang.gdata.Container(children, [yang.gdata.yang_str(self.k1), yang.gdata.yang_str(self.k2)])
+        return yang.gdata.Container(children)
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__l1_entry:
@@ -108,7 +108,7 @@ mut def from_xml_foo__c1__l1_element(node: xml.Node) -> yang.gdata.Node:
     yang.gdata.maybe_add(children, 'k2', from_xml_foo__c1__l1__k2, child_k2)
     child_l1 = yang.gdata.from_xml_str(node, 'l1')
     yang.gdata.maybe_add(children, 'l1', from_xml_foo__c1__l1__l1, child_l1)
-    return yang.gdata.Container(children, [yang.gdata.yang_str(child_k1), yang.gdata.yang_str(child_k2)])
+    return yang.gdata.Container(children)
 
 mut def from_xml_foo__c1__l1(nodes: list[xml.Node]) -> yang.gdata.List:
     elements = []
@@ -125,7 +125,7 @@ mut def from_json_path_foo__c1__l1_element(jd: value, path: list[str]=[], op: ?s
         if op == "merge":
             return val
         elif op == "remove":
-            return yang.gdata.Absent(val.key)
+            return yang.gdata.Absent(val.key_children(['k1', 'k2']))
         raise ValueError("Invalid operation")
     elif len(path) > 1:
         keys = path[0].split(",")
@@ -136,7 +136,7 @@ mut def from_json_path_foo__c1__l1_element(jd: value, path: list[str]=[], op: ?s
         children['k2'] = from_json_foo__c1__l1__k2(keys[1])
         if point == 'l1':
             raise ValueError("Invalid json path to non-inner node")
-        return yang.gdata.Container(children, keys)
+        return yang.gdata.Container(children)
     raise ValueError("unreachable - no keys to list element")
 
 mut def from_json_path_foo__c1__l1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.List:
@@ -158,7 +158,7 @@ mut def from_json_path_foo__c1__l1(jd: value, path: list[str]=[], op: ?str='merg
         if op == "merge":
             elements.append(element)
         elif op == "remove":
-            elements.append(yang.gdata.Absent(element.key))
+            elements.append(yang.gdata.Absent(element.key_children(['k1', 'k2'])))
         return yang.gdata.List(['k1', 'k2'], elements)
     elif len(path) > 1:
         return yang.gdata.List(['k1', 'k2'], [from_json_path_foo__c1__l1_element(jd, path, op)])
@@ -172,7 +172,7 @@ mut def from_json_foo__c1__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     yang.gdata.maybe_add(children, 'k2', from_json_foo__c1__l1__k2, child_k2)
     child_l1 = yang.gdata.take_json_str(jd, 'l1')
     yang.gdata.maybe_add(children, 'l1', from_json_foo__c1__l1__l1, child_l1)
-    return yang.gdata.Container(children, [yang.gdata.yang_str(child_k1), yang.gdata.yang_str(child_k2)])
+    return yang.gdata.Container(children)
 
 mut def from_json_foo__c1__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = []
