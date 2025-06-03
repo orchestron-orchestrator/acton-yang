@@ -202,6 +202,25 @@ def _test_adata_foo_pc2():
     testing.assertEqual(pc2.foo.l_mandatory, "baz")
     return ad.to_gdata().prsrc()
 
+def _indent_lines(text, indent=4):
+    """Indent each line of the given text with the specified indent."""
+    return "\n".join([(" " * indent) + line for line in text.splitlines()])
+
+def _test_adata_source_roundtrip_xml_full(t: testing.EnvT):
+    wfcap = file.WriteFileCap(file.FileCap(t.env.cap))
+    xml_in = xml.decode(xml_text_full)
+    gd = yang_foo.from_xml(xml_in)
+    ad = yang_foo_root.from_gdata(gd)
+    wf = file.WriteFile(wfcap, "../test_gdata_source_roundtrip/src/xml_full_adata.act")
+    await async wf.write(f"""from yang_foo import *
+
+def adata():
+{_indent_lines(ad.prsrc("ad"))}
+    return ad
+""".encode())
+    await async wf.close()
+    t.success()
+
 def _test_foo_from_xml1():
     """"""
     xml_text = """<data>
