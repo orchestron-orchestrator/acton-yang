@@ -33,6 +33,12 @@ class base__c1__base_l1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> base__c1__base_l1_entry:
         return base__c1__base_l1_entry(base_k1=n.get_str('base:k1'), foo_k1=n.get_str('foo:k1'))
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = base__c1__base_l1({repr(self.base_k1)}, {repr(self.foo_k1)})')
+        return '\n'.join(res)
+
 class base__c1__base_l1(yang.adata.MNode):
     elements: list[base__c1__base_l1_entry]
     mut def __init__(self, elements=[]):
@@ -169,6 +175,12 @@ class base__c1__foo_l1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> base__c1__foo_l1_entry:
         return base__c1__foo_l1_entry(k2=n.get_str('k2'))
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = base__c1__foo_l1({repr(self.k2)})')
+        return '\n'.join(res)
+
 class base__c1__foo_l1(yang.adata.MNode):
     elements: list[base__c1__foo_l1_entry]
     mut def __init__(self, elements=[]):
@@ -301,6 +313,22 @@ class base__c1(yang.adata.MNode):
             return base__c1(base_l1=base__c1__base_l1.from_gdata(n.get_opt_list('base:l1')), foo_l1=base__c1__foo_l1.from_gdata(n.get_opt_list('foo:l1')))
         return base__c1()
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = base__c1()')
+        _base_l1 = self.base_l1
+        for _element in _base_l1.elements:
+            list_elem = f'base_l1_element = {self_name}.base_l1.create({repr(_element.base_k1)}, {repr(_element.foo_k1)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'base_l1_element', False).splitlines())
+        _foo_l1 = self.foo_l1
+        for _element in _foo_l1.elements:
+            list_elem = f'foo_l1_element = {self_name}.foo_l1.create({repr(_element.k2)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'foo_l1_element', False).splitlines())
+        return '\n'.join(res)
+
 
 mut def from_xml_base__c1(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -357,6 +385,15 @@ class root(yang.adata.MNode):
         if n != None:
             return root(c1=base__c1.from_gdata(n.get_opt_container('c1')))
         return root()
+
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = root()')
+        _c1 = self.c1
+        if _c1 is not None:
+            res.extend(_c1.prsrc(f'{self_name}.c1', False).splitlines())
+        return '\n'.join(res)
 
 
 mut def from_xml_root(node: xml.Node) -> yang.gdata.Container:

@@ -36,6 +36,12 @@ class foo__c__li__bar(yang.adata.MNode):
             return foo__c__li__bar(man=n.get_str('man'))
         raise ValueError('Missing required subtree foo__c__li__bar')
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = foo__c__li__bar({repr(self.man)})')
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__c__li__bar(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -92,6 +98,19 @@ class foo__c__li_entry(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c__li_entry:
         return foo__c__li_entry(name=n.get_str('name'), foo=n.get_opt_str('foo'), bar=foo__c__li__bar.from_gdata(n.get_container('bar')))
+
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'self_bar = foo__c__li__bar({repr(self.bar.man)})')
+            res.append(f'{self_name} = foo__c__li({repr(self.name)}, self_bar)')
+        _foo = self.foo
+        if _foo is not None:
+            res.append(f'{self_name}.foo = {repr(_foo)}')
+        _bar = self.bar
+        if _bar is not None:
+            res.extend(_bar.prsrc(f'{self_name}.bar', False).splitlines())
+        return '\n'.join(res)
 
 class foo__c__li(yang.adata.MNode):
     elements: list[foo__c__li_entry]

@@ -31,6 +31,12 @@ class foo__li1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__li1_entry:
         return foo__li1_entry(l1=n.get_str('l1'))
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = foo__li1({repr(self.l1)})')
+        return '\n'.join(res)
+
 class foo__li1(yang.adata.MNode):
     elements: list[foo__li1_entry]
     mut def __init__(self, elements=[]):
@@ -166,6 +172,20 @@ class root(yang.adata.MNode):
         if n != None:
             return root(li1=foo__li1.from_gdata(n.get_opt_list('li1')), ll1=n.get_opt_strs('ll1'))
         return root()
+
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = root()')
+        _li1 = self.li1
+        for _element in _li1.elements:
+            list_elem = f'li1_element = {self_name}.li1.create({repr(_element.l1)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'li1_element', False).splitlines())
+        _ll1 = self.ll1
+        if _ll1 is not None:
+            res.append(f'{self_name}.ll1 = {repr(_ll1)}')
+        return '\n'.join(res)
 
 
 mut def from_xml(node: xml.Node) -> yang.gdata.Container:

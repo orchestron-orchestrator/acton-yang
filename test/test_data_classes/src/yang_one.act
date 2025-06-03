@@ -45,6 +45,15 @@ class foo__tc1(yang.adata.MNode):
             return foo__tc1(l1=n.get_str('l1'), l2=n.get_opt_str('l2'))
         raise ValueError('Missing required subtree foo__tc1')
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = foo__tc1({repr(self.l1)})')
+        _l2 = self.l2
+        if _l2 is not None:
+            res.append(f'{self_name}.l2 = {repr(_l2)}')
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__tc1(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -123,6 +132,15 @@ class foo__li__c1(yang.adata.MNode):
             return foo__li__c1(l1=n.get_str('l1'), l2=n.get_opt_str('l2'))
         raise ValueError('Missing required subtree foo__li__c1')
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = foo__li__c1({repr(self.l1)})')
+        _l2 = self.l2
+        if _l2 is not None:
+            res.append(f'{self_name}.l2 = {repr(_l2)}')
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__li__c1(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -180,6 +198,16 @@ class foo__li_entry(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_entry:
         return foo__li_entry(name=n.get_str('name'), c1=foo__li__c1.from_gdata(n.get_container('c1')))
+
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'self_c1 = foo__li__c1({repr(self.c1.l1)})')
+            res.append(f'{self_name} = foo__li({repr(self.name)}, self_c1)')
+        _c1 = self.c1
+        if _c1 is not None:
+            res.extend(_c1.prsrc(f'{self_name}.c1', False).splitlines())
+        return '\n'.join(res)
 
 class foo__li(yang.adata.MNode):
     elements: list[foo__li_entry]
@@ -318,6 +346,22 @@ class root(yang.adata.MNode):
         if n != None:
             return root(tc1=foo__tc1.from_gdata(n.get_container('tc1')), li=foo__li.from_gdata(n.get_opt_list('li')))
         raise ValueError('Missing required subtree root')
+
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'self_tc1 = foo__tc1({repr(self.tc1.l1)})')
+            res.append(f'{self_name} = root(self_tc1)')
+        _tc1 = self.tc1
+        if _tc1 is not None:
+            res.extend(_tc1.prsrc(f'{self_name}.tc1', False).splitlines())
+        _li = self.li
+        for _element in _li.elements:
+            res.append(f'element_c1 = foo__li__c1({repr(_element.c1.l1)})')
+            list_elem = f'li_element = {self_name}.li.create({repr(_element.name)}, element_c1)'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'li_element', False).splitlines())
+        return '\n'.join(res)
 
 
 mut def from_xml(node: xml.Node) -> yang.gdata.Container:

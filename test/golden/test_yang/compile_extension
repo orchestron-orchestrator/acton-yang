@@ -42,6 +42,15 @@ class foo__c1__things_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__things_entry:
         return foo__c1__things_entry(name=n.get_str('name'), id=n.get_opt_str('id'))
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = foo__c1__things({repr(self.name)})')
+        _id = self.id
+        if _id is not None:
+            res.append(f'{self_name}.id = {repr(_id)}')
+        return '\n'.join(res)
+
 class foo__c1__things(yang.adata.MNode):
     elements: list[foo__c1__things_entry]
     mut def __init__(self, elements=[]):
@@ -175,6 +184,17 @@ class foo__c1(yang.adata.MNode):
             return foo__c1(things=foo__c1__things.from_gdata(n.get_opt_list('things')))
         return foo__c1()
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = foo__c1()')
+        _things = self.things
+        for _element in _things.elements:
+            list_elem = f'things_element = {self_name}.things.create({repr(_element.name)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'things_element', False).splitlines())
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__c1(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -224,6 +244,15 @@ class root(yang.adata.MNode):
         if n != None:
             return root(c1=foo__c1.from_gdata(n.get_opt_container('c1')))
         return root()
+
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = root()')
+        _c1 = self.c1
+        if _c1 is not None:
+            res.extend(_c1.prsrc(f'{self_name}.c1', False).splitlines())
+        return '\n'.join(res)
 
 
 mut def from_xml(node: xml.Node) -> yang.gdata.Container:

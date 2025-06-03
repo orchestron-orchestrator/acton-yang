@@ -24,6 +24,15 @@ class foo__foo__bar(yang.adata.MNode):
             return foo__foo__bar(l1=n.get_opt_str('l1'))
         return None
 
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = foo__foo__bar()')
+        _l1 = self.l1
+        if _l1 is not None:
+            res.append(f'{self_name}.l1 = {repr(_l1)}')
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__foo__bar(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -77,6 +86,16 @@ class foo__foo(yang.adata.MNode):
         if n != None:
             return foo__foo(bar=foo__foo__bar.from_gdata(n.get_opt_container('bar')))
         return None
+
+    def prsrc(self, self_name='ad', top=True):
+        res = []
+        if top:
+            res.append(f'{self_name} = foo__foo()')
+        _bar = self.bar
+        if _bar is not None:
+            res.append(f'bar = {self_name}.create_bar()')
+            res.extend(_bar.prsrc('bar', False).splitlines())
+        return '\n'.join(res)
 
 
 mut def from_xml_foo__foo(node: xml.Node) -> yang.gdata.Container:

@@ -537,6 +537,151 @@ class DNodeInner(DNode):
                 res.append(f"        raise ValueError('Missing required subtree {pname(self)}')")
         res.append("")
 
+        def find_non_optional_subtree(container: DNodeInner, path: list[str], local_prefix="_") -> (list[str], list[str]):
+            """Discover the non-optional descendants of a container
+
+            The container here is either a DContainer or a DList (representing
+            a list element). We recursively traverse the child nodes of the
+            container, looking for non-optional leaves and containers. A
+            container is non-optional if it is not a presence container and it
+            contains other non-optional nodes.
+
+            As we traverse the tree, we build intermediate container objects
+            using their non-optional arguments.
+
+            Args:
+                container: The container node to analyze
+                path: List of attribute names representing the path from the root
+                      to the current container (e.g. ['self', 'child1', 'child2'])
+                local_prefix: Prefix used for variable access in generated code,
+                             typically "_" for local variables or "" for self references
+
+            The function returns a tuple of two lists:
+            - non_optional_args: list of non-optional arguments for the outer container
+            - non_optional_containers: list of code lines that declare the
+            intermediate containers and their arguments
+
+            Note on f-string evaluation timing:
+            This function uses nested f-strings with two evaluation phases:
+            1. Generation-time: Outer f-strings resolve class names, paths, variable names
+            2. Runtime: Inner f-strings ({{...}}) become {...} and evaluate when prsrc() executes.
+            """
+            non_optional_args = []
+            non_optional_containers = []
+            unique_namer = _UniqueNamer(container)
+
+            for cchild in container.children:
+                if isinstance(cchild, DLeaf):
+                    # The list of children is already sorted so that key leaves
+                    # come first in the correct order.
+                    if not is_optional_arg_yang_leaf(cchild, loose):
+                        cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
+                        # Use repr() in nested f-string to print local variable / attribute verbatim
+                        non_optional_args.append(f"{{repr({local_prefix}{'.'.join(path)}.{cchild_safe_name})}}")
+                elif isinstance(cchild, DContainer):
+                    if not (cchild.presence or loose or optional_subtree(cchild)):
+                        cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
+
+                        # Recursively build subtree for non-optional children
+                        sub_args, sub_containers = find_non_optional_subtree(cchild, path + [cchild_safe_name], local_prefix)
+
+                        # Create variable declaration for this container
+                        mcchild_var = f"{'_'.join(path)}_{cchild_safe_name}"
+
+                        if sub_args:
+                            sub_args_str = ", ".join(sub_args)
+                            non_optional_containers.append(f"            res.append(f'{mcchild_var} = {pname(cchild)}({sub_args_str})')")
+                        else:
+                            non_optional_containers.append(f"            res.append('{mcchild_var} = {pname(cchild)}()')")
+
+                        # Add nested variable declarations
+                        non_optional_containers.extend(sub_containers)
+
+                        non_optional_args.append(mcchild_var)
+
+            return non_optional_args, non_optional_containers
+
+        # Generate prsrc() method that creates Acton source code to reconstruct this data object
+        # Uses nested f-strings with two evaluation phases:
+        # 1. Generation-time: Outer f-strings resolve class names, paths, variable names
+        # 2. Runtime: Inner f-strings {{...}} become {...} and evaluate when prsrc() executes
+        # 
+        # The 'top' parameter is internal and controls how the top element is created:
+        # - top=True: Generate constructor call (for root/independent objects)
+        # - top=False: Skip constructor, generate only assignments (for nested objects)
+        res.append("    def prsrc(self, self_name='ad', top=True):")
+        res.append("        res = []")
+        res.append("        if top:")
+        # Build constructor arguments for non-optional children (same logic as in __init__)
+        constructor_args, constructor_containers = find_non_optional_subtree(self, ["self"], local_prefix="")
+
+        if constructor_args:
+            # Add variable declarations in reverse order to ensure dependencies are declared before use.
+            # For example, if container C needs argument from container B, which needs argument from A,
+            # we must generate: A_var = ..., B_var = ..., C_var = ... in that order.
+            # Since find_non_optional_subtree() builds the list depth-first, we reverse it.
+            res.extend(list(reversed(constructor_containers)))
+            args_str = ", ".join(constructor_args)
+            res.append(f"            res.append(f'{{self_name}} = {pname(self)}({args_str})')")
+        else:
+            res.append(f"            res.append(f'{{self_name}} = {pname(self)}()')")
+        for child in self.children:
+            if isinstance(child, DNodeLeaf):
+                if not top and not is_optional_arg_yang_leaf(child, loose):
+                    # Do not print non-optional leafs if not top level, because
+                    # they are implicitly set with .create*()
+                    continue
+                # DLeaf and DLeafList are both copied verbatim
+                res.append(f"        _{usname(child)} = self.{usname(child)}")
+                res.append(f"        if _{usname(child)} is not None:")
+                res.append("            res.append(f'{self_name}.%s = {repr(_%s)}')" % (usname(child), usname(child)))
+            elif isinstance(child, DContainer):
+                res.append(f"        _{usname(child)} = self.{usname(child)}")
+                res.append(f"        if _{usname(child)} is not None:")
+                if child.presence:
+                    # Build .prsrc() code for this P-container
+                    pc_args, pc_var_declarations = find_non_optional_subtree(child, [usname(child)])
+
+                    # Add variable declarations in reverse order to ensure the prerequisites are met
+                    res.extend(list(reversed(pc_var_declarations)))
+
+                    child_accessor = _safe_name(child.name)
+                    pc_args_str = ", ".join(pc_args)
+                    if pc_args_str:
+                        res.append(f"            res.append(f'{child_accessor} = {{self_name}}.create_{usname(child)}({pc_args_str})')")
+                    else:
+                        res.append(f"            res.append(f'{child_accessor} = {{self_name}}.create_{usname(child)}()')")
+                    # Recursive call to prsrc() for the P-container, to fill in the rest of the optional children
+                    res.append(f"            res.extend(_{usname(child)}.prsrc('{usname(child)}', False).splitlines())")
+                else:
+                    # Build .prsrc() code for this container
+                    res.append(f"            res.extend(_{usname(child)}.prsrc(f'{{self_name}}.{usname(child)}', False).splitlines())")
+            elif isinstance(child, DList):
+                res.append(f"        _{usname(child)} = self.{usname(child)}")
+                res.append(f"        for _element in _{usname(child)}.elements:")
+
+                # Build the list of arguments for create() method
+                child_unique_namer = _UniqueNamer(child)
+                list_create_args = []
+
+                non_optional_args, non_optional_containers = find_non_optional_subtree(child, ["element"])
+
+                res.extend(list(reversed(non_optional_containers)))
+                list_create_args.extend(non_optional_args)
+
+                create_args_str = ", ".join(list_create_args)
+                if create_args_str:
+                    res.append(f"            list_elem = f'{usname(child)}_element = {{self_name}}.{usname(child)}.create({create_args_str})'")
+                else:
+                    res.append(f"            list_elem = f'{usname(child)}_element = {{self_name}}.{usname(child)}.create()'")
+                res.append(f"            res.append(list_elem)")
+                # Recursive call to prsrc() for the list element
+                res.append(f"            res.extend(_element.prsrc(f'{usname(child)}_element', False).splitlines())")
+            else:
+                raise ValueError(f"Unhandled child type in .prsrc(): {type(child)}")
+        res.append("        return '\\n'.join(res)")
+        res.append("")
+
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
             # - the list itself
