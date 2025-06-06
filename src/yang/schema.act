@@ -1019,8 +1019,12 @@ class DLeaf(DNodeLeaf):
     def is_key(self) -> bool:
         parent = self.parent
         if isinstance(parent, DList):
-            if self.name in parent.key:
-                return True
+            # If the leaf is in a different namespace as the list, it:
+            # - cannot possibly be a key,
+            # - may even have the same name as one of the keys!
+            if self.namespace == parent.namespace:
+                if self.name in parent.key:
+                    return True
         return False
 
     def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
