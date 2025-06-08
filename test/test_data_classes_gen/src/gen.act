@@ -13,7 +13,7 @@ def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str, loose
     src += "def src_yang():\n"
     src += "    res = []\n"
     for y in yangs:
-        src += '    res.append("""%s""")\n' % (y)
+        src += f'    res.append("""{y}""")\n'
     src += "    return res\n"
     src += "\n"
 
@@ -22,18 +22,18 @@ def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str, loose
     for y in yangs:
         ys = yang.schema_from_src(y)
         if isinstance(ys, yang.schema.Module):
-            src += '    res["%s"] = %s\n' % (ys.name, ys.prsrc())
+            src += f'    res["{ys.name}"] = {ys.prsrc()}\n'
         elif isinstance(ys, yang.schema.Submodule):
-            src += '    res["%s"] = %s\n' % (ys.name, ys.prsrc())
+            src += f'    res["{ys.name}"] = {ys.prsrc()}\n'
         else:
-            raise ValueError("Expected Module or Submodule, got %s" % type(ys))
+            raise ValueError(f"Expected Module or Submodule, got {type(ys)}")
     src += "    return res\n"
     src += "\n"
 
     src += "def src_schema_compiled():\n"
     src += "    res = {}\n"
     for m in modules:
-        src += '    res["%s"] = %s\n' % (m.name, m.prsrc())
+        src += f'    res["{m.name}"] = {m.prsrc()}\n'
     src += "    return res\n"
 
     # TF can't we write to the same file multiple times?!
