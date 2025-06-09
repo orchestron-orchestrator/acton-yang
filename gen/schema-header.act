@@ -388,7 +388,7 @@ class DNodeInner(DNode):
             elif isinstance(child, DOutput):
                 pass # TODO
             else:
-                raise ValueError("unreachable, unknown child type: " + str(type(child)))
+                raise ValueError(f"unreachable, unknown child type: {type(child)}")
         res.append("")
         req_args = []
         opt_args = []
@@ -551,7 +551,7 @@ class DNodeInner(DNode):
             res.append(f"    mut def __init__({init_args_str}):")
             # Set namespace from us
             res.append(f"        self._ns = '{self.namespace}'")
-            res.append("        self._name = " + repr(self.name))
+            res.append(f"        self._name = {repr(self.name)}")
             res.append("        self.elements = elements")
             res.append("")
 
@@ -638,7 +638,7 @@ class DNodeInner(DNode):
         if gen_xml and isinstance(self, DNodeInner):
             fname = "from_xml"
             if not top:
-                fname += "_" + pname(self)
+                fname += f"_{pname(self)}"
 
             if isinstance(self, DList):
                 res.append(f"mut def {fname}_element(node: xml.Node) -> yang.gdata.Node:")
@@ -677,7 +677,7 @@ class DNodeInner(DNode):
         if gen_json and isinstance(self, DNodeInner):
             fname = "from_json_path"
             if not top:
-                fname += "_" + pname(self)
+                fname += f"_{pname(self)}"
 
             if isinstance(self, DList):
                 res += [f"mut def {fname}_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:"]
@@ -756,7 +756,7 @@ class DNodeInner(DNode):
                         res.append(f"        if point == '{child.name}':")
                     if isinstance(child, DNodeInner):
                         res += [nest(12) + f"child = {{'{uname(child)}': from_json_path_{pname(child)}(jd, rest_path, op) }}"]
-                        res += [nest(12) + "return yang.gdata." + self.gname + f"(child{gdata_nsq})"]
+                        res += [f"{nest(12)}return yang.gdata.{self.gname}(child{gdata_nsq})"]
                     else:
                         res.append("            raise ValueError(\"Invalid json path to non-inner node\")")
                 res.append("        raise ValueError(\"Invalid path\")")
@@ -775,7 +775,7 @@ class DNodeInner(DNode):
         if gen_json and isinstance(self, DNodeInner):
             fname = "from_json"
             if not top:
-                fname += "_" + pname(self)
+                fname += f"_{pname(self)}"
 
             if isinstance(self, DList):
                 res.append(f"mut def {fname}_element(jd: dict[str, ?value]) -> yang.gdata.Node:")
@@ -1264,7 +1264,7 @@ class SchemaNode(object):
         res = []
         self_arg = self._get_arg()
         if self_arg is not None:
-            args = ["'" + self_arg + "'"]
+            args = [f"'{self_arg}'"]
         else:
             args = []
         attrs_text = _prsrc_attrs(indent, self.get_attrs())
@@ -1274,7 +1274,7 @@ class SchemaNode(object):
         if have_children:
             args.append("children=[")
         args_text = ", ".join(args)
-        text_line = _ind(indent) + self._get_class_name() + "(" + args_text
+        text_line = f"{_ind(indent)}{self._get_class_name()}({args_text}"
         if not have_children:
             text_line += ')'
         res.append(text_line)
@@ -1599,7 +1599,7 @@ class SchemaNode(object):
                         aug.expand_children(context, target, new_mod=aug.get_module_name(), new_ns=aug.get_namespace(), new_pfx=aug.get_prefix())
                         target.exts.extend(aug.exts)
                     else:
-                        raise ValueError("Augment target " + str(target) + " is not an inner node")
+                        raise ValueError(f"Augment target {target} is not an inner node")
 
         # Look if node is of a type that has augment substatements
         if isinstance(self, Module):
@@ -1768,14 +1768,14 @@ class Ext(SchemaNode):
         prefix = self.prefix
         args = []
         if prefix is not None:
-            args = ["'" + str(prefix) + "', '" + str(self.name) + "'"]
+            args = [f"'{prefix}', '{self.name}'"]
         else:
             raise ValueError("No prefix in Ext.prsrc, this should never happen")
         attrs_text = _prsrc_attrs(indent, attrs)
         if len(attrs_text) > 0:
             args.append(attrs_text)
         args_text = ", ".join(args)
-        text_line = _ind(indent) + "Ext(" + args_text + ")"
+        text_line = f"{_ind(indent)}Ext({args_text})"
         res.append(text_line)
         return "\n".join(res)
 
@@ -1787,7 +1787,7 @@ class Ext(SchemaNode):
 
     def __str__(self):
         self_arg = self.arg
-        return "Ext " + self.name + ((" " + self_arg) if self_arg is not None else "")
+        return f"Ext {self.name}{(' ' + self_arg if self_arg is not None else '')}"
 
 extension Ext (Ord):
     def __eq__(self, other: Ext) -> bool:
@@ -1847,10 +1847,7 @@ def take_str(stmts: list[Statement], kw: str) -> str:
 def take_yang_version(stmts: list[Statement]) -> float:
     v = take_opt_str(stmts, "yang-version")
     if v is not None:
-        # TODO: this should just be: return float(v)
-        # but a compiler bug prevents that from working
-        f = float(v)
-        return f
+        return float(v)
     return 1.0
 
 def take_strlist(stmts: list[Statement], kw: str) -> list[str]:
@@ -1943,14 +1940,14 @@ def _prsrc_attrs(indent, attrs):
                             list_val.append(repr(e))
                     list_val_str = "[]"
                     if len(list_val) == 1 and list_val[0][0] != " " and len(list_val[0]) < 20:
-                        list_val_str = "[" + list_val[0] + "]"
+                        list_val_str = f"[{list_val[0]}]"
                     else:
-                        list_val_str = "[\n" + ",\n".join(list_val) + "\n" + _ind(indent + 1) + "]"
-                    res.append(name + "=" + list_val_str)
+                        list_val_str = f"[\n{',\n'.join(list_val)}\n{_ind(indent + 1)}]"
+                    res.append(f"{name}={list_val_str}")
             elif isinstance(value, SchemaNode):
-                res.append(name + "=" + value.prsrc(0))
+                res.append(f"{name}={value.prsrc(0)}")
             else:
-                res.append(name + "=" + repr(value))
+                res.append(f"{name}={repr(value)}")
     return ", ".join(res)
 
 
@@ -2098,7 +2095,7 @@ def yang_typename_to_acton_type(type_name: str) -> str:
     elif type_name == "union":
         # You should use yang_type_to_acton_type which can expand the union type for you!
         raise ValueError("Union type not supported")
-    raise ValueError("Unknown YANG type: " + type_name)
+    raise ValueError(f"Unknown YANG type: {type_name}")
 
 def yang_type_to_acton_type(t: ?Type) -> str:
     # +---------------------+-------------------------------------+
@@ -2215,7 +2212,7 @@ def prsrc_literal(ytype: str, value: str) -> str:
             return str(False)
         # otherwise it is a string
         return '"' + value.replace('"', '\\"') + '"'
-    raise ValueError("Unhandled prsrc literal of type " + ytype)
+    raise ValueError(f"Unhandled prsrc literal of type {ytype}")
 
 def _safe_name(name: str, safe_kw=True) -> str:
     new = name.replace("-", "_").replace(".", "_")
@@ -2319,7 +2316,7 @@ def get_path_name(dnode: DNode) -> str:
 
     # This never happens, we always get at least our name!
     if len(path) == 0:
-        raise ValueError("No path for DNode" + str(dnode))
+        raise ValueError(f"No path for DNode{dnode}")
 
     return "__".join(reversed(path))
 
