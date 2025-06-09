@@ -66,22 +66,29 @@ class root(yang.adata.MNode):
             return root(l1=n.get_opt_int('l1'), l2=n.get_opt_int('l2'), l3=n.get_opt_int('l3'), l4=n.get_opt_int('l4'))
         return root()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /root')
             res.append(f'{self_name} = root()')
+        leaves = []
         _l1 = self.l1
         if _l1 is not None:
-            res.append(f'{self_name}.l1 = {repr(_l1)}')
+            leaves.append(f'{self_name}.l1 = {repr(_l1)}')
         _l2 = self.l2
         if _l2 is not None:
-            res.append(f'{self_name}.l2 = {repr(_l2)}')
+            leaves.append(f'{self_name}.l2 = {repr(_l2)}')
         _l3 = self.l3
         if _l3 is not None:
-            res.append(f'{self_name}.l3 = {repr(_l3)}')
+            leaves.append(f'{self_name}.l3 = {repr(_l3)}')
         _l4 = self.l4
         if _l4 is not None:
-            res.append(f'{self_name}.l4 = {repr(_l4)}')
+            leaves.append(f'{self_name}.l4 = {repr(_l4)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /root'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 

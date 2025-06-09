@@ -30,10 +30,17 @@ class foo__l1__bar(yang.adata.MNode):
             return foo__l1__bar(hi=n.get_str('hi'))
         return None
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /l1/bar')
             res.append(f'{self_name} = foo__l1__bar({repr(self.hi)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /l1/bar'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -93,14 +100,23 @@ class foo__l1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__l1_entry:
         return foo__l1_entry(name=n.get_str('name'), bar=foo__l1__bar.from_gdata(n.get_opt_container('bar')))
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /l1')
             res.append(f'{self_name} = foo__l1({repr(self.name)})')
+        leaves = []
         _bar = self.bar
         if _bar is not None:
+            res.append('')
+            res.append('# P-container: /l1/bar')
             res.append(f'bar = {self_name}.create_bar({repr(_bar.hi)})')
             res.extend(_bar.prsrc('bar', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /l1'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 class foo__l1(yang.adata.MNode):

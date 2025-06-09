@@ -61,13 +61,20 @@ class foo__c1__li_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__li_entry:
         return foo__c1__li_entry(name=n.get_str('name'), val=n.get_opt_str('val'))
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /c1/li')
             res.append(f'{self_name} = foo__c1__li({repr(self.name)})')
+        leaves = []
         _val = self.val
         if _val is not None:
-            res.append(f'{self_name}.val = {repr(_val)}')
+            leaves.append(f'{self_name}.val = {repr(_val)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c1/li'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 class foo__c1__li(yang.adata.MNode):
@@ -269,39 +276,48 @@ class foo__c1(yang.adata.MNode):
             return foo__c1(f_l1=n.get_opt_str('f:l1'), l3=n.get_opt_int('l3'), l_empty=n.get_opt_bool('l_empty'), li=foo__c1__li.from_gdata(n.get_opt_list('li')), ll_uint64=n.get_opt_ints('ll_uint64'), ll_str=n.get_opt_strs('ll_str'), l4=n.get_opt_str('l4'), bar_l1=n.get_opt_str('bar:l1'), l2=n.get_opt_str('l2'))
         return foo__c1()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /c1')
             res.append(f'{self_name} = foo__c1()')
+        leaves = []
         _f_l1 = self.f_l1
         if _f_l1 is not None:
-            res.append(f'{self_name}.f_l1 = {repr(_f_l1)}')
+            leaves.append(f'{self_name}.f_l1 = {repr(_f_l1)}')
         _l3 = self.l3
         if _l3 is not None:
-            res.append(f'{self_name}.l3 = {repr(_l3)}')
+            leaves.append(f'{self_name}.l3 = {repr(_l3)}')
         _l_empty = self.l_empty
         if _l_empty is not None:
-            res.append(f'{self_name}.l_empty = {repr(_l_empty)}')
+            leaves.append(f'{self_name}.l_empty = {repr(_l_empty)}')
         _li = self.li
         for _element in _li.elements:
+            res.append('')
+            res.append(f"# List /c1/li element: {_element.to_gdata().key_str(['name'])}")
             list_elem = f'li_element = {self_name}.li.create({repr(_element.name)})'
             res.append(list_elem)
-            res.extend(_element.prsrc(f'li_element', False).splitlines())
+            res.extend(_element.prsrc(f'li_element', False, list_element=True).splitlines())
         _ll_uint64 = self.ll_uint64
         if _ll_uint64 is not None:
-            res.append(f'{self_name}.ll_uint64 = {repr(_ll_uint64)}')
+            leaves.append(f'{self_name}.ll_uint64 = {repr(_ll_uint64)}')
         _ll_str = self.ll_str
         if _ll_str is not None:
-            res.append(f'{self_name}.ll_str = {repr(_ll_str)}')
+            leaves.append(f'{self_name}.ll_str = {repr(_ll_str)}')
         _l4 = self.l4
         if _l4 is not None:
-            res.append(f'{self_name}.l4 = {repr(_l4)}')
+            leaves.append(f'{self_name}.l4 = {repr(_l4)}')
         _bar_l1 = self.bar_l1
         if _bar_l1 is not None:
-            res.append(f'{self_name}.bar_l1 = {repr(_bar_l1)}')
+            leaves.append(f'{self_name}.bar_l1 = {repr(_bar_l1)}')
         _l2 = self.l2
         if _l2 is not None:
-            res.append(f'{self_name}.l2 = {repr(_l2)}')
+            leaves.append(f'{self_name}.l2 = {repr(_l2)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c1'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -406,13 +422,20 @@ class foo__pc1__foo(yang.adata.MNode):
             return foo__pc1__foo(l1=n.get_opt_bytess('l1'))
         return foo__pc1__foo()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /pc1/foo')
             res.append(f'{self_name} = foo__pc1__foo()')
+        leaves = []
         _l1 = self.l1
         if _l1 is not None:
-            res.append(f'{self_name}.l1 = {repr(_l1)}')
+            leaves.append(f'{self_name}.l1 = {repr(_l1)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc1/foo'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -464,13 +487,20 @@ class foo__pc1(yang.adata.MNode):
             return foo__pc1(foo=foo__pc1__foo.from_gdata(n.get_opt_container('foo')))
         return None
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /pc1')
             res.append(f'{self_name} = foo__pc1()')
+        leaves = []
         _foo = self.foo
         if _foo is not None:
             res.extend(_foo.prsrc(f'{self_name}.foo', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc1'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -529,10 +559,17 @@ class foo__pc2__foo(yang.adata.MNode):
             return foo__pc2__foo(l_mandatory=n.get_str('l_mandatory'))
         raise ValueError('Missing required subtree foo__pc2__foo')
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /pc2/foo')
             res.append(f'{self_name} = foo__pc2__foo({repr(self.l_mandatory)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc2/foo'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -584,14 +621,21 @@ class foo__pc2(yang.adata.MNode):
             return foo__pc2(foo=foo__pc2__foo.from_gdata(n.get_container('foo')))
         return None
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /pc2')
             res.append(f'self_foo = foo__pc2__foo({repr(self.foo.l_mandatory)})')
             res.append(f'{self_name} = foo__pc2(self_foo)')
+        leaves = []
         _foo = self.foo
         if _foo is not None:
             res.extend(_foo.prsrc(f'{self_name}.foo', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc2'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -685,13 +729,20 @@ class foo__pc3__level1__level2__level3(yang.adata.MNode):
             return foo__pc3__level1__level2__level3(l3=n.get_str('l3'), l3_optional=n.get_opt_str('l3-optional'))
         raise ValueError('Missing required subtree foo__pc3__level1__level2__level3')
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /pc3/level1/level2/level3')
             res.append(f'{self_name} = foo__pc3__level1__level2__level3({repr(self.l3)})')
+        leaves = []
         _l3_optional = self.l3_optional
         if _l3_optional is not None:
-            res.append(f'{self_name}.l3_optional = {repr(_l3_optional)}')
+            leaves.append(f'{self_name}.l3_optional = {repr(_l3_optional)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc3/level1/level2/level3'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -759,17 +810,24 @@ class foo__pc3__level1__level2(yang.adata.MNode):
             return foo__pc3__level1__level2(l2=n.get_str('l2'), l2_optional=n.get_opt_str('l2-optional'), level3=foo__pc3__level1__level2__level3.from_gdata(n.get_container('level3')))
         raise ValueError('Missing required subtree foo__pc3__level1__level2')
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /pc3/level1/level2')
             res.append(f'self_level3 = foo__pc3__level1__level2__level3({repr(self.level3.l3)})')
             res.append(f'{self_name} = foo__pc3__level1__level2({repr(self.l2)}, self_level3)')
+        leaves = []
         _l2_optional = self.l2_optional
         if _l2_optional is not None:
-            res.append(f'{self_name}.l2_optional = {repr(_l2_optional)}')
+            leaves.append(f'{self_name}.l2_optional = {repr(_l2_optional)}')
         _level3 = self.level3
         if _level3 is not None:
             res.extend(_level3.prsrc(f'{self_name}.level3', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc3/level1/level2'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -844,18 +902,25 @@ class foo__pc3__level1(yang.adata.MNode):
             return foo__pc3__level1(l1=n.get_str('l1'), l1_optional=n.get_opt_str('l1-optional'), level2=foo__pc3__level1__level2.from_gdata(n.get_container('level2')))
         raise ValueError('Missing required subtree foo__pc3__level1')
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /pc3/level1')
             res.append(f'self_level2_level3 = foo__pc3__level1__level2__level3({repr(self.level2.level3.l3)})')
             res.append(f'self_level2 = foo__pc3__level1__level2({repr(self.level2.l2)}, self_level2_level3)')
             res.append(f'{self_name} = foo__pc3__level1({repr(self.l1)}, self_level2)')
+        leaves = []
         _l1_optional = self.l1_optional
         if _l1_optional is not None:
-            res.append(f'{self_name}.l1_optional = {repr(_l1_optional)}')
+            leaves.append(f'{self_name}.l1_optional = {repr(_l1_optional)}')
         _level2 = self.level2
         if _level2 is not None:
             res.extend(_level2.prsrc(f'{self_name}.level2', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc3/level1'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -920,16 +985,23 @@ class foo__pc3(yang.adata.MNode):
             return foo__pc3(level1=foo__pc3__level1.from_gdata(n.get_container('level1')))
         return None
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /pc3')
             res.append(f'self_level1_level2_level3 = foo__pc3__level1__level2__level3({repr(self.level1.level2.level3.l3)})')
             res.append(f'self_level1_level2 = foo__pc3__level1__level2({repr(self.level1.level2.l2)}, self_level1_level2_level3)')
             res.append(f'self_level1 = foo__pc3__level1({repr(self.level1.l1)}, self_level1_level2)')
             res.append(f'{self_name} = foo__pc3(self_level1)')
+        leaves = []
         _level1 = self.level1
         if _level1 is not None:
             res.extend(_level1.prsrc(f'{self_name}.level1', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc3'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -978,10 +1050,17 @@ class foo__empty_presence(yang.adata.MNode):
             return foo__empty_presence()
         return None
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /empty-presence')
             res.append(f'{self_name} = foo__empty_presence()')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /empty-presence'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -1044,16 +1123,23 @@ class foo__c_dot(yang.adata.MNode):
             return foo__c_dot(l_dot1=n.get_opt_str('l.dot1'), l_dot2=n.get_opt_str('l.dot2'))
         return foo__c_dot()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /c.dot')
             res.append(f'{self_name} = foo__c_dot()')
+        leaves = []
         _l_dot1 = self.l_dot1
         if _l_dot1 is not None:
-            res.append(f'{self_name}.l_dot1 = {repr(_l_dot1)}')
+            leaves.append(f'{self_name}.l_dot1 = {repr(_l_dot1)}')
         _l_dot2 = self.l_dot2
         if _l_dot2 is not None:
-            res.append(f'{self_name}.l_dot2 = {repr(_l_dot2)}')
+            leaves.append(f'{self_name}.l_dot2 = {repr(_l_dot2)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c.dot'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -1121,10 +1207,17 @@ class foo__cc__death_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__cc__death_entry:
         return foo__cc__death_entry(name=n.get_str('name'))
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /cc/death')
             res.append(f'{self_name} = foo__cc__death({repr(self.name)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /cc/death'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 class foo__cc__death(yang.adata.MNode):
@@ -1259,18 +1352,27 @@ class foo__cc(yang.adata.MNode):
             return foo__cc(cake=n.get_opt_str('cake'), death=foo__cc__death.from_gdata(n.get_opt_list('death')))
         return foo__cc()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /cc')
             res.append(f'{self_name} = foo__cc()')
+        leaves = []
         _cake = self.cake
         if _cake is not None:
-            res.append(f'{self_name}.cake = {repr(_cake)}')
+            leaves.append(f'{self_name}.cake = {repr(_cake)}')
         _death = self.death
         for _element in _death.elements:
+            res.append('')
+            res.append(f"# List /cc/death element: {_element.to_gdata().key_str(['name'])}")
             list_elem = f'death_element = {self_name}.death.create({repr(_element.name)})'
             res.append(list_elem)
-            res.extend(_element.prsrc(f'death_element', False).splitlines())
+            res.extend(_element.prsrc(f'death_element', False, list_element=True).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /cc'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -1331,10 +1433,17 @@ class foo__conflict__f_inner(yang.adata.MNode):
             return foo__conflict__f_inner()
         return None
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /conflict/f:inner')
             res.append(f'{self_name} = foo__conflict__f_inner()')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /conflict/f:inner'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -1382,10 +1491,17 @@ class foo__conflict__bar_inner(yang.adata.MNode):
             return foo__conflict__bar_inner()
         return None
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /conflict/bar:inner')
             res.append(f'{self_name} = foo__conflict__bar_inner()')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /conflict/bar:inner'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -1456,24 +1572,35 @@ class foo__conflict(yang.adata.MNode):
             return foo__conflict(f_foo=n.get_opt_str('f:foo'), f_inner=foo__conflict__f_inner.from_gdata(n.get_opt_container('f:inner')), bar_foo=n.get_opt_str('bar:foo'), bar_inner=foo__conflict__bar_inner.from_gdata(n.get_opt_container('bar:inner')))
         return foo__conflict()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /conflict')
             res.append(f'{self_name} = foo__conflict()')
+        leaves = []
         _f_foo = self.f_foo
         if _f_foo is not None:
-            res.append(f'{self_name}.f_foo = {repr(_f_foo)}')
+            leaves.append(f'{self_name}.f_foo = {repr(_f_foo)}')
         _f_inner = self.f_inner
         if _f_inner is not None:
+            res.append('')
+            res.append('# P-container: /conflict/f:inner')
             res.append(f'inner = {self_name}.create_f_inner()')
             res.extend(_f_inner.prsrc('f_inner', False).splitlines())
         _bar_foo = self.bar_foo
         if _bar_foo is not None:
-            res.append(f'{self_name}.bar_foo = {repr(_bar_foo)}')
+            leaves.append(f'{self_name}.bar_foo = {repr(_bar_foo)}')
         _bar_inner = self.bar_inner
         if _bar_inner is not None:
+            res.append('')
+            res.append('# P-container: /conflict/bar:inner')
             res.append(f'inner = {self_name}.create_bar_inner()')
             res.extend(_bar_inner.prsrc('bar_inner', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /conflict'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -1549,10 +1676,17 @@ class foo__special_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__special_entry:
         return foo__special_entry(yes=n.get_bool('yes'))
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /special')
             res.append(f'{self_name} = foo__special({repr(self.yes)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /special'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 class foo__special(yang.adata.MNode):
@@ -1726,13 +1860,20 @@ class foo__nested__f_inner__li1__li2_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__nested__f_inner__li1__li2_entry:
         return foo__nested__f_inner__li1__li2_entry(key1=n.get_str('key1'), key2=n.get_str('key2'), baz=n.get_opt_str('baz'))
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /nested/f:inner/li1/li2')
             res.append(f'{self_name} = foo__nested__f_inner__li1__li2({repr(self.key1)}, {repr(self.key2)})')
+        leaves = []
         _baz = self.baz
         if _baz is not None:
-            res.append(f'{self_name}.baz = {repr(_baz)}')
+            leaves.append(f'{self_name}.baz = {repr(_baz)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested/f:inner/li1/li2'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 class foo__nested__f_inner__li1__li2(yang.adata.MNode):
@@ -1895,21 +2036,30 @@ class foo__nested__f_inner__li1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__nested__f_inner__li1_entry:
         return foo__nested__f_inner__li1_entry(name=n.get_str('name'), f_bar=n.get_opt_str('f:bar'), li2=foo__nested__f_inner__li1__li2.from_gdata(n.get_opt_list('li2')), bar_bar=n.get_opt_str('bar:bar'))
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /nested/f:inner/li1')
             res.append(f'{self_name} = foo__nested__f_inner__li1({repr(self.name)})')
+        leaves = []
         _f_bar = self.f_bar
         if _f_bar is not None:
-            res.append(f'{self_name}.f_bar = {repr(_f_bar)}')
+            leaves.append(f'{self_name}.f_bar = {repr(_f_bar)}')
         _li2 = self.li2
         for _element in _li2.elements:
+            res.append('')
+            res.append(f"# List /nested/f:inner/li1/li2 element: {_element.to_gdata().key_str(['key1', 'key2'])}")
             list_elem = f'li2_element = {self_name}.li2.create({repr(_element.key1)}, {repr(_element.key2)})'
             res.append(list_elem)
-            res.extend(_element.prsrc(f'li2_element', False).splitlines())
+            res.extend(_element.prsrc(f'li2_element', False, list_element=True).splitlines())
         _bar_bar = self.bar_bar
         if _bar_bar is not None:
-            res.append(f'{self_name}.bar_bar = {repr(_bar_bar)}')
+            leaves.append(f'{self_name}.bar_bar = {repr(_bar_bar)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested/f:inner/li1'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 class foo__nested__f_inner__li1(yang.adata.MNode):
@@ -2062,18 +2212,27 @@ class foo__nested__f_inner(yang.adata.MNode):
             return foo__nested__f_inner(foo=n.get_opt_str('foo'), li1=foo__nested__f_inner__li1.from_gdata(n.get_opt_list('li1')))
         return foo__nested__f_inner()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /nested/f:inner')
             res.append(f'{self_name} = foo__nested__f_inner()')
+        leaves = []
         _foo = self.foo
         if _foo is not None:
-            res.append(f'{self_name}.foo = {repr(_foo)}')
+            leaves.append(f'{self_name}.foo = {repr(_foo)}')
         _li1 = self.li1
         for _element in _li1.elements:
+            res.append('')
+            res.append(f"# List /nested/f:inner/li1 element: {_element.to_gdata().key_str(['name'])}")
             list_elem = f'li1_element = {self_name}.li1.create({repr(_element.name)})'
             res.append(list_elem)
-            res.extend(_element.prsrc(f'li1_element', False).splitlines())
+            res.extend(_element.prsrc(f'li1_element', False, list_element=True).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested/f:inner'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -2138,13 +2297,20 @@ class foo__nested__bar_inner(yang.adata.MNode):
             return foo__nested__bar_inner(foo=n.get_opt_str('foo'))
         return foo__nested__bar_inner()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /nested/bar:inner')
             res.append(f'{self_name} = foo__nested__bar_inner()')
+        leaves = []
         _foo = self.foo
         if _foo is not None:
-            res.append(f'{self_name}.foo = {repr(_foo)}')
+            leaves.append(f'{self_name}.foo = {repr(_foo)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested/bar:inner'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -2201,16 +2367,23 @@ class foo__nested(yang.adata.MNode):
             return foo__nested(f_inner=foo__nested__f_inner.from_gdata(n.get_opt_container('f:inner')), bar_inner=foo__nested__bar_inner.from_gdata(n.get_opt_container('bar:inner')))
         return foo__nested()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /nested')
             res.append(f'{self_name} = foo__nested()')
+        leaves = []
         _f_inner = self.f_inner
         if _f_inner is not None:
             res.extend(_f_inner.prsrc(f'{self_name}.f_inner', False).splitlines())
         _bar_inner = self.bar_inner
         if _bar_inner is not None:
             res.extend(_bar_inner.prsrc(f'{self_name}.bar_inner', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -2296,10 +2469,17 @@ class foo__li_union_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_union_entry:
         return foo__li_union_entry(k1=n.get_str('k1'), k2=n.get_value('k2'), k3=n.get_bytes('k3'))
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /li-union')
             res.append(f'{self_name} = foo__li_union({repr(self.k1)}, {repr(self.k2)}, {repr(self.k3)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /li-union'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 class foo__li_union(yang.adata.MNode):
@@ -2474,16 +2654,23 @@ class foo__state__c1(yang.adata.MNode):
             return foo__state__c1(l1=n.get_opt_str('l1'), l2=n.get_opt_str('l2'))
         return foo__state__c1()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /state/c1')
             res.append(f'{self_name} = foo__state__c1()')
+        leaves = []
         _l1 = self.l1
         if _l1 is not None:
-            res.append(f'{self_name}.l1 = {repr(_l1)}')
+            leaves.append(f'{self_name}.l1 = {repr(_l1)}')
         _l2 = self.l2
         if _l2 is not None:
-            res.append(f'{self_name}.l2 = {repr(_l2)}')
+            leaves.append(f'{self_name}.l2 = {repr(_l2)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /state/c1'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -2541,13 +2728,20 @@ class foo__state(yang.adata.MNode):
             return foo__state(c1=foo__state__c1.from_gdata(n.get_opt_container('c1')))
         return foo__state()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /state')
             res.append(f'{self_name} = foo__state()')
+        leaves = []
         _c1 = self.c1
         if _c1 is not None:
             res.extend(_c1.prsrc(f'{self_name}.c1', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /state'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -2606,13 +2800,20 @@ class foo__c2(yang.adata.MNode):
             return foo__c2(l1=n.get_opt_str('l1'))
         return foo__c2()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /c2')
             res.append(f'{self_name} = foo__c2()')
+        leaves = []
         _l1 = self.l1
         if _l1 is not None:
-            res.append(f'{self_name}.l1 = {repr(_l1)}')
+            leaves.append(f'{self_name}.l1 = {repr(_l1)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c2'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -2670,13 +2871,20 @@ class bar__conflict(yang.adata.MNode):
             return bar__conflict(foo=n.get_opt_str('foo'))
         return bar__conflict()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /conflict')
             res.append(f'{self_name} = bar__conflict()')
+        leaves = []
         _foo = self.foo
         if _foo is not None:
-            res.append(f'{self_name}.foo = {repr(_foo)}')
+            leaves.append(f'{self_name}.foo = {repr(_foo)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /conflict'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 
@@ -2813,24 +3021,32 @@ class root(yang.adata.MNode):
             return root(c1=foo__c1.from_gdata(n.get_opt_container('c1')), pc1=foo__pc1.from_gdata(n.get_opt_container('pc1')), pc2=foo__pc2.from_gdata(n.get_opt_container('pc2')), pc3=foo__pc3.from_gdata(n.get_opt_container('pc3')), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container('empty-presence')), c_dot=foo__c_dot.from_gdata(n.get_opt_container('c.dot')), cc=foo__cc.from_gdata(n.get_opt_container('cc')), f_conflict=foo__conflict.from_gdata(n.get_opt_container('f:conflict')), special=foo__special.from_gdata(n.get_opt_list('special')), nested=foo__nested.from_gdata(n.get_opt_container('nested')), li_union=foo__li_union.from_gdata(n.get_opt_list('li-union')), state=foo__state.from_gdata(n.get_opt_container('state')), c2=foo__c2.from_gdata(n.get_opt_container('c2')), bar_conflict=bar__conflict.from_gdata(n.get_opt_container('bar:conflict')))
         return root()
 
-    def prsrc(self, self_name='ad', top=True):
+    def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
+            res.append(f'# Top node: /root')
             res.append(f'{self_name} = root()')
+        leaves = []
         _c1 = self.c1
         if _c1 is not None:
             res.extend(_c1.prsrc(f'{self_name}.c1', False).splitlines())
         _pc1 = self.pc1
         if _pc1 is not None:
+            res.append('')
+            res.append('# P-container: /pc1')
             res.append(f'pc1 = {self_name}.create_pc1()')
             res.extend(_pc1.prsrc('pc1', False).splitlines())
         _pc2 = self.pc2
         if _pc2 is not None:
+            res.append('')
+            res.append('# P-container: /pc2')
             res.append(f'pc2_foo = foo__pc2__foo({repr(_pc2.foo.l_mandatory)})')
             res.append(f'pc2 = {self_name}.create_pc2(pc2_foo)')
             res.extend(_pc2.prsrc('pc2', False).splitlines())
         _pc3 = self.pc3
         if _pc3 is not None:
+            res.append('')
+            res.append('# P-container: /pc3')
             res.append(f'pc3_level1_level2_level3 = foo__pc3__level1__level2__level3({repr(_pc3.level1.level2.level3.l3)})')
             res.append(f'pc3_level1_level2 = foo__pc3__level1__level2({repr(_pc3.level1.level2.l2)}, pc3_level1_level2_level3)')
             res.append(f'pc3_level1 = foo__pc3__level1({repr(_pc3.level1.l1)}, pc3_level1_level2)')
@@ -2838,6 +3054,8 @@ class root(yang.adata.MNode):
             res.extend(_pc3.prsrc('pc3', False).splitlines())
         _empty_presence = self.empty_presence
         if _empty_presence is not None:
+            res.append('')
+            res.append('# P-container: /empty-presence')
             res.append(f'empty_presence = {self_name}.create_empty_presence()')
             res.extend(_empty_presence.prsrc('empty_presence', False).splitlines())
         _c_dot = self.c_dot
@@ -2851,17 +3069,21 @@ class root(yang.adata.MNode):
             res.extend(_f_conflict.prsrc(f'{self_name}.f_conflict', False).splitlines())
         _special = self.special
         for _element in _special.elements:
+            res.append('')
+            res.append(f"# List /special element: {_element.to_gdata().key_str(['yes'])}")
             list_elem = f'special_element = {self_name}.special.create({repr(_element.yes)})'
             res.append(list_elem)
-            res.extend(_element.prsrc(f'special_element', False).splitlines())
+            res.extend(_element.prsrc(f'special_element', False, list_element=True).splitlines())
         _nested = self.nested
         if _nested is not None:
             res.extend(_nested.prsrc(f'{self_name}.nested', False).splitlines())
         _li_union = self.li_union
         for _element in _li_union.elements:
+            res.append('')
+            res.append(f"# List /li-union element: {_element.to_gdata().key_str(['k1', 'k2', 'k3'])}")
             list_elem = f'li_union_element = {self_name}.li_union.create({repr(_element.k1)}, {repr(_element.k2)}, {repr(_element.k3)})'
             res.append(list_elem)
-            res.extend(_element.prsrc(f'li_union_element', False).splitlines())
+            res.extend(_element.prsrc(f'li_union_element', False, list_element=True).splitlines())
         _state = self.state
         if _state is not None:
             res.extend(_state.prsrc(f'{self_name}.state', False).splitlines())
@@ -2871,6 +3093,11 @@ class root(yang.adata.MNode):
         _bar_conflict = self.bar_conflict
         if _bar_conflict is not None:
             res.extend(_bar_conflict.prsrc(f'{self_name}.bar_conflict', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /root'] + leaves + res
+            else:
+                res = leaves + res
         return '\n'.join(res)
 
 

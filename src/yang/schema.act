@@ -605,9 +605,12 @@ class DNodeInner(DNode):
         # The 'top' parameter is internal and controls how the top element is created:
         # - top=True: Generate constructor call (for root/independent objects)
         # - top=False: Skip constructor, generate only assignments (for nested objects)
-        res.append("    def prsrc(self, self_name='ad', top=True):")
+        # The 'list_element' parameter is internal and used to indicate if this
+        # is a list element and controls how the header comment is generated.
+        res.append("    def prsrc(self, self_name='ad', top=True, list_element=False):")
         res.append("        res = []")
         res.append("        if top:")
+        res.append(f"            res.append(f'# Top node: {get_path(self)}')")
         # Build constructor arguments for non-optional children (same logic as in __init__)
         constructor_args, constructor_containers = find_non_optional_subtree(self, ["self"], local_prefix="")
 
@@ -621,6 +624,7 @@ class DNodeInner(DNode):
             res.append(f"            res.append(f'{{self_name}} = {pname(self)}({args_str})')")
         else:
             res.append(f"            res.append(f'{{self_name}} = {pname(self)}()')")
+        res.append("        leaves = []")
         for child in self.children:
             if isinstance(child, DNodeLeaf):
                 if not top and not is_optional_arg_yang_leaf(child, loose):
@@ -630,11 +634,13 @@ class DNodeInner(DNode):
                 # DLeaf and DLeafList are both copied verbatim
                 res.append(f"        _{usname(child)} = self.{usname(child)}")
                 res.append(f"        if _{usname(child)} is not None:")
-                res.append("            res.append(f'{self_name}.%s = {repr(_%s)}')" % (usname(child), usname(child)))
+                res.append("            leaves.append(f'{self_name}.%s = {repr(_%s)}')" % (usname(child), usname(child)))
             elif isinstance(child, DContainer):
                 res.append(f"        _{usname(child)} = self.{usname(child)}")
                 res.append(f"        if _{usname(child)} is not None:")
                 if child.presence:
+                    res.append("            res.append('')")
+                    res.append(f"            res.append('# P-container: {get_path(child)}')")
                     # Build .prsrc() code for this P-container
                     pc_args, pc_var_declarations = find_non_optional_subtree(child, [usname(child)])
 
@@ -655,6 +661,8 @@ class DNodeInner(DNode):
             elif isinstance(child, DList):
                 res.append(f"        _{usname(child)} = self.{usname(child)}")
                 res.append(f"        for _element in _{usname(child)}.elements:")
+                res.append("            res.append('')")
+                res.append(f'            res.append(f"# List {get_path(child)} element: {{_element.to_gdata().key_str({child.key})}}")')
 
                 # Build the list of arguments for create() method
                 child_unique_namer = _UniqueNamer(child)
@@ -672,9 +680,16 @@ class DNodeInner(DNode):
                     res.append(f"            list_elem = f'{usname(child)}_element = {{self_name}}.{usname(child)}.create()'")
                 res.append(f"            res.append(list_elem)")
                 # Recursive call to prsrc() for the list element
-                res.append(f"            res.extend(_element.prsrc(f'{usname(child)}_element', False).splitlines())")
+                res.append(f"            res.extend(_element.prsrc(f'{usname(child)}_element', False, list_element=True).splitlines())")
             else:
                 raise ValueError(f"Unhandled child type in .prsrc(): {type(child)}")
+        # Add the leaves as a single group at the beginning of the section,
+        # optionally add container header if we're not printing a list element
+        res.append("        if leaves:")
+        res.append("            if not list_element:")
+        res.append(f"               res = ['', '# Container: {get_path(self)}'] + leaves + res")
+        res.append("            else:")
+        res.append("                res = leaves + res")
         res.append("        return '\\n'.join(res)")
         res.append("")
 
@@ -2461,10 +2476,68 @@ def get_path_name(dnode: DNode) -> str:
 
     # This never happens, we always get at least our name!
     if len(path) == 0:
-        raise ValueError(f"No path for DNode{dnode}")
+        raise ValueError(f"No path for DNode {dnode}")
 
     return "__".join(reversed(path))
 
+def get_path(dnode: DNode) -> str:
+    """Get the path of a data node
+
+    The path is the absolute path in the YANG model, e.g. for the following
+    YANG model:
+
+    module foo {
+      prefix foo;
+      container bar {
+        leaf baz {
+          type string;
+        }
+      }
+    }
+
+    the path for the baz leaf is "/foo:bar/baz".
+
+    This function detects conflicting names across sibling nodes. If we add
+    another module that augments a conflicting node like this:
+
+    module m2 {
+      import foo { prefix foo; }
+      augment /foo:bar {
+        leaf baz {
+          type string;
+        }
+      }
+    }
+
+    Then the path for the baz leaves in the two modules is:
+    - /foo:bar/foo:baz
+    - /foo:bar/m2:baz
+    """
+    path = []
+    parent = dnode.parent
+    if parent is None and isinstance(dnode, DNodeInner):
+        top_solo = True if not dnode.children else False
+    else:
+        top_solo = False
+    while True:
+        self_name = dnode.name
+        parent = dnode.parent
+        # if parent is not None then of course it is DNodeInner (= has children
+        # attribute), but let's make that explicit for the compiler ...
+        if parent is not None:
+            if isinstance(parent, DNodeInner):
+                unique_namer = _UniqueNamer(parent)
+                self_name = unique_namer.unique_name(dnode.name, dnode.prefix)
+                dnode = parent
+        path.append(self_name)
+        if parent is None or isinstance(parent, DModule):
+            break
+
+    # This never happens, we always get at least our name!
+    if len(path) == 0:
+        raise ValueError(f"No path for DNode {dnode}")
+
+    return "/" + "/".join(reversed(path))
 
 # -- end of manually defined schema functions, automatically generated code follows
 
