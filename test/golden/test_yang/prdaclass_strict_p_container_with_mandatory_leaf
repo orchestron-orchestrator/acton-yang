@@ -55,6 +55,19 @@ class foo__foo__bar(yang.adata.MNode):
             return foo__foo__bar(foo_l1=n.get_str('foo:l1'), bar_l1=n.get_str('bar:l1'), l2=n.get_str('l2'))
         return None
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /foo/bar')
+            res.append(f'{self_name} = foo__foo__bar({repr(self.foo_l1)}, {repr(self.bar_l1)}, {repr(self.l2)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /foo/bar'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__foo__bar(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -121,6 +134,25 @@ class foo__foo(yang.adata.MNode):
             return foo__foo(bar=foo__foo__bar.from_gdata(n.get_opt_container('bar')))
         return None
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /foo')
+            res.append(f'{self_name} = foo__foo()')
+        leaves = []
+        _bar = self.bar
+        if _bar is not None:
+            res.append('')
+            res.append('# P-container: /foo/bar')
+            res.append(f'bar = {self_name}.create_bar({repr(_bar.foo_l1)}, {repr(_bar.bar_l1)}, {repr(_bar.l2)})')
+            res.extend(_bar.prsrc('bar', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /foo'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__foo(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -175,6 +207,25 @@ class root(yang.adata.MNode):
         if n != None:
             return root(foo=foo__foo.from_gdata(n.get_opt_container('foo')))
         return root()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /root')
+            res.append(f'{self_name} = root()')
+        leaves = []
+        _foo = self.foo
+        if _foo is not None:
+            res.append('')
+            res.append('# P-container: /foo')
+            res.append(f'foo = {self_name}.create_foo()')
+            res.extend(_foo.prsrc('foo', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /root'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml(node: xml.Node) -> yang.gdata.Container:

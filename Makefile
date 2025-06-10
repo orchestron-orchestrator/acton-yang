@@ -30,11 +30,11 @@ test-daclass:
 
 .PHONY: test-gdata-source-roundtrip
 test-gdata-source-roundtrip:
-	cd test/test_gdata_source_roundtrip && acton test
+	cd test/test_data_source_roundtrip && acton test
 
 .PHONY: test-golden-update
 test-golden-update:
 	acton test --golden-update
 	cd test/test_data_classes_gen && acton build && out/bin/gen
 	cd test/test_data_classes && acton test --golden-update
-	cd test/test_gdata_source_roundtrip && acton test --golden-update
+	cd test/test_data_source_roundtrip && acton test --golden-update

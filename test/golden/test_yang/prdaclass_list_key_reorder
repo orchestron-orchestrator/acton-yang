@@ -33,6 +33,22 @@ class foo__l1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__l1_entry:
         return foo__l1_entry(name=n.get_str('name'), id=n.get_opt_str('id'))
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /l1')
+            res.append(f'{self_name} = foo__l1({repr(self.name)})')
+        leaves = []
+        _id = self.id
+        if _id is not None:
+            leaves.append(f'{self_name}.id = {repr(_id)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /l1'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 class foo__l1(yang.adata.MNode):
     elements: list[foo__l1_entry]
     mut def __init__(self, elements=[]):

@@ -459,6 +459,12 @@ class Node(value):
         except ValueError:
             return None
 
+    def get_list(self, name) -> List:
+        l = self.get_opt_list(name)
+        if l is not None:
+            return l
+        raise ValueError("Cannot find list child with name " + name)
+
     def get_opt_list(self, name) -> ?List:
         if isinstance(self, Container):
             for nm,child in self.children.items():
@@ -666,6 +672,26 @@ class List(Node):
         self.user_order = user_order
         self.ns = ns
         self.module = module
+
+    def get_opt_list_entry(self, key: str) -> ?Node:
+        """Get a list entry by key value
+
+        Returns None if the entry is not found.
+        """
+        for elem in self.elements:
+            if elem.key_str(self.keys) == key:
+                return elem
+        return None
+
+    def get_list_entry(self, key: str) -> Node:
+        """Get a list entry by key value
+
+        Raises ValueError if the entry is not found.
+        """
+        elem = self.get_opt_list_entry(key)
+        if elem is not None:
+            return elem
+        raise ValueError(f"Cannot find list entry with key {key}")
 
 class Container(Node):
     def __init__(self, children: dict[str, Node]={}, presence: bool=False, ns: ?str=None, module: ?str=None):

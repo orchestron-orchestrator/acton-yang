@@ -61,6 +61,22 @@ class foo__c1__li_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__li_entry:
         return foo__c1__li_entry(name=n.get_str('name'), val=n.get_opt_str('val'))
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /c1/li')
+            res.append(f'{self_name} = foo__c1__li({repr(self.name)})')
+        leaves = []
+        _val = self.val
+        if _val is not None:
+            leaves.append(f'{self_name}.val = {repr(_val)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c1/li'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 class foo__c1__li(yang.adata.MNode):
     elements: list[foo__c1__li_entry]
     mut def __init__(self, elements=[]):
@@ -260,6 +276,50 @@ class foo__c1(yang.adata.MNode):
             return foo__c1(f_l1=n.get_opt_str('f:l1'), l3=n.get_opt_int('l3'), l_empty=n.get_opt_bool('l_empty'), li=foo__c1__li.from_gdata(n.get_opt_list('li')), ll_uint64=n.get_opt_ints('ll_uint64'), ll_str=n.get_opt_strs('ll_str'), l4=n.get_opt_str('l4'), bar_l1=n.get_opt_str('bar:l1'), l2=n.get_opt_str('l2'))
         return foo__c1()
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /c1')
+            res.append(f'{self_name} = foo__c1()')
+        leaves = []
+        _f_l1 = self.f_l1
+        if _f_l1 is not None:
+            leaves.append(f'{self_name}.f_l1 = {repr(_f_l1)}')
+        _l3 = self.l3
+        if _l3 is not None:
+            leaves.append(f'{self_name}.l3 = {repr(_l3)}')
+        _l_empty = self.l_empty
+        if _l_empty is not None:
+            leaves.append(f'{self_name}.l_empty = {repr(_l_empty)}')
+        _li = self.li
+        for _element in _li.elements:
+            res.append('')
+            res.append(f"# List /c1/li element: {_element.to_gdata().key_str(['name'])}")
+            list_elem = f'li_element = {self_name}.li.create({repr(_element.name)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'li_element', False, list_element=True).splitlines())
+        _ll_uint64 = self.ll_uint64
+        if _ll_uint64 is not None:
+            leaves.append(f'{self_name}.ll_uint64 = {repr(_ll_uint64)}')
+        _ll_str = self.ll_str
+        if _ll_str is not None:
+            leaves.append(f'{self_name}.ll_str = {repr(_ll_str)}')
+        _l4 = self.l4
+        if _l4 is not None:
+            leaves.append(f'{self_name}.l4 = {repr(_l4)}')
+        _bar_l1 = self.bar_l1
+        if _bar_l1 is not None:
+            leaves.append(f'{self_name}.bar_l1 = {repr(_bar_l1)}')
+        _l2 = self.l2
+        if _l2 is not None:
+            leaves.append(f'{self_name}.l2 = {repr(_l2)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c1'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__c1(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -362,6 +422,22 @@ class foo__pc1__foo(yang.adata.MNode):
             return foo__pc1__foo(l1=n.get_opt_bytess('l1'))
         return foo__pc1__foo()
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /pc1/foo')
+            res.append(f'{self_name} = foo__pc1__foo()')
+        leaves = []
+        _l1 = self.l1
+        if _l1 is not None:
+            leaves.append(f'{self_name}.l1 = {repr(_l1)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc1/foo'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__pc1__foo(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -410,6 +486,22 @@ class foo__pc1(yang.adata.MNode):
         if n != None:
             return foo__pc1(foo=foo__pc1__foo.from_gdata(n.get_opt_container('foo')))
         return None
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /pc1')
+            res.append(f'{self_name} = foo__pc1()')
+        leaves = []
+        _foo = self.foo
+        if _foo is not None:
+            res.extend(_foo.prsrc(f'{self_name}.foo', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc1'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml_foo__pc1(node: xml.Node) -> yang.gdata.Container:
@@ -467,6 +559,22 @@ class foo__pc2__foo(yang.adata.MNode):
             return foo__pc2__foo(l_mandatory=n.get_opt_str('l_mandatory'))
         raise ValueError('Missing required subtree foo__pc2__foo')
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /pc2/foo')
+            res.append(f'{self_name} = foo__pc2__foo()')
+        leaves = []
+        _l_mandatory = self.l_mandatory
+        if _l_mandatory is not None:
+            leaves.append(f'{self_name}.l_mandatory = {repr(_l_mandatory)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc2/foo'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__pc2__foo(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -516,6 +624,22 @@ class foo__pc2(yang.adata.MNode):
             return foo__pc2(foo=foo__pc2__foo.from_gdata(n.get_opt_container('foo')))
         return None
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /pc2')
+            res.append(f'{self_name} = foo__pc2()')
+        leaves = []
+        _foo = self.foo
+        if _foo is not None:
+            res.extend(_foo.prsrc(f'{self_name}.foo', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc2'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__pc2(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -546,6 +670,375 @@ mut def from_json_foo__pc2(jd: dict[str, ?value]) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'foo', from_json_foo__pc2__foo, child_foo)
     return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
 
+mut def from_json_foo__pc3__level1__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__pc3__level1__l1(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_json_foo__pc3__level1__l1_optional(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__pc3__level1__l1_optional(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_json_foo__pc3__level1__level2__l2(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__pc3__level1__level2__l2(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_json_foo__pc3__level1__level2__l2_optional(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__pc3__level1__level2__l2_optional(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_json_foo__pc3__level1__level2__level3__l3(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__pc3__level1__level2__level3__l3(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_json_foo__pc3__level1__level2__level3__l3_optional(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__pc3__level1__level2__level3__l3_optional(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+class foo__pc3__level1__level2__level3(yang.adata.MNode):
+    l3: ?str
+    l3_optional: ?str
+
+    mut def __init__(self, l3: ?str, l3_optional: ?str):
+        self._ns = 'http://example.com/foo'
+        self.l3 = l3
+        self.l3_optional = l3_optional
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _l3 = self.l3
+        if _l3 is not None:
+            children['l3'] = yang.gdata.Leaf('string', _l3)
+        _l3_optional = self.l3_optional
+        if _l3_optional is not None:
+            children['l3-optional'] = yang.gdata.Leaf('string', _l3_optional)
+        return yang.gdata.Container(children)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc3__level1__level2__level3:
+        if n != None:
+            return foo__pc3__level1__level2__level3(l3=n.get_opt_str('l3'), l3_optional=n.get_opt_str('l3-optional'))
+        raise ValueError('Missing required subtree foo__pc3__level1__level2__level3')
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /pc3/level1/level2/level3')
+            res.append(f'{self_name} = foo__pc3__level1__level2__level3()')
+        leaves = []
+        _l3 = self.l3
+        if _l3 is not None:
+            leaves.append(f'{self_name}.l3 = {repr(_l3)}')
+        _l3_optional = self.l3_optional
+        if _l3_optional is not None:
+            leaves.append(f'{self_name}.l3_optional = {repr(_l3_optional)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc3/level1/level2/level3'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml_foo__pc3__level1__level2__level3(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l3 = yang.gdata.from_xml_opt_str(node, 'l3')
+    yang.gdata.maybe_add(children, 'l3', from_xml_foo__pc3__level1__level2__level3__l3, child_l3)
+    child_l3_optional = yang.gdata.from_xml_opt_str(node, 'l3-optional')
+    yang.gdata.maybe_add(children, 'l3-optional', from_xml_foo__pc3__level1__level2__level3__l3_optional, child_l3_optional)
+    return yang.gdata.Container(children)
+
+mut def from_json_path_foo__pc3__level1__level2__level3(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'l3':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'l3-optional':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__pc3__level1__level2__level3(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__pc3__level1__level2__level3(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l3 = yang.gdata.take_json_opt_str(jd, 'l3')
+    yang.gdata.maybe_add(children, 'l3', from_json_foo__pc3__level1__level2__level3__l3, child_l3)
+    child_l3_optional = yang.gdata.take_json_opt_str(jd, 'l3-optional')
+    yang.gdata.maybe_add(children, 'l3-optional', from_json_foo__pc3__level1__level2__level3__l3_optional, child_l3_optional)
+    return yang.gdata.Container(children)
+
+class foo__pc3__level1__level2(yang.adata.MNode):
+    l2: ?str
+    l2_optional: ?str
+    level3: foo__pc3__level1__level2__level3
+
+    mut def __init__(self, l2: ?str, l2_optional: ?str, level3: ?foo__pc3__level1__level2__level3=None):
+        self._ns = 'http://example.com/foo'
+        self.l2 = l2
+        self.l2_optional = l2_optional
+        self.level3 = level3 if level3 is not None else foo__pc3__level1__level2__level3()
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _l2 = self.l2
+        if _l2 is not None:
+            children['l2'] = yang.gdata.Leaf('string', _l2)
+        _l2_optional = self.l2_optional
+        if _l2_optional is not None:
+            children['l2-optional'] = yang.gdata.Leaf('string', _l2_optional)
+        _level3 = self.level3
+        if _level3 is not None:
+            children['level3'] = _level3.to_gdata()
+        return yang.gdata.Container(children)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc3__level1__level2:
+        if n != None:
+            return foo__pc3__level1__level2(l2=n.get_opt_str('l2'), l2_optional=n.get_opt_str('l2-optional'), level3=foo__pc3__level1__level2__level3.from_gdata(n.get_opt_container('level3')))
+        raise ValueError('Missing required subtree foo__pc3__level1__level2')
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /pc3/level1/level2')
+            res.append(f'{self_name} = foo__pc3__level1__level2()')
+        leaves = []
+        _l2 = self.l2
+        if _l2 is not None:
+            leaves.append(f'{self_name}.l2 = {repr(_l2)}')
+        _l2_optional = self.l2_optional
+        if _l2_optional is not None:
+            leaves.append(f'{self_name}.l2_optional = {repr(_l2_optional)}')
+        _level3 = self.level3
+        if _level3 is not None:
+            res.extend(_level3.prsrc(f'{self_name}.level3', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc3/level1/level2'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml_foo__pc3__level1__level2(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l2 = yang.gdata.from_xml_opt_str(node, 'l2')
+    yang.gdata.maybe_add(children, 'l2', from_xml_foo__pc3__level1__level2__l2, child_l2)
+    child_l2_optional = yang.gdata.from_xml_opt_str(node, 'l2-optional')
+    yang.gdata.maybe_add(children, 'l2-optional', from_xml_foo__pc3__level1__level2__l2_optional, child_l2_optional)
+    child_level3 = yang.gdata.from_xml_opt_cnt(node, 'level3')
+    yang.gdata.maybe_add(children, 'level3', from_xml_foo__pc3__level1__level2__level3, child_level3)
+    return yang.gdata.Container(children)
+
+mut def from_json_path_foo__pc3__level1__level2(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'l2':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'l2-optional':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'level3':
+            child = {'level3': from_json_path_foo__pc3__level1__level2__level3(jd, rest_path, op) }
+            return yang.gdata.Container(child)
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__pc3__level1__level2(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__pc3__level1__level2(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l2 = yang.gdata.take_json_opt_str(jd, 'l2')
+    yang.gdata.maybe_add(children, 'l2', from_json_foo__pc3__level1__level2__l2, child_l2)
+    child_l2_optional = yang.gdata.take_json_opt_str(jd, 'l2-optional')
+    yang.gdata.maybe_add(children, 'l2-optional', from_json_foo__pc3__level1__level2__l2_optional, child_l2_optional)
+    child_level3 = yang.gdata.take_json_opt_cnt(jd, 'level3')
+    yang.gdata.maybe_add(children, 'level3', from_json_foo__pc3__level1__level2__level3, child_level3)
+    return yang.gdata.Container(children)
+
+class foo__pc3__level1(yang.adata.MNode):
+    l1: ?str
+    l1_optional: ?str
+    level2: foo__pc3__level1__level2
+
+    mut def __init__(self, l1: ?str, l1_optional: ?str, level2: ?foo__pc3__level1__level2=None):
+        self._ns = 'http://example.com/foo'
+        self.l1 = l1
+        self.l1_optional = l1_optional
+        self.level2 = level2 if level2 is not None else foo__pc3__level1__level2()
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _l1 = self.l1
+        if _l1 is not None:
+            children['l1'] = yang.gdata.Leaf('string', _l1)
+        _l1_optional = self.l1_optional
+        if _l1_optional is not None:
+            children['l1-optional'] = yang.gdata.Leaf('string', _l1_optional)
+        _level2 = self.level2
+        if _level2 is not None:
+            children['level2'] = _level2.to_gdata()
+        return yang.gdata.Container(children)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc3__level1:
+        if n != None:
+            return foo__pc3__level1(l1=n.get_opt_str('l1'), l1_optional=n.get_opt_str('l1-optional'), level2=foo__pc3__level1__level2.from_gdata(n.get_opt_container('level2')))
+        raise ValueError('Missing required subtree foo__pc3__level1')
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /pc3/level1')
+            res.append(f'{self_name} = foo__pc3__level1()')
+        leaves = []
+        _l1 = self.l1
+        if _l1 is not None:
+            leaves.append(f'{self_name}.l1 = {repr(_l1)}')
+        _l1_optional = self.l1_optional
+        if _l1_optional is not None:
+            leaves.append(f'{self_name}.l1_optional = {repr(_l1_optional)}')
+        _level2 = self.level2
+        if _level2 is not None:
+            res.extend(_level2.prsrc(f'{self_name}.level2', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc3/level1'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml_foo__pc3__level1(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l1 = yang.gdata.from_xml_opt_str(node, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_xml_foo__pc3__level1__l1, child_l1)
+    child_l1_optional = yang.gdata.from_xml_opt_str(node, 'l1-optional')
+    yang.gdata.maybe_add(children, 'l1-optional', from_xml_foo__pc3__level1__l1_optional, child_l1_optional)
+    child_level2 = yang.gdata.from_xml_opt_cnt(node, 'level2')
+    yang.gdata.maybe_add(children, 'level2', from_xml_foo__pc3__level1__level2, child_level2)
+    return yang.gdata.Container(children)
+
+mut def from_json_path_foo__pc3__level1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'l1':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'l1-optional':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'level2':
+            child = {'level2': from_json_path_foo__pc3__level1__level2(jd, rest_path, op) }
+            return yang.gdata.Container(child)
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__pc3__level1(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__pc3__level1(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l1 = yang.gdata.take_json_opt_str(jd, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_json_foo__pc3__level1__l1, child_l1)
+    child_l1_optional = yang.gdata.take_json_opt_str(jd, 'l1-optional')
+    yang.gdata.maybe_add(children, 'l1-optional', from_json_foo__pc3__level1__l1_optional, child_l1_optional)
+    child_level2 = yang.gdata.take_json_opt_cnt(jd, 'level2')
+    yang.gdata.maybe_add(children, 'level2', from_json_foo__pc3__level1__level2, child_level2)
+    return yang.gdata.Container(children)
+
+class foo__pc3(yang.adata.MNode):
+    level1: foo__pc3__level1
+
+    mut def __init__(self, level1: ?foo__pc3__level1=None):
+        self._ns = 'http://example.com/foo'
+        self.level1 = level1 if level1 is not None else foo__pc3__level1()
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _level1 = self.level1
+        if _level1 is not None:
+            children['level1'] = _level1.to_gdata()
+        return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__pc3:
+        if n != None:
+            return foo__pc3(level1=foo__pc3__level1.from_gdata(n.get_opt_container('level1')))
+        return None
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /pc3')
+            res.append(f'{self_name} = foo__pc3()')
+        leaves = []
+        _level1 = self.level1
+        if _level1 is not None:
+            res.extend(_level1.prsrc(f'{self_name}.level1', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /pc3'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml_foo__pc3(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_level1 = yang.gdata.from_xml_opt_cnt(node, 'level1')
+    yang.gdata.maybe_add(children, 'level1', from_xml_foo__pc3__level1, child_level1)
+    return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
+
+mut def from_json_path_foo__pc3(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'level1':
+            child = {'level1': from_json_path_foo__pc3__level1(jd, rest_path, op) }
+            return yang.gdata.Container(child, ns='http://example.com/foo', module='foo')
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__pc3(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__pc3(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_level1 = yang.gdata.take_json_opt_cnt(jd, 'level1')
+    yang.gdata.maybe_add(children, 'level1', from_json_foo__pc3__level1, child_level1)
+    return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
+
 class foo__empty_presence(yang.adata.MNode):
 
     mut def __init__(self):
@@ -561,6 +1054,19 @@ class foo__empty_presence(yang.adata.MNode):
         if n != None:
             return foo__empty_presence()
         return None
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /empty-presence')
+            res.append(f'{self_name} = foo__empty_presence()')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /empty-presence'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml_foo__empty_presence(node: xml.Node) -> yang.gdata.Container:
@@ -621,6 +1127,25 @@ class foo__c_dot(yang.adata.MNode):
         if n != None:
             return foo__c_dot(l_dot1=n.get_opt_str('l.dot1'), l_dot2=n.get_opt_str('l.dot2'))
         return foo__c_dot()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /c.dot')
+            res.append(f'{self_name} = foo__c_dot()')
+        leaves = []
+        _l_dot1 = self.l_dot1
+        if _l_dot1 is not None:
+            leaves.append(f'{self_name}.l_dot1 = {repr(_l_dot1)}')
+        _l_dot2 = self.l_dot2
+        if _l_dot2 is not None:
+            leaves.append(f'{self_name}.l_dot2 = {repr(_l_dot2)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c.dot'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml_foo__c_dot(node: xml.Node) -> yang.gdata.Container:
@@ -686,6 +1211,19 @@ class foo__cc__death_entry(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__cc__death_entry:
         return foo__cc__death_entry(name=n.get_str('name'))
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /cc/death')
+            res.append(f'{self_name} = foo__cc__death({repr(self.name)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /cc/death'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 class foo__cc__death(yang.adata.MNode):
     elements: list[foo__cc__death_entry]
@@ -819,6 +1357,29 @@ class foo__cc(yang.adata.MNode):
             return foo__cc(cake=n.get_opt_str('cake'), death=foo__cc__death.from_gdata(n.get_opt_list('death')))
         return foo__cc()
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /cc')
+            res.append(f'{self_name} = foo__cc()')
+        leaves = []
+        _cake = self.cake
+        if _cake is not None:
+            leaves.append(f'{self_name}.cake = {repr(_cake)}')
+        _death = self.death
+        for _element in _death.elements:
+            res.append('')
+            res.append(f"# List /cc/death element: {_element.to_gdata().key_str(['name'])}")
+            list_elem = f'death_element = {self_name}.death.create({repr(_element.name)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'death_element', False, list_element=True).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /cc'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__cc(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -877,6 +1438,19 @@ class foo__conflict__f_inner(yang.adata.MNode):
             return foo__conflict__f_inner()
         return None
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /conflict/f:inner')
+            res.append(f'{self_name} = foo__conflict__f_inner()')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /conflict/f:inner'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__conflict__f_inner(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -921,6 +1495,19 @@ class foo__conflict__bar_inner(yang.adata.MNode):
         if n != None:
             return foo__conflict__bar_inner()
         return None
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /conflict/bar:inner')
+            res.append(f'{self_name} = foo__conflict__bar_inner()')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /conflict/bar:inner'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml_foo__conflict__bar_inner(node: xml.Node) -> yang.gdata.Container:
@@ -989,6 +1576,37 @@ class foo__conflict(yang.adata.MNode):
         if n != None:
             return foo__conflict(f_foo=n.get_opt_str('f:foo'), f_inner=foo__conflict__f_inner.from_gdata(n.get_opt_container('f:inner')), bar_foo=n.get_opt_str('bar:foo'), bar_inner=foo__conflict__bar_inner.from_gdata(n.get_opt_container('bar:inner')))
         return foo__conflict()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /conflict')
+            res.append(f'{self_name} = foo__conflict()')
+        leaves = []
+        _f_foo = self.f_foo
+        if _f_foo is not None:
+            leaves.append(f'{self_name}.f_foo = {repr(_f_foo)}')
+        _f_inner = self.f_inner
+        if _f_inner is not None:
+            res.append('')
+            res.append('# P-container: /conflict/f:inner')
+            res.append(f'inner = {self_name}.create_f_inner()')
+            res.extend(_f_inner.prsrc('f_inner', False).splitlines())
+        _bar_foo = self.bar_foo
+        if _bar_foo is not None:
+            leaves.append(f'{self_name}.bar_foo = {repr(_bar_foo)}')
+        _bar_inner = self.bar_inner
+        if _bar_inner is not None:
+            res.append('')
+            res.append('# P-container: /conflict/bar:inner')
+            res.append(f'inner = {self_name}.create_bar_inner()')
+            res.extend(_bar_inner.prsrc('bar_inner', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /conflict'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml_foo__conflict(node: xml.Node) -> yang.gdata.Container:
@@ -1062,6 +1680,19 @@ class foo__special_entry(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__special_entry:
         return foo__special_entry(yes=n.get_bool('yes'))
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /special')
+            res.append(f'{self_name} = foo__special({repr(self.yes)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /special'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 class foo__special(yang.adata.MNode):
     elements: list[foo__special_entry]
@@ -1234,6 +1865,22 @@ class foo__nested__f_inner__li1__li2_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__nested__f_inner__li1__li2_entry:
         return foo__nested__f_inner__li1__li2_entry(key1=n.get_str('key1'), key2=n.get_str('key2'), baz=n.get_opt_str('baz'))
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /nested/f:inner/li1/li2')
+            res.append(f'{self_name} = foo__nested__f_inner__li1__li2({repr(self.key1)}, {repr(self.key2)})')
+        leaves = []
+        _baz = self.baz
+        if _baz is not None:
+            leaves.append(f'{self_name}.baz = {repr(_baz)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested/f:inner/li1/li2'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 class foo__nested__f_inner__li1__li2(yang.adata.MNode):
     elements: list[foo__nested__f_inner__li1__li2_entry]
     mut def __init__(self, elements=[]):
@@ -1394,6 +2041,32 @@ class foo__nested__f_inner__li1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__nested__f_inner__li1_entry:
         return foo__nested__f_inner__li1_entry(name=n.get_str('name'), f_bar=n.get_opt_str('f:bar'), li2=foo__nested__f_inner__li1__li2.from_gdata(n.get_opt_list('li2')), bar_bar=n.get_opt_str('bar:bar'))
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /nested/f:inner/li1')
+            res.append(f'{self_name} = foo__nested__f_inner__li1({repr(self.name)})')
+        leaves = []
+        _f_bar = self.f_bar
+        if _f_bar is not None:
+            leaves.append(f'{self_name}.f_bar = {repr(_f_bar)}')
+        _li2 = self.li2
+        for _element in _li2.elements:
+            res.append('')
+            res.append(f"# List /nested/f:inner/li1/li2 element: {_element.to_gdata().key_str(['key1', 'key2'])}")
+            list_elem = f'li2_element = {self_name}.li2.create({repr(_element.key1)}, {repr(_element.key2)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'li2_element', False, list_element=True).splitlines())
+        _bar_bar = self.bar_bar
+        if _bar_bar is not None:
+            leaves.append(f'{self_name}.bar_bar = {repr(_bar_bar)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested/f:inner/li1'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 class foo__nested__f_inner__li1(yang.adata.MNode):
     elements: list[foo__nested__f_inner__li1_entry]
     mut def __init__(self, elements=[]):
@@ -1544,6 +2217,29 @@ class foo__nested__f_inner(yang.adata.MNode):
             return foo__nested__f_inner(foo=n.get_opt_str('foo'), li1=foo__nested__f_inner__li1.from_gdata(n.get_opt_list('li1')))
         return foo__nested__f_inner()
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /nested/f:inner')
+            res.append(f'{self_name} = foo__nested__f_inner()')
+        leaves = []
+        _foo = self.foo
+        if _foo is not None:
+            leaves.append(f'{self_name}.foo = {repr(_foo)}')
+        _li1 = self.li1
+        for _element in _li1.elements:
+            res.append('')
+            res.append(f"# List /nested/f:inner/li1 element: {_element.to_gdata().key_str(['name'])}")
+            list_elem = f'li1_element = {self_name}.li1.create({repr(_element.name)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'li1_element', False, list_element=True).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested/f:inner'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__nested__f_inner(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -1606,6 +2302,22 @@ class foo__nested__bar_inner(yang.adata.MNode):
             return foo__nested__bar_inner(foo=n.get_opt_str('foo'))
         return foo__nested__bar_inner()
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /nested/bar:inner')
+            res.append(f'{self_name} = foo__nested__bar_inner()')
+        leaves = []
+        _foo = self.foo
+        if _foo is not None:
+            leaves.append(f'{self_name}.foo = {repr(_foo)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested/bar:inner'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__nested__bar_inner(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -1659,6 +2371,25 @@ class foo__nested(yang.adata.MNode):
         if n != None:
             return foo__nested(f_inner=foo__nested__f_inner.from_gdata(n.get_opt_container('f:inner')), bar_inner=foo__nested__bar_inner.from_gdata(n.get_opt_container('bar:inner')))
         return foo__nested()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /nested')
+            res.append(f'{self_name} = foo__nested()')
+        leaves = []
+        _f_inner = self.f_inner
+        if _f_inner is not None:
+            res.extend(_f_inner.prsrc(f'{self_name}.f_inner', False).splitlines())
+        _bar_inner = self.bar_inner
+        if _bar_inner is not None:
+            res.extend(_bar_inner.prsrc(f'{self_name}.bar_inner', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /nested'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml_foo__nested(node: xml.Node) -> yang.gdata.Container:
@@ -1742,6 +2473,19 @@ class foo__li_union_entry(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_union_entry:
         return foo__li_union_entry(k1=n.get_str('k1'), k2=n.get_value('k2'), k3=n.get_bytes('k3'))
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /li-union')
+            res.append(f'{self_name} = foo__li_union({repr(self.k1)}, {repr(self.k2)}, {repr(self.k3)})')
+        leaves = []
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /li-union'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 class foo__li_union(yang.adata.MNode):
     elements: list[foo__li_union_entry]
@@ -1915,6 +2659,25 @@ class foo__state__c1(yang.adata.MNode):
             return foo__state__c1(l1=n.get_opt_str('l1'), l2=n.get_opt_str('l2'))
         return foo__state__c1()
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /state/c1')
+            res.append(f'{self_name} = foo__state__c1()')
+        leaves = []
+        _l1 = self.l1
+        if _l1 is not None:
+            leaves.append(f'{self_name}.l1 = {repr(_l1)}')
+        _l2 = self.l2
+        if _l2 is not None:
+            leaves.append(f'{self_name}.l2 = {repr(_l2)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /state/c1'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__state__c1(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -1969,6 +2732,22 @@ class foo__state(yang.adata.MNode):
         if n != None:
             return foo__state(c1=foo__state__c1.from_gdata(n.get_opt_container('c1')))
         return foo__state()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /state')
+            res.append(f'{self_name} = foo__state()')
+        leaves = []
+        _c1 = self.c1
+        if _c1 is not None:
+            res.extend(_c1.prsrc(f'{self_name}.c1', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /state'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml_foo__state(node: xml.Node) -> yang.gdata.Container:
@@ -2026,6 +2805,22 @@ class foo__c2(yang.adata.MNode):
             return foo__c2(l1=n.get_opt_str('l1'))
         return foo__c2()
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /c2')
+            res.append(f'{self_name} = foo__c2()')
+        leaves = []
+        _l1 = self.l1
+        if _l1 is not None:
+            leaves.append(f'{self_name}.l1 = {repr(_l1)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c2'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_foo__c2(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -2081,6 +2876,22 @@ class bar__conflict(yang.adata.MNode):
             return bar__conflict(foo=n.get_opt_str('foo'))
         return bar__conflict()
 
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /conflict')
+            res.append(f'{self_name} = bar__conflict()')
+        leaves = []
+        _foo = self.foo
+        if _foo is not None:
+            leaves.append(f'{self_name}.foo = {repr(_foo)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /conflict'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
 
 mut def from_xml_bar__conflict(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -2114,6 +2925,7 @@ class root(yang.adata.MNode):
     c1: foo__c1
     pc1: ?foo__pc1
     pc2: ?foo__pc2
+    pc3: ?foo__pc3
     empty_presence: ?foo__empty_presence
     c_dot: foo__c_dot
     cc: foo__cc
@@ -2125,11 +2937,12 @@ class root(yang.adata.MNode):
     c2: foo__c2
     bar_conflict: bar__conflict
 
-    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, f_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, li_union: list[foo__li_union_entry]=[], state: ?foo__state=None, c2: ?foo__c2=None, bar_conflict: ?bar__conflict=None):
+    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, pc3: ?foo__pc3=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, f_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, li_union: list[foo__li_union_entry]=[], state: ?foo__state=None, c2: ?foo__c2=None, bar_conflict: ?bar__conflict=None):
         self._ns = ''
         self.c1 = c1 if c1 is not None else foo__c1()
         self.pc1 = pc1
         self.pc2 = pc2
+        self.pc3 = pc3
         self.empty_presence = empty_presence
         self.c_dot = c_dot if c_dot is not None else foo__c_dot()
         self.cc = cc if cc is not None else foo__cc()
@@ -2151,6 +2964,11 @@ class root(yang.adata.MNode):
         self.pc2 = res
         return res
 
+    mut def create_pc3(self):
+        res = foo__pc3()
+        self.pc3 = res
+        return res
+
     mut def create_empty_presence(self):
         res = foo__empty_presence()
         self.empty_presence = res
@@ -2167,6 +2985,9 @@ class root(yang.adata.MNode):
         _pc2 = self.pc2
         if _pc2 is not None:
             children['pc2'] = _pc2.to_gdata()
+        _pc3 = self.pc3
+        if _pc3 is not None:
+            children['pc3'] = _pc3.to_gdata()
         _empty_presence = self.empty_presence
         if _empty_presence is not None:
             children['empty-presence'] = _empty_presence.to_gdata()
@@ -2202,8 +3023,83 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n != None:
-            return root(c1=foo__c1.from_gdata(n.get_opt_container('c1')), pc1=foo__pc1.from_gdata(n.get_opt_container('pc1')), pc2=foo__pc2.from_gdata(n.get_opt_container('pc2')), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container('empty-presence')), c_dot=foo__c_dot.from_gdata(n.get_opt_container('c.dot')), cc=foo__cc.from_gdata(n.get_opt_container('cc')), f_conflict=foo__conflict.from_gdata(n.get_opt_container('f:conflict')), special=foo__special.from_gdata(n.get_opt_list('special')), nested=foo__nested.from_gdata(n.get_opt_container('nested')), li_union=foo__li_union.from_gdata(n.get_opt_list('li-union')), state=foo__state.from_gdata(n.get_opt_container('state')), c2=foo__c2.from_gdata(n.get_opt_container('c2')), bar_conflict=bar__conflict.from_gdata(n.get_opt_container('bar:conflict')))
+            return root(c1=foo__c1.from_gdata(n.get_opt_container('c1')), pc1=foo__pc1.from_gdata(n.get_opt_container('pc1')), pc2=foo__pc2.from_gdata(n.get_opt_container('pc2')), pc3=foo__pc3.from_gdata(n.get_opt_container('pc3')), empty_presence=foo__empty_presence.from_gdata(n.get_opt_container('empty-presence')), c_dot=foo__c_dot.from_gdata(n.get_opt_container('c.dot')), cc=foo__cc.from_gdata(n.get_opt_container('cc')), f_conflict=foo__conflict.from_gdata(n.get_opt_container('f:conflict')), special=foo__special.from_gdata(n.get_opt_list('special')), nested=foo__nested.from_gdata(n.get_opt_container('nested')), li_union=foo__li_union.from_gdata(n.get_opt_list('li-union')), state=foo__state.from_gdata(n.get_opt_container('state')), c2=foo__c2.from_gdata(n.get_opt_container('c2')), bar_conflict=bar__conflict.from_gdata(n.get_opt_container('bar:conflict')))
         return root()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append(f'# Top node: /root')
+            res.append(f'{self_name} = root()')
+        leaves = []
+        _c1 = self.c1
+        if _c1 is not None:
+            res.extend(_c1.prsrc(f'{self_name}.c1', False).splitlines())
+        _pc1 = self.pc1
+        if _pc1 is not None:
+            res.append('')
+            res.append('# P-container: /pc1')
+            res.append(f'pc1 = {self_name}.create_pc1()')
+            res.extend(_pc1.prsrc('pc1', False).splitlines())
+        _pc2 = self.pc2
+        if _pc2 is not None:
+            res.append('')
+            res.append('# P-container: /pc2')
+            res.append(f'pc2 = {self_name}.create_pc2()')
+            res.extend(_pc2.prsrc('pc2', False).splitlines())
+        _pc3 = self.pc3
+        if _pc3 is not None:
+            res.append('')
+            res.append('# P-container: /pc3')
+            res.append(f'pc3 = {self_name}.create_pc3()')
+            res.extend(_pc3.prsrc('pc3', False).splitlines())
+        _empty_presence = self.empty_presence
+        if _empty_presence is not None:
+            res.append('')
+            res.append('# P-container: /empty-presence')
+            res.append(f'empty_presence = {self_name}.create_empty_presence()')
+            res.extend(_empty_presence.prsrc('empty_presence', False).splitlines())
+        _c_dot = self.c_dot
+        if _c_dot is not None:
+            res.extend(_c_dot.prsrc(f'{self_name}.c_dot', False).splitlines())
+        _cc = self.cc
+        if _cc is not None:
+            res.extend(_cc.prsrc(f'{self_name}.cc', False).splitlines())
+        _f_conflict = self.f_conflict
+        if _f_conflict is not None:
+            res.extend(_f_conflict.prsrc(f'{self_name}.f_conflict', False).splitlines())
+        _special = self.special
+        for _element in _special.elements:
+            res.append('')
+            res.append(f"# List /special element: {_element.to_gdata().key_str(['yes'])}")
+            list_elem = f'special_element = {self_name}.special.create({repr(_element.yes)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'special_element', False, list_element=True).splitlines())
+        _nested = self.nested
+        if _nested is not None:
+            res.extend(_nested.prsrc(f'{self_name}.nested', False).splitlines())
+        _li_union = self.li_union
+        for _element in _li_union.elements:
+            res.append('')
+            res.append(f"# List /li-union element: {_element.to_gdata().key_str(['k1', 'k2', 'k3'])}")
+            list_elem = f'li_union_element = {self_name}.li_union.create({repr(_element.k1)}, {repr(_element.k2)}, {repr(_element.k3)})'
+            res.append(list_elem)
+            res.extend(_element.prsrc(f'li_union_element', False, list_element=True).splitlines())
+        _state = self.state
+        if _state is not None:
+            res.extend(_state.prsrc(f'{self_name}.state', False).splitlines())
+        _c2 = self.c2
+        if _c2 is not None:
+            res.extend(_c2.prsrc(f'{self_name}.c2', False).splitlines())
+        _bar_conflict = self.bar_conflict
+        if _bar_conflict is not None:
+            res.extend(_bar_conflict.prsrc(f'{self_name}.bar_conflict', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /root'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
 
 
 mut def from_xml(node: xml.Node) -> yang.gdata.Container:
@@ -2214,6 +3110,8 @@ mut def from_xml(node: xml.Node) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'pc1', from_xml_foo__pc1, child_pc1)
     child_pc2 = yang.gdata.from_xml_opt_cnt(node, 'pc2', 'http://example.com/foo')
     yang.gdata.maybe_add(children, 'pc2', from_xml_foo__pc2, child_pc2)
+    child_pc3 = yang.gdata.from_xml_opt_cnt(node, 'pc3', 'http://example.com/foo')
+    yang.gdata.maybe_add(children, 'pc3', from_xml_foo__pc3, child_pc3)
     child_empty_presence = yang.gdata.from_xml_opt_cnt(node, 'empty-presence', 'http://example.com/foo')
     yang.gdata.maybe_add(children, 'empty-presence', from_xml_foo__empty_presence, child_empty_presence)
     child_c_dot = yang.gdata.from_xml_opt_cnt(node, 'c.dot', 'http://example.com/foo')
@@ -2249,6 +3147,9 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.
             return yang.gdata.Container(child)
         if point == 'foo:pc2':
             child = {'pc2': from_json_path_foo__pc2(jd, rest_path, op) }
+            return yang.gdata.Container(child)
+        if point == 'foo:pc3':
+            child = {'pc3': from_json_path_foo__pc3(jd, rest_path, op) }
             return yang.gdata.Container(child)
         if point == 'foo:empty-presence':
             child = {'empty-presence': from_json_path_foo__empty_presence(jd, rest_path, op) }
@@ -2297,6 +3198,8 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'pc1', from_json_foo__pc1, child_pc1)
     child_pc2 = yang.gdata.take_json_opt_cnt(jd, 'pc2', 'foo')
     yang.gdata.maybe_add(children, 'pc2', from_json_foo__pc2, child_pc2)
+    child_pc3 = yang.gdata.take_json_opt_cnt(jd, 'pc3', 'foo')
+    yang.gdata.maybe_add(children, 'pc3', from_json_foo__pc3, child_pc3)
     child_empty_presence = yang.gdata.take_json_opt_cnt(jd, 'empty-presence', 'foo')
     yang.gdata.maybe_add(children, 'empty-presence', from_json_foo__empty_presence, child_empty_presence)
     child_c_dot = yang.gdata.take_json_opt_cnt(jd, 'c.dot', 'foo')
@@ -2379,6 +3282,36 @@ def src_yang():
             leaf l_mandatory {
                 type string;
                 mandatory true;
+            }
+        }
+    }
+    container pc3 {
+        presence "p";
+        container level1 {
+            leaf l1 {
+                type string;
+                mandatory true;
+            }
+            leaf l1-optional {
+                type string;
+            }
+            container level2 {
+                leaf l2 {
+                    type string;
+                    mandatory true;
+                }
+                leaf l2-optional {
+                    type string;
+                }
+                container level3 {
+                    leaf l3 {
+                        type string;
+                        mandatory true;
+                    }
+                    leaf l3-optional {
+                        type string;
+                    }
+                }
             }
         }
     }
@@ -2568,6 +3501,20 @@ def src_schema():
             Leaf('l_mandatory', type_=Type('string'), mandatory=True)
         ])
     ]),
+    Container('pc3', presence='p', children=[
+        Container('level1', children=[
+            Leaf('l1', type_=Type('string'), mandatory=True),
+            Leaf('l1-optional', type_=Type('string')),
+            Container('level2', children=[
+                Leaf('l2', type_=Type('string'), mandatory=True),
+                Leaf('l2-optional', type_=Type('string')),
+                Container('level3', children=[
+                    Leaf('l3', type_=Type('string'), mandatory=True),
+                    Leaf('l3-optional', type_=Type('string'))
+                ])
+            ])
+        ])
+    ]),
     Container('empty-presence', presence='nothing else here'),
     Container('c.dot', children=[
         Leaf('l.dot1', type_=Type('string'))
@@ -2692,6 +3639,20 @@ def src_schema_compiled():
     Container('pc2', presence='p', children=[
         Container('foo', children=[
             Leaf('l_mandatory', type_=Type('string'), mandatory=True)
+        ])
+    ]),
+    Container('pc3', presence='p', children=[
+        Container('level1', children=[
+            Leaf('l1', type_=Type('string'), mandatory=True),
+            Leaf('l1-optional', type_=Type('string')),
+            Container('level2', children=[
+                Leaf('l2', type_=Type('string'), mandatory=True),
+                Leaf('l2-optional', type_=Type('string')),
+                Container('level3', children=[
+                    Leaf('l3', type_=Type('string'), mandatory=True),
+                    Leaf('l3-optional', type_=Type('string'))
+                ])
+            ])
         ])
     ]),
     Container('empty-presence', presence='nothing else here'),
