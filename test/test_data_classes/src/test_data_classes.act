@@ -9,6 +9,7 @@ import yang.gdata
 
 import yang_one
 import yang_foo
+import yang_foo_loose
 from yang_foo import root as yang_foo_root
 import yang_basics
 
@@ -227,6 +228,21 @@ def _test_adata_source_roundtrip_xml_full(t: testing.EnvT):
     ad = yang_foo_root.from_gdata(gd)
     wf = file.WriteFile(wfcap, "../test_data_source_roundtrip/src/xml_full_adata.act")
     await async wf.write(f"""from yang_foo import *
+
+def adata():
+{_indent_lines(ad.prsrc("ad"))}
+    return ad
+""".encode())
+    await async wf.close()
+    t.success()
+
+def _test_adata_source_roundtrip_xml_full_loose(t: testing.EnvT):
+    wfcap = file.WriteFileCap(file.FileCap(t.env.cap))
+    xml_in = xml.decode(xml_text_full)
+    gd = yang_foo.from_xml(xml_in)
+    ad = yang_foo_loose.root.from_gdata(gd)
+    wf = file.WriteFile(wfcap, "../test_data_source_roundtrip/src/xml_full_adata_loose.act")
+    await async wf.write(f"""from yang_foo_loose import *
 
 def adata():
 {_indent_lines(ad.prsrc("ad"))}
