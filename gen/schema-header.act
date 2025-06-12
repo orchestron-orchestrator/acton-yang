@@ -247,7 +247,7 @@ def nest(n):
     return " " * n
 
 class DNode(object):
-    parent: ?DNode
+    parent: ?DNodeInner
     gname: str       # The name of the GData class, e.g. "Container" for yang.gdata.Container
     module: str      # The name of the module this node belongs to
     namespace: str
@@ -2467,13 +2467,10 @@ def get_path_name(dnode: DNode) -> str:
     while True:
         self_unique_safe_name = _safe_name(dnode.name, safe_kw=not top_solo)
         parent = dnode.parent
-        # if parent is not None then of course it is DNodeInner (= has children
-        # attribute), but let's make that explicit for the compiler ...
         if parent is not None:
-            if isinstance(parent, DNodeInner):
-                unique_namer = _UniqueNamer(parent)
-                self_unique_safe_name = unique_namer.unique_safe_name(dnode.name, dnode.prefix, safe_kw=False)
-                dnode = parent
+            unique_namer = _UniqueNamer(parent)
+            self_unique_safe_name = unique_namer.unique_safe_name(dnode.name, dnode.prefix, safe_kw=False)
+            dnode = parent
         path.append(self_unique_safe_name)
         if parent is None:
             break
@@ -2526,13 +2523,10 @@ def get_path(dnode: DNode) -> str:
     while True:
         self_name = dnode.name
         parent = dnode.parent
-        # if parent is not None then of course it is DNodeInner (= has children
-        # attribute), but let's make that explicit for the compiler ...
         if parent is not None:
-            if isinstance(parent, DNodeInner):
-                unique_namer = _UniqueNamer(parent)
-                self_name = unique_namer.unique_name(dnode.name, dnode.prefix)
-                dnode = parent
+            unique_namer = _UniqueNamer(parent)
+            self_name = unique_namer.unique_name(dnode.name, dnode.prefix)
+            dnode = parent
         path.append(self_name)
         if parent is None or isinstance(parent, DModule):
             break
