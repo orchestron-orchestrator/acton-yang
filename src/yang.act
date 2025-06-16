@@ -21,13 +21,13 @@ class NameRevMap[T](object):
             pass
         else:
             if not eq_optional(revision, old_revision):
-                raise ValueError("Another revision of item " + name + "alread present, old: " + optional_str(old_revision) + ", new: " + optional_str(revision))
+                raise ValueError(f"Another revision of item {name} already present, old: {optional_str(old_revision)}, new: {optional_str(revision)}")
         self.items[name] = (revision, val)
 
     def get(self, name: str, revision: ?str = None) -> T:
         actual_revision, val = self.items[name]
         if revision is not None and revision != actual_revision:
-            raise ValueError("Mismatching revision requested: " + optional_str(revision) + ", actual: " + optional_str(actual_revision))
+            raise ValueError(f"Mismatching revision requested: {optional_str(revision)}, actual: {optional_str(actual_revision)}")
         return val
 
     def pop(self, name: str, revision: ?str = None) -> T:
@@ -86,7 +86,7 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
             try:
                 submod = submodules.get(include.module, include.revision_date)
             except KeyError:
-                raise ValueError(m.name + " - submodule " + include.module + "not found.")
+                raise ValueError(f"{m.name} - submodule {include.module} not found.")
             else:
                 if submod.belongs_to.prefix != m.prefix:
                     # TODO: Remap submodule children to parent prefix, or shift to global namespace?
@@ -155,7 +155,7 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
                     try:
                         mc = m.compile(ctx)
                     except Exception as ex:
-                        raise ValueError(m.name + " - Compile - Failed: " + ex.error_message)
+                        raise ValueError(f"{m.name} - Compile - Failed: {ex.error_message}")
                     else:
                         if isinstance(mc, yang.schema.Module):
                             ctx.add_module(mc)
