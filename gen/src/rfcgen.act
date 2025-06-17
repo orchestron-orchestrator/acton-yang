@@ -802,11 +802,8 @@ snode_methods = {
     "type": {
         "resolve_union_types": """    def resolve_union_types(self, context: Context) -> Type:
         if self.name == "union":
-            resolved_union_types = []
             # Resolve union types
-            for ut in self.type_:
-                resolved_ut = ut.resolve_typedef(context).type_
-                resolved_union_types.append(resolved_ut)
+            resolved_union_types = [ut.resolve_typedef(context).type_ for ut in self.type_]
             new = Type(self.name,
                        base=self.base,
                        bit=self.bit,
@@ -905,11 +902,9 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
     res.append("        if type(self) != type(other):")
     res.append("            return False")
     for stmt_name in sorted(stmts):
+        stmt = stmts[stmt_name]
         res.append("        elif isinstance(self, %s) and isinstance(other, %s):" % (_class_name(stmt_name), _class_name(stmt_name)))
-        attributes_to_compare = []
-        for substmt in stmts[stmt_name].substmts.values():
-            if substmt.name not in child_stmts:
-                attributes_to_compare.append(_attr_name(substmt.name))
+        attributes_to_compare = [_attr_name(substmt.name) for substmt in stmt.substmts.values() if substmt.name not in child_stmts]
         if len(attributes_to_compare) > 0:
             res.append("            return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))
         else:
@@ -957,10 +952,8 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             Attributes not explicitly listed are appended at the end.
             """
             # Lower number in order dict = higher priority
-            order_dict = {}
             # Add module_order items first in their preferred order
-            for idx, item in enumerate(module_order):
-                order_dict[item] = idx
+            order_dict = {item: idx for idx, item in enumerate(module_order)}
             # Add mandatory items next in the provided order
             for idx, item in enumerate(mandatory):
                 order_dict.setdefault(item, len(module_order) + idx)
@@ -1237,10 +1230,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("        return None")
         res.append("")
 
-        attributes_to_compare = []
-        for substmt in stmts[stmt_name].substmts.values():
-            if substmt.name not in child_stmts:
-                attributes_to_compare.append(_attr_name(substmt.name))
+        attributes_to_compare = [_attr_name(substmt.name) for substmt in stmt.substmts.values() if substmt.name not in child_stmts]
 
         if stmt_name == "module":
             res.append("extension %s (Hashable):" % _class_name(stmt_name))
@@ -1331,7 +1321,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         joiner = ",\n" + indent
         res.append("            n = %s(%s\n" % (_class_name(stmt_name), joiner.join(attrs_takers)) + indent + ")")
         if have_children:
-            valid_children_list = ", ".join(map(lambda x: "\"%s\"" % x, valid_children))
+            valid_children_list = ", ".join([f'"{x}"' for x in valid_children])
             res.append("            n.children=take_nodes(ss, [%s], n)" % valid_children_list)
 
         res.append("            if len(ss) > 0:")

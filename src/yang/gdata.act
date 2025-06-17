@@ -225,16 +225,10 @@ class Node(value):
     children: dict[str, Node]
 
     def key_str(self, key_names: list[str]) -> str:
-        def escape_keys(key_val):
-            return key_val.replace(",", "\\,")
-        keys = map(lambda kn: str(self.get_leaf(kn).val), key_names)
-        return ",".join(map(escape_keys, keys))
+        return ",".join([str(self.get_leaf(kn).val).replace(",", "\\,") for kn in key_names])
 
     def key_children(self, key_names: list[str]) -> dict[str, Leaf]:
-        children = {}
-        for kn in key_names:
-            children[kn] = self.get_leaf(kn)
-        return children
+        return {kn: self.get_leaf(kn) for kn in key_names}
 
     def prsrc(self, indent=0, name="") -> str:
         args = []
@@ -774,11 +768,7 @@ class Replace(Node):
 def sorted_elements(elements, key_names):
     keys = list(map(lambda elem: elem.key_str(key_names), elements))
     key_map = dict(zip(keys, elements))
-    sorted_keys = sorted(keys)
-    res = []
-    for key in sorted_keys:
-        res.append(key_map[key])
-    return res
+    return [key_map[key] for key in sorted(keys)]
 
 def vals_equal(a: value, b: value) -> bool:
     # Compare known leaf value types
@@ -885,12 +875,8 @@ def merge(a: Node, b: Node) -> Node:
     def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node]) -> dict[str, Node]:
         result: dict[str, Node] = {}
 
-        a_keys = []
-        for k in a_children:
-            a_keys.append(k)
-        b_keys = []
-        for k in b_children:
-            b_keys.append(k)
+        a_keys = list(a_children.keys())
+        b_keys = list(b_children.keys())
 
         i = 0
         j = 0
@@ -986,9 +972,7 @@ def merge(a: Node, b: Node) -> Node:
             # This preserves the order from 'a' as baseline and inserts 'b' elements accordingly.
             new_elements: list[Node] = []
 
-            old_map = {}
-            for e in a.elements:
-                old_map[e.key_str(a.keys)] = e
+            old_map = {e.key_str(a.keys): e for e in a.elements}
 
             # Start with elements from a, merge if present in b
             for a_elem in a.elements:
@@ -1042,10 +1026,7 @@ def merge(a: Node, b: Node) -> Node:
 
             new_elements: list[Node] = []
             # sort keys lex order as before
-            unsorted_keys = []
-            for k in all_elements:
-                unsorted_keys.append(k)
-            sorted_keys = sorted(unsorted_keys)
+            sorted_keys = sorted(all_elements.keys())
 
             for key_str in sorted_keys:
                 elems = all_elements[key_str]
@@ -1113,19 +1094,11 @@ def diff(old: Node, new: Node) -> ?Node:
             raise ValueError("List keys differ: %s vs %s" % (str(old_list.keys), str(new_list.keys)))
 
         # Map old elements by key
-        old_map = {}
-        old_key_order = []
-        for e in old_list.elements:
-            k = e.key_str(old_list.keys)
-            old_map[k] = e
-            old_key_order.append(k)
+        old_map = {e.key_str(old_list.keys): e for e in old_list.elements}
+        old_key_order = [e.key_str(old_list.keys) for e in old_list.elements]
 
-        new_map = {}
-        new_key_order = []
-        for e in new_list.elements:
-            nk = e.key_str(new_list.keys)
-            new_map[nk] = e
-            new_key_order.append(nk)
+        new_map = {e.key_str(new_list.keys): e for e in new_list.elements}
+        new_key_order = [e.key_str(new_list.keys) for e in new_list.elements]
 
         # We'll do the two-pointer approach on these key orders
         i = 0
@@ -1269,10 +1242,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
         if old.keys != p.keys:
             raise ValueError("List keys differ: %s vs %s" % (str(old.keys), str(p.keys)))
 
-        old_map = {}
-        for e in old.elements:
-            k = e.key_str(old.keys)
-            old_map[k] = e
+        old_map = {e.key_str(old.keys): e for e in old.elements}
 
         # Apply patch elements
         patch_elems = p.elements
