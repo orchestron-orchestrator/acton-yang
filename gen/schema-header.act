@@ -734,9 +734,7 @@ class DNodeInner(DNode):
             res.append("        for e in self.elements:")
             res.append("            match = True")
             for us_key in us_list_key():
-                unique_base_types = set()
-                for t in list_key_types[us_key].type_:
-                    unique_base_types.add(yang_type_to_acton_type(t))
+                unique_base_types = {yang_type_to_acton_type(t) for t in list_key_types[us_key].type_}
                 if len(unique_base_types) <= 1:
                     # Class attribute is a not a "value" Acton type because it
                     # is either not an union or it an union that was resolved
@@ -1443,9 +1441,7 @@ class SchemaNode(object):
             text_line += ')'
         res.append(text_line)
         if isinstance(self, SchemaNodeInner) and have_children:
-            child_res = []
-            for child in self.children:
-                child_res.append(child.prsrc(indent+1))
+            child_res = [child.prsrc(indent+1) for child in self.children]
             res.append(",\n".join(child_res))
             res.append(_ind(indent) + "])")
         return "\n".join(res)
