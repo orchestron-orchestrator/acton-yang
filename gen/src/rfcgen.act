@@ -227,7 +227,7 @@ def _attr_type(name, stmt, stmts) -> str:
     # TODO: change namespace and prefix cardinality to 1
     #if cardinality == "0..1":
     if cardinality == "0..1":
-        return "?" + t
+        return f"?{t}"
     elif cardinality == "1":
         return t
     elif cardinality == "0..n":
@@ -1190,7 +1190,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):")
             new_args = []
             if arg_name is not None:
-                new_args += ["self." + _attr_name(arg_name)]
+                new_args += [f"self.{_attr_name(arg_name)}"]
             new_args += list(map(lambda x: "%s=self.%s" % (_attr_name(x), _attr_name(x)), kwattrs))
             new_args.append("exts=self.exts")
             if stmt_name not in {"module", "submodule"}:
@@ -1208,7 +1208,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("")
 
         res.append("    def __str__(self):")
-        strret = "\"%s \" + self.%s" % (_class_name(stmt_name), _attr_name(arg_name)) if arg_name is not None else "\"%s\"" % (_class_name(stmt_name))
+        strret = "f\"%s {self.%s}\"" % (_class_name(stmt_name), _attr_name(arg_name)) if arg_name is not None else "\"%s\"" % (_class_name(stmt_name))
         res.append("        return " + strret)
         res.append("")
 
@@ -1329,7 +1329,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("                prefix = ss[0].prefix")
         res.append("                raise ValueError(\"Invalid statement under %s: %%s\" %% (name))" % stmt_name)
         res.append("            return n")
-    res.append("    raise ValueError(\"Unknown statement:\" + stmt.kw)")
+    res.append("    raise ValueError(f\"Unknown statement:{stmt.kw}\")")
     res.append("")
 
     return res
