@@ -777,11 +777,9 @@ class DNodeInner(DNode):
 #            # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
             res.append("    @staticmethod")
             res.append(f"    mut def from_gdata(n: ?yang.gdata.List) -> list[{pname(self)}_entry]:")
-            res.append("        res = []")
             res.append("        if n is not None:")
-            res.append("            for e in n.elements:")
-            res.append(f"                res.append({pname(self)}_entry.from_gdata(e))")
-            res.append("        return res")
+            res.append(f"            return [{pname(self)}_entry.from_gdata(e) for e in n.elements]")
+            res.append("        return []")
             #res.append("        return list(map(lambda x: %s_entry.from_gdata(x), n.elements))" % pname(self))
             # TODO: trying to use list(map(lambda)) here results in an error,
             # why? Above code that iterates over n.elements works fine... Error is:
@@ -823,9 +821,7 @@ class DNodeInner(DNode):
 
         if gen_xml and isinstance(self, DList):
             res.append(f"mut def from_xml_{pname(self)}(nodes: list[xml.Node]) -> yang.gdata.List:")
-            res.append(f"    elements = []")
-            res.append(f"    for e in nodes:")
-            res.append(f"        elements.append(from_xml_{pname(self)}_element(e))")
+            res.append(f"    elements = [from_xml_{pname(self)}_element(e) for e in nodes]")
             res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
             res.append("")
 
@@ -960,10 +956,7 @@ class DNodeInner(DNode):
 
         if gen_json and isinstance(self, DList):
             res.append(f"mut def from_json_{pname(self)}(jd: list[dict[str, ?value]]) -> yang.gdata.List:")
-            res.append(f"    elements = []")
-            res.append(f"    for e in jd:")
-            res.append(f"        if isinstance(e, dict):")
-            res.append(f"            elements.append(from_json_{pname(self)}_element(e))")
+            res.append(f"    elements = [from_json_{pname(self)}_element(e) for e in jd if isinstance(e, dict)]")
             res.append(f"    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
             res.append("")
 
