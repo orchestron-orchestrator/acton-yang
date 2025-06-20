@@ -260,11 +260,9 @@ class foo__li(yang.adata.MNode):
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__li_entry]:
-        res = []
         if n is not None:
-            for e in n.elements:
-                res.append(foo__li_entry.from_gdata(e))
-        return res
+            return [foo__li_entry.from_gdata(e) for e in n.elements]
+        return []
 
 
 mut def from_xml_foo__li_element(node: xml.Node) -> yang.gdata.Node:
@@ -276,9 +274,7 @@ mut def from_xml_foo__li_element(node: xml.Node) -> yang.gdata.Node:
     return yang.gdata.Container(children)
 
 mut def from_xml_foo__li(nodes: list[xml.Node]) -> yang.gdata.List:
-    elements = []
-    for e in nodes:
-        elements.append(from_xml_foo__li_element(e))
+    elements = [from_xml_foo__li_element(e) for e in nodes]
     return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
 
 mut def from_json_path_foo__li_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
@@ -337,10 +333,7 @@ mut def from_json_foo__li_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     return yang.gdata.Container(children)
 
 mut def from_json_foo__li(jd: list[dict[str, ?value]]) -> yang.gdata.List:
-    elements = []
-    for e in jd:
-        if isinstance(e, dict):
-            elements.append(from_json_foo__li_element(e))
+    elements = [from_json_foo__li_element(e) for e in jd if isinstance(e, dict)]
     return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
 
 class root(yang.adata.MNode):
