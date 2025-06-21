@@ -730,7 +730,12 @@ class DNodeInner(DNode):
             res.append("        for e in self.elements:")
             res.append("            match = True")
             for us_key in us_list_key():
-                unique_base_types = {yang_type_to_acton_type(t) for t in list_key_types[us_key].type_}
+                # Order-preserving deduplication
+                unique_base_types = []
+                for t in list_key_types[us_key].type_:
+                    acton_type = yang_type_to_acton_type(t)
+                    if acton_type not in unique_base_types:
+                        unique_base_types.append(acton_type)
                 if len(unique_base_types) <= 1:
                     # Class attribute is a not a "value" Acton type because it
                     # is either not an union or it an union that was resolved
