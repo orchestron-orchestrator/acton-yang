@@ -730,7 +730,12 @@ class DNodeInner(DNode):
             res.append("        for e in self.elements:")
             res.append("            match = True")
             for us_key in us_list_key():
-                unique_base_types = {yang_type_to_acton_type(t) for t in list_key_types[us_key].type_}
+                # Order-preserving deduplication
+                unique_base_types = []
+                for t in list_key_types[us_key].type_:
+                    acton_type = yang_type_to_acton_type(t)
+                    if acton_type not in unique_base_types:
+                        unique_base_types.append(acton_type)
                 if len(unique_base_types) <= 1:
                     # Class attribute is a not a "value" Acton type because it
                     # is either not an union or it an union that was resolved
@@ -1336,12 +1341,14 @@ extension ModRev (Hashable):
     def __eq__(self, other: ModRev) -> bool:
         return self.modname == other.modname and self.rev == other.rev
 
-    def __hash__(self) -> int:
+    def hash(self, hasher):
+        self.modname.hash(hasher)
         selfrev = self.rev
-        revstr = selfrev if selfrev is not None else ""
-        # TODO: actually include revision in hash
-        #return self.modname.__hash__() + revstr.__hash__()
-        return self.modname.__hash__()
+        if selfrev is not None:
+            selfrev.hash(hasher)
+        else:
+            # Hash empty string for None revision to distinguish from modules with revision
+            "".hash(hasher)
 
 class Context(object):
     """Compilation context
@@ -2815,15 +2822,15 @@ class Action(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def get(self, name: str, ns: ?str=None) -> SchemaNode:
@@ -2969,24 +2976,24 @@ class Anydata(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
         for ref_if_feature in refine.if_feature:
             if ref_if_feature not in self.if_feature:
                 self.if_feature.append(ref_if_feature)
-        for ref_must in refine.must:
-            if ref_must not in self.must:
-                self.must.append(ref_must)
         ref_mandatory = refine.mandatory
         if ref_mandatory != None:
             self.mandatory = ref_mandatory
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
         ref_reference = refine.reference
         if ref_reference != None:
             self.reference = ref_reference
-        ref_config = refine.config
-        if ref_config != None:
-            self.config = ref_config
         self.exts.extend(refine.exts)
 
     def to_dnode(self) -> DAnydata:
@@ -3107,24 +3114,24 @@ class Anyxml(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
         for ref_if_feature in refine.if_feature:
             if ref_if_feature not in self.if_feature:
                 self.if_feature.append(ref_if_feature)
-        for ref_must in refine.must:
-            if ref_must not in self.must:
-                self.must.append(ref_must)
         ref_mandatory = refine.mandatory
         if ref_mandatory != None:
             self.mandatory = ref_mandatory
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
         ref_reference = refine.reference
         if ref_reference != None:
             self.reference = ref_reference
-        ref_config = refine.config
-        if ref_config != None:
-            self.config = ref_config
         self.exts.extend(refine.exts)
 
     def to_dnode(self) -> DAnyxml:
@@ -3237,15 +3244,15 @@ class Augment(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -3388,15 +3395,15 @@ class Bit(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -3489,15 +3496,15 @@ class Case(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -3600,25 +3607,25 @@ class Choice(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        if len(refine.default) == 1:
+            self.default = refine.default[0]
+        elif len(refine.default) > 1:
+            raise ValueError("Attempting to refine default with multiple values")
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
         for ref_if_feature in refine.if_feature:
             if ref_if_feature not in self.if_feature:
                 self.if_feature.append(ref_if_feature)
-        if len(refine.default) == 1:
-            self.default = refine.default[0]
-        elif len(refine.default) > 1:
-            raise ValueError("Attempting to refine default with multiple values")
         ref_mandatory = refine.mandatory
         if ref_mandatory != None:
             self.mandatory = ref_mandatory
         ref_reference = refine.reference
         if ref_reference != None:
             self.reference = ref_reference
-        ref_config = refine.config
-        if ref_config != None:
-            self.config = ref_config
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -3735,24 +3742,24 @@ class Container(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
-        ref_presence = refine.presence
-        if ref_presence != None:
-            self.presence = ref_presence
         for ref_if_feature in refine.if_feature:
             if ref_if_feature not in self.if_feature:
                 self.if_feature.append(ref_if_feature)
         for ref_must in refine.must:
             if ref_must not in self.must:
                 self.must.append(ref_must)
+        ref_presence = refine.presence
+        if ref_presence != None:
+            self.presence = ref_presence
         ref_reference = refine.reference
         if ref_reference != None:
             self.reference = ref_reference
-        ref_config = refine.config
-        if ref_config != None:
-            self.config = ref_config
         self.exts.extend(refine.exts)
 
     def is_presence(self) -> bool:
@@ -3864,15 +3871,15 @@ class Enum(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -3950,12 +3957,12 @@ class Extension(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4032,15 +4039,15 @@ class Feature(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4126,12 +4133,12 @@ class Grouping(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4211,15 +4218,15 @@ class Identity(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4297,12 +4304,12 @@ class Import(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4376,12 +4383,12 @@ class Include(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4600,28 +4607,28 @@ class Leaf(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        if len(refine.default) == 1:
+            self.default = refine.default[0]
+        elif len(refine.default) > 1:
+            raise ValueError("Attempting to refine default with multiple values")
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
         for ref_if_feature in refine.if_feature:
             if ref_if_feature not in self.if_feature:
                 self.if_feature.append(ref_if_feature)
-        if len(refine.default) == 1:
-            self.default = refine.default[0]
-        elif len(refine.default) > 1:
-            raise ValueError("Attempting to refine default with multiple values")
-        for ref_must in refine.must:
-            if ref_must not in self.must:
-                self.must.append(ref_must)
         ref_mandatory = refine.mandatory
         if ref_mandatory != None:
             self.mandatory = ref_mandatory
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
         ref_reference = refine.reference
         if ref_reference != None:
             self.reference = ref_reference
-        ref_config = refine.config
-        if ref_config != None:
-            self.config = ref_config
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4784,30 +4791,30 @@ class LeafList(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
+        for ref_default in refine.default:
+            if ref_default not in self.default:
+                self.default.append(ref_default)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
         for ref_if_feature in refine.if_feature:
             if ref_if_feature not in self.if_feature:
                 self.if_feature.append(ref_if_feature)
-        for ref_default in refine.default:
-            if ref_default not in self.default:
-                self.default.append(ref_default)
-        for ref_must in refine.must:
-            if ref_must not in self.must:
-                self.must.append(ref_must)
         ref_max_elements = refine.max_elements
         if ref_max_elements != None:
             self.max_elements = ref_max_elements
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_min_elements = refine.min_elements
         if ref_min_elements != None:
             self.min_elements = ref_min_elements
-        ref_config = refine.config
-        if ref_config != None:
-            self.config = ref_config
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4933,12 +4940,12 @@ class Length(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -5062,27 +5069,27 @@ class List(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
         for ref_if_feature in refine.if_feature:
             if ref_if_feature not in self.if_feature:
                 self.if_feature.append(ref_if_feature)
-        for ref_must in refine.must:
-            if ref_must not in self.must:
-                self.must.append(ref_must)
         ref_max_elements = refine.max_elements
         if ref_max_elements != None:
             self.max_elements = ref_max_elements
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_min_elements = refine.min_elements
         if ref_min_elements != None:
             self.min_elements = ref_min_elements
-        ref_config = refine.config
-        if ref_config != None:
-            self.config = ref_config
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def keys(self) -> list[str]:
@@ -5318,12 +5325,12 @@ class Module(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def get_import_by_prefix(self, prefix: str) -> Import:
@@ -5415,10 +5422,14 @@ class Module(SchemaNodeInner):
         return self.name
 
 extension Module (Hashable):
-    def __hash__(self):
+    def hash(self, hasher):
+        self.get_namespace().hash(hasher)
         rev = self.get_revision()
-        rev_str = rev.date if rev is not None else ""
-        return hash(self.get_namespace() + rev_str)
+        if rev is not None:
+            rev.date.hash(hasher)
+        else:
+            # Hash empty string for None revision
+            "".hash(hasher)
 
     def __eq__(self, other: Module):
         return self.name == other.name and self.augment == other.augment and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension_ == other.extension_ and self.feature == other.feature and self.import_ == other.import_ and self.include == other.include and self.namespace == other.namespace and self.organization == other.organization and self.prefix == other.prefix and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
@@ -5470,12 +5481,12 @@ class Must(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -5578,18 +5589,18 @@ class Notification(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_must in refine.must:
-            if ref_must not in self.must:
-                self.must.append(ref_must)
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def to_dnode(self) -> DNotification:
@@ -5795,12 +5806,12 @@ class Pattern(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -5878,12 +5889,12 @@ class Range(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -5989,36 +6000,36 @@ class Refine(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_description = refine.description
-        if ref_description != None:
-            self.description = ref_description
-        ref_presence = refine.presence
-        if ref_presence != None:
-            self.presence = ref_presence
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
+        ref_config = refine.config
+        if ref_config != None:
+            self.config = ref_config
         for ref_default in refine.default:
             if ref_default not in self.default:
                 self.default.append(ref_default)
-        for ref_must in refine.must:
-            if ref_must not in self.must:
-                self.must.append(ref_must)
+        ref_description = refine.description
+        if ref_description != None:
+            self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
         ref_mandatory = refine.mandatory
         if ref_mandatory != None:
             self.mandatory = ref_mandatory
         ref_max_elements = refine.max_elements
         if ref_max_elements != None:
             self.max_elements = ref_max_elements
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_min_elements = refine.min_elements
         if ref_min_elements != None:
             self.min_elements = ref_min_elements
-        ref_config = refine.config
-        if ref_config != None:
-            self.config = ref_config
+        for ref_must in refine.must:
+            if ref_must not in self.must:
+                self.must.append(ref_must)
+        ref_presence = refine.presence
+        if ref_presence != None:
+            self.presence = ref_presence
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -6095,12 +6106,12 @@ class Revision(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -6215,15 +6226,15 @@ class Rpc(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def get(self, name: str, ns: ?str=None) -> SchemaNode:
@@ -6461,12 +6472,12 @@ class Submodule(SchemaNodeInner):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def get_modrev(self) -> ModRev:
@@ -6779,12 +6790,12 @@ class Typedef(SchemaNodeOuter):
             self.default = refine.default[0]
         elif len(refine.default) > 1:
             raise ValueError("Attempting to refine default with multiple values")
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -6901,15 +6912,15 @@ class Uses(SchemaNodeOuter):
         ]
 
     mut def apply_refine(self, refine: Refine):
-        ref_reference = refine.reference
-        if ref_reference != None:
-            self.reference = ref_reference
-        for ref_if_feature in refine.if_feature:
-            if ref_if_feature not in self.if_feature:
-                self.if_feature.append(ref_if_feature)
         ref_description = refine.description
         if ref_description != None:
             self.description = ref_description
+        for ref_if_feature in refine.if_feature:
+            if ref_if_feature not in self.if_feature:
+                self.if_feature.append(ref_if_feature)
+        ref_reference = refine.reference
+        if ref_reference != None:
+            self.reference = ref_reference
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):

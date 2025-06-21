@@ -734,7 +734,12 @@ class DNodeInner(DNode):
             res.append("        for e in self.elements:")
             res.append("            match = True")
             for us_key in us_list_key():
-                unique_base_types = {yang_type_to_acton_type(t) for t in list_key_types[us_key].type_}
+                # Order-preserving deduplication
+                unique_base_types = []
+                for t in list_key_types[us_key].type_:
+                    acton_type = yang_type_to_acton_type(t)
+                    if acton_type not in unique_base_types:
+                        unique_base_types.append(acton_type)
                 if len(unique_base_types) <= 1:
                     # Class attribute is a not a "value" Acton type because it
                     # is either not an union or it an union that was resolved
@@ -1340,12 +1345,14 @@ extension ModRev (Hashable):
     def __eq__(self, other: ModRev) -> bool:
         return self.modname == other.modname and self.rev == other.rev
 
-    def __hash__(self) -> int:
+    def hash(self, hasher):
+        self.modname.hash(hasher)
         selfrev = self.rev
-        revstr = selfrev if selfrev is not None else ""
-        # TODO: actually include revision in hash
-        #return self.modname.__hash__() + revstr.__hash__()
-        return self.modname.__hash__()
+        if selfrev is not None:
+            selfrev.hash(hasher)
+        else:
+            # Hash empty string for None revision to distinguish from modules with revision
+            "".hash(hasher)
 
 class Context(object):
     """Compilation context
