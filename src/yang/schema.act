@@ -1336,12 +1336,14 @@ extension ModRev (Hashable):
     def __eq__(self, other: ModRev) -> bool:
         return self.modname == other.modname and self.rev == other.rev
 
-    def __hash__(self) -> int:
+    def hash(self, hasher):
+        self.modname.hash(hasher)
         selfrev = self.rev
-        revstr = selfrev if selfrev is not None else ""
-        # TODO: actually include revision in hash
-        #return self.modname.__hash__() + revstr.__hash__()
-        return self.modname.__hash__()
+        if selfrev is not None:
+            selfrev.hash(hasher)
+        else:
+            # Hash empty string for None revision to distinguish from modules with revision
+            "".hash(hasher)
 
 class Context(object):
     """Compilation context
@@ -5415,10 +5417,14 @@ class Module(SchemaNodeInner):
         return self.name
 
 extension Module (Hashable):
-    def __hash__(self):
+    def hash(self, hasher):
+        self.get_namespace().hash(hasher)
         rev = self.get_revision()
-        rev_str = rev.date if rev is not None else ""
-        return hash(self.get_namespace() + rev_str)
+        if rev is not None:
+            rev.date.hash(hasher)
+        else:
+            # Hash empty string for None revision
+            "".hash(hasher)
 
     def __eq__(self, other: Module):
         return self.name == other.name and self.augment == other.augment and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension_ == other.extension_ and self.feature == other.feature and self.import_ == other.import_ and self.include == other.include and self.namespace == other.namespace and self.organization == other.organization and self.prefix == other.prefix and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version

@@ -1234,10 +1234,14 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
 
         if stmt_name == "module":
             res.append("extension %s (Hashable):" % _class_name(stmt_name))
-            res.append("    def __hash__(self):")
+            res.append("    def hash(self, hasher):")
+            res.append("        self.get_namespace().hash(hasher)")
             res.append("        rev = self.get_revision()")
-            res.append("        rev_str = rev.date if rev is not None else \"\"")
-            res.append("        return hash(self.get_namespace() + rev_str)")
+            res.append("        if rev is not None:")
+            res.append("            rev.date.hash(hasher)")
+            res.append("        else:")
+            res.append("            # Hash empty string for None revision")
+            res.append("            \"\".hash(hasher)")
             res.append("")
             res.append("    def __eq__(self, other: %s):" % _class_name(stmt_name))
             res.append("        return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))

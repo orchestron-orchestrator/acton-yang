@@ -1340,12 +1340,14 @@ extension ModRev (Hashable):
     def __eq__(self, other: ModRev) -> bool:
         return self.modname == other.modname and self.rev == other.rev
 
-    def __hash__(self) -> int:
+    def hash(self, hasher):
+        self.modname.hash(hasher)
         selfrev = self.rev
-        revstr = selfrev if selfrev is not None else ""
-        # TODO: actually include revision in hash
-        #return self.modname.__hash__() + revstr.__hash__()
-        return self.modname.__hash__()
+        if selfrev is not None:
+            selfrev.hash(hasher)
+        else:
+            # Hash empty string for None revision to distinguish from modules with revision
+            "".hash(hasher)
 
 class Context(object):
     """Compilation context
