@@ -117,7 +117,7 @@ class YangTokenizer(object):
             # check the separator
             if (self.buf[0].isspace() or
                 (self.buf[0] == '/' and self.buf[1] in ['/', '*']) or
-                (self.buf[0] in [';','{'])):
+                (self.buf[0] in [';', r'{'])):
                 pass
             else:
                 raise ValueError("expected separator, got: " + self.buf[:6] + "...")
@@ -131,7 +131,7 @@ class YangTokenizer(object):
                 return (identifier=gident, prefix=prefix)
             raise ValueError("identifier or prefix is None")
         else:
-            raise ValueError(f"illegal keyword: {self.buf}")
+            raise ValueError("illegal keyword: {self.buf}")
 
     def peek(self) -> str:
         """Return next real character in input stream.
@@ -153,8 +153,8 @@ class YangTokenizer(object):
         """ret: string"""
         self.skip()
 
-        if self.buf[0] == ';' or self.buf[0] == '{' or self.buf[0] == '}':
-            raise ValueError(f"expected argument, got: {self.buf[0]}")
+        if self.buf[0] == ';' or self.buf[0] == r'{' or self.buf[0] == r'}':
+            raise ValueError("expected argument, got: {self.buf[0]}")
 
         if self.buf[0] == '"' or self.buf[0] == "'":
             # for double-quoted string,  loop over string and translate
@@ -199,9 +199,9 @@ class YangTokenizer(object):
                         elif self.buf[i+1] == '\\':
                             special = '\\'
                         elif self.strict_quoting and self.is_1_1:
-                            raise ValueError(f"illegal escape: {self.buf[i+1]}")
+                            raise ValueError("illegal escape: {self.buf[i+1]}")
                         elif self.strict_quoting:
-                            raise ValueError(f"illegal escape: {self.buf[i+1]}")
+                            raise ValueError("illegal escape: {self.buf[i+1]}")
                         if special is not None:
                             res.append(self.buf[start:i])
                             res.append(special)
@@ -242,7 +242,7 @@ class YangTokenizer(object):
                         # whitespace only on this line; keep it as is
                         i = 0
         elif need_quote == True:
-            raise ValueError(f"expected quoted string, got: {self.buf}")
+            raise ValueError("expected quoted string, got: {self.buf}")
         else:
             # unquoted string
             buflen = len(self.buf)
@@ -250,7 +250,7 @@ class YangTokenizer(object):
             while i < buflen:
                 if (self.buf[i].isspace() or self.buf[i] == ';' or
                     self.buf[i] == '"' or self.buf[i] == "'" or
-                    self.buf[i] == '{' or self.buf[i] == '}' or
+                    self.buf[i] == r'{' or self.buf[i] == r'}' or
                     self.buf[i:i+2] == '//' or self.buf[i:i+2] == '/*' or
                     self.buf[i:i+2] == '*/'):
                     res = self.buf[:i]
@@ -284,7 +284,7 @@ class YangParser(object):
         keywd = self.tokenizer.get_keyword()
         # check for argument
         tok = self.tokenizer.peek()
-        if tok == '{' or tok == ';':
+        if tok == r'{' or tok == ';':
             arg = None
             argstrs = None
         else:
@@ -303,14 +303,14 @@ class YangParser(object):
 
         # check for substatements
         tok = self.tokenizer.peek()
-        if tok == '{':
+        if tok == r'{':
             self.tokenizer.skip_tok() # skip the '{'
             self.last_line = self.pos.line
             # TODO: the commented out while loop here was the original used, how are the following 4 lines not equivalent?
             #while self.tokenizer.peek() != '}':
             while True:
                 p = self.tokenizer.peek()
-                if p == '}':
+                if p == r'}':
                     break
                 substmt = self._parse_statement(stmt)
                 stmt.substatements.append(substmt)
@@ -321,7 +321,7 @@ class YangParser(object):
 #            error.err_add(self.ctx.errors, self.pos, 'INCOMPLETE_STATEMENT',
 #                          (keywd, tok))
 #            raise error.Abort
-            raise ValueError(f"incomplete statement, expected '{{' or ';', got: {tok}")
+            raise ValueError("incomplete statement, expected '{{' or ';', got: {tok}")
         self.last_line = self.pos.line
         return stmt
 

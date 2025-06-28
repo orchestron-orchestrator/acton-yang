@@ -17,18 +17,18 @@ def get_schema_nodeid(nodes: list[yang.schema.DNode]) -> str:
     no_root = list(filter(lambda n: not isinstance(n, yang.schema.DRoot), nodes))
     for i, node in enumerate(no_root):
         if i == 0:
-            prefix = f"{node.prefix}:"
+            prefix = "{node.prefix}:"
         else:
             parent = no_root[i-1]
             if isinstance(parent, yang.schema.DNodeInner):
                 siblings = filter(lambda n: node.name == n.name, parent.children)
                 if len(list(siblings)) > 1:
-                    prefix = f"{node.prefix}:"
+                    prefix = "{node.prefix}:"
                 else:
                     prefix =""
             else:
-                raise ValueError(f"Node {parent} is not a DNodeInner")
-        path.append(f"{prefix}{node.name}")
+                raise ValueError("Node {parent} is not a DNodeInner")
+        path.append("{prefix}{node.name}")
     return "/".join(path)
 
 mut def remove_list_user_order(node: yang.schema.DNode, filter_paths=[]) -> None:
@@ -59,11 +59,11 @@ mut def remove_list_user_order(node: yang.schema.DNode, filter_paths=[]) -> None
         new_path = path + [node]
         if isinstance(node, yang.schema.DList):
             if is_interesting(new_path) and node.ordered_by == "user":
-                print(f'Removing "ordered-by user" from {get_schema_nodeid(new_path)}', err=True)
+                print('Removing "ordered-by user" from {get_schema_nodeid(new_path)}', err=True)
                 node.ordered_by = "system"
         elif isinstance(node, yang.schema.DLeafList):
             if is_interesting(new_path) and node.ordered_by == "user":
-                print(f'Removing "ordered-by user" from {get_schema_nodeid(new_path)}', err=True)
+                print('Removing "ordered-by user" from {get_schema_nodeid(new_path)}', err=True)
                 node.ordered_by = "system"
         if isinstance(node, yang.schema.DNodeInner):
             for child in node.children:
@@ -71,7 +71,7 @@ mut def remove_list_user_order(node: yang.schema.DNode, filter_paths=[]) -> None
 
     remove_list_user_order_filtered(node)
 
-test_yang = """module test_yang {
+test_yang = r"""module test_yang {
   yang-version "1.1";
   namespace "http://example.com/test_yang";
   prefix "test_yang";

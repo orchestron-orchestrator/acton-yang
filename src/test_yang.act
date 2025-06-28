@@ -5,7 +5,7 @@ import yang.schema
 import yang
 
 
-test_yang = """module test_yang {
+test_yang = r"""module test_yang {
   yang-version "1.1";
   namespace "http://example.com/test_yang";
   prefix "test_yang";
@@ -108,9 +108,9 @@ test_yang = """module test_yang {
     }
     leaf ql2 {
       type string;
-      description "contains \\"quotes\\"";
-      must "have \\"quotes\\"";
-      when "does it \\"work\\"?";
+      description "contains \"quotes\"";
+      must "have \"quotes\"";
+      when "does it \"work\"?";
     }
     leaf ql3 {
       type string {
@@ -162,7 +162,7 @@ test_yang = """module test_yang {
 }
 """
 
-test_submodule = """submodule test_submodule {
+test_submodule = r"""submodule test_submodule {
   yang-version "1.1";
   belongs-to test_yang {
     prefix "sub1";
@@ -170,7 +170,7 @@ test_submodule = """submodule test_submodule {
 }
 """
 
-test_yang_simple = """module test_yang {
+test_yang_simple = r"""module test_yang {
   yang-version "1.1";
   namespace "http://example.com/test_yang";
   prefix "test_yang";
@@ -210,12 +210,12 @@ test_yang_simple = """module test_yang {
 
 def mwrap(s):
     """Wrap some YANG in a module definition"""
-    header = """module test_yang {
+    header = r"""module test_yang {
   yang-version "1.1";
   namespace "http://example.com/test_yang";
   prefix "test_yang";
 """
-    footer = """
+    footer = r"""
 }
 """
     return header + s + footer
@@ -255,14 +255,14 @@ def _test_parse_pryang_non_idempotent():
     # quotes after a single roundtrip, as we do not preserve the quotes used in
     # our schema representation. This is fine, as long as the resulting YANG is
     # still valid - \ is escaped as \\.
-    original = """module test_yang {
+    original = r"""module test_yang {
     yang-version "1.1";
     namespace "http://example.com/test_yang";
     prefix "test_yang";
     container c1 {
         leaf l1 {
             type string {
-                pattern 'example\\.com';
+                pattern 'example\.com';
             }
             description 'leaf with single quote';
         }
@@ -289,7 +289,7 @@ def _test_schema_node_submodule():
 
 def _test_fail_leaf_invalid():
     """Invalid statement under leaf"""
-    t = mwrap("""leaf l1 {
+    t = mwrap(r"""leaf l1 {
   type string;
   description "leaf 1";
   foo "bar";
@@ -302,7 +302,7 @@ def _test_fail_leaf_invalid():
         return
 
 def _test_unexpected_eof():
-    ys = """container c1 {
+    ys = r"""container c1 {
 """
     try:
         y = yang.parser.parse(ys)
@@ -312,7 +312,7 @@ def _test_unexpected_eof():
     testing.error("Expected ValueError")
 
 def _test_prsrc_action_1():
-    ys = """action action1 {
+    ys = r"""action action1 {
   description "action 1";
   input {
     leaf rli1 {
@@ -335,7 +335,7 @@ def _test_prsrc_action_1():
     return root.prsrc()
 
 def _test_prsrc_augment_1():
-    ys = """augment "/if:interfaces/if:interface" {
+    ys = r"""augment "/if:interfaces/if:interface" {
   if-feature "iffy";
   description "aug1";
   reference "ref1";
@@ -345,7 +345,7 @@ def _test_prsrc_augment_1():
     return s.prsrc()
 
 def _test_prsrc_bit_1():
-    ys = """bit b1 {
+    ys = r"""bit b1 {
   description "bit1";
   if-feature "iffy";
   position 1;
@@ -356,7 +356,7 @@ def _test_prsrc_bit_1():
     return s.prsrc()
 
 def _test_prsrc_case_1():
-    ys = """case case1 {
+    ys = r"""case case1 {
   description "choice1";
   if-feature "iffy";
   reference "ref1";
@@ -367,7 +367,7 @@ def _test_prsrc_case_1():
     return s.prsrc()
 
 def _test_prsrc_choice_1():
-    ys = """choice c1 {
+    ys = r"""choice c1 {
   config true;
   default case1;
   description "choice1";
@@ -381,7 +381,7 @@ def _test_prsrc_choice_1():
     return s.prsrc()
 
 def _test_prsrc_choice_case():
-    ys = """container transfer {
+    ys = r"""container transfer {
   choice how {
     default interval;
     case interval {
@@ -396,7 +396,7 @@ def _test_prsrc_choice_case():
     return s.prsrc()
 
 def _test_prsrc_enum_1():
-    ys = """enum foo {
+    ys = r"""enum foo {
     description "bar";
     if-feature baz;
     reference "qux";
@@ -407,7 +407,7 @@ def _test_prsrc_enum_1():
     return s.prsrc()
 
 def _test_prsrc_input_1():
-    ys = """input {
+    ys = r"""input {
   must 'foo' {
     description "bar";
     error-app-tag "baz";
@@ -426,7 +426,7 @@ def _test_prsrc_input_1():
     return s.prsrc()
 
 def _test_prsrc_grouping_1():
-    ys = """grouping g1 {
+    ys = r"""grouping g1 {
   description "g1 desc";
   reference "ref1";
   status current;
@@ -435,7 +435,7 @@ def _test_prsrc_grouping_1():
     return s.prsrc()
 
 def _test_prsrc_module_1():
-    ys = """module test_yang {
+    ys = r"""module test_yang {
   yang-version "1.1";
   namespace "http://example.com/test_yang";
   prefix "test_yang";
@@ -449,7 +449,7 @@ def _test_prsrc_module_1():
     return s.prsrc()
 
 def _test_prsrc_must_1():
-    ys = """must 'foo' {
+    ys = r"""must 'foo' {
   description "bar";
   error-app-tag "baz";
   error-message "bax";
@@ -459,7 +459,7 @@ def _test_prsrc_must_1():
     return s.prsrc()
 
 def _test_prsrc_notification_1():
-    ys = """notification n1 {
+    ys = r"""notification n1 {
   description "notification 1";
   if-feature baz;
   must 'foo' {
@@ -475,7 +475,7 @@ def _test_prsrc_notification_1():
     return s.prsrc()
 
 def _test_prsrc_revision_1():
-    ys = """revision 2019-01-01 {
+    ys = r"""revision 2019-01-01 {
   description "test revision";
   reference "ref1";
 }"""
@@ -483,7 +483,7 @@ def _test_prsrc_revision_1():
     return s.prsrc()
 
 def _test_prsrc_leaf_type_bit():
-    ys = """leaf foo {
+    ys = r"""leaf foo {
   type bits {
     bit "bar" {
       description "bar";
@@ -502,7 +502,7 @@ def _test_prsrc_leaf_type_bit():
     return s.prsrc()
 
 def _test_prsrc_leaf_type_decimal_fract():
-    ys = """leaf foo {
+    ys = r"""leaf foo {
   type decimal {
     fraction-digits 3;
   }
@@ -511,7 +511,7 @@ def _test_prsrc_leaf_type_decimal_fract():
     return s.prsrc()
 
 def _test_prsrc_leaf_type_enum():
-    ys = """leaf foo {
+    ys = r"""leaf foo {
   type enumeration {
     enum "bar" {
       description "bar";
@@ -530,7 +530,7 @@ def _test_prsrc_leaf_type_enum():
     return s.prsrc()
 
 def _test_prsrc_leaf_type_leafref():
-    ys = """leaf foo {
+    ys = r"""leaf foo {
   type leafref {
     path "/foo/bar";
     require-instance false;
@@ -540,7 +540,7 @@ def _test_prsrc_leaf_type_leafref():
     return s.prsrc()
 
 def _test_prsrc_leaf_type_string_length():
-    ys = """leaf foo {
+    ys = r"""leaf foo {
   type string {
     length "1..10";
     pattern "foo.*";
@@ -550,7 +550,7 @@ def _test_prsrc_leaf_type_string_length():
     return s.prsrc()
 
 def _test_prsrc_leaf_type_uint():
-    ys = """leaf foo {
+    ys = r"""leaf foo {
   type uint32 {
     range "1..10";
   }
@@ -559,7 +559,7 @@ def _test_prsrc_leaf_type_uint():
     return s.prsrc()
 
 def _test_prsrc_rpc_1():
-    ys = """rpc rpc1 {
+    ys = r"""rpc rpc1 {
   description "rpc 1";
   input {
     leaf rli1 {
@@ -582,7 +582,7 @@ def _test_prsrc_rpc_1():
     return s.prsrc()
 
 def _test_prsrc_typedef_1():
-    ys = """typedef t1 {
+    ys = r"""typedef t1 {
   default "foo";
   description "t1 desc";
   reference "ref1";
@@ -594,7 +594,7 @@ def _test_prsrc_typedef_1():
     return s.prsrc()
 
 def _test_prsrc_uses():
-    ys = """uses g1 {
+    ys = r"""uses g1 {
   description "uses g1";
   if-feature baz;
   reference "ref1";
@@ -614,7 +614,7 @@ def _test_prsrc_uses():
     return s.prsrc()
 
 def _test_is_config1():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -634,7 +634,7 @@ def _test_is_config1():
     testing.assertEqual(s.get("c1").get("c2").get("l1").is_config(), True)
 
 def _test_is_config2():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -655,7 +655,7 @@ def _test_is_config2():
     testing.assertEqual(s.get("c1").get("c2").get("l1").is_config(), False)
 
 def _test_ns():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -681,7 +681,7 @@ def _test_ns():
 
 
 def _test_compile_type1():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -724,7 +724,7 @@ def _test_compile_type1():
         testing.error("Expected LeafList instance")
 
 def _test_compile_type2():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -772,7 +772,7 @@ def _test_compile_type2():
         testing.error("Expected LeafList instance")
 
 def _test_compile_type3():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -813,7 +813,7 @@ def _test_compile_type3():
         testing.error("Expected Leaf instance")
 
 def _test_compile_type_in_imported_module():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -823,7 +823,7 @@ def _test_compile_type_in_imported_module():
     }
   }
 }"""
-    ys_bar = """module bar {
+    ys_bar = r"""module bar {
   yang-version "1.1";
   namespace "http://example.com/bar";
   prefix "bar";
@@ -853,7 +853,7 @@ def _test_compile_type_in_imported_module():
 
 
 def _test_compile_uses():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -878,7 +878,7 @@ def _test_compile_uses():
     return root.prdaclass()
 
 def _test_compile_imported_grouping():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -897,7 +897,7 @@ def _test_compile_imported_grouping():
     uses g1;
   }
 }"""
-    ys_bar = """module bar {
+    ys_bar = r"""module bar {
   yang-version "1.1";
   namespace "http://example.com/bar";
   prefix "bar";
@@ -915,7 +915,7 @@ def _test_compile_imported_grouping():
     return root.prdaclass()
 
 def _test_compile_augment():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -939,7 +939,7 @@ def _test_compile_augment():
     return root.prdaclass()
 
 def _test_compile_augment_import():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -950,7 +950,7 @@ def _test_compile_augment_import():
     }
   }
 }"""
-    ys_bar = """module bar {
+    ys_bar = r"""module bar {
   yang-version "1.1";
   namespace "http://example.com/bar";
   prefix "bar";
@@ -972,7 +972,7 @@ def _test_compile_augment_import():
 
 def _test_compile_uses_augment():
     """Augmenting a grouping"""
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1007,7 +1007,7 @@ def _test_compile_uses_augment():
 
 def _test_compile_augment_uses():
     """Augmenting a grouping"""
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1047,7 +1047,7 @@ def _test_compile_augment_uses():
 
 def _test_compile_augment_absolute_path_under_uses():
     """Augmenting a grouping"""
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1078,7 +1078,7 @@ def _test_compile_augment_absolute_path_under_uses():
 
 def _test_compile_augment_relative_path_under_module():
     """Augmenting a grouping"""
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1107,7 +1107,7 @@ def _test_compile_augment_relative_path_under_module():
 
 def _test_compile_augment_implicit_input_output():
     """Augmenting under implicit input/output of action/rpc"""
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1153,7 +1153,7 @@ def _test_compile_augment_implicit_input_output():
 
 def _test_compile_refine():
     """Refining a grouping"""
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1184,7 +1184,7 @@ def _test_compile_refine():
     return root.prdaclass()
 
 def _test_compile_choice():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1225,7 +1225,7 @@ def _test_compile_choice():
 
 def _test_resolve_type_union_of_string():
     """Test resolution of a union type where all base types are string"""
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1265,7 +1265,7 @@ def _test_resolve_type_union_of_string():
     return root.prdaclass()
 
 def _test_resolve_type_union_of_intX():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1332,7 +1332,7 @@ def _test_resolve_type_union_of_intX():
 
 def _test_resolve_type_union_of_string_and_int():
     """Test resolution of a union type where one base type is string and the other is int"""
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1354,7 +1354,7 @@ def _test_resolve_type_union_of_string_and_int():
     return root.prdaclass()
 
 def _test_prdaclass_union_list_key():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1386,7 +1386,7 @@ type string;
     return root.prdaclass()
 
 def _test_compile_bundle1():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1404,7 +1404,7 @@ def _test_compile_bundle1():
     }
 }"""
 
-    ys_bar = """module bar {
+    ys_bar = r"""module bar {
     yang-version "1.1";
     namespace "http://example.com/bar";
     prefix "bar";
@@ -1431,7 +1431,7 @@ def _test_compile_bundle1():
     return src
 
 def _test_compile_extension():
-    ys = """module foo {
+    ys = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1463,7 +1463,7 @@ def _test_compile_extension():
     return root.prdaclass()
 
 def _test_compile_augment_on_augment():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1499,7 +1499,7 @@ def _test_compile_augment_on_augment():
     return root.prdaclass()
 
 def _test_compile_augment_on_augment_across_modules():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1515,7 +1515,7 @@ def _test_compile_augment_on_augment_across_modules():
     }
 }"""
 
-    ys_bar = """module bar {
+    ys_bar = r"""module bar {
     yang-version "1.1";
     namespace "http://example.com/bar";
     prefix "bar";
@@ -1533,7 +1533,7 @@ def _test_compile_augment_on_augment_across_modules():
     }
 }"""
 
-    ys_baz = """module baz {
+    ys_baz = r"""module baz {
     yang-version "1.1";
     namespace "http://example.com/baz";
     prefix "baz";
@@ -1583,7 +1583,7 @@ def _test_compile_augment_on_augment_across_modules():
     return root.prdaclass()
 
 def _test_compile_submodules1():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1599,7 +1599,7 @@ def _test_compile_submodules1():
     }
 }"""
 
-    ys_bar = """submodule bar {
+    ys_bar = r"""submodule bar {
     yang-version "1.1";
     belongs-to foo {
         prefix "foo";
@@ -1620,7 +1620,7 @@ def _test_compile_submodules1():
     return root.prdaclass()
 
 def _test_compile_submodules2():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1636,7 +1636,7 @@ def _test_compile_submodules2():
     }
 }"""
 
-    ys_bar = """submodule bar {
+    ys_bar = r"""submodule bar {
     yang-version "1.1";
     belongs-to foo {
         prefix "foo";
@@ -1655,7 +1655,7 @@ def _test_compile_submodules2():
     #testing.error("Expected ValueError")
 
 def _test_compile_import_hyphenated_prefix():
-    ys_foo = """module acme_foo-bar {
+    ys_foo = r"""module acme_foo-bar {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "acme_foo-bar";
@@ -1664,7 +1664,7 @@ def _test_compile_import_hyphenated_prefix():
   }
   uses acme_qux-baz:g1;
 }"""
-    ys_qux = """module acme_qux-baz {
+    ys_qux = r"""module acme_qux-baz {
   yang-version "1.1";
   namespace "http://example.com/qux";
   prefix "acme_qux-baz";
@@ -1690,7 +1690,7 @@ def _test_prdaclass_req_arg():
     mandatory and needs to be a required argument which should all go before the
     optional args that have a default value.
     """
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1715,7 +1715,7 @@ def _test_prdaclass_req_arg():
     return src
 
 def _test_prdaclass_loose_p_container_with_mandatory_leaf():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1736,7 +1736,7 @@ def _test_prdaclass_loose_p_container_with_mandatory_leaf():
     return src
 
 def _test_prdaclass_loose_container_in_container():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1755,7 +1755,7 @@ def _test_prdaclass_loose_container_in_container():
     return src
 
 def _test_prdaclass_strict_list_mandatory():
-    ys = """module foo {
+    ys = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1776,7 +1776,7 @@ def _test_prdaclass_strict_list_mandatory():
     return src
 
 def _test_prdaclass_strict_p_container_with_mandatory_leaf():
-    ys = """module foo {
+    ys = r"""module foo {
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
@@ -1792,7 +1792,7 @@ def _test_prdaclass_strict_p_container_with_mandatory_leaf():
   }
 }"""
 
-    ys_bar = """module bar {
+    ys_bar = r"""module bar {
   yang-version "1.1";
   namespace "http://example.com/bar";
   prefix "bar";
@@ -1816,7 +1816,7 @@ def _test_prdaclass_strict_p_container_with_mandatory_leaf():
     return src
 
 def _test_prdaclass_strict_list_p_container_with_mandatory_leaf():
-    ys = """module foo {
+    ys = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1840,7 +1840,7 @@ def _test_prdaclass_strict_list_p_container_with_mandatory_leaf():
     return src
 
 def _test_prdaclass_keyword_name_import():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1868,7 +1868,7 @@ def _test_prdaclass_keyword_name_import():
     return src
 
 def _test_prdaclass_list_key_mandatory():
-    ys = """module foo {
+    ys = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1886,7 +1886,7 @@ def _test_prdaclass_list_key_mandatory():
     return src
 
 def _test_prdaclass_list_key_reorder():
-    ys = """module foo {
+    ys = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1906,7 +1906,7 @@ def _test_prdaclass_list_key_reorder():
     return src
 
 def _test_prdaclass_top_conflict():
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1916,7 +1916,7 @@ def _test_prdaclass_top_conflict():
         }
     }
 }"""
-    ys_bar = """module bar {
+    ys_bar = r"""module bar {
     yang-version "1.1";
     namespace "http://example.com/bar";
     prefix "bar";
@@ -1931,7 +1931,7 @@ def _test_prdaclass_top_conflict():
     return src
 
 def _test_prdaclass_augment_name_conflict():
-    ys_base = """module base {
+    ys_base = r"""module base {
     yang-version "1.1";
     namespace "http://example.com/base";
     prefix "base";
@@ -1939,7 +1939,7 @@ def _test_prdaclass_augment_name_conflict():
     }
 }"""
 
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -1953,7 +1953,7 @@ def _test_prdaclass_augment_name_conflict():
     }
 }"""
 
-    ys_bar = """module bar {
+    ys_bar = r"""module bar {
     yang-version "1.1";
     namespace "http://example.com/bar";
     prefix "bar";
@@ -1973,7 +1973,7 @@ def _test_prdaclass_augment_name_conflict():
     return src
 
 def _test_prdaclass_augment_inner_name_conflict():
-    ys_base = """module base {
+    ys_base = r"""module base {
     yang-version "1.1";
     namespace "http://example.com/base";
     prefix "base";
@@ -1986,7 +1986,7 @@ def _test_prdaclass_augment_inner_name_conflict():
     }
 }"""
 
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -2008,7 +2008,7 @@ def _test_prdaclass_augment_inner_name_conflict():
     return src
 
 def _test_prdaclass_augment_inner_list_conflict():
-    ys_base = """module base {
+    ys_base = r"""module base {
     yang-version "1.1";
     namespace "http://example.com/base";
     prefix "base";
@@ -2022,7 +2022,7 @@ def _test_prdaclass_augment_inner_list_conflict():
     }
 }"""
 
-    ys_foo = """module foo {
+    ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -2050,7 +2050,7 @@ def _test_prdaclass_augment_inner_list_conflict():
     return src
 
 def _test_prdaclass_top_container_from_xml_opt():
-    ys_base = """module foo {
+    ys_base = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -2074,7 +2074,7 @@ def _test_prdaclass_top_container_from_xml_opt():
 
 
 def _test_leaf_defaults():
-    ys_base = """module foo {
+    ys_base = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -2104,7 +2104,7 @@ def _test_leaf_defaults():
         testing.error("Expected Leaf instance for l_boolean_def")
 
 def _test_prdaclass_max_elements_unbounded():
-    ys_base = """module foo {
+    ys_base = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -2125,7 +2125,7 @@ def _test_prdaclass_max_elements_unbounded():
     return src
 
 def _test_prdaclass_min_elements():
-    ys_base = """module foo {
+    ys_base = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -2146,7 +2146,7 @@ def _test_prdaclass_min_elements():
     return src
 
 def _test_mixed_req_args():
-    ys_base = """module foo {
+    ys_base = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
@@ -2179,7 +2179,7 @@ def _test_mixed_req_args():
     return src
 
 def _test_prdaclass_dot():
-    ys_base = """module foo {
+    ys_base = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";

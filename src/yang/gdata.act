@@ -202,13 +202,13 @@ def json_val(yang_type: str, v: value) -> ?value:
 def fmt_json_name(name, module=None):
     name_without_prefix = name.split(":")[-1]
     if module is not None:
-        return f"{module}:{name_without_prefix}"
+        return "{module}:{name_without_prefix}"
     return name_without_prefix
 
 
 def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
     ns_attr = [("xmlns", '"'+ns+'"')] if ns is not None and not close else []
-    attr_strs = list(map(lambda x: f"{x.0}={x.1}", ns_attr + attrs))
+    attr_strs = list(map(lambda x: "{x.0}={x.1}", ns_attr + attrs))
     left = "</" if close else "<"
     right = "/>" if end else ">"
     name_without_prefix = name.split(":")[-1]
@@ -234,50 +234,50 @@ class Node(value):
         args = []
         sns = self.ns
         if sns is not None:
-            args += [f"ns='{sns}'"]
+            args += ["ns='{sns}'"]
         smodule = self.module
         if smodule is not None:
-            args += [f"module='{smodule}'"]
+            args += ["module='{smodule}'"]
         res = []
         if isinstance(self, Leaf):
-            args.insert(0, f"'{str(self.t)}'")
+            args.insert(0, "'{str(self.t)}'")
             if isinstance(self.val, str):
-                val = f"'{self.val}'"
+                val = "'{self.val}'"
             else:
                 val = str(self.val)
             args.insert(1, val)
-            return f"Leaf({", ".join(args)})"
+            return "Leaf({", ".join(args)})"
         elif isinstance(self, LeafList):
-            args.insert(0, f"'{str(self.t)}'")
+            args.insert(0, "'{str(self.t)}'")
             args.insert(1, str(self.vals if self.user_order else vals_list_sorted(self.vals)))
             if self.user_order:
                 args.append("user_order=True")
-            return f"LeafList({", ".join(args)})"
+            return "LeafList({", ".join(args)})"
         elif isinstance(self, Absent):
             sname = "Absent"
             if len(self.children) == 0:
-                res.append(f"{sname}({", ".join(args)})")
+                res.append("{sname}({", ".join(args)})")
             else:
                 child_res = []
                 for nm,child in self.children.items():
-                    child_res.append(f"{_ind(indent+1)}'{nm}': {child.prsrc(indent+1, nm)}")
-                res.append(sname + "({")
+                    child_res.append("{_ind(indent+1)}'{nm}': {child.prsrc(indent+1, nm)}")
+                res.append(sname + r"({")
                 res.append(",\n".join(child_res))
 
                 args_str = ""
                 if len(args) > 0:
-                    args_str = f", {", ".join(args)}"
-                res.append(f"{_ind(indent)}}}{args_str})")
+                    args_str = ", {", ".join(args)}"
+                res.append("{_ind(indent)}}}{args_str})")
             return "\n".join(res)
         elif isinstance(self, List):
             args.insert(0, str(self.keys))
             if self.user_order:
                 args.append("user_order=True")
             if len(self.elements) == 0:
-                res.append(f"List({", ".join(args)})")
+                res.append("List({", ".join(args)})")
             else:
                 args.append("elements=[")
-                res.append(f"List({", ".join(args)}")
+                res.append("List({", ".join(args)}")
                 child_res = []
                 for elem in self.elements if self.user_order else sorted_elements(self.elements, self.keys):
                     child_res.append(_ind(indent+1) + elem.prsrc(indent+1))
@@ -289,18 +289,18 @@ class Node(value):
             if self.presence:
                 args.insert(0, "presence=True")
             if len(self.children) == 0:
-                res.append(f"{sname}({", ".join(args)})")
+                res.append("{sname}({", ".join(args)})")
             else:
                 child_res = []
                 for nm,child in self.children.items():
-                    child_res.append(f"{_ind(indent+1)}'{nm}': {child.prsrc(indent+1, nm)}")
-                res.append(sname + "({")
+                    child_res.append("{_ind(indent+1)}'{nm}': {child.prsrc(indent+1, nm)}")
+                res.append(sname + r"({")
                 res.append(",\n".join(child_res))
 
                 args_str = ""
                 if len(args) > 0:
-                    args_str = f", {", ".join(args)}"
-                res.append(f"{_ind(indent)}}}{args_str})")
+                    args_str = ", {", ".join(args)}"
+                res.append("{_ind(indent)}}}{args_str})")
             return "\n".join(res)
         else:
             raise ValueError("Unsupported node type in prsrc")
@@ -342,12 +342,12 @@ class Node(value):
                             elem_dict.update(elem.to_dict(pretty).items())
                             elems.append(elem_dict)
                         else:
-                            raise ValueError(f"Unexpected list ({nm}) element type: {type(elem)}")
+                            raise ValueError("Unexpected list ({nm}) element type: {type(elem)}")
                     child_dict[fmt_json_name(nm, child.module)] = elems
                 else:
-                    raise ValueError(f"Unsupported child ({nm}) node type in to_dict: {type(child)}")
+                    raise ValueError("Unsupported child ({nm}) node type in to_dict: {type(child)}")
             return child_dict
-        raise ValueError(f"Unsupported node type in to_dict: {type(self)}")
+        raise ValueError("Unsupported node type in to_dict: {type(self)}")
 
     def to_xmlstr(self, name="top", pretty=True, indent=0, cns: ?str=None) -> str:
         # TODO: get rid of cns, I don't think it is necessary anymore, right?
@@ -422,14 +422,14 @@ class Node(value):
             return xml
         elif isinstance(self, Absent):
             return _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op, end=True) + _nl()
-        raise ValueError(f"Unsupported node type in to_xml: {type(self)}")
+        raise ValueError("Unsupported node type in to_xml: {type(self)}")
 
     # --
     def get_leaf(self, name) -> Leaf:
         l = self.get_opt_leaf(name)
         if l != None:
             return l
-        raise ValueError(f"Cannot find leaf child in {self} with name: {name}")
+        raise ValueError("Cannot find leaf child in {self} with name: {name}")
 
     def get_opt_leaf(self, name) -> ?Leaf:
         if isinstance(self, Container) or isinstance(self, Absent):
@@ -444,7 +444,7 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, Container) and nm == name:
                     return child
-        raise ValueError(f"Cannot find container child with name {name}")
+        raise ValueError("Cannot find container child with name {name}")
 
     def get_opt_container(self, name) -> ?Container:
         """This is for P-container"""
@@ -470,7 +470,7 @@ class Node(value):
         childval = child.val
         if isinstance(childval, bool):
             return childval
-        raise ValueError("Leaf %s is not of type bool" % name)
+        raise ValueError("Leaf {name} is not of type bool")
 
     def get_opt_bool(self, name) -> ?bool:
         child = self.get_opt_leaf(name)
@@ -484,7 +484,7 @@ class Node(value):
         childval = child.val
         if isinstance(childval, float):
             return childval
-        raise ValueError("Leaf %s is not of type float" % name)
+        raise ValueError("Leaf {name} is not of type float")
 
     def get_opt_float(self, name) -> ?float:
         child = self.get_opt_leaf(name)
@@ -498,7 +498,7 @@ class Node(value):
         childval = child.val
         if isinstance(childval, int):
             return childval
-        raise ValueError("Leaf %s is not of type int" % name)
+        raise ValueError("Leaf {name} is not of type int")
 
     def get_ints(self, name) -> list[int]:
         if isinstance(self, Container):
@@ -509,7 +509,7 @@ class Node(value):
                         if isinstance(v, int):
                             cvals.append(v)
                     return cvals
-        raise ValueError(f"Cannot find leaf-list child with name {name}")
+        raise ValueError("Cannot find leaf-list child with name {name}")
 
     def get_opt_int(self, name) -> ?int:
         child = self.get_opt_leaf(name)
@@ -529,7 +529,7 @@ class Node(value):
         childval = child.val
         if isinstance(childval, str):
             return childval
-        raise ValueError("Leaf %s value is not type str" % name)
+        raise ValueError("Leaf {name} value is not type str")
 
     def get_opt_str(self, name) -> ?str:
         child = self.get_opt_leaf(name)
@@ -547,7 +547,7 @@ class Node(value):
                         if isinstance(v, str):
                             cvals.append(v)
                     return cvals
-        raise ValueError(f"Cannot find leaf-list child with name {name}")
+        raise ValueError("Cannot find leaf-list child with name {name}")
 
     def get_opt_strs(self, name) -> list[str]:
         try:
@@ -560,7 +560,7 @@ class Node(value):
         childval = child.val
         if isinstance(childval, bytes):
             return childval
-        raise ValueError("Leaf %s value is not type bytes" % name)
+        raise ValueError("Leaf {name} value is not type bytes")
 
     def get_opt_bytes(self, name) -> ?bytes:
         child = self.get_opt_leaf(name)
@@ -578,7 +578,7 @@ class Node(value):
                         if isinstance(v, bytes):
                             cvals.append(v)
                     return cvals
-        raise ValueError(f"Cannot find leaf-list child with name {name}")
+        raise ValueError("Cannot find leaf-list child with name {name}")
 
     def get_opt_bytess(self, name) -> list[bytes]:
         try:
@@ -600,7 +600,7 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     return child.vals
-        raise ValueError(f"Cannot find leaf-list child with name {name}")
+        raise ValueError("Cannot find leaf-list child with name {name}")
 
     def get_opt_values(self, name) -> list[value]:
         try:
@@ -685,7 +685,7 @@ class List(Node):
         elem = self.get_opt_list_entry(key)
         if elem is not None:
             return elem
-        raise ValueError(f"Cannot find list entry with key {key}")
+        raise ValueError("Cannot find list entry with key {key}")
 
 class Container(Node):
     def __init__(self, children: dict[str, Node]={}, presence: bool=False, ns: ?str=None, module: ?str=None):
@@ -800,7 +800,7 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, i64) and isinstance(b, i64):
         return a == b
-    raise ValueError(f"Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
+    raise ValueError("Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
 
 # For leaf-lists we need to compare a list of values
 def vals_list_equal(a: list[value], b: list[value]) -> bool:
@@ -841,7 +841,7 @@ def vals_less_than(a: value, b: value) -> bool:
         return a < b
     if isinstance(a, i64) and isinstance(b, i64):
         return a < b
-    raise ValueError(f"Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
+    raise ValueError("Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
 
 def vals_list_sorted(a: list[value]) -> list[value]:
     """Sort a list of values, comparing only values of the same type
@@ -869,7 +869,7 @@ def vals_list_sorted(a: list[value]) -> list[value]:
 
 def merge(a: Node, b: Node) -> Node:
     if type(a) != type(b):
-        raise ValueError("Cannot merge nodes of different types, type(a) = %s, type(b) = %s" % (str(type(a)), str(type(b))))
+        raise ValueError("Cannot merge nodes of different types, type(a) = {str(type(a))}, type(b) = {str(type(b))}")
 
     # Helper to merge keyed children
     def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node]) -> dict[str, Node]:
@@ -953,7 +953,7 @@ def merge(a: Node, b: Node) -> Node:
         bval = b.val
         if vals_equal(aval, bval):
             return a
-        raise ValueError("Cannot merge leaves with different values: %s != %s" % (str(aval), str(bval)))
+        raise ValueError("Cannot merge leaves with different values: {str(aval)} != {str(bval)}")
 
     elif isinstance(a, LeafList) and isinstance(b, LeafList):
         if vals_list_equal(a.vals, b.vals):
@@ -962,7 +962,7 @@ def merge(a: Node, b: Node) -> Node:
 
     elif isinstance(a, List) and isinstance(b, List):
         if a.keys != b.keys:
-            raise ValueError("Cannot merge lists with different keys: %s vs %s" % (str(a.keys), str(b.keys)))
+            raise ValueError("Cannot merge lists with different keys: {str(a.keys)} vs {str(b.keys)}")
         if a.user_order != b.user_order:
             raise ValueError("Cannot merge lists with different user_order")
 
@@ -1046,12 +1046,12 @@ def merge(a: Node, b: Node) -> Node:
         return a
 
     else:
-        raise ValueError("Unsupported node type in merge: %s" % str(type(a)))
+        raise ValueError("Unsupported node type in merge: {str(type(a))}")
 
 
 def diff(old: Node, new: Node) -> ?Node:
     if type(old) != type(new):
-        raise ValueError("diff called with nodes of different types: %s vs %s" % (str(type(old)), str(type(new))))
+        raise ValueError("diff called with nodes of different types: {str(type(old))} vs {str(type(new))}")
 
     # Helper function for diffing Container nodes that have children keyed by strings
     def diff_keyed_children(old_children: dict[str, Node], new_children: dict[str, Node]) -> ?dict[str, Node]:
@@ -1091,7 +1091,7 @@ def diff(old: Node, new: Node) -> ?Node:
     def diff_list_elements(old_list: List, new_list: List) -> ?list[Node]:
 
         if old_list.keys != new_list.keys:
-            raise ValueError("List keys differ: %s vs %s" % (str(old_list.keys), str(new_list.keys)))
+            raise ValueError("List keys differ: {str(old_list.keys)} vs {str(new_list.keys)}")
 
         # Map old elements by key
         old_map = {e.key_str(old_list.keys): e for e in old_list.elements}
@@ -1172,7 +1172,7 @@ def diff(old: Node, new: Node) -> ?Node:
 
     elif isinstance(old, Leaf) and isinstance(new, Leaf):
         if old.t != new.t:
-            raise ValueError("Leaf types differ: %s vs %s" % (old.t, new.t))
+            raise ValueError("Leaf types differ: {old.t} vs {new.t}")
         if vals_equal(old.val, new.val):
             return None
         else:
@@ -1187,11 +1187,11 @@ def diff(old: Node, new: Node) -> ?Node:
         diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is not None:
             # TODO: can't call key_str(list_keys) without our parent List node!?
-            raise ValueError("Absent keys differ: %s vs %s" % (str(old.children), str(new.children)))
+            raise ValueError("Absent keys differ: {str(old.children)} vs {str(new.children)}")
         return None
 
     else:
-        raise ValueError("Unhandled node type in diff: %s" % str(type(old)))
+        raise ValueError("Unhandled node type in diff: {str(type(old))}")
 
 
 # TODO: Can we make patch return a Node instead of ?Node?
@@ -1205,7 +1205,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
             # Both absent means node was removed
             if p.children != old.children:
                 # TODO: can't call key_str(list_keys) without our parent List node!?
-                raise ValueError("Absent keys differ in patch: %s vs %s" % (str(old.children), str(p.children)))
+                raise ValueError("Absent keys differ in patch: {str(old.children)} vs {str(p.children)}")
         return None
 
     elif isinstance(old, Container) and isinstance(p, Container):
@@ -1240,7 +1240,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
     elif isinstance(old, List) and isinstance(p, List):
         if old.keys != p.keys:
-            raise ValueError("List keys differ: %s vs %s" % (str(old.keys), str(p.keys)))
+            raise ValueError("List keys differ: {str(old.keys)} vs {str(p.keys)}")
 
         old_map = {e.key_str(old.keys): e for e in old.elements}
 
@@ -1298,7 +1298,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
     elif isinstance(old, Leaf) and isinstance(p, Leaf):
         # Patch leaf replaces old leaf value
         if old.t != p.t:
-            raise ValueError("Leaf types differ in patch: %s vs %s" % (old.t, p.t))
+            raise ValueError("Leaf types differ in patch: {old.t} vs {p.t}")
         return p
 
     elif isinstance(old, LeafList) and isinstance(p, LeafList):
@@ -1311,7 +1311,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
     else:
         if p != None:
-            raise ValueError("Unhandled node type in patch: %s" % str(type(p)))
+            raise ValueError("Unhandled node type in patch: {str(type(p))}")
 
 def _node_match(n: xml.Node, name: str, ns: ?str) -> bool:
     """Check if an XML node matches the given name and namespace
@@ -1337,7 +1337,7 @@ def get_xml_child(n: xml.Node, name: str, ns: ?str) -> xml.Node:
     r = get_xml_opt_child(n, name, ns)
     if r is not None:
         return r
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 def get_xml_opt_child(n: xml.Node, name: str, ns: ?str) -> ?xml.Node:
     for child in n.children:
@@ -1352,7 +1352,7 @@ def get_xml_child_text(n: xml.Node, name: str) -> str:
             if childtext is not None:
                 return childtext
             raise ValueError("Child text is None")
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 def get_xml_children(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
     res = []
@@ -1371,7 +1371,7 @@ def from_xml_list(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
     r = from_xml_opt_list(n, name, ns)
     if r is not None:
         return r
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 def from_xml_opt_cnt(n: xml.Node, name: str, ns: ?str) -> ?xml.Node:
     return get_xml_opt_child(n, name, ns)
@@ -1391,7 +1391,7 @@ def from_xml_bool(n: xml.Node, name: str, ns: ?str) -> bool:
     r = from_xml_opt_bool(n, name, ns)
     if r is not None:
         return r
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 def from_xml_opt_empty(n: xml.Node, name: str, ns: ?str) -> ?bool:
     try:
@@ -1401,14 +1401,14 @@ def from_xml_opt_empty(n: xml.Node, name: str, ns: ?str) -> ?bool:
     else:
         if text == "":
             return True
-        raise ValueError(f"Expected an empty string for empty leaf {name}, got {str(text)}")
+        raise ValueError("Expected an empty string for empty leaf {name}, got {str(text)}")
 
 def from_xml_float(n: xml.Node, name: str, ns: ?str) -> float:
     text = get_xml_child(n, name, ns).text
     if text is not None:
         res = float(text)
         return res
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
     return 13.37 # bah, get C error otherwise
 
 def from_xml_opt_float(n: xml.Node, name: str, ns: ?str) -> ?float:
@@ -1432,7 +1432,7 @@ def from_xml_int(n: xml.Node, name: str, ns: ?str) -> int:
     r = from_xml_opt_int(n, name, ns)
     if r is not None:
         return r
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 def from_xml_opt_str(n: xml.Node, name: str, ns: ?str) -> ?str:
     try:
@@ -1444,7 +1444,7 @@ def from_xml_str(n: xml.Node, name: str, ns: ?str) -> str:
     r = from_xml_opt_str(n, name, ns)
     if r is not None:
         return r
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 def from_xml_opt_bytes(n: xml.Node, name: str, ns: ?str) -> ?bytes:
     try:
@@ -1458,7 +1458,7 @@ def from_xml_bytes(n: xml.Node, name: str, ns: ?str) -> bytes:
     r = from_xml_opt_bytes(n, name, ns)
     if r is not None:
         return r
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 def from_xml_opt_value(n: xml.Node, name: str, ns: ?str) -> ?value:
     try:
@@ -1472,14 +1472,14 @@ def from_xml_value(n: xml.Node, name: str, ns: ?str) -> value:
     r = from_xml_opt_value(n, name, ns)
     if r is not None:
         return r
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 # plural
 def from_xml_strs(n: xml.Node, name: str, ns: ?str) -> list[str]:
     r = from_xml_opt_strs(n, name, ns)
     if r is not None:
         return r
-    raise ValueError(f"Cannot find xml child with name {name}")
+    raise ValueError("Cannot find xml child with name {name}")
 
 def from_xml_opt_strs(n: xml.Node, name: str, ns: ?str) -> ?list[str]:
     res = []
@@ -1535,14 +1535,14 @@ mut def maybe_add[T](target: dict[str, Node], key: str, taker: mut(T) -> Node, v
         target[key] = taker(val)
 
 def take_json_opt_value(jd: dict[str, ?value], name: str, module: ?str=None) -> ?value:
-    full_name = f"{module}:{name}" if module is not None else name
+    full_name = "{module}:{name}" if module is not None else name
     return jd.get(full_name)
 
 def take_json_value(jd: dict[str, ?value], name: str, module: ?str=None) -> value:
     val = take_json_opt_value(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json child with name {name}")
+    raise ValueError("Cannot find json child with name {name}")
 
 def take_json_opt_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> ?dict[str, ?value]:
     child = take_json_opt_value(jd, name, module)
@@ -1550,14 +1550,14 @@ def take_json_opt_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> ?d
         try:
             return unwrap_dict(child)
         except:
-            raise ValueError(f"Expected a dictionary for {name}")
+            raise ValueError("Expected a dictionary for {name}")
     return None
 
 def take_json_cnt(jd: dict[str, ?value], name: str, module: ?str=None) -> dict[str, ?value]:
     val = take_json_opt_cnt(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json child with name {name}")
+    raise ValueError("Cannot find json child with name {name}")
 
 def take_json_opt_list(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[dict[str, ?value]]:
     child = take_json_opt_value(jd, name, module)
@@ -1565,28 +1565,28 @@ def take_json_opt_list(jd: dict[str, ?value], name: str, module: ?str=None) -> ?
         try:
             return unwrap_list(child)
         except:
-            raise ValueError(f"Expected a list for {name}")
+            raise ValueError("Expected a list for {name}")
     return None
 
 def take_json_list(jd: dict[str, ?value], name: str, module: ?str=None) -> list[dict[str, ?value]]:
     val = take_json_opt_list(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json list with name {name}")
+    raise ValueError("Cannot find json list with name {name}")
 
 def take_json_opt_str(jd: dict[str, ?value], name: str, module: ?str=None) -> ?str:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, str):
             return child
-        raise ValueError(f"Expected a string for {name}")
+        raise ValueError("Expected a string for {name}")
     return None
 
 def take_json_str(jd: dict[str, ?value], name: str, module: ?str=None) -> str:
     val = take_json_opt_str(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json str child with name: {name}")
+    raise ValueError("Cannot find json str child with name: {name}")
 
 def take_json_opt_strs(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[str]:
     child = take_json_opt_value(jd, name, module)
@@ -1597,7 +1597,7 @@ def take_json_opt_strs(jd: dict[str, ?value], name: str, module: ?str=None) -> ?
             elem = child[0]
             if isinstance(elem, str):
                 return child
-            raise ValueError(f"{name}is a list of wrong type, should be str, not {str(type(elem))}")
+            raise ValueError("{name}is a list of wrong type, should be str, not {str(type(elem))}")
         raise ValueError(name + "is not a list of strings")
     return None
 
@@ -1605,7 +1605,7 @@ def take_json_strs(jd: dict[str, ?value], name: str, module: ?str=None) -> list[
     val = take_json_opt_strs(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json str child with name {name}")
+    raise ValueError("Cannot find json str child with name {name}")
 
 def take_json_opt_int(jd: dict[str, ?value], name: str, module: ?str=None) -> ?int:
     child = take_json_opt_value(jd, name, module)
@@ -1615,14 +1615,14 @@ def take_json_opt_int(jd: dict[str, ?value], name: str, module: ?str=None) -> ?i
         # TODO: strings are only allowed / mandated for 64-bit numbers!
         elif isinstance(child, str):
             return int(child)
-        raise ValueError(f"Expected an int for {name}")
+        raise ValueError("Expected an int for {name}")
     return None
 
 def take_json_int(jd: dict[str, ?value], name: str, module: ?str=None) -> int:
     val = take_json_opt_int(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json int child with name {name}")
+    raise ValueError("Cannot find json int child with name {name}")
 
 def take_json_opt_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[int]:
     child = take_json_opt_value(jd, name, module)
@@ -1636,7 +1636,7 @@ def take_json_opt_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> ?
                 if isinstance(c, int):
                     int_vals.append(c)
                 else:
-                    raise ValueError(f"{name}is a list of wrong type, should be int, not {str(type(elem))}")
+                    raise ValueError("{name}is a list of wrong type, should be int, not {str(type(elem))}")
             return int_vals
         raise ValueError(name + "is not a list of ints")
     return None
@@ -1645,21 +1645,21 @@ def take_json_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> list[
     val = take_json_opt_ints(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json int child with name {name}")
+    raise ValueError("Cannot find json int child with name {name}")
 
 def take_json_opt_int64(jd: dict[str, ?value], name: str, module: ?str=None) -> ?int:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, str):
             return int(child)
-        raise ValueError(f"Expected a string for 64-bit number {name}")
+        raise ValueError("Expected a string for 64-bit number {name}")
     return None
 
 def take_json_int64(jd: dict[str, ?value], name: str, module: ?str=None) -> int:
     val = take_json_opt_int64(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json int64 child with name {name}")
+    raise ValueError("Cannot find json int64 child with name {name}")
 
 def take_json_opt_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[int]:
     child = take_json_opt_value(jd, name, module)
@@ -1673,7 +1673,7 @@ def take_json_opt_int64s(jd: dict[str, ?value], name: str, module: ?str=None) ->
                 if isinstance(c, str):
                     int_vals.append(int(c))
                 else:
-                    raise ValueError(f"{name}is a list of wrong type, should be str, not {str(type(elem))}")
+                    raise ValueError("{name}is a list of wrong type, should be str, not {str(type(elem))}")
             return int_vals
         raise ValueError(name + "is not a list of 64-bit numbers")
     return None
@@ -1682,7 +1682,7 @@ def take_json_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> lis
     val = take_json_opt_int64s(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json int64 child with name {name}")
+    raise ValueError("Cannot find json int64 child with name {name}")
 
 def take_json_opt_float(jd: dict[str, ?value], name: str, module: ?str=None) -> ?float:
     child = take_json_opt_value(jd, name, module)
@@ -1694,7 +1694,7 @@ def take_json_float(jd: dict[str, ?value], name: str, module: ?str=None) -> floa
     val = take_json_opt_float(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json float child with name {name}")
+    raise ValueError("Cannot find json float child with name {name}")
     return 13.37 # bah, get C error otherwise
 
 def take_json_opt_bool(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bool:
@@ -1702,14 +1702,14 @@ def take_json_opt_bool(jd: dict[str, ?value], name: str, module: ?str=None) -> ?
     if child is not None:
         if isinstance(child, bool):
             return child
-        raise ValueError(f"Expected a bool for {name}")
+        raise ValueError("Expected a bool for {name}")
     return None
 
 def take_json_bool(jd: dict[str, ?value], name: str, module: ?str=None) -> bool:
     val = take_json_opt_bool(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json child with name {name}")
+    raise ValueError("Cannot find json child with name {name}")
 
 def take_json_opt_empty(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bool:
     child = take_json_opt_value(jd, name, module)
@@ -1718,7 +1718,7 @@ def take_json_opt_empty(jd: dict[str, ?value], name: str, module: ?str=None) -> 
             v = child[0]
             if v is None:
                 return True
-        raise ValueError(f"Expected a [null] for empty leaf {name}")
+        raise ValueError("Expected a [null] for empty leaf {name}")
     return None
 
 def take_json_opt_bytes(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bytes:
@@ -1726,14 +1726,14 @@ def take_json_opt_bytes(jd: dict[str, ?value], name: str, module: ?str=None) -> 
     if child is not None:
         if isinstance(child, str):
             return base64.decode(child.encode())
-        raise ValueError(f"Expected a base64 encoded str for {name}")
+        raise ValueError("Expected a base64 encoded str for {name}")
     return None
 
 def take_json_bytes(jd: dict[str, ?value], name: str, module: ?str=None) -> bytes:
     val = take_json_opt_bytes(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json child with name {name}")
+    raise ValueError("Cannot find json child with name {name}")
 
 def take_json_opt_bytess(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[bytes]:
     child = take_json_opt_value(jd, name, module)
@@ -1746,7 +1746,7 @@ def take_json_opt_bytess(jd: dict[str, ?value], name: str, module: ?str=None) ->
                 if isinstance(c, str):
                     decoded.append(base64.decode(c.encode()))
                 else:
-                    raise ValueError(f"{name}is a list of wrong type, should be base64 encoded strings, not {str(type(c))}")
+                    raise ValueError("{name}is a list of wrong type, should be base64 encoded strings, not {str(type(c))}")
             return decoded
         raise ValueError(name + "is not a list of bytes")
     return None
@@ -1755,7 +1755,7 @@ def take_json_bytess(jd: dict[str, ?value], name: str, module: ?str=None) -> lis
     val = take_json_opt_bytess(jd, name, module)
     if val is not None:
         return val
-    raise ValueError(f"Cannot find json child with name {name}")
+    raise ValueError("Cannot find json child with name {name}")
 
 # --
 def unwrap_dict(jd: value) -> dict[str, value]:

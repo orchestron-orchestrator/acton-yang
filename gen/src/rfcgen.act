@@ -47,7 +47,7 @@ class Stmt(object):
         argument_name = self.argument_name
         if argument_name is not None:
             argname = argument_name
-        return "<Stmt name: %s  section: %s  argument_name: %s  substmts: %s>" % (self.name, self.section, argname, str(self.substmts))
+        return "<Stmt name: {self.name}  section: {self.section}  argument_name: {argname}  substmts: {str(self.substmts)}>"
 
 class SubStmt(object):
     name: str
@@ -62,11 +62,11 @@ class SubStmt(object):
 
     def __str__(self):
         argname = "None"
-        return "<SubStmt name: %s  section: %s  argument_name: %s  cardinality: %s>" % (self.name, self.section, argname, self.cardinality)
+        return "<SubStmt name: {self.name}  section: {self.section}  argument_name: {argname}  cardinality: {self.cardinality}>"
 
     def __repr__(self):
         argname = "None"
-        return "<SubStmt name: %s  section: %s  argument_name: %s  cardinality: %s>" % (self.name, self.section, argname, self.cardinality)
+        return "<SubStmt name: {self.name}  section: {self.section}  argument_name: {argname}  cardinality: {self.cardinality}>"
 
 reserved_names = {
     "range",
@@ -227,11 +227,11 @@ def _attr_type(name, stmt, stmts) -> str:
     # TODO: change namespace and prefix cardinality to 1
     #if cardinality == "0..1":
     if cardinality == "0..1":
-        return f"?{t}"
+        return "?{t}"
     elif cardinality == "1":
         return t
     elif cardinality == "0..n":
-        return "list[%s]" % t
+        return "list[{t}]"
     return "?str"
 
 def _attr_taker_name(name: str):
@@ -261,18 +261,18 @@ def _attr_taker(name, stmt, stmts) -> str:
 
     if cardinality == "0..1":
         if name in stmts:
-            return "take_opt_%s(ss)" % t
-        return "take_opt_%s(ss, \"%s\")" % (t, name)
+            return "take_opt_{t}(ss)"
+        return 'take_opt_{t}(ss, "{name}")'
     elif cardinality == "1":
         if name in stmts:
-            return "take_%s(ss)" % t
-        return "take_str(ss, \"%s\")" % name
+            return "take_{t}(ss)"
+        return 'take_str(ss, "{name}")'
     elif cardinality == "0..n":
         if name in stmts:
-            return "take_%ss(ss)" % t
-        return "take_strlist(ss, \"%s\")" % name
+            return "take_{t}s(ss)"
+        return 'take_strlist(ss, "{name}")'
     else:
-        raise ValueError("Unknown cardinality: %s" % cardinality)
+        raise ValueError("Unknown cardinality: {cardinality}")
 
 def _attr_defval(name, stmt, stms) -> str:
     if name == stmt.argument_name:
@@ -286,7 +286,7 @@ def _attr_defval(name, stmt, stms) -> str:
         return ""
     elif cardinality == "0..n":
         return "=[]"
-    raise ValueError("Unknown cardinality: %s" % cardinality)
+    raise ValueError("Unknown cardinality: {cardinality}")
 
 snode_methods = {
     "action": {
@@ -441,11 +441,11 @@ snode_methods = {
 """
     },
     "module": {
-        "get_import_by_prefix": """    def get_import_by_prefix(self, prefix: str) -> Import:
+        "get_import_by_prefix": r"""    def get_import_by_prefix(self, prefix: str) -> Import:
         for imp in self.import_:
             if imp.prefix == prefix:
                 return imp
-        raise ValueError("No import with prefix %s in module %s" % (prefix, self.name))
+        raise ValueError("No import with prefix {prefix} in module {self.name}")
 
 """,
         "get_modrev": """    def get_modrev(self) -> ModRev:
@@ -454,24 +454,24 @@ snode_methods = {
         return ModRev(self.name, rev_date)
 
 """,
-        "get_namespace": """    def get_namespace(self) -> str:
+        "get_namespace": r"""    def get_namespace(self) -> str:
         self_ns = self.ns
         if self_ns is not None:
             return self_ns
         selfnamespace = self.namespace
         if selfnamespace is not None:
             return selfnamespace
-        raise ValueError("Module %s has no namespace" % self.name)
+        raise ValueError("Module {self.name} has no namespace")
 
 """,
-        "get_prefix": """    def get_prefix(self) -> str:
+        "get_prefix": r"""    def get_prefix(self) -> str:
         self_pfx = self.pfx
         if self_pfx is not None:
             return self_pfx
         selfprefix = self.prefix
         if selfprefix is not None:
             return selfprefix
-        raise ValueError("Module %s has no prefix" % self.name)
+        raise ValueError("Module {self.name} has no prefix")
 
 """,
         "get_revision": """    def get_revision(self) -> ?Revision:
@@ -800,7 +800,7 @@ snode_methods = {
 """,
     },
     "type": {
-        "resolve_union_types": """    def resolve_union_types(self, context: Context) -> Type:
+        "resolve_union_types": r"""    def resolve_union_types(self, context: Context) -> Type:
         if self.name == "union":
             # Resolve union types
             resolved_union_types = [ut.resolve_typedef(context).type_ for ut in self.type_]
@@ -820,7 +820,7 @@ snode_methods = {
             return self
 
 """,
-        "resolve_typedef": """    def resolve_typedef(self, context: Context) -> Typedef:
+        "resolve_typedef": r"""    def resolve_typedef(self, context: Context) -> Typedef:
         if self.name in _builtin_types:
             return Typedef(self.name, type_=self.resolve_union_types(context))
         td = self.get_typedef(self.name, context)
@@ -831,13 +831,13 @@ snode_methods = {
                 return td
             td = td.type_.resolve_typedef(context)
             if i == RECURSION_LIMIT:
-                raise ValueError("Recursion limit reached for typedef %s" % self.name)
-        raise ValueError("Unable to resolve typedef %s" % self.name)
+                raise ValueError("Recursion limit reached for typedef {self.name}")
+        raise ValueError("Unable to resolve typedef {self.name}")
 
 """,
     },
     "typedef": {
-        "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        "compile": r"""    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         base_typedef = self.type_.resolve_typedef(context)
 
         new_default = self.default
@@ -861,7 +861,7 @@ snode_methods = {
 """,
     },
     "uses": {
-        "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        "compile": r"""    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
 """,
@@ -903,10 +903,10 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
     res.append("            return False")
     for stmt_name in sorted(stmts):
         stmt = stmts[stmt_name]
-        res.append("        elif isinstance(self, %s) and isinstance(other, %s):" % (_class_name(stmt_name), _class_name(stmt_name)))
+        res.append("        elif isinstance(self, {_class_name(stmt_name)}) and isinstance(other, {_class_name(stmt_name)}):")
         attributes_to_compare = [_attr_name(substmt.name) for substmt in stmt.substmts.values() if substmt.name not in child_stmts]
         if len(attributes_to_compare) > 0:
-            res.append("            return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))
+            res.append("            return " + " and ".join(map(lambda x: "self.{x} == other.{x}", attributes_to_compare)))
         else:
             res.append("            return True")
     res.append("        return False")
@@ -918,8 +918,8 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         stmt = stmts[stmt_name]
         arg_name = stmt.argument_name
         if arg_name is not None:
-            res.append("    if isinstance(sn, %s):" % _class_name(stmt_name))
-            res.append("        return sn.%s" % _attr_name(arg_name))
+            res.append("    if isinstance(sn, {_class_name(stmt_name)}):")
+            res.append("        return sn.{_attr_name(arg_name)}")
     res.append("    raise ValueError(\"Unknown SchemaNode type in snode_name\")")
     res.append("")
 
@@ -928,8 +928,8 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         stmt = stmts[stmt_name]
         arg_name = stmt.argument_name
         if arg_name is not None:
-            res.append("    if isinstance(sn, %s):" % _class_name(stmt_name))
-            res.append("        return \"%s\"" % _class_name(stmt_name))
+            res.append("    if isinstance(sn, {_class_name(stmt_name)}):")
+            res.append("        return \"{_class_name(stmt_name)}\"")
     res.append("    raise ValueError(\"Unknown SchemaNode type in snode_type_name\")")
     res.append("")
 
@@ -1006,14 +1006,14 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         cattrs = [arg_name] + kwattrs if arg_name != None else kwattrs
 
         parent_class = "SchemaNodeInner" if have_children else "SchemaNodeOuter"
-        res.append("class %s(%s):" % (_class_name(stmt_name), parent_class))
-        res.append("    \"\"\"YANG %s" % stmt_name)
+        res.append("class {_class_name(stmt_name)}({parent_class}):")
+        res.append('    """YANG {stmt_name}')
         res.append("")
-        res.append("    https://tools.ietf.org/html/rfc7950#section-%s" % stmt.section)
-        res.append("    \"\"\"")
+        res.append("    https://tools.ietf.org/html/rfc7950#section-{stmt.section}")
+        res.append('    """')
 
         for attr in cattrs:
-            res.append("    %s: %s" % (_attr_name(attr), _attr_type(attr, stmt, stmts)))
+            res.append("    {_attr_name(attr)}: {_attr_type(attr, stmt, stmts)}")
 
         res.append("")
         init_attrs = ["self"]
@@ -1022,11 +1022,11 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             pos_arg_idx += 1
         for substmt in stmt.substmts.values():
             if substmt.name == stmt.argument_name:
-                init_attrs.append("%s: %s" % (_attr_name(substmt.name), _attr_type(substmt.name, stmt, stmts)))
+                init_attrs.append("{_attr_name(substmt.name)}: {_attr_type(substmt.name, stmt, stmts)}")
             else:
                 if substmt.name not in child_stmts:
                     # Place attributes with cardinality 1 first
-                    attr_text = "%s: %s%s" % (_attr_name(substmt.name), _attr_type(substmt.name, stmt, stmts), _attr_defval(substmt.name, stmt, stmts))
+                    attr_text = "{_attr_name(substmt.name)}: {_attr_type(substmt.name, stmt, stmts)}{_attr_defval(substmt.name, stmt, stmts)}"
                     if substmt.cardinality == "1":
                         init_attrs.insert(pos_arg_idx, attr_text)
                         pos_arg_idx += 1
@@ -1065,8 +1065,8 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("        self.mod = new_mod")
         res.append("        self.ns = new_ns")
         res.append("        self.pfx = new_pfx")
-#        res.append("        self.cname = \"%s\"" % _class_name(stmt_name))
-        res.append("        self._yname = \"%s\"" % stmt_name)
+#        res.append('        self.cname = "{_class_name(stmt_name)}"')
+        res.append('        self._yname = "{stmt_name}"')
 
         for substmt in stmt.substmts.values():
             if substmt.name == stmt.argument_name:
@@ -1075,30 +1075,30 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 if substmt.name in stmts: # Another statement (not a child)
                     # Set parent for substatement objects & inherit namespace + prefix
                     if substmt.cardinality == "0..1":
-                        res.append("        if %s is not None:" % _attr_name(substmt.name))
-                        res.append("            %s.parent = self" % _attr_name(substmt.name))
-                        res.append("            n_mod = %s.mod" % _attr_name(substmt.name))
+                        res.append("        if {_attr_name(substmt.name)} is not None:")
+                        res.append("            {_attr_name(substmt.name)}.parent = self")
+                        res.append("            n_mod = {_attr_name(substmt.name)}.mod")
                         res.append("            if n_mod is None:")
-                        res.append("                %s.mod = self.mod" % _attr_name(substmt.name))
-                        res.append("            n_ns = %s.ns" % _attr_name(substmt.name))
+                        res.append("                {_attr_name(substmt.name)}.mod = self.mod")
+                        res.append("            n_ns = {_attr_name(substmt.name)}.ns")
                         res.append("            if n_ns is None:")
-                        res.append("                %s.ns = self.ns" % _attr_name(substmt.name))
-                        res.append("            n_pfx = %s.pfx" % _attr_name(substmt.name))
+                        res.append("                {_attr_name(substmt.name)}.ns = self.ns")
+                        res.append("            n_pfx = {_attr_name(substmt.name)}.pfx")
                         res.append("            if n_pfx is None:")
-                        res.append("                %s.pfx = self.pfx" % _attr_name(substmt.name))
+                        res.append("                {_attr_name(substmt.name)}.pfx = self.pfx")
                     elif substmt.cardinality == "1":
-                        res.append("        %s.parent = self" % _attr_name(substmt.name))
-                        res.append("        n_mod = %s.mod" % _attr_name(substmt.name))
+                        res.append("        {_attr_name(substmt.name)}.parent = self")
+                        res.append("        n_mod = {_attr_name(substmt.name)}.mod")
                         res.append("        if n_mod is None:")
-                        res.append("            %s.mod = self.mod" % _attr_name(substmt.name))
-                        res.append("        n_ns = %s.ns" % _attr_name(substmt.name))
+                        res.append("            {_attr_name(substmt.name)}.mod = self.mod")
+                        res.append("        n_ns = {_attr_name(substmt.name)}.ns")
                         res.append("        if n_ns is None:")
-                        res.append("            %s.ns = self.ns" % _attr_name(substmt.name))
-                        res.append("        n_pfx = %s.pfx" % _attr_name(substmt.name))
+                        res.append("            {_attr_name(substmt.name)}.ns = self.ns")
+                        res.append("        n_pfx = {_attr_name(substmt.name)}.pfx")
                         res.append("        if n_pfx is None:")
-                        res.append("            %s.pfx = self.pfx" % _attr_name(substmt.name))
+                        res.append("            {_attr_name(substmt.name)}.pfx = self.pfx")
                     elif substmt.cardinality == "0..n":
-                        res.append("        for n in %s:" % _attr_name(substmt.name))
+                        res.append("        for n in {_attr_name(substmt.name)}:")
                         res.append("            n.parent = self")
                         res.append("            n_mod = n.mod")
                         res.append("            if n_mod is None:")
@@ -1110,11 +1110,11 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                         res.append("            if n_pfx is None:")
                         res.append("                n.pfx = self.pfx")
                     else:
-                        raise ValueError("Unknown cardinality: %s" % substmt.cardinality)
+                        raise ValueError("Unknown cardinality: {substmt.cardinality}")
 
         for substmt in stmt.substmts.values():
             if substmt.name not in child_stmts: # Attribute
-                res.append("        self.%s = %s" % (_attr_name(substmt.name), _attr_name(substmt.name)))
+                res.append("        self.{_attr_name(substmt.name)} = {_attr_name(substmt.name)}")
 
         res.append("        self.exts = exts")
 
@@ -1137,7 +1137,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append("    def get_attrs(self) -> list[(str, ?value)]:")
         res.append("        return [")
         for attr in kwattrs:
-            res.append("            (\"%s\", self.%s)," % (attr, _attr_name(attr)))
+            res.append("            (\"{attr}\", self.{_attr_name(attr)}),")
         res.append("            (\"exts\", self.exts),")
         res.append("        ]")
         res.append("")
@@ -1159,20 +1159,20 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 target_cardinality = stmt.substmts[attr].cardinality
                 refine_cardinality = stmts["refine"].substmts[attr].cardinality
                 if target_cardinality == "0..1" and refine_cardinality == "0..1":
-                    res.append("        ref_%s = refine.%s" % (_attr_name(attr), _attr_name(attr)))
-                    res.append("        if ref_%s != None:" % _attr_name(attr))
-                    res.append("            self.%s = ref_%s" % (_attr_name(attr), _attr_name(attr)))
+                    res.append("        ref_{_attr_name(attr)} = refine.{_attr_name(attr)}")
+                    res.append("        if ref_{_attr_name(attr)} != None:")
+                    res.append("            self.{_attr_name(attr)} = ref_{_attr_name(attr)}")
                 elif target_cardinality == "0..1" and refine_cardinality == "0..n":
-                    res.append("        if len(refine.%s) == 1:" % _attr_name(attr))
-                    res.append("            self.%s = refine.%s[0]" % (_attr_name(attr), _attr_name(attr)))
-                    res.append("        elif len(refine.%s) > 1:" % _attr_name(attr))
-                    res.append("            raise ValueError(\"Attempting to refine %s with multiple values\")" % attr)
+                    res.append("        if len(refine.{_attr_name(attr)}) == 1:")
+                    res.append("            self.{_attr_name(attr)} = refine.{_attr_name(attr)}[0]")
+                    res.append("        elif len(refine.{_attr_name(attr)}) > 1:")
+                    res.append("            raise ValueError(\"Attempting to refine {attr} with multiple values\")")
                 elif target_cardinality == "0..n":
-                    res.append("        for ref_%s in refine.%s:" % (_attr_name(attr), _attr_name(attr)))
-                    res.append("            if ref_%s not in self.%s:" % (_attr_name(attr), _attr_name(attr)))
-                    res.append("                self.%s.append(ref_%s)" % (_attr_name(attr), _attr_name(attr)))
+                    res.append("        for ref_{_attr_name(attr)} in refine.{_attr_name(attr)}:")
+                    res.append("            if ref_{_attr_name(attr)} not in self.{_attr_name(attr)}:")
+                    res.append("                self.{_attr_name(attr)}.append(ref_{_attr_name(attr)})")
                 else:
-                    raise ValueError("Unknown cardinality for %s: %s" % (attr, target_cardinality))
+                    raise ValueError("Unknown cardinality for {attr}: {target_cardinality}")
             res.append("        self.exts.extend(refine.exts)")
             res.append("")
 
@@ -1190,15 +1190,15 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):")
             new_args = []
             if arg_name is not None:
-                new_args += [f"self.{_attr_name(arg_name)}"]
-            new_args += list(map(lambda x: "%s=self.%s" % (_attr_name(x), _attr_name(x)), kwattrs))
+                new_args += ["self.{_attr_name(arg_name)}"]
+            new_args += list(map(lambda x: "{_attr_name(x)}=self.{_attr_name(x)}", kwattrs))
             new_args.append("exts=self.exts")
             if stmt_name not in {"module", "submodule"}:
                 new_args.append("mod=new_mod if new_mod is not None else self.mod")
                 new_args.append("ns=new_ns if new_ns is not None else self.ns")
                 new_args.append("pfx=new_pfx if new_pfx is not None else self.pfx")
 
-            res.append("        new = %s(%s)" % (_class_name(stmt_name), (",\n               " + " " * len(_class_name(stmt_name))).join(new_args)))
+            res.append('        new = {_class_name(stmt_name)}({(",\n               " + " " * len(_class_name(stmt_name))).join(new_args)})')
             if have_children:
                 res.append("        self.expand_children(context, new, new_mod, new_ns, new_pfx)")
             for substmt in stmt.substmts.values():
@@ -1208,24 +1208,28 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("")
 
         res.append("    def __str__(self):")
-        strret = "f\"%s {self.%s}\"" % (_class_name(stmt_name), _attr_name(arg_name)) if arg_name is not None else "\"%s\"" % (_class_name(stmt_name))
-        res.append("        return " + strret)
+        strret = ""
+        if arg_name is not None:
+            strret = '"{_class_name(stmt_name)} {{self.{_attr_name(arg_name)}}}"'
+        else:
+            strret = '"{_class_name(stmt_name)}"'
+        res.append("        return {strret}")
         res.append("")
 
         res.append("    def _get_class_name(self) -> str:")
-        res.append("        return \"%s\"" % _class_name(stmt_name))
+        res.append('        return "{_class_name(stmt_name)}"')
         res.append("")
 
         res.append("    def _get_argname(self) -> ?str:")
         if arg_name is not None:
-            res.append("        return '%s'" % _attr_name(arg_name))
+            res.append("        return '{_attr_name(arg_name)}'")
         else:
             res.append("        return None")
         res.append("")
 
         res.append("    def _get_arg(self) -> ?str:")
         if arg_name is not None:
-            res.append("        return self.%s" % _attr_name(arg_name))
+            res.append("        return self.{_attr_name(arg_name)}")
         else:
             res.append("        return None")
         res.append("")
@@ -1233,7 +1237,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         attributes_to_compare = [_attr_name(substmt.name) for substmt in stmt.substmts.values() if substmt.name not in child_stmts]
 
         if stmt_name == "module":
-            res.append("extension %s (Hashable):" % _class_name(stmt_name))
+            res.append("extension {_class_name(stmt_name)} (Hashable):")
             res.append("    def hash(self, hasher):")
             res.append("        self.get_namespace().hash(hasher)")
             res.append("        rev = self.get_revision()")
@@ -1243,19 +1247,19 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("            # Hash empty string for None revision")
             res.append("            \"\".hash(hasher)")
             res.append("")
-            res.append("    def __eq__(self, other: %s):" % _class_name(stmt_name))
-            res.append("        return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))
+            res.append("    def __eq__(self, other: {_class_name(stmt_name)}):")
+            res.append("        return " + " and ".join(["self.{x} == other.{x}" for x in attributes_to_compare]))
             res.append("")
-            res.append("extension %s (Ord):" % _class_name(stmt_name))
+            res.append("extension {_class_name(stmt_name)} (Ord):")
         else:
-            res.append("extension %s (Ord):" % _class_name(stmt_name))
-            res.append("    def __eq__(self, other: %s):" % _class_name(stmt_name))
-            res.append("        return " + " and ".join(map(lambda x: "self.%s == other.%s" % (x, x), attributes_to_compare)))
+            res.append("extension {_class_name(stmt_name)} (Ord):")
+            res.append("    def __eq__(self, other: {_class_name(stmt_name)}):")
+            res.append("        return " + " and ".join(["self.{x} == other.{x}" for x in attributes_to_compare]))
             res.append("")
 
         res.append("    def __lt__(a, b):")
         if arg_name is not None:
-            res.append("        return a.%s < b.%s" % (_attr_name(arg_name), _attr_name(arg_name)))
+            res.append("        return a.{_attr_name(arg_name)} < b.{_attr_name(arg_name)}")
         else:
             res.append("        return True")
         res.append("")
@@ -1264,21 +1268,21 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
 
     # Generate takers, both singular and plural (i.e. a list)
     for stmt_name in sorted(stmts):
-        res.append("def take_opt_%s(stmts: list[Statement]) -> ?%s:" % (_attr_taker_name(stmt_name), _class_name(stmt_name)))
-        res.append("    for node in take_nodes(stmts, [\"%s\"]):" % stmt_name)
-        res.append("        if isinstance(node, %s):" % _class_name(stmt_name))
+        res.append("def take_opt_{_attr_taker_name(stmt_name)}(stmts: list[Statement]) -> ?{_class_name(stmt_name)}:")
+        res.append('    for node in take_nodes(stmts, ["{stmt_name}"]):')
+        res.append("        if isinstance(node, {_class_name(stmt_name)}):")
         res.append("            return node")
         res.append("")
-        res.append("def take_%s(stmts: list[Statement]) -> %s:" % (_attr_taker_name(stmt_name), _class_name(stmt_name)))
-        res.append("    for node in take_nodes(stmts, [\"%s\"]):" % stmt_name)
-        res.append("        if isinstance(node, %s):" % _class_name(stmt_name))
+        res.append("def take_{_attr_taker_name(stmt_name)}(stmts: list[Statement]) -> {_class_name(stmt_name)}:")
+        res.append('    for node in take_nodes(stmts, ["{stmt_name}"]):')
+        res.append("        if isinstance(node, {_class_name(stmt_name)}):")
         res.append("            return node")
-        res.append("    raise ValueError(\"No %s in stmts\")" % stmt_name)
+        res.append('    raise ValueError("No {stmt_name} in stmts")')
         res.append("")
-        res.append("def take_%ss(stmts: list[Statement]) -> list[%s]:" % (_attr_taker_name(stmt_name), _class_name(stmt_name)))
+        res.append("def take_{_attr_taker_name(stmt_name)}s(stmts: list[Statement]) -> list[{_class_name(stmt_name)}]:")
         res.append("    res = []")
-        res.append("    for node in take_nodes(stmts, [\"%s\"]):" % stmt_name)
-        res.append("        if isinstance(node, %s):" % _class_name(stmt_name))
+        res.append('    for node in take_nodes(stmts, ["{stmt_name}"]):')
+        res.append("        if isinstance(node, {_class_name(stmt_name)}):")
         res.append("            res.append(node)")
         res.append("    return res")
         res.append("")
@@ -1300,7 +1304,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 cattrs.append(substmt.name)
         kwattrs = cattrs if arg_name is None else cattrs[1:]
 
-        res.append("    if stmt.kw == \"%s\":" % stmt_name)
+        res.append("    if stmt.kw == \"{stmt_name}\":")
 
         if arg_name is not None:
             res.append("        if arg is not None:")
@@ -1323,17 +1327,17 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         attrs_takers.append("parent=parent")
         indent = " " * (17+len(_class_name(stmt_name)))
         joiner = ",\n" + indent
-        res.append("            n = %s(%s\n" % (_class_name(stmt_name), joiner.join(attrs_takers)) + indent + ")")
+        res.append("            n = {_class_name(stmt_name)}({joiner.join(attrs_takers)}\n{indent})")
         if have_children:
-            valid_children_list = ", ".join([f'"{x}"' for x in valid_children])
-            res.append("            n.children=take_nodes(ss, [%s], n)" % valid_children_list)
+            valid_children_list = ", ".join(['"{x}"' for x in valid_children])
+            res.append("            n.children=take_nodes(ss, [{valid_children_list}], n)")
 
         res.append("            if len(ss) > 0:")
         res.append("                name = ss[0].kw")
         res.append("                prefix = ss[0].prefix")
-        res.append("                raise ValueError(\"Invalid statement under %s: %%s\" %% (name))" % stmt_name)
+        res.append('                raise ValueError("Invalid statement under {stmt_name}: {{name}}")')
         res.append("            return n")
-    res.append("    raise ValueError(f\"Unknown statement:{stmt.kw}\")")
+    res.append('    raise ValueError("Unknown statement: {{stmt.kw}}")')
     res.append("")
 
     return res

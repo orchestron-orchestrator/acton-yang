@@ -13,34 +13,34 @@ def yang_to_act(wfcap: file.WriteFileCap, yangs: list[str], filename: str, loose
     src += "def src_yang():\n"
     src += "    res = []\n"
     for y in yangs:
-        src += f'    res.append("""{y}""")\n'
+        src += '    res.append(r"""{y}""")\n'
     src += "    return res\n"
     src += "\n"
 
     src += "def src_schema():\n"
-    src += "    res = {}\n"
+    src += "    res = {{}}\n"
     for y in yangs:
         ys = yang.schema_from_src(y)
         if isinstance(ys, yang.schema.Module):
-            src += f'    res["{ys.name}"] = {ys.prsrc()}\n'
+            src += '    res["{ys.name}"] = {ys.prsrc()}\n'
         elif isinstance(ys, yang.schema.Submodule):
-            src += f'    res["{ys.name}"] = {ys.prsrc()}\n'
+            src += '    res["{ys.name}"] = {ys.prsrc()}\n'
         else:
-            raise ValueError(f"Expected Module or Submodule, got {type(ys)}")
+            raise ValueError("Expected Module or Submodule, got {type(ys)}")
     src += "    return res\n"
     src += "\n"
 
     src += "def src_schema_compiled():\n"
-    src += "    res = {}\n"
+    src += "    res = {{}}\n"
     for m in modules:
-        src += f'    res["{m.name}"] = {m.prsrc()}\n'
+        src += '    res["{m.name}"] = {m.prsrc()}\n'
     src += "    return res\n"
 
     # TF can't we write to the same file multiple times?!
     await async wf.write(src.encode())
     await async wf.close()
 
-ys_one = """module foo {
+ys_one = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "f";
@@ -71,7 +71,7 @@ ys_one = """module foo {
     }
 }"""
 
-ys_foo = """module foo {
+ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "f";
@@ -253,7 +253,7 @@ ys_foo = """module foo {
     }
 }"""
 
-ys_bar = """module bar {
+ys_bar = r"""module bar {
     yang-version "1.1";
     namespace "http://example.com/bar";
     prefix "bar";
@@ -297,7 +297,7 @@ ys_bar = """module bar {
     }
 }"""
 
-ys_qux = """submodule qux {
+ys_qux = r"""submodule qux {
     yang-version "1.1";
     belongs-to foo {
         prefix "f";
@@ -315,7 +315,7 @@ ys_qux = """submodule qux {
     }
 }"""
 
-ys_basics = """module basics {
+ys_basics = r"""module basics {
     yang-version "1.1";
     namespace "http://example.com/basics";
     prefix "b";
@@ -326,7 +326,7 @@ ys_basics = """module basics {
         }
         leaf l_str_def_quoted {
             type string;
-            default "\\"foo\\"";
+            default "\"foo\"";
         }
         leaf l_uint64_def {
             type uint64;
