@@ -590,7 +590,7 @@ class DNodeInner(DNode):
 
                         if sub_args:
                             sub_args_str = ", ".join(sub_args)
-                            non_optional_containers.append("            res.append(f'{mcchild_var} = {pname(cchild)}({sub_args_str})')")
+                            non_optional_containers.append("            res.append('{mcchild_var} = {pname(cchild)}({sub_args_str})')")
                         else:
                             non_optional_containers.append("            res.append('{mcchild_var} = {pname(cchild)}()')")
 
@@ -614,7 +614,7 @@ class DNodeInner(DNode):
         res.append("    def prsrc(self, self_name='ad', top=True, list_element=False):")
         res.append("        res = []")
         res.append("        if top:")
-        res.append("            res.append(f'# Top node: {get_path(self)}')")
+        res.append("            res.append('# Top node: {get_path(self)}')")
         # Build constructor arguments for non-optional children (same logic as in __init__)
         constructor_args, constructor_containers = find_non_optional_subtree(self, ["self"], local_prefix="")
 
@@ -625,9 +625,9 @@ class DNodeInner(DNode):
             # Since find_non_optional_subtree() builds the list depth-first, we reverse it.
             res.extend(list(reversed(constructor_containers)))
             args_str = ", ".join(constructor_args)
-            res.append("            res.append(f'{{self_name}} = {pname(self)}({args_str})')")
+            res.append("            res.append('{{self_name}} = {pname(self)}({args_str})')")
         else:
-            res.append("            res.append(f'{{self_name}} = {pname(self)}()')")
+            res.append("            res.append('{{self_name}} = {pname(self)}()')")
         res.append("        leaves = []")
         for child in self.children:
             if isinstance(child, DNodeLeaf):
@@ -638,7 +638,7 @@ class DNodeInner(DNode):
                 # DLeaf and DLeafList are both copied verbatim
                 res.append("        _{usname(child)} = self.{usname(child)}")
                 res.append("        if _{usname(child)} is not None:")
-                res.append("            leaves.append(f'{{self_name}}.{usname(child)} = {{repr(_{usname(child)})}}')")
+                res.append("            leaves.append('{{self_name}}.{usname(child)} = {{repr(_{usname(child)})}}')")
             elif isinstance(child, DContainer):
                 res.append("        _{usname(child)} = self.{usname(child)}")
                 res.append("        if _{usname(child)} is not None:")
@@ -654,14 +654,14 @@ class DNodeInner(DNode):
                     child_accessor = _safe_name(child.name)
                     pc_args_str = ", ".join(pc_args)
                     if pc_args_str:
-                        res.append("            res.append(f'{child_accessor} = {{self_name}}.create_{usname(child)}({pc_args_str})')")
+                        res.append("            res.append('{child_accessor} = {{self_name}}.create_{usname(child)}({pc_args_str})')")
                     else:
-                        res.append("            res.append(f'{child_accessor} = {{self_name}}.create_{usname(child)}()')")
+                        res.append("            res.append('{child_accessor} = {{self_name}}.create_{usname(child)}()')")
                     # Recursive call to prsrc() for the P-container, to fill in the rest of the optional children
                     res.append("            res.extend(_{usname(child)}.prsrc('{usname(child)}', False).splitlines())")
                 else:
                     # Build .prsrc() code for this container
-                    res.append("            res.extend(_{usname(child)}.prsrc(f'{{self_name}}.{usname(child)}', False).splitlines())")
+                    res.append("            res.extend(_{usname(child)}.prsrc('{{self_name}}.{usname(child)}', False).splitlines())")
             elif isinstance(child, DList):
                 res.append("        _{usname(child)} = self.{usname(child)}")
                 res.append("        for _element in _{usname(child)}.elements:")
@@ -679,12 +679,12 @@ class DNodeInner(DNode):
 
                 create_args_str = ", ".join(list_create_args)
                 if create_args_str:
-                    res.append("            list_elem = f'{usname(child)}_element = {{self_name}}.{usname(child)}.create({create_args_str})'")
+                    res.append("            list_elem = '{usname(child)}_element = {{self_name}}.{usname(child)}.create({create_args_str})'")
                 else:
-                    res.append("            list_elem = f'{usname(child)}_element = {{self_name}}.{usname(child)}.create()'")
+                    res.append("            list_elem = '{usname(child)}_element = {{self_name}}.{usname(child)}.create()'")
                 res.append("            res.append(list_elem)")
                 # Recursive call to prsrc() for the list element
-                res.append("            res.extend(_element.prsrc(f'{usname(child)}_element', False, list_element=True).splitlines())")
+                res.append("            res.extend(_element.prsrc('{usname(child)}_element', False, list_element=True).splitlines())")
             else:
                 raise ValueError("Unhandled child type in .prsrc(): {type(child)}")
         # Add the leaves as a single group at the beginning of the section,
@@ -1452,7 +1452,7 @@ class SchemaNode(object):
         raise NotImplementedError('SchemaNode pdc')
 
     mut def to_dnode(self) -> DNode:
-        raise NotImplementedError(f'SchemaNode to_dschema not implemented for {type(self)}')
+        raise NotImplementedError('SchemaNode to_dschema not implemented for {type(self)}')
 
     def get_dnode_children(self, in_choice: bool=False):
         mut def unset_mandatory(node):
@@ -1789,7 +1789,7 @@ class SchemaNode(object):
             raise ValueError("expand_children() called on non-inner node {type(self)}")
 
     mut def apply_refine(self, refine: Refine):
-        raise NotImplementedError(f'SchemaNode apply_refine not implemented for {type(self)}')
+        raise NotImplementedError('SchemaNode apply_refine not implemented for {type(self)}')
 
     def get_module_by_prefix(self, prefix: str, context: Context) -> Module:
         """Get a Module from the import prefix in the local module"""
