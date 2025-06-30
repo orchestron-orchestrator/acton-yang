@@ -508,17 +508,10 @@ class DNodeInner(DNode):
         # TODO: should .from_gdata() not take a specific data node instead, like Container instead of yang.gdata.Node?
         from_gdata_args_list = []
         for child in self.children:
-            if isinstance(child, DLeaf):
-                from_gdata_args_list.append("{usname(child)}=n.get_{yang_leaf_to_getval(child, loose)}('{uname(child)}')")
-            elif isinstance(child, DLeafList):
-                from_gdata_args_list.append("{usname(child)}=n.get_{yang_leaf_to_getval(child, loose)}s('{uname(child)}')")
-            elif isinstance(child, DContainer):
-                if loose or child.presence or optional_subtree(child):
-                    from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.get_opt_container('{uname(child)}'))")
-                else:
-                    from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.get_container('{uname(child)}'))")
-            elif isinstance(child, DList):
-                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.get_opt_list('{uname(child)}'))")
+            if isinstance(child, DNodeLeaf):
+                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, 'gdata', loose=loose)}('{uname(child)}')")
+            else:
+                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, 'gdata', loose=loose)}('{uname(child)}'))")
         from_gdata_args = ", ".join(from_gdata_args_list)
         res.append("    @staticmethod")
         if isinstance(self, DList):
@@ -2189,6 +2182,8 @@ def taker_name(n: DNode, input_format: str, loose: bool=False) -> str:
         taker_prefix = "from_xml_"
     elif input_format == "json":
         taker_prefix = "take_json_"
+    elif input_format == "gdata":
+        taker_prefix = "get_"
     else:
         raise ValueError("Unknown input format {input_format}")
     if isinstance(n, DContainer):
@@ -2214,12 +2209,6 @@ def taker_name(n: DNode, input_format: str, loose: bool=False) -> str:
             return taker_prefix + optional_str + "int64s"
         return taker_prefix + optional_str + yang_type_to_acton_type(n.type_) + "s"
     raise ValueError("unreachable - unknown node type {type(n)}")
-
-def yang_leaf_to_getval(leaf: DNodeLeaf, loose: bool) -> str:
-    optional = is_optional_arg_yang_leaf(leaf, loose)
-    optional_str = "opt_" if optional else ""
-    t = yang_type_to_acton_type(leaf.type_)
-    return optional_str + t
 
 def yang_leaflist_to_acton_type(leaf: DLeafList) -> str:
     t = yang_type_to_acton_type(leaf.type_)
