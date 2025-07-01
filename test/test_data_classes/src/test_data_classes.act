@@ -4,6 +4,8 @@ import testing
 import json
 import xml
 
+import yang
+import yang.gen3
 import yang.adata
 import yang.gdata
 from yang.identityref import Identityref
@@ -302,9 +304,7 @@ def _test_foo_from_xml_pc2():
         gd = yang_foo.from_xml(xml_in)
         testing.error("Expected exception on missing mandatory leaf")
     except ValueError as e:
-        if str(e) != "ValueError: Cannot find xml child with name foo":
-            raise e
-        return
+        testing.assertIn("Cannot find xml child with name foo", e.error_message)
 
 def _test_foo_from_xml2():
     """"""
@@ -1093,3 +1093,8 @@ def _test_validate_identityref_leaflist_json_invalid():
     except ValueError as exc:
         if "Invalid value for identityref" not in exc.error_message:
             raise exc
+
+def _test_gen3_from_xml_full():
+    s = yang.compile(yang_foo.src_yang())
+    gd = yang.gen3.from_xml(s, xml.decode(xml_text_full))
+    return gd.prsrc()
