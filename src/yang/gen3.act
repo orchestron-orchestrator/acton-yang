@@ -1,0 +1,150 @@
+import testing
+import xml
+
+import yang
+import yang.gdata
+import yang.schema
+
+
+# Map of taker function names to actual functions
+XML_TAKERS = {
+    # Container takers
+    "from_xml_cnt": yang.gdata.from_xml_cnt,
+    "from_xml_opt_cnt": yang.gdata.from_xml_opt_cnt,
+    # List takers
+    "from_xml_list": yang.gdata.from_xml_list,
+    "from_xml_opt_list": yang.gdata.from_xml_opt_list,
+    # Leaf takers
+    "from_xml_str": yang.gdata.from_xml_str,
+    "from_xml_opt_str": yang.gdata.from_xml_opt_str,
+    "from_xml_int": yang.gdata.from_xml_int,
+    "from_xml_opt_int": yang.gdata.from_xml_opt_int,
+    "from_xml_float": yang.gdata.from_xml_float,
+    "from_xml_opt_float": yang.gdata.from_xml_opt_float,
+    "from_xml_bool": yang.gdata.from_xml_bool,
+    "from_xml_opt_bool": yang.gdata.from_xml_opt_bool,
+    "from_xml_opt_empty": yang.gdata.from_xml_opt_empty,
+    # LeafList takers
+    "from_xml_strs": yang.gdata.from_xml_strs,
+    "from_xml_opt_strs": yang.gdata.from_xml_opt_strs,
+    "from_xml_ints": yang.gdata.from_xml_ints,
+    "from_xml_opt_ints": yang.gdata.from_xml_opt_ints,
+    "from_xml_floats": yang.gdata.from_xml_floats,
+    "from_xml_opt_floats": yang.gdata.from_xml_opt_floats,
+    "from_xml_bools": yang.gdata.from_xml_bools,
+    "from_xml_opt_bools": yang.gdata.from_xml_opt_bools,
+    "from_xml_bytes": yang.gdata.from_xml_bytes,
+    "from_xml_opt_bytes": yang.gdata.from_xml_opt_bytes,
+    "from_xml_bytess": yang.gdata.from_xml_bytess,
+    "from_xml_opt_bytess": yang.gdata.from_xml_opt_bytess,
+    "from_xml_value": yang.gdata.from_xml_value,
+    "from_xml_opt_value": yang.gdata.from_xml_opt_value,
+    "from_xml_values": yang.gdata.from_xml_values,
+    "from_xml_opt_values": yang.gdata.from_xml_opt_values,
+}
+
+def _user_order(ordered_by):
+    return True if ordered_by == "user" else False
+
+def from_xml(s: yang.schema.DNodeInner, node: xml.Node, set_ns=True) -> yang.gdata.Node:
+    """Convert XML node to gdata tree based on schema"""
+
+    # Process container
+    children: dict[str, yang.gdata.Node] = {}
+
+    unique_namer = yang.schema._UniqueNamer(s)
+
+    def uname(n) -> str:
+        return unique_namer.unique_name(n.name, n.prefix)
+
+    for child in s.children:
+        # Get the appropriate taker function name
+        taker_name = yang.schema.taker_name(child, "xml")
+        print("Processing child: {child.name} with taker {taker_name}", err=True)
+
+        # Get the taker function from our map
+        if taker_name not in XML_TAKERS:
+            raise ValueError(f"Unknown taker function: {taker_name}")
+        taker_func = XML_TAKERS[taker_name]
+
+        # Determine namespace (only include if different from parent)
+        ns = child.namespace if child.namespace != s.namespace else None
+        # mod = child.module if child.module != s.module else None
+
+        if isinstance(child, yang.schema.DList):
+            print("Processing list node: {child.name} with taker {taker_name} {ns}", err=True)
+
+        elif isinstance(child, yang.schema.DNodeInner):
+            # Process inner nodes (containers, lists)
+            print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
+            child_data = taker_func(node, child.name, ns=ns)
+            if child_data is not None and isinstance(child_data, xml.Node):
+                print("Child data is a Node, processing further", err=True)
+                yang.gdata.maybe_add(children, uname(child), lambda x: from_xml(child, x, set_ns=set_ns), child_data)
+        elif isinstance(child, yang.schema.DNodeLeaf):
+            # Process leaf nodes
+            child_data = taker_func(node, child.name, ns=ns)
+            if child_data is not None:
+                print("Child data is not None, adding to children", err=True)
+                if child.gname == "Leaf":
+                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, child_data, ns=ns)
+                elif child.gname == "LeafList" and isinstance(child_data, list):
+                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, child_data, ns=ns)
+                else:
+                    raise ValueError(f"Unknown schema node type: {child.gname} for {child}")
+        else:
+            raise ValueError(f"Unknown schema node type: {child.gname} for {child}")
+    if s.gname == "Container":
+        # TODO: ns, module
+        return yang.gdata.Container(children)
+    elif s.gname == "List" and isinstance(s, yang.schema.DList):
+        # TODO: ns, module, user_order
+        return yang.gdata.List(s.key, [])
+    else:
+        raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
+
+
+def _test_y1():
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    description "Container 1";
+    leaf l1 {
+      type string;
+      description "Leaf 1";
+    }
+    list l2 {
+      key "k1";
+      leaf k1 {
+        type string;
+        description "Key 1";
+      }
+      leaf v1 {
+        type string;
+        description "Value 1";
+      }
+    }
+    leaf-list ll1 {
+      type string;
+      description "Leaf List 1";
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y1">
+  <l1>Value for l1</l1>
+  <l2>
+    <k1>Key 1</k1>
+    <v1>Value for v1</v1>
+  </l2>
+  <ll1>Item 1</ll1>
+  <ll1>Item 2</ll1>
+</c1>
+</data>"""
+
+    s = yang.compile([y1])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
