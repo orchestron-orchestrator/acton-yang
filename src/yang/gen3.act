@@ -47,7 +47,7 @@ def _user_order(ordered_by):
     return True if ordered_by == "user" else False
 
 
-def from_xml(s: yang.schema.DNodeInner, node: xml.Node, set_ns=True) -> yang.gdata.Node:
+def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True) -> yang.gdata.Node:
     """Convert XML node to gdata tree based on schema"""
 
     # Process container
@@ -59,7 +59,7 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, set_ns=True) -> yang.gda
 
     for child in s.children:
         # Get the appropriate taker function name
-        taker_name = yang.schema.taker_name(child, "xml")
+        taker_name = yang.schema.taker_name(child, "xml", loose)
         print("Processing child: {child.name} with taker {taker_name}", err=True)
 
         # Get the taker function from our map
@@ -83,7 +83,7 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, set_ns=True) -> yang.gda
                 # Process each list element
                 list_elements = []
                 for element_node in list_nodes:
-                    element_gdata = from_xml(child, element_node, set_ns=False)
+                    element_gdata = from_xml(child, element_node, loose, set_ns=False)
                     list_elements.append(element_gdata)
 
                 # Create the List with processed elements
