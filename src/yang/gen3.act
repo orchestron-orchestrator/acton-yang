@@ -62,11 +62,6 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True
         taker_name = yang.schema.taker_name(child, "xml", loose)
         print("Processing child: {child.name} with taker {taker_name}", err=True)
 
-        # Get the taker function from our map
-        if taker_name not in XML_TAKERS:
-            raise ValueError(f"Unknown taker function: {taker_name}")
-        taker_func = XML_TAKERS[taker_name]
-
         # Determine namespace (only include if different from parent)
         ns = None
         mod = None
@@ -74,15 +69,25 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True
             ns = child.namespace
             mod = child.module
 
+        # Get the taker function from our map
+        if taker_name not in XML_TAKERS:
+            raise ValueError(f"Unknown taker function: {taker_name}")
+        taker_func = XML_TAKERS[taker_name]
+
+        taken_nodes: ?value = None
+        try:
+            taken_nodes = taker_func(node, child.name, ns=ns)
+        except ValueError as err:
+            raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
+
         if isinstance(child, yang.schema.DList):
-            # We add the gdata.List containing node here, then recursively process each element 
+            # We add the gdata.List containing node here, then recursively process each element
             print("Processing list node: {child.name} with taker {taker_name} {ns}", err=True)
             # Use the list taker to get all list element nodes
-            list_nodes = taker_func(node, child.name, ns=ns)
-            if list_nodes is not None and isinstance(list_nodes, list):
+            if taken_nodes is not None and isinstance(taken_nodes, list):
                 # Process each list element
                 list_elements = []
-                for element_node in list_nodes:
+                for element_node in taken_nodes:
                     element_gdata = from_xml(child, element_node, loose, set_ns=False)
                     list_elements.append(element_gdata)
 
@@ -94,19 +99,17 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True
         elif isinstance(child, yang.schema.DNodeInner):
             # Process inner nodes (containers, lists)
             print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
-            child_data = taker_func(node, child.name, ns=ns)
-            if child_data is not None and isinstance(child_data, xml.Node):
+            if taken_nodes is not None and isinstance(taken_nodes, xml.Node):
                 print("Child data is a Node, processing further", err=True)
-                yang.gdata.maybe_add(children, uname(child), lambda x: from_xml(child, x, set_ns=s.namespace != child.namespace), child_data)
+                yang.gdata.maybe_add(children, uname(child), lambda x: from_xml(child, x, set_ns=s.namespace != child.namespace), taken_nodes)
         elif isinstance(child, yang.schema.DNodeLeaf):
             # Process leaf nodes
-            child_data = taker_func(node, child.name, ns=ns)
-            if child_data is not None:
+            if taken_nodes is not None:
                 print("Child data is not None, adding to children", err=True)
                 if child.gname == "Leaf":
-                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, child_data, ns=ns, module=mod)
-                elif child.gname == "LeafList" and isinstance(child_data, list):
-                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, child_data, ns=ns, module=mod)
+                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, taken_nodes, ns=ns, module=mod)
+                elif child.gname == "LeafList" and isinstance(taken_nodes, list):
+                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, taken_nodes, ns=ns, module=mod)
                 else:
                     raise ValueError(f"Unknown schema node type: {child.gname} for {child}")
         else:
@@ -165,3 +168,15 @@ def _test_y1():
     s = yang.compile([y1])
     gd = from_xml(s, xml.decode(xml_in))
     return gd.prsrc()
+
+def _test_mandatory_leaf():
+    # Well, this is clearly less readable than YANG ...
+    s = yang.schema.DContainer("y1", "urn:example:y1", "y1", name="c1", config=True, presence=False, children=[
+        yang.schema.DLeaf("y1", "urn:example:y1", "y1", name="l1", config=True, mandatory=True, type_=yang.schema.Type("string"))
+    ])
+
+    try:
+        from_xml(s, xml.decode("<c1/>"))
+    except ValueError as err:
+        if err.error_message != "Error reading /l1: Cannot find xml child with name l1":
+            testing.error("Unexpected error: {err}")
