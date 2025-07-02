@@ -115,6 +115,9 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True
         else:
             raise ValueError(f"Unknown schema node type: {child.gname} for {child}")
     if s.gname == "Container":
+        if isinstance(s, yang.schema.DContainer):
+            return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
+        else:
             return yang.gdata.Container(children, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
     elif s.gname == "List" and isinstance(s, yang.schema.DList):
         # When processing a list element, return it as a Container
