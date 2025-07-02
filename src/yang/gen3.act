@@ -80,40 +80,38 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True
         except ValueError as err:
             raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
 
-        if isinstance(child, yang.schema.DList):
-            # We add the gdata.List containing node here, then recursively process each element
-            print("Processing list node: {child.name} with taker {taker_name} {ns}", err=True)
-            # Use the list taker to get all list element nodes
-            if taken_nodes is not None and isinstance(taken_nodes, list):
-                # Process each list element
-                list_elements = []
-                for element_node in taken_nodes:
-                    element_gdata = from_xml(child, element_node, loose, set_ns=False)
-                    list_elements.append(element_gdata)
+        if taken_nodes is not None:
+            if isinstance(child, yang.schema.DList):
+                # We add the gdata.List containing node here, then recursively process each element
+                print("Processing list node: {child.name} with taker {taker_name} {ns}", err=True)
+                # Use the list taker to get all list element nodes
+                if isinstance(taken_nodes, list):
+                    # Process each list element
+                    list_elements = []
+                    for element_node in taken_nodes:
+                        element_gdata = from_xml(child, element_node, loose, set_ns=False)
+                        list_elements.append(element_gdata)
 
-                # Create the List with processed elements
-                if list_elements:
-                    list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
-                    children[uname(child)] = list_gdata
+                    # Create the List with processed elements
+                    if list_elements:
+                        list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+                        children[uname(child)] = list_gdata
 
-        elif isinstance(child, yang.schema.DNodeInner):
-            # Process inner nodes (containers, lists)
-            print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
-            if taken_nodes is not None and isinstance(taken_nodes, xml.Node):
-                print("Child data is a Node, processing further", err=True)
-                yang.gdata.maybe_add(children, uname(child), lambda x: from_xml(child, x, set_ns=s.namespace != child.namespace), taken_nodes)
-        elif isinstance(child, yang.schema.DNodeLeaf):
-            # Process leaf nodes
-            if taken_nodes is not None:
-                print("Child data is not None, adding to children", err=True)
-                if child.gname == "Leaf":
-                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, taken_nodes, ns=ns, module=mod)
-                elif child.gname == "LeafList" and isinstance(taken_nodes, list):
-                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, taken_nodes, ns=ns, module=mod)
+            elif isinstance(child, yang.schema.DNodeInner):
+                # Process inner nodes (containers, lists)
+                print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
+                if isinstance(taken_nodes, xml.Node):
+                    print("Child data is a Node, processing further", err=True)
+                    yang.gdata.maybe_add(children, uname(child), lambda x: from_xml(child, x, set_ns=s.namespace != child.namespace), taken_nodes)
+            elif isinstance(child, yang.schema.DNodeLeaf):
+                # Process leaf nodes
+                print("Processing leaf node: {child.name} with taker {taker_name} {ns}", err=True)
+                if isinstance(child, yang.schema.DLeafList) and isinstance(taken_nodes, list):
+                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, taken_nodes, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
                 else:
-                    raise ValueError(f"Unknown schema node type: {child.gname} for {child}")
-        else:
-            raise ValueError(f"Unknown schema node type: {child.gname} for {child}")
+                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, taken_nodes, ns=ns, module=mod)
+            else:
+                raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
     if s.gname == "Container":
         if isinstance(s, yang.schema.DContainer):
             return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
