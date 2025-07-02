@@ -1800,6 +1800,70 @@ def take_json_bytess(jd: dict[str, ?value], name: str, module: ?str=None) -> lis
         return val
     raise ValueError("Cannot find json child with name {name}")
 
+def take_json_opt_floats(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[float]:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, list):
+            if len(child) == 0:
+                return []
+            float_vals = []
+            for c in child:
+                if isinstance(c, float):
+                    float_vals.append(c)
+                else:
+                    raise ValueError("{name}is a list of wrong type, should be float, not {str(type(c))}")
+            return float_vals
+        raise ValueError(name + "is not a list of floats")
+    return None
+
+def take_json_floats(jd: dict[str, ?value], name: str, module: ?str=None) -> list[float]:
+    val = take_json_opt_floats(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json float child with name {name}")
+
+def take_json_opt_bools(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[bool]:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, list):
+            if len(child) == 0:
+                return []
+            bool_vals = []
+            for c in child:
+                if isinstance(c, bool):
+                    bool_vals.append(c)
+                else:
+                    raise ValueError("{name}is a list of wrong type, should be bool, not {str(type(c))}")
+            return bool_vals
+        raise ValueError(name + "is not a list of bools")
+    return None
+
+def take_json_bools(jd: dict[str, ?value], name: str, module: ?str=None) -> list[bool]:
+    val = take_json_opt_bools(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json bool child with name {name}")
+
+def take_json_opt_values(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[value]:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, list):
+            if len(child) == 0:
+                return []
+            values = []
+            for c in child:
+                if isinstance(c, value):
+                    values.append(c)
+            return values
+        raise ValueError(name + "is not a list of values")
+    return None
+
+def take_json_values(jd: dict[str, ?value], name: str, module: ?str=None) -> list[value]:
+    val = take_json_opt_values(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json value child with name {name}")
+
 # --
 def unwrap_dict(jd: value) -> dict[str, value]:
     """Unwrap an unknown JSON data structure to a dict or throw an error
