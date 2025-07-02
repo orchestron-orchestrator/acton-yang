@@ -215,10 +215,6 @@ def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
     return left + " ".join([name_without_prefix] + attr_strs) + right
 
 
-# Static value for empty key, used by Node that do not have a key (it must still
-# be set for all concrete classes since it's an attribute of the Node parent)
-empty_key = []
-
 class Node(value):
     ns: ?str
     module: ?str
@@ -663,7 +659,6 @@ class List(Node):
     user_order: bool
 
     def __init__(self, keys: list[str], elements: list[Node]=[], user_order=False, ns: ?str=None, module: ?str=None):
-        self.key = empty_key
         self.keys = keys
         self.elements = elements
         self.user_order = user_order
@@ -702,7 +697,6 @@ class Leaf(Node):
     val: value
 
     def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None):
-        self.key = empty_key
         self.t = t
         self.val = val
         self.ns = ns
@@ -714,7 +708,6 @@ class LeafList(Node):
     user_order: bool
 
     def __init__(self, t:str, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None):
-        self.key = empty_key
         self.t = t
         self.ns = ns
         self.module = module
@@ -740,8 +733,7 @@ class Delete(Node):
 
     Unlike Absent / remove, Delete of a non-existent node is a failure.
     """
-    def __init__(self, key: list[str]=[], ns: ?str=None, module: ?str=None):
-        self.key = key
+    def __init__(self, ns: ?str=None, module: ?str=None):
         self.ns = ns
         self.module = module
         self.children = {}
@@ -752,8 +744,7 @@ class Create(Node):
 
     Unlike the default implicit merge, Create of an existing node is a failure.
     """
-    def __init__(self, children={}, key: list[str]=[], ns: ?str=None, module: ?str=None):
-        self.key = key
+    def __init__(self, children={}, ns: ?str=None, module: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
@@ -762,8 +753,7 @@ class Replace(Node):
     """Imperative replace of a node
     NETCONF replace operation maps to Replace
     """
-    def __init__(self, children={}, key: list[str]=[], ns: ?str=None, module: ?str=None):
-        self.key = key
+    def __init__(self, children={}, ns: ?str=None, module: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
