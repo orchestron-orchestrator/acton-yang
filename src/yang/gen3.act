@@ -47,6 +47,52 @@ XML_TAKERS = {
     "from_xml_opt_Identityrefs": yang.gdata.from_xml_opt_Identityrefs,
 }
 
+# Map of JSON taker function names to actual functions
+JSON_TAKERS = {
+    # Container takers
+    "take_json_cnt": yang.gdata.take_json_cnt,
+    "take_json_opt_cnt": yang.gdata.take_json_opt_cnt,
+    # List takers
+    "take_json_list": yang.gdata.take_json_list,
+    "take_json_opt_list": yang.gdata.take_json_opt_list,
+    # Leaf takers
+    "take_json_str": yang.gdata.take_json_str,
+    "take_json_opt_str": yang.gdata.take_json_opt_str,
+    "take_json_int": yang.gdata.take_json_int,
+    "take_json_opt_int": yang.gdata.take_json_opt_int,
+    "take_json_int64": yang.gdata.take_json_int64,
+    "take_json_opt_int64": yang.gdata.take_json_opt_int64,
+    "take_json_float": yang.gdata.take_json_float,
+    "take_json_opt_float": yang.gdata.take_json_opt_float,
+    "take_json_bool": yang.gdata.take_json_bool,
+    "take_json_opt_bool": yang.gdata.take_json_opt_bool,
+    "take_json_opt_empty": yang.gdata.take_json_opt_empty,
+    "take_json_bytes": yang.gdata.take_json_bytes,
+    "take_json_opt_bytes": yang.gdata.take_json_opt_bytes,
+    "take_json_value": yang.gdata.take_json_value,
+    "take_json_opt_value": yang.gdata.take_json_opt_value,
+    "take_json_Identityref": yang.gdata.take_json_Identityref,
+    "take_json_opt_Identityref": yang.gdata.take_json_opt_Identityref,
+    # LeafList takers
+    "take_json_strs": yang.gdata.take_json_strs,
+    "take_json_opt_strs": yang.gdata.take_json_opt_strs,
+    "take_json_ints": yang.gdata.take_json_ints,
+    "take_json_opt_ints": yang.gdata.take_json_opt_ints,
+    "take_json_int64s": yang.gdata.take_json_int64s,
+    "take_json_opt_int64s": yang.gdata.take_json_opt_int64s,
+    "take_json_floats": yang.gdata.take_json_floats,
+    "take_json_opt_floats": yang.gdata.take_json_opt_floats,
+    "take_json_bools": yang.gdata.take_json_bools,
+    "take_json_opt_bools": yang.gdata.take_json_opt_bools,
+    "take_json_bytess": yang.gdata.take_json_bytess,
+    "take_json_opt_bytess": yang.gdata.take_json_opt_bytess,
+    "take_json_values": yang.gdata.take_json_values,
+    "take_json_opt_values": yang.gdata.take_json_opt_values,
+    "take_json_Identityrefs": yang.gdata.take_json_Identityrefs,
+    "take_json_opt_Identityrefs": yang.gdata.take_json_opt_Identityrefs,
+}
+
+
 def _user_order(ordered_by):
     return True if ordered_by == "user" else False
 
@@ -83,7 +129,7 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
 
         taken_nodes: ?value = None
         try:
-            taken_nodes = taker_func(node, child.name, ns=ns)
+            taken_nodes = taker_func(node, child.name, ns)
         except ValueError as err:
             raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
 
@@ -132,7 +178,84 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
         raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
 
 
-def _test_y1():
+def from_json(s: yang.schema.DNodeInner, node: dict[str, ?value], loose: bool=False, set_ns: bool=True) -> yang.gdata.Container:
+    """Convert XML node to gdata tree based on schema"""
+
+    # Process container
+    children: dict[str, yang.gdata.Node] = {}
+
+    unique_namer = yang.schema._UniqueNamer(s)
+    def uname(n) -> str:
+        return unique_namer.unique_name(n.name, n.prefix)
+
+    for child in s.children:
+        # Get the appropriate taker function name
+        taker_name = yang.schema.taker_name(child, "json", loose)
+        print("Processing child: {child.name} with taker {taker_name}", err=True)
+
+        # Determine namespace (only include if different from parent)
+        ns = None
+        mod = None
+        if child.namespace != s.namespace:
+            ns = child.namespace
+            mod = child.module
+
+        # Get the taker function from our map
+        if taker_name not in JSON_TAKERS:
+            raise ValueError(f"Unknown taker function: {taker_name}")
+        taker_func = JSON_TAKERS[taker_name]
+
+        taken_nodes: ?value = None
+        try:
+            taken_nodes = taker_func(node, child.name, mod)
+        except ValueError as err:
+            raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
+
+        if taken_nodes is not None:
+            if isinstance(child, yang.schema.DList):
+                # We add the gdata.List containing node here, then recursively process each element
+                print("Processing list node: {child.name} with taker {taker_name} {ns}", err=True)
+                # Use the list taker to get all list element nodes
+                if isinstance(taken_nodes, list):
+                    # Process each list element
+                    list_elements = []
+                    for element_node in taken_nodes:
+                        element_gdata = from_json(child, element_node, loose, set_ns=False)
+                        list_elements.append(element_gdata)
+
+                    # Create the List with processed elements
+                    if list_elements:
+                        list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+                        children[uname(child)] = list_gdata
+
+            elif isinstance(child, yang.schema.DNodeInner):
+                # Process inner nodes (containers, lists)
+                print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
+                if isinstance(taken_nodes, dict):
+                    print("Child data is a Node, processing further", err=True)
+                    yang.gdata.maybe_add(children, uname(child), lambda x: from_json(child, x, set_ns=s.namespace != child.namespace), taken_nodes)
+            elif isinstance(child, yang.schema.DNodeLeaf):
+                # Process leaf nodes
+                print("Processing leaf node: {child.name} with taker {taker_name} {ns}", err=True)
+                if isinstance(child, yang.schema.DLeafList) and isinstance(taken_nodes, list):
+                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, taken_nodes, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+                else:
+                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, taken_nodes, ns=ns, module=mod)
+            else:
+                raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
+    if s.gname == "Container":
+        if isinstance(s, yang.schema.DContainer):
+            return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
+        else:
+            return yang.gdata.Container(children, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
+    elif s.gname == "List" and isinstance(s, yang.schema.DList):
+        # When processing a list element, return it as a Container
+        # The List wrapper is created by the parent when processing all elements
+        return yang.gdata.Container(children)
+    else:
+        raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
+
+def _test_y1_xml():
     y1 = r"""module y1 {
   namespace "urn:example:y1";
   prefix y1;
@@ -188,3 +311,51 @@ def _test_mandatory_leaf():
     except ValueError as err:
         if err.error_message != "Error reading /l1: Cannot find xml child with name l1":
             testing.error("Unexpected error: {err}")
+
+
+def _test_y1_json():
+    """Test JSON parsing with the same schema as XML test"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    description "Container 1";
+    leaf l1 {
+      type string;
+      description "Leaf 1";
+    }
+    list l2 {
+      key "k1";
+      leaf k1 {
+        type string;
+        description "Key 1";
+      }
+      leaf v1 {
+        type string;
+        description "Value 1";
+      }
+    }
+    leaf-list ll1 {
+      type string;
+      description "Leaf List 1";
+    }
+  }
+}"""
+
+    json_data = {
+        "y1:c1": {
+            "l1": "Value for l1",
+            "l2": [
+                {
+                    "k1": "Key 1",
+                    "v1": "Value for v1"
+                }
+            ],
+            "ll1": ["Item 1", "Item 2"]
+        }
+    }
+
+    s = yang.compile([y1])
+    gd = from_json(s, json_data)
+    return gd.prsrc()
