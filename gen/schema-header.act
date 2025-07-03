@@ -958,6 +958,13 @@ class DNodeInner(DNode):
             res.append("    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
             res.append("")
 
+        if isinstance(self, DRoot):
+            # from_gdata_root is a wrapper around the root.from_gdata static method.
+            # This is a workaround for a compilation error when referencing the
+            # from_gdata static method from a reference to the root type
+            res.append("def from_gdata_root(n: ?yang.gdata.Node) -> root:")
+            res.append("    return root.from_gdata(n)")
+            res.append("")
         if top:
             res.append("schema_namespaces: set[str] = {{")
             for ns in sorted(schema_ns):
