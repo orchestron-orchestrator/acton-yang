@@ -301,8 +301,10 @@ class DNodeInner(DNode):
             res.append("import base64")
             res.append("import json")
             res.append("import xml")
+            res.append("import yang")
             res.append("import yang.adata")
             res.append("import yang.gdata")
+            res.append("import yang.gen3")
             res.append("")
             res.append("# == This file is generated ==")
             res.append("")
@@ -832,6 +834,12 @@ class DNodeInner(DNode):
             res.append("mut def from_xml_{pname(self)}(nodes: list[xml.Node]) -> yang.gdata.List:")
             res.append("    elements = [from_xml_{pname(self)}_element(e) for e in nodes]")
             res.append("    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
+            res.append("")
+
+        if gen_xml and isinstance(self, DRoot):
+            res.append("def from_xml_root(node: xml.Node):")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.from_xml(s, node, loose={loose})")
             res.append("")
 
         # == JSON serde ================================

@@ -89,8 +89,15 @@ def _user_order(ordered_by):
     return True if ordered_by == "user" else False
 
 
-def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True) -> yang.gdata.Node:
+def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Node:
     """Convert XML node to gdata tree based on schema"""
+
+    # Navigate to root path if specified
+    if root_path != [] and len(path) < len(root_path):
+        inner = s.get(root_path[len(path)])
+        if isinstance(inner, yang.schema.DNodeInner):
+            return from_xml(inner, node, loose, set_ns, path + [root_path[len(path)]], root_path)
+        raise ValueError("Node on path {path} is not inner")
 
     # Process container
     children: dict[str, yang.gdata.Node] = {}
@@ -167,8 +174,15 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose=False, set_ns=True
         raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
 
 
-def from_json(s: yang.schema.DNodeInner, node: dict[str, ?value], loose=False, set_ns=True) -> yang.gdata.Node:
+def from_json(s: yang.schema.DNodeInner, node: dict[str, ?value], loose=False, set_ns=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Node:
     """Convert XML node to gdata tree based on schema"""
+
+    # Navigate to root path if specified
+    if root_path != [] and len(path) < len(root_path):
+        inner = s.get(root_path[len(path)])
+        if isinstance(inner, yang.schema.DNodeInner):
+            return from_json(inner, node, loose, set_ns, path + [root_path[len(path)]], root_path)
+        raise ValueError("Node on path {path} is not inner")
 
     # Process container
     children: dict[str, yang.gdata.Node] = {}
@@ -348,3 +362,40 @@ def _test_y1_json():
     s = yang.compile([y1])
     gd = from_json(s, json_data)
     return gd.prsrc()
+
+
+def _test_root_path():
+    """Test root_path argument for navigating to nested containers"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container top {
+    description "Top container";
+    container nested {
+      description "Nested container";
+      leaf value {
+        type string;
+        description "Test value";
+      }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<top xmlns="urn:example:y1">
+  <nested>
+    <value>test data</value>
+  </nested>
+</top>
+</data>"""
+
+    s = yang.compile([y1])
+
+    # Test parsing from root (should include top container)
+    gd_root = from_xml(s, xml.decode(xml_in))
+
+    # Test parsing with root_path to navigate directly to nested container
+    gd_nested = from_xml(s, xml.decode(xml_in), root_path=["top", "nested"])
+
+    return gd_nested.prsrc()

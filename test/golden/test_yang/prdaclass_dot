@@ -1,8 +1,10 @@
 import base64
 import json
 import xml
+import yang
 import yang.adata
 import yang.gdata
+import yang.gen3
 
 # == This file is generated ==
 
@@ -120,6 +122,10 @@ mut def from_xml(node: xml.Node) -> yang.gdata.Container:
     child_ieee_802_3 = yang.gdata.from_xml_opt_cnt(node, 'ieee-802.3', 'http://example.com/foo')
     yang.gdata.maybe_add(children, 'ieee-802.3', from_xml_foo__ieee_802_3, child_ieee_802_3)
     return yang.gdata.Container(children)
+
+def from_xml_root(node: xml.Node):
+    s = yang.compile(src_yang())
+    return yang.gen3.from_xml(s, node, loose=False)
 
 mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
