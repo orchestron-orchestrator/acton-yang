@@ -1,3 +1,9 @@
+"""Generic YANG data parser implementation
+
+This module provides a generic algorithm for parsing YANG data from different
+sources (XML, JSON) using the YangData protocol.
+"""
+
 import testing
 import xml
 
@@ -93,6 +99,106 @@ JSON_TAKERS = {
 }
 
 
+# TODO: implement this protocol on the actual data types instead of the wrapper classes:
+# - XML: xml.Node, list[xml.Node]
+# - JSON: dict[str, ?value], list[dict[str, ?value]]
+# Lacking language support for union types, the common type to these is the
+# value builtin type. In the extension, do an isinstance(data, XXX) for the
+# supported data types and raise a runtime exception for unsupported.
+protocol YangData[N]:
+    """Protocol for YANG data nodes where N is the implementing wrapper type
+
+    This protocol provides a uniform interface for extracting data from
+    different formats (XML, JSON) while maintaining type safety.
+    """
+    # Generic take method that uses taker function names
+    take: mut(str, str, ?str) -> ?value
+
+    # Methods to wrap results in the same YangData type
+    wrap: (value) -> N
+    wrap_list: mut(list[value]) -> list[N]
+
+    # Method to identify the format for parameter selection
+    format_name: () -> str
+
+
+class XmlYangData(value):
+    """Wrapper for XML nodes that implements YangData protocol"""
+    node: xml.Node
+
+    def __init__(self, node: xml.Node):
+        self.node = node
+
+
+# Extension to make XmlYangData implement YangData protocol
+extension XmlYangData (YangData[XmlYangData]):
+    def take(self, taker_name: str, name: str, ns: ?str=None) -> ?value:
+        """Generic take method that looks up the appropriate taker function"""
+        if taker_name not in XML_TAKERS:
+            raise ValueError(f"Unknown taker function: {taker_name}")
+        taker_func = XML_TAKERS[taker_name]
+        return taker_func(self.node, name, ns)
+
+    def wrap(self, val: value) -> XmlYangData:
+        """Wrap a value in XmlYangData if it's an xml.Node"""
+        if isinstance(val, xml.Node):
+            return XmlYangData(val)
+        raise ValueError("Expected xml.Node to wrap")
+
+    def wrap_list(self, vals: list[value]) -> list[XmlYangData]:
+        """Wrap a list of values in XmlYangData"""
+        result = []
+        for val in vals:
+            if isinstance(val, xml.Node):
+                result.append(XmlYangData(val))
+            else:
+                raise ValueError("Expected xml.Node in list")
+        return result
+
+    def format_name(self) -> str:
+        """Return the format name for parameter selection"""
+        return "xml"
+
+
+# Wrapper class for JSON data
+class JsonYangData(value):
+    """Wrapper for JSON data that implements YangData protocol"""
+    data: dict[str, ?value]
+
+    def __init__(self, data: dict[str, ?value]):
+        self.data = data
+
+
+# Extension to make JsonYangData implement YangData protocol
+extension JsonYangData (YangData[JsonYangData]):
+    def take(self, taker_name: str, name: str, module: ?str=None) -> ?value:
+        """Generic take method that looks up the appropriate taker function"""
+        if taker_name not in JSON_TAKERS:
+            raise ValueError(f"Unknown taker function: {taker_name}")
+        taker_func = JSON_TAKERS[taker_name]
+        return taker_func(self.data, name, module)
+
+    def wrap(self, val: value) -> JsonYangData:
+        """Wrap a value in JsonYangData if it's a dict"""
+        if isinstance(val, dict):
+            return JsonYangData(val)
+        raise ValueError("Expected dict to wrap")
+
+    def wrap_list(self, vals: list[value]) -> list[JsonYangData]:
+        """Wrap a list of values in JsonYangData"""
+        result = []
+        for val in vals:
+            if isinstance(val, dict):
+                result.append(JsonYangData(val))
+            else:
+                raise ValueError("Expected dict in list")
+        return result
+
+    def format_name(self) -> str:
+        """Return the format name for parameter selection"""
+        return "json"
+
+
 def _user_order(ordered_by):
     return True if ordered_by == "user" else False
 
@@ -104,8 +210,8 @@ def _parse_qualified_name(name: str) -> (str, ?str):
     return (name, None)
 
 
-def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
-    """Convert XML node to gdata tree based on schema
+def _from_data(s: yang.schema.DNodeInner, data, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
+    """Generic function to convert data to gdata tree based on schema
 
     Args:
         s: Schema node (container or list) - the root of the schema tree to start parsing from
@@ -131,7 +237,7 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return from_xml(child, node, loose, set_ns, path + [next], root_path)
+            return _from_data(child, data, loose, set_ns, path + [next], root_path)
         raise ValueError("Node on path {path} is not inner")
 
     children: dict[str, yang.gdata.Node] = {}
@@ -146,7 +252,7 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
             print("Skipping chilld: {child.name} of type {type(child)}", err=True)
             continue
         # Get the appropriate taker function name
-        taker_name = yang.schema.taker_name(child, "xml", loose)
+        taker_name = yang.schema.taker_name(child, data.format_name(), loose)
         print("Processing child: {child.name} with taker {taker_name}", err=True)
 
         # Determine namespace (only include if different from parent)
@@ -156,14 +262,12 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
             ns = child.namespace
             mod = child.module
 
-        # Get the taker function from our map
-        if taker_name not in XML_TAKERS:
-            raise ValueError(f"Unknown taker function: {taker_name}")
-        taker_func = XML_TAKERS[taker_name]
-
+        # Use the protocol's take method
         taken_nodes: ?value = None
         try:
-            taken_nodes = taker_func(node, child.name, ns)
+            # For XML, pass ns; for JSON, pass mod
+            param = ns if data.format_name() == "xml" else mod
+            taken_nodes = data.take(taker_name, child.name, param)
         except ValueError as err:
             raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
 
@@ -175,8 +279,9 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
                 if isinstance(taken_nodes, list):
                     # Process each list element
                     list_elements = []
-                    for element_node in taken_nodes:
-                        element_gdata = from_xml(child, element_node, loose, set_ns=False)
+                    wrapped_nodes = data.wrap_list(taken_nodes)
+                    for element_data in wrapped_nodes:
+                        element_gdata = _from_data(child, element_data, loose, set_ns=False)
                         list_elements.append(element_gdata)
 
                     # Create the List with processed elements
@@ -187,9 +292,9 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
             elif isinstance(child, yang.schema.DNodeInner):
                 # Process inner nodes (containers, lists)
                 print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
-                if isinstance(taken_nodes, xml.Node):
-                    print("Child data is a Node, processing further", err=True)
-                    yang.gdata.maybe_add(children, uname(child), lambda x: from_xml(child, x, set_ns=s.namespace != child.namespace), taken_nodes)
+                wrapped_node = data.wrap(taken_nodes)
+                print("Child data wrapped, processing further", err=True)
+                yang.gdata.maybe_add(children, uname(child), lambda x: _from_data(child, x, loose, set_ns=s.namespace != child.namespace), wrapped_node)
             elif isinstance(child, yang.schema.DNodeLeaf):
                 # Process leaf nodes
                 print("Processing leaf node: {child.name} with taker {taker_name} {ns}", err=True)
@@ -199,6 +304,7 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
                     children[uname(child)] = yang.gdata.Leaf(child.type_.name, taken_nodes, ns=ns, module=mod)
             else:
                 raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
+
     if s.gname == "Container":
         if isinstance(s, yang.schema.DContainer):
             return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
@@ -212,89 +318,17 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
         raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
 
 
-def from_json(s: yang.schema.DNodeInner, node: dict[str, ?value], loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
+def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
     """Convert XML node to gdata tree based on schema"""
+    xml_data = XmlYangData(node)
+    return _from_data(s, xml_data, loose, root_path=root_path)
 
-    # Navigate to root path if specified
-    if root_path != [] and len(path) < len(root_path):
-        inner = s.get(root_path[len(path)])
-        if isinstance(inner, yang.schema.DNodeInner):
-            return from_json(inner, node, loose, set_ns, path + [root_path[len(path)]], root_path)
-        raise ValueError("Node on path {path} is not inner")
 
-    # Process container
-    children: dict[str, yang.gdata.Node] = {}
+def from_json(s: yang.schema.DNodeInner, node: dict[str, ?value], loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Node:
+    """Convert JSON node to gdata tree based on schema"""
+    json_data = JsonYangData(node)
+    return _from_data(s, json_data, loose, root_path=root_path)
 
-    unique_namer = yang.schema._UniqueNamer(s)
-    def uname(n) -> str:
-        return unique_namer.unique_name(n.name, n.prefix)
-
-    for child in s.children:
-        # Get the appropriate taker function name
-        taker_name = yang.schema.taker_name(child, "json", loose)
-        print("Processing child: {child.name} with taker {taker_name}", err=True)
-
-        # Determine namespace (only include if different from parent)
-        ns = None
-        mod = None
-        if child.namespace != s.namespace:
-            ns = child.namespace
-            mod = child.module
-
-        # Get the taker function from our map
-        if taker_name not in JSON_TAKERS:
-            raise ValueError(f"Unknown taker function: {taker_name}")
-        taker_func = JSON_TAKERS[taker_name]
-
-        taken_nodes: ?value = None
-        try:
-            taken_nodes = taker_func(node, child.name, mod)
-        except ValueError as err:
-            raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
-
-        if taken_nodes is not None:
-            if isinstance(child, yang.schema.DList):
-                # We add the gdata.List containing node here, then recursively process each element
-                print("Processing list node: {child.name} with taker {taker_name} {ns}", err=True)
-                # Use the list taker to get all list element nodes
-                if isinstance(taken_nodes, list):
-                    # Process each list element
-                    list_elements = []
-                    for element_node in taken_nodes:
-                        element_gdata = from_json(child, element_node, loose, set_ns=False)
-                        list_elements.append(element_gdata)
-
-                    # Create the List with processed elements
-                    if list_elements:
-                        list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
-                        children[uname(child)] = list_gdata
-
-            elif isinstance(child, yang.schema.DNodeInner):
-                # Process inner nodes (containers, lists)
-                print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
-                if isinstance(taken_nodes, dict):
-                    print("Child data is a Node, processing further", err=True)
-                    yang.gdata.maybe_add(children, uname(child), lambda x: from_json(child, x, set_ns=s.namespace != child.namespace), taken_nodes)
-            elif isinstance(child, yang.schema.DNodeLeaf):
-                # Process leaf nodes
-                print("Processing leaf node: {child.name} with taker {taker_name} {ns}", err=True)
-                if isinstance(child, yang.schema.DLeafList) and isinstance(taken_nodes, list):
-                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, taken_nodes, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
-                else:
-                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, taken_nodes, ns=ns, module=mod)
-            else:
-                raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
-    if s.gname == "Container":
-        if isinstance(s, yang.schema.DContainer):
-            return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
-        else:
-            return yang.gdata.Container(children, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
-    elif s.gname == "List" and isinstance(s, yang.schema.DList):
-        # When processing a list element, return it as a Container
-        # The List wrapper is created by the parent when processing all elements
-        return yang.gdata.Container(children)
-    else:
-        raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
 
 def _test_y1_xml():
     y1 = r"""module y1 {
