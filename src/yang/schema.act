@@ -802,44 +802,10 @@ class DNodeInner(DNode):
         # == XML serde ================================
 
         # from_xml(): from XML -> gdata
-        if gen_xml and isinstance(self, DNodeInner):
-            fname = "from_xml"
-            if not top:
-                fname += "_{pname(self)}"
-
-            if isinstance(self, DList):
-                res.append("mut def {fname}_element(node: xml.Node) -> yang.gdata.Node:")
-            else:
-                res.append("mut def {fname}(node: xml.Node) -> yang.gdata.{self.gname}:")
-
-            res.append("    children = {{}}")
-            for child in self.children:
-                maybe_ns = ", '{child.namespace}'" if child.namespace != self.namespace else ""
-                # TODO: no need for local variables when we switch from the
-                # gdata.Container.key attribute to key_str() method
-                res.append("    child_{usname(child)} = yang.gdata.{taker_name(child, 'xml', loose=loose)}(node, '{child.name}'{maybe_ns})")
-                res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_xml_{pname(child)}, child_{usname(child)})")
-
-            if isinstance(self, DList):
-                # List element is a Container, but it needs no namespace qualifiers
-                # because it must belong to the same module as the list
-                res.append("    return yang.gdata.Container(children)")
-            elif isinstance(self, DContainer) and self.presence:
-                res.append("    return yang.gdata.{self.gname}(children, presence=True{gdata_nsq})")
-            else:
-                res.append("    return yang.gdata.{self.gname}(children{gdata_nsq})")
-            res.append("")
-
-        if gen_xml and isinstance(self, DList):
-            res.append("mut def from_xml_{pname(self)}(nodes: list[xml.Node]) -> yang.gdata.List:")
-            res.append("    elements = [from_xml_{pname(self)}_element(e) for e in nodes]")
-            res.append("    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
-            res.append("")
-
         if gen_xml and isinstance(self, DRoot):
-            res.append("def from_xml_root(node: xml.Node):")
+            res.append("def from_xml(node: xml.Node, root_path: list[str]=[]):")
             res.append("    s = yang.compile(src_yang())")
-            res.append("    return yang.gen3.from_xml(s, node, loose={loose})")
+            res.append("    return yang.gen3.from_xml(s, node, loose={loose}, root_path=root_path)")
             res.append("")
 
         # == JSON serde ================================

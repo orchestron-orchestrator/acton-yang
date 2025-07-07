@@ -71,16 +71,6 @@ class foo__foo__bar(yang.adata.MNode):
         return '\n'.join(res)
 
 
-mut def from_xml_foo__foo__bar(node: xml.Node) -> yang.gdata.Container:
-    children = {}
-    child_foo_l1 = yang.gdata.from_xml_str(node, 'l1')
-    yang.gdata.maybe_add(children, 'foo:l1', from_xml_foo__foo__bar__foo_l1, child_foo_l1)
-    child_bar_l1 = yang.gdata.from_xml_str(node, 'l1', 'http://example.com/bar')
-    yang.gdata.maybe_add(children, 'bar:l1', from_xml_foo__foo__bar__bar_l1, child_bar_l1)
-    child_l2 = yang.gdata.from_xml_str(node, 'l2', 'http://example.com/bar')
-    yang.gdata.maybe_add(children, 'l2', from_xml_foo__foo__bar__l2, child_l2)
-    return yang.gdata.Container(children, presence=True)
-
 mut def from_json_path_foo__foo__bar(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
@@ -156,12 +146,6 @@ class foo__foo(yang.adata.MNode):
         return '\n'.join(res)
 
 
-mut def from_xml_foo__foo(node: xml.Node) -> yang.gdata.Container:
-    children = {}
-    child_bar = yang.gdata.from_xml_opt_cnt(node, 'bar')
-    yang.gdata.maybe_add(children, 'bar', from_xml_foo__foo__bar, child_bar)
-    return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
-
 mut def from_json_path_foo__foo(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
@@ -230,15 +214,9 @@ class root(yang.adata.MNode):
         return '\n'.join(res)
 
 
-mut def from_xml(node: xml.Node) -> yang.gdata.Container:
-    children = {}
-    child_foo = yang.gdata.from_xml_opt_cnt(node, 'foo', 'http://example.com/foo')
-    yang.gdata.maybe_add(children, 'foo', from_xml_foo__foo, child_foo)
-    return yang.gdata.Container(children)
-
-def from_xml_root(node: xml.Node):
+def from_xml(node: xml.Node, root_path: list[str]=[]):
     s = yang.compile(src_yang())
-    return yang.gen3.from_xml(s, node, loose=False)
+    return yang.gen3.from_xml(s, node, loose=False, root_path=root_path)
 
 mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
