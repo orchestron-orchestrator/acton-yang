@@ -307,6 +307,7 @@ class DNodeInner(DNode):
             res.append("import xml")
             res.append("import yang.adata")
             res.append("import yang.gdata")
+            res.append("from yang.common import Identityref")
             res.append("")
             res.append("# == This file is generated ==")
             res.append("")
@@ -1192,12 +1193,22 @@ class DLeaf(DNodeLeaf):
         gdata_nsq = ", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
         if gen_json:
-            res.append("mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
-            res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
+            if self.type_.name == "identityref":
+                res.append("mut def from_json_{pname(self)}(val: Identityref) -> yang.gdata.Leaf:")
+                res.append("    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)")
+                res.append("    return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
+            else:
+                res.append("mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
+                res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
         if gen_xml:
-            res.append("mut def from_xml_{pname(self)}(val: value) -> yang.gdata.Leaf:")
-            res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
+            if self.type_.name == "identityref":
+                res.append("mut def from_xml_{pname(self)}(val: Identityref) -> yang.gdata.Leaf:")
+                res.append("    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)")
+                res.append("    return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
+            else:
+                res.append("mut def from_xml_{pname(self)}(val: value) -> yang.gdata.Leaf:")
+                res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
         return "\n".join(res)
 
@@ -1243,12 +1254,22 @@ class DLeafList(DNodeLeaf):
         gdata_nsq = ", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
         if gen_json:
-            res.append("mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
+            if self.type_.name == "identityref":
+                res.append("mut def from_json_{pname(self)}(val: list[Identityref]) -> yang.gdata.LeafList:")
+                res.append("    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]")
+                res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
+            else:
+                res.append("mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
+                res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
         if gen_xml:
-            res.append("mut def from_xml_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
+            if self.type_.name == "identityref":
+                res.append("mut def from_xml_{pname(self)}(val: list[Identityref]) -> yang.gdata.LeafList:")
+                res.append("    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]")
+                res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
+            else:
+                res.append("mut def from_xml_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
+                res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
         return "\n".join(res)
 
@@ -2232,7 +2253,7 @@ def yang_typename_to_acton_type(type_name: str) -> str:
         # TODO: use acton unions of fixed strings!?
         return "str"
     elif type_name == "identityref":
-        return "str"
+        return "Identityref"
     elif type_name == "instance-identifier":
         return "str"
     elif type_name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:

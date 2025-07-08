@@ -99,6 +99,8 @@ xml_text_full = """<data>
   <ll_uint64>42</ll_uint64>
   <ll_str>kava</ll_str>
   <ll_str>čaj</ll_str>
+  <l_identityref>fooy</l_identityref>
+  <ll_identityref xmlns:bar="http://example.com/bar">bar:bary</ll_identityref>
   <l4>foo-qux</l4>
   <l1 xmlns="http://example.com/bar">foo-bar</l1>
   <l2 xmlns="http://example.com/bar">bar</l2>
@@ -206,7 +208,7 @@ actor _test_gdata_source_roundtrip_xml_full(t: testing.EnvT):
     xml_in = xml.decode(xml_text_full)
     gd = yang_foo.from_xml(xml_in)
     wf = file.WriteFile(wfcap, "../test_data_source_roundtrip/src/xml_full_gdata.act")
-    await async wf.write("from yang.gdata import *\n\nxml_full = {gd.prsrc()}".encode())
+    await async wf.write("from yang.gdata import *\nfrom yang.common import Identityref\n\nxml_full = {gd.prsrc()}".encode())
     await async wf.close()
     t.success()
 
@@ -228,6 +230,7 @@ actor _test_adata_source_roundtrip_xml_full(t: testing.EnvT):
     ad = yang_foo_root.from_gdata(gd)
     wf = file.WriteFile(wfcap, "../test_data_source_roundtrip/src/xml_full_adata.act")
     await async wf.write("""from yang_foo import *
+from yang.common import Identityref
 
 def adata():
 {_indent_lines(ad.prsrc("ad"))}
@@ -243,6 +246,7 @@ actor _test_adata_source_roundtrip_xml_full_loose(t: testing.EnvT):
     ad = yang_foo_loose.root.from_gdata(gd)
     wf = file.WriteFile(wfcap, "../test_data_source_roundtrip/src/xml_full_adata_loose.act")
     await async wf.write("""from yang_foo_loose import *
+from yang.common import Identityref
 
 def adata():
 {_indent_lines(ad.prsrc("ad"))}

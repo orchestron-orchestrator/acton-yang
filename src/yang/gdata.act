@@ -3,6 +3,8 @@ import testing
 import json
 import xml
 
+from yang.common import Identityref
+
 """YANG data
 
 This module defines classes for YANG data nodes. It can represent a YANG data
@@ -183,35 +185,46 @@ def either(a: ?str, b: ?str):
         return b
 
 
-def nsq(node_ns, val_ns, val_mod):
+def nsq(node_ns, v: ?value=None):
     r = {}
     if node_ns is not None:
         r[""] = node_ns
-    if val_ns is not None and val_mod is not None:
-        r[val_mod] = val_ns
+    if isinstance(v, Identityref):
+        vns = v.ns
+        vmod = v.mod
+        if vns is not None and vmod is not None:
+            r[vmod] = vns
     return r
 
 
-def yang_str(v, val_mod) -> str:
+def yang_str(v) -> str:
     if isinstance(v, bytes):
         s = base64.encode(v).decode()
+        return s
+    if isinstance(v, Identityref):
+        vmod = v.mod
+        if vmod is not None:
+            s = "{vmod}:{v.val}"
+        else:
+            s = str(v.val)
         return s
     s = str(v)
     if isinstance(v, bool):
         s = s.lower()
-    if val_mod is not None:
-        s = "{val_mod}:{s}"
     return s
 
-def json_val(yang_type: str, v: value, val_mod) -> ?value:
+def json_val(yang_type: str, v: value) -> ?value:
     if isinstance(v, bytes):
         return base64.encode(v).decode()
     if yang_type == "int64" or yang_type == "uint64":
         return str(v)
-    if val_mod is not None:
-        return "{val_mod}:{v}"
-    else:
-        return v
+    if isinstance(v, Identityref):
+        vmod = v.mod
+        if vmod is not None:
+            return "{v.mod}:{v.val}"
+        else:
+            return str(v.val)
+    return v
 
 
 def fmt_json_name(name, module=None):
@@ -340,12 +353,11 @@ class Node(value):
                             if v == True:
                                 child_dict[fmt_json_name(nm, child.module)] = [None]
                     else:
-                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val, child.val_mod)
+                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val)
                 elif isinstance(child, LeafList):
                     vals = []
                     for v in child.vals if child.user_order else vals_list_sorted(child.vals):
-                        # TODO: val_mod
-                        vals.append(json_val(child.t, v, None))
+                        vals.append(json_val(child.t, v))
                     child_dict[fmt_json_name(nm, child.module)] = vals
                 elif isinstance(child, List):
                     elems = []
@@ -353,7 +365,7 @@ class Node(value):
                         if isinstance(elem, Container):
                             elem_dict = {}
                             for key_name, key_leaf in elem.key_children(child.keys).items():
-                                elem_dict[fmt_json_name(key_name)] = json_val(key_leaf.t, key_leaf.val, key_leaf.val_mod)
+                                elem_dict[fmt_json_name(key_name)] = json_val(key_leaf.t, key_leaf.val)
                             elem_dict.update(elem.to_dict(pretty).items())
                             elems.append(elem_dict)
                         else:
@@ -405,8 +417,8 @@ class Node(value):
                 xml += _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=remove_op if remove else []) + _nl()
                 # Print key leafs first
                 for key_name, key_leaf in elem.key_children(self.keys).items():
-                    v = yang_str(key_leaf.val, key_leaf.val_mod)
-                    xml += _indent(1) + fmt_tag(key_name, nsq(val_ns=key_leaf.val_ns, val_mod=key_leaf.val_mod)) + v + fmt_tag(key_name, close=True) + _nl()
+                    v = yang_str(key_leaf.val)
+                    xml += _indent(1) + fmt_tag(key_name, nsq(v=key_leaf.val)) + v + fmt_tag(key_name, close=True) + _nl()
                 for nm,child in elem.children.items():
                     if nm in self.keys or remove:
                         continue
@@ -425,16 +437,15 @@ class Node(value):
                     else:
                         xml += fmt_tag(name, nsq(either(self.ns, cns)), attrs=remove_op, end=True)
             else:
-                v = yang_str(self.val, self.val_mod)
-                xml += fmt_tag(name, nsq(either(self.ns, cns), self.val_ns, self.val_mod)) + v + fmt_tag(name, close=True)
+                v = yang_str(self.val)
+                xml += fmt_tag(name, nsq(either(self.ns, cns), self.val)) + v + fmt_tag(name, close=True)
             xml += _nl()
             return xml
         elif isinstance(self, LeafList):
             xml = ""
             for val in self.vals if self.user_order else vals_list_sorted(self.vals):
-                # TODO: val_mod
-                v = yang_str(val, None)
-                xml += _indent() + fmt_tag(name, nsq(either(self.ns, cns))) + v + fmt_tag(name, close=True) + _nl()
+                v = yang_str(val)
+                xml += _indent() + fmt_tag(name, nsq(either(self.ns, cns), val)) + v + fmt_tag(name, close=True) + _nl()
             return xml
         elif isinstance(self, Absent):
             return _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=remove_op, end=True) + _nl()
@@ -627,6 +638,37 @@ class Node(value):
         except ValueError:
             return []
 
+    def get_Identityref(self, name) -> Identityref:
+        child = self.get_leaf(name)
+        childval = child.val
+        if isinstance(childval, Identityref):
+            return childval
+        raise ValueError("Leaf {name} value is not type Identityref")
+
+    def get_opt_Identityref(self, name) -> ?Identityref:
+        child = self.get_opt_leaf(name)
+        if child != None:
+            childval = child.val
+            if isinstance(childval, Identityref):
+                return childval
+
+    def get_Identityrefs(self, name) -> list[Identityref]:
+        if isinstance(self, Container):
+            for nm,child in self.children.items():
+                if isinstance(child, LeafList) and nm == name:
+                    cvals = []
+                    for v in child.vals:
+                        if isinstance(v, Identityref):
+                            cvals.append(v)
+                    return cvals
+        raise ValueError("Cannot find leaf-list child with name {name}")
+
+    def get_opt_Identityrefs(self, name) -> list[Identityref]:
+        try:
+            return self.get_Identityrefs(name)
+        except ValueError:
+            return []
+
 extension Node(Eq):
     def __eq__(self, other: Node) -> bool:
         if self.ns != other.ns:
@@ -715,22 +757,17 @@ class Container(Node):
 class Leaf(Node):
     t: str
     val: value
-    val_ns: ?str
-    val_mod: ?str
 
-    def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None, val_ns: ?str=None, val_mod: ?str=None):
+    def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None):
         self.t = t
         self.val = val
         self.ns = ns
         self.module = module
-        self.val_ns = val_ns
-        self.val_mod = val_mod
 
 class LeafList(Node):
     t: str
     vals: list[value]
     user_order: bool
-    # TODO: add val_ns and val_mod to each value how?
 
     def __init__(self, t:str, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None):
         self.t = t
@@ -817,6 +854,8 @@ def vals_equal(a: value, b: value) -> bool:
     if isinstance(a, i32) and isinstance(b, i32):
         return a == b
     if isinstance(a, i64) and isinstance(b, i64):
+        return a == b
+    if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a == b
     raise ValueError("Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
 
@@ -1492,6 +1531,38 @@ def from_xml_value(n: xml.Node, name: str, ns: ?str) -> value:
         return r
     raise ValueError("Cannot find xml child with name {name}")
 
+def from_xml_opt_Identityref(n: xml.Node, name: str, ns: ?str) -> ?Identityref:
+    try:
+        c = get_xml_child(n, name, ns)
+        t = c.text
+        if t is not None:
+            return Identityref.from_xml(t, c.nsdefs)
+    except ValueError:
+        return None
+
+def from_xml_Identityref(n: xml.Node, name: str, ns: ?str) -> Identityref:
+    r = from_xml_opt_Identityref(n, name, ns)
+    if r is not None:
+        return r
+    raise ValueError("Cannot find xml child with name {name}")
+
+# plural
+def from_xml_opt_Identityrefs(n: xml.Node, name: str, ns: ?str) -> ?list[Identityref]:
+    res = []
+    for child in get_xml_children(n, name, ns):
+        t = child.text
+        if t is not None:
+            res.append(Identityref.from_xml(t, child.nsdefs))
+    if len(res) == 0:
+        return None
+    return res
+
+def from_xml_Identityrefs(n: xml.Node, name: str, ns: ?str) -> list[Identityref]:
+    r = from_xml_opt_Identityrefs(n, name, ns)
+    if r is not None:
+        return r
+    raise ValueError("Cannot find xml child with name {name}")
+
 # plural
 def from_xml_strs(n: xml.Node, name: str, ns: ?str) -> list[str]:
     r = from_xml_opt_strs(n, name, ns)
@@ -1888,6 +1959,42 @@ def take_json_values(jd: dict[str, ?value], name: str, module: ?str=None) -> lis
     if val is not None:
         return val
     raise ValueError("Cannot find json value child with name {name}")
+
+def take_json_opt_Identityref(jd: dict[str, ?value], name: str, module: ?str=None) -> ?Identityref:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, str):
+            return Identityref.from_json(child)
+        raise ValueError("Expected a string for identityref {name}")
+    return None
+
+def take_json_Identityref(jd: dict[str, ?value], name: str, module: ?str=None) -> Identityref:
+    val = take_json_opt_Identityref(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json identityref child with name {name}")
+
+def take_json_opt_Identityrefs(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[Identityref]:
+    child = take_json_opt_value(jd, name, module)
+    if child is not None:
+        if isinstance(child, list):
+            if len(child) == 0:
+                return []
+            result = []
+            for c in child:
+                if isinstance(c, str):
+                    result.append(Identityref.from_json(c))
+                else:
+                    raise ValueError("{name} is a list of wrong type, should be str for identityref, not {str(type(c))}")
+            return result
+        raise ValueError(name + " is not a list of identityrefs")
+    return None
+
+def take_json_Identityrefs(jd: dict[str, ?value], name: str, module: ?str=None) -> list[Identityref]:
+    val = take_json_opt_Identityrefs(jd, name, module)
+    if val is not None:
+        return val
+    raise ValueError("Cannot find json identityrefs child with name {name}")
 
 # --
 def unwrap_dict(jd: value) -> dict[str, value]:
@@ -2646,9 +2753,9 @@ def _test_to_json_empty_leaf():
 
 def _test_to_json_identityref():
     y1 = Container({
-        "identity-local": Leaf("identityref", "foo"),
-        "identity-other": Leaf("identityref", "bar",  val_ns="http://example.com/bar", val_mod="bar"),
-        "augmented-identity-other": Leaf("identityref", "bar", "http://example.com/augmentor", "augmentor",  val_ns="http://example.com/bar", val_mod="bar"),
+        "identity-local": Leaf("identityref", Identityref("foo")),
+        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar")),
+        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar"), "http://example.com/augmentor", "augmentor"),
     })
 
     return y1.to_json(pretty=True)
@@ -2778,9 +2885,9 @@ def _test_to_xmlstr_empty_leaf():
 
 def _test_to_xmlstr_identityref():
     y1 = Container({
-        "identity-local": Leaf("identityref", "foo"),
-        "identity-other": Leaf("identityref", "bar",  val_ns="http://example.com/bar", val_mod="bar"),
-        "augmented-identity-other": Leaf("identityref", "bar", "http://example.com/augmentor", "augmentor",  val_ns="http://example.com/bar", val_mod="bar"),
+        "identity-local": Leaf("identityref", Identityref("foo")),
+        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar")),
+        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar"), "http://example.com/augmentor", "augmentor"),
     })
 
     return y1.to_xmlstr()
