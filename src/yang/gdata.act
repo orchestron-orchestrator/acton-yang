@@ -182,21 +182,36 @@ def either(a: ?str, b: ?str):
     else:
         return b
 
-def yang_str(v) -> str:
+
+def nsq(node_ns, val_ns, val_mod):
+    r = {}
+    if node_ns is not None:
+        r[""] = node_ns
+    if val_ns is not None and val_mod is not None:
+        r[val_mod] = val_ns
+    return r
+
+
+def yang_str(v, val_mod) -> str:
     if isinstance(v, bytes):
         s = base64.encode(v).decode()
         return s
     s = str(v)
     if isinstance(v, bool):
         s = s.lower()
+    if val_mod is not None:
+        s = "{val_mod}:{s}"
     return s
 
-def json_val(yang_type: str, v: value) -> ?value:
+def json_val(yang_type: str, v: value, val_mod) -> ?value:
     if isinstance(v, bytes):
         return base64.encode(v).decode()
     if yang_type == "int64" or yang_type == "uint64":
         return str(v)
-    return v
+    if val_mod is not None:
+        return "{val_mod}:{v}"
+    else:
+        return v
 
 
 def fmt_json_name(name, module=None):
@@ -206,8 +221,11 @@ def fmt_json_name(name, module=None):
     return name_without_prefix
 
 
-def fmt_tag(name, ns=None, attrs: list[(str, str)]=[], close=False, end=False):
-    ns_attr = [("xmlns", '"'+ns+'"')] if ns is not None and not close else []
+def fmt_tag(name, ns: dict[str, str]={}, attrs: list[(str, str)]=[], close=False, end=False):
+    if close:
+        ns_attr = []
+    else:
+        ns_attr = [("xmlns:{name}" if name != "" else "xmlns", '"'+uri+'"') for name, uri in ns.items()]
     attr_strs = list(map(lambda x: "{x.0}={x.1}", ns_attr + attrs))
     left = "</" if close else "<"
     right = "/>" if end else ">"
@@ -322,11 +340,12 @@ class Node(value):
                             if v == True:
                                 child_dict[fmt_json_name(nm, child.module)] = [None]
                     else:
-                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val)
+                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val, child.val_mod)
                 elif isinstance(child, LeafList):
                     vals = []
                     for v in child.vals if child.user_order else vals_list_sorted(child.vals):
-                        vals.append(json_val(child.t, v))
+                        # TODO: val_mod
+                        vals.append(json_val(child.t, v, None))
                     child_dict[fmt_json_name(nm, child.module)] = vals
                 elif isinstance(child, List):
                     elems = []
@@ -334,7 +353,7 @@ class Node(value):
                         if isinstance(elem, Container):
                             elem_dict = {}
                             for key_name, key_leaf in elem.key_children(child.keys).items():
-                                elem_dict[fmt_json_name(key_name)] = json_val(key_leaf.t, key_leaf.val)
+                                elem_dict[fmt_json_name(key_name)] = json_val(key_leaf.t, key_leaf.val, key_leaf.val_mod)
                             elem_dict.update(elem.to_dict(pretty).items())
                             elems.append(elem_dict)
                         else:
@@ -370,11 +389,11 @@ class Node(value):
 
             if child_xml == "":
                 if self.presence:
-                    return _indent() + fmt_tag(name, either(self.ns, cns), end=True) + _nl()
+                    return _indent() + fmt_tag(name, nsq(either(self.ns, cns)), end=True) + _nl()
                 else:
                     return ""
 
-            xml = _indent() + fmt_tag(name, either(self.ns, cns)) + _nl()
+            xml = _indent() + fmt_tag(name, nsq(either(self.ns, cns))) + _nl()
             xml += child_xml
             xml += _indent() + fmt_tag(name, close=True) + _nl()
             return xml
@@ -383,11 +402,11 @@ class Node(value):
             xml = ""
             for elem in self.elements if self.user_order else sorted_elements(self.elements, self.keys):
                 remove = isinstance(elem, Absent)
-                xml += _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op if remove else []) + _nl()
+                xml += _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=remove_op if remove else []) + _nl()
                 # Print key leafs first
                 for key_name, key_leaf in elem.key_children(self.keys).items():
-                    v = yang_str(key_leaf.val)
-                    xml += _indent(1) + fmt_tag(key_name) + v + fmt_tag(key_name, close=True) + _nl()
+                    v = yang_str(key_leaf.val, key_leaf.val_mod)
+                    xml += _indent(1) + fmt_tag(key_name, nsq(val_ns=key_leaf.val_ns, val_mod=key_leaf.val_mod)) + v + fmt_tag(key_name, close=True) + _nl()
                 for nm,child in elem.children.items():
                     if nm in self.keys or remove:
                         continue
@@ -402,22 +421,23 @@ class Node(value):
                     return ""
                 if isinstance(v, bool):
                     if v == True:
-                        xml += fmt_tag(name, either(self.ns, cns), end=True)
+                        xml += fmt_tag(name, nsq(either(self.ns, cns)), end=True)
                     else:
-                        xml += fmt_tag(name, either(self.ns, cns), attrs=remove_op, end=True)
+                        xml += fmt_tag(name, nsq(either(self.ns, cns)), attrs=remove_op, end=True)
             else:
-                v = yang_str(self.val)
-                xml += fmt_tag(name, either(self.ns, cns)) + v + fmt_tag(name, close=True)
+                v = yang_str(self.val, self.val_mod)
+                xml += fmt_tag(name, nsq(either(self.ns, cns), self.val_ns, self.val_mod)) + v + fmt_tag(name, close=True)
             xml += _nl()
             return xml
         elif isinstance(self, LeafList):
             xml = ""
             for val in self.vals if self.user_order else vals_list_sorted(self.vals):
-                v = yang_str(val)
-                xml += _indent() + fmt_tag(name, either(self.ns, cns)) + v + fmt_tag(name, close=True) + _nl()
+                # TODO: val_mod
+                v = yang_str(val, None)
+                xml += _indent() + fmt_tag(name, nsq(either(self.ns, cns))) + v + fmt_tag(name, close=True) + _nl()
             return xml
         elif isinstance(self, Absent):
-            return _indent() + fmt_tag(name, either(self.ns, cns), attrs=remove_op, end=True) + _nl()
+            return _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=remove_op, end=True) + _nl()
         raise ValueError("Unsupported node type in to_xml: {type(self)}")
 
     # --
@@ -695,17 +715,22 @@ class Container(Node):
 class Leaf(Node):
     t: str
     val: value
+    val_ns: ?str
+    val_mod: ?str
 
-    def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None):
+    def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None, val_ns: ?str=None, val_mod: ?str=None):
         self.t = t
         self.val = val
         self.ns = ns
         self.module = module
+        self.val_ns = val_ns
+        self.val_mod = val_mod
 
 class LeafList(Node):
     t: str
     vals: list[value]
     user_order: bool
+    # TODO: add val_ns and val_mod to each value how?
 
     def __init__(self, t:str, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None):
         self.t = t
@@ -2619,6 +2644,15 @@ def _test_to_json_empty_leaf():
 
     return y1.to_json(pretty=True)
 
+def _test_to_json_identityref():
+    y1 = Container({
+        "identity-local": Leaf("identityref", "foo"),
+        "identity-other": Leaf("identityref", "bar",  val_ns="http://example.com/bar", val_mod="bar"),
+        "augmented-identity-other": Leaf("identityref", "bar", "http://example.com/augmentor", "augmentor",  val_ns="http://example.com/bar", val_mod="bar"),
+    })
+
+    return y1.to_json(pretty=True)
+
 def _test_to_xmlstr():
     y1 = Container({
         "acme:foo": Container({
@@ -2738,6 +2772,15 @@ def _test_to_xmlstr_empty_leaf():
     y1 = Container({
         "e1": Leaf("empty", True),
         "e2": Leaf("empty", False)
+    })
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_identityref():
+    y1 = Container({
+        "identity-local": Leaf("identityref", "foo"),
+        "identity-other": Leaf("identityref", "bar",  val_ns="http://example.com/bar", val_mod="bar"),
+        "augmented-identity-other": Leaf("identityref", "bar", "http://example.com/augmentor", "augmentor",  val_ns="http://example.com/bar", val_mod="bar"),
     })
 
     return y1.to_xmlstr()
