@@ -2192,3 +2192,84 @@ def _test_prdaclass_dot():
     root = yang.compile([ys_base])
     src = root.prdaclass()
     return src
+
+def _test_identityref():
+    # Base module with base identity and a leaf that references it
+    ys_base = r"""module base {
+    yang-version "1.1";
+    namespace "http://example.com/base";
+    prefix "base";
+
+    identity protocol-type {
+        description "Base identity for protocol types";
+    }
+
+    container config {
+        leaf active-protocol {
+            type identityref {
+                base protocol-type;
+            }
+            description "Currently active protocol";
+        }
+    }
+}"""
+
+    # First module extending the base identity
+    ys_foo = r"""module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    import base {
+        prefix "base";
+    }
+
+    identity tcp {
+        base base:protocol-type;
+        description "TCP protocol";
+    }
+
+    identity udp {
+        base base:protocol-type;
+        description "UDP protocol";
+    }
+}"""
+
+    # Second module extending the base identity
+    ys_bar = r"""module bar {
+    yang-version "1.1";
+    namespace "http://example.com/bar";
+    prefix "bar";
+    import base {
+        prefix "base";
+    }
+
+    identity sctp {
+        base base:protocol-type;
+        description "SCTP protocol";
+    }
+
+    identity dccp {
+        base base:protocol-type;
+        description "DCCP protocol";
+    }
+}"""
+
+    # Compile all modules together
+    root = yang.compile([ys_base, ys_foo, ys_bar])
+
+    # Get the leaf with identityref type
+    config = root.get("config")
+    active_protocol = config.get("active-protocol")
+
+    # Verify the leaf has the correct type
+    if isinstance(active_protocol, yang.schema.DLeaf):
+        leaf_type = active_protocol.type_
+        if isinstance(leaf_type, yang.schema.Type):
+            testing.assertEqual(leaf_type.name, "identityref")
+        else:
+            testing.error("Expected Type instance")
+    else:
+        testing.error("Expected DLeaf instance")
+
+    src = root.prdaclass()
+    return src
