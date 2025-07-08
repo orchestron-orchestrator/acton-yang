@@ -254,32 +254,43 @@ class DNode(object):
     reference: ?str
     exts: list[Ext]
 
-    def get(self, name: str) -> DNode:
+    def get(self, name: str, module: ?str) -> DNode:
         """Get child node by name
         """
         if isinstance(self, DNodeInner):
+            matches = []
             for child in self.children:
+                if module is not None and child.module != module:
+                    continue
+
                 if isinstance(child, DAction) and child.name == name:
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DAnydata) and child.name == name:
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DAnyxml) and child.name == name:
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DContainer) and child.name == name:
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DInput) and name == 'input':
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DLeaf) and child.name == name:
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DLeafList) and child.name == name:
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DList) and child.name == name:
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DOutput) and name == 'output':
-                    return child
+                    matches.append(child)
                 elif isinstance(child, DRpc) and child.name == name:
-                    return child
-            raise ValueError("Child {name} not found")
+                    matches.append(child)
+            
+            if len(matches) == 1:
+                return matches[0]
+            elif len(matches) > 1:
+                module_names = [child.module for child in matches]
+                raise ValueError("Duplicate child names found: {name} in modules: {module_names}")
+            else:
+                raise ValueError("Child {name} not found")
 
         raise ValueError("Unable to get child from non-inner node")
 
@@ -611,7 +622,7 @@ class DNodeInner(DNode):
         # Uses nested f-strings with two evaluation phases:
         # 1. Generation-time: Outer f-strings resolve class names, paths, variable names
         # 2. Runtime: Inner f-strings {{...}} become {...} and evaluate when prsrc() executes
-        # 
+        #
         # The 'top' parameter is internal and controls how the top element is created:
         # - top=True: Generate constructor call (for root/independent objects)
         # - top=False: Skip constructor, generate only assignments (for nested objects)
