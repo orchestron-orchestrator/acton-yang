@@ -857,7 +857,11 @@ class DNodeInner(DNode):
                 for child in self.children:
                     try:
                         idx = self.key.index(child.name)
-                        res += ["        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
+                        if isinstance(child, DLeaf) and child.type_.name == "identityref":
+                            # Key child is of course always DLeaf, but the compiler doesn't know that ...
+                            res += ["        children['{uname(child)}'] = from_json_{pname(child)}(Identityref.from_json(keys[{idx}]))"]
+                        else:
+                            res += ["        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
                     except KeyError:
                         if child.namespace != self.namespace:
                             res += ["        if point == '{child.module}:{child.name}':"]
