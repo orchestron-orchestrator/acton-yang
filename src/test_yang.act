@@ -2111,6 +2111,7 @@ def _test_leaf_defaults():
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
+    identity id1;
     container c {
         leaf l_str_def {
             type string;
@@ -2119,6 +2120,12 @@ def _test_leaf_defaults():
         leaf l_boolean_def {
             type boolean;
             default "true";
+        }
+        leaf l_identityref_def {
+            type identityref {
+                base id1;
+            }
+            default id1;
         }
     }
 }"""
@@ -2135,6 +2142,12 @@ def _test_leaf_defaults():
         testing.assertEqual(l_boolean_def.default, "true")
     else:
         testing.error("Expected Leaf instance for l_boolean_def")
+
+    l_identityref_def = root.get("c").get("l_identityref_def")
+    if isinstance(l_identityref_def, yang.schema.DLeaf):
+        testing.assertEqual(l_identityref_def.default, "id1")
+    else:
+        testing.error("Expected Leaf instance for l_identityref_def")
 
 def _test_prdaclass_max_elements_unbounded():
     ys_base = r"""module foo {

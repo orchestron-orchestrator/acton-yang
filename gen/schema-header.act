@@ -93,6 +93,7 @@
 # and then running .to_dnode().
 
 import re
+from yang.common import Identityref
 
 RECURSION_LIMIT = 512
 
@@ -315,6 +316,7 @@ class DNodeInner(DNode):
             if isinstance(self, DRoot):
                 res.append("mod_to_ns = {repr(self.mod_to_ns)}")
                 res.append("ns_to_mod = {repr(self.ns_to_mod)}")
+                res.append("prefix_to_mod = {repr(self.prefix_to_mod)}")
                 res.append("")
                 res.append("")
 
@@ -435,6 +437,15 @@ class DNodeInner(DNode):
             elif isinstance(child, DLeaf):
                 child_default = child.default
                 if not loose and child_default is not None:
+                    if child.type_.name == "identityref":
+                        parts = child_default.split(":")
+                        if len(parts) == 1:
+                            prefix = child.prefix
+                            name = parts[0]
+                        else:
+                            prefix = parts[0]
+                            name = parts[1]
+                        child_default = """Identityref('{name}', mod_to_ns[prefix_to_mod["{prefix}"]], prefix_to_mod["{prefix}"])"""
                     res.append("        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {prsrc_literal(child.type_.name, child_default)}")
                 else:
                     res.append("        self.{usname(child)} = {usname(child)}")
@@ -1322,12 +1333,14 @@ class DRoot(DNodeInner):
         self.children=[]
         self.mod_to_ns = {}
         self.ns_to_mod = {}
+        self.prefix_to_mod = {}
         for module in modules:
             if isinstance(module, DModule):
                 for child in module.children:
                     self.children.append(child)
                 self.mod_to_ns[module.name] = module.namespace
                 self.ns_to_mod[module.namespace] = module.name
+                self.prefix_to_mod[module.prefix] = module.name
             else:
                 raise ValueError("DRoot can only contain DModule")
 
@@ -2368,7 +2381,7 @@ def prsrc_literal(ytype: str, value: str) -> str:
     elif ytype == "enumeration":
         return '"' + value + '"'
     elif ytype == "identityref":
-        return '"' + value + '"'
+        return value
     elif ytype in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
         return value
     elif ytype == "binary":
