@@ -210,7 +210,147 @@ def _parse_qualified_name(name: str) -> (str, ?str):
     return (name, None)
 
 
-def _from_data(s: yang.schema.DNodeInner, data, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
+def from_json_path(s: yang.schema.DNodeInner, data: dict[str, ?value], path: list[str], op: str="merge", loose: bool=False) -> yang.gdata.Container:
+    r"""Convert JSON to a gdata tree rooted at the schema root, with data applied
+    at the specified path.
+
+    Unlike from_data which can create partial trees starting at any schema node,
+    this function ALWAYS creates a sparse tree from the root of the schema,
+    meaning that it  only creates containers and list entries required to hold
+    the data at the specified path location. This is useful for NETCONF/RESTCONF
+    operations where the payload is a subtree rooted in the provided query path.
+
+    Args:
+        s: Root schema node (must be the actual root, not an inner node)
+        data: JSON data to apply at the target path location
+        path: List of path elements to navigate from root, e.g. ["mod1:c1", "list1", "key1", "inner"]
+              - Container/List names "name" or "module:name"
+              - List entries: comma-separated key values, e.g. "key1,key2"
+        op: Operation to perform - "merge" (default) or "remove"
+        loose: Whether to allow missing mandatory fields
+
+    Returns:
+        A sparse gdata tree from root with data only at the specified path
+
+    Examples:
+        # Creates: root -> c1 -> c2 -> {leaf1: "value"}
+        from_json_path(schema, {"leaf1": "value"}, ["mod:c1", "c2"])
+
+        # Creates: root -> list1[key1] -> container -> {field: "value"}
+        from_json_path(schema, {"field": "value"}, ["mod:list1", "key1", "container"])
+
+        # Creates: root -> list1[key1] as Absent (for removal)
+        from_json_path(schema, {}, ["mod:list1", "key1"], "remove")
+    """
+    result = _from_json_path_recursive(s, data, path, op, loose, [], True, True)
+    # The top-level call always returns a Container because:
+    # - If path is empty, from_data returns Container
+    # - If path is non-empty, we wrap in Container
+    if isinstance(result, yang.gdata.Container):
+        return result
+    else:
+        raise ValueError("Internal error: expected Container at root level")
+
+
+def _from_json_path_recursive(s: yang.schema.DNodeInner, data: dict[str, ?value], path: list[str], op: str, loose: bool, current_path: list[str], top: bool, set_ns: bool) -> yang.gdata.Node:
+    if isinstance(s, yang.schema.DRoot) or isinstance(s, yang.schema.DContainer):
+        if len(path) == 0:
+            # Base case: no more path elements, process the data
+            if op == "merge":
+                json_data = JsonYangData(data)
+                # TODO: set_ns??
+                return _from_data(s, json_data, loose=loose, set_ns=set_ns)
+            elif op == "remove":
+                return yang.gdata.Absent()
+            raise ValueError(f"Invalid operation: {op}")
+        else:   # len(path) > 0
+            # More path to traverse - create a container with just the next child
+            unique_namer = yang.schema._UniqueNamer(s)
+            def uname(n):
+                return unique_namer.unique_name(n.name, n.prefix)
+
+            point = path[0]
+            rest_path = path[1:]
+
+            local_name, module = _parse_qualified_name(point)
+            child = s.get(local_name, module, allow_unqualified=False)
+
+            if isinstance(child, yang.schema.DNodeInner):
+                # Recursively process the child node
+                perhaps = True if (top or set_ns) and s.namespace != "" else False
+                cchild = _from_json_path_recursive(child, data, rest_path, op, loose, current_path + [point], False, s.namespace != child.namespace)
+                # Create a container with just this one child
+                return yang.gdata.Container({uname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
+
+            # Path tries to go through a leaf - this is an error
+            raise ValueError("Invalid JSON path to non-inner node")
+    elif isinstance(s, yang.schema.DList):
+        if len(path) == 1:
+            # Base case: keys are the last path element
+            point = path[0]
+            keys = point.split(",")
+            # Check that all keys are present in payload.
+            # If present, they must equal the keys in the path
+            # If not present, fill in from path
+            data_with_keys = dict(data.items())
+            for key in s.key:
+                if key not in data_with_keys:
+                    data_with_keys[key] = keys.pop(0)
+                else:
+                    if str(data_with_keys[key]) != keys.pop(0):
+                        raise ValueError("Key value mismatch between path and payload")
+            element_data = JsonYangData(data_with_keys)
+            element_gdata = _from_data(s, element_data, loose, set_ns=False)
+            elements = []
+            if op == "merge":
+                elements.append(element_gdata)
+            elif op == "remove":
+                elements.append(yang.gdata.Absent(element_gdata.key_children(s.key)))
+            else:
+                raise ValueError("Invalid operation: {op}")
+            perhaps = True if (top or set_ns) and s.namespace != "" else False
+            return yang.gdata.List(s.key, elements, _user_order(s.ordered_by), ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
+        elif len(path) > 1:
+            # The path crosses this list element and references another inner node
+            point = path[0]
+            rest_path = path[1:]
+
+            # First create this list with a single element with only key children.
+            # For nested lists, we always use "merge" for intermediate elements.
+            slist = _from_json_path_recursive(s, {}, [point], "merge", loose, current_path + [point], top, set_ns)
+
+            # The return type must be a List, we just requested it
+            if isinstance(slist, yang.gdata.List):
+                # Now process the rest of the path following the structural list keys
+                unique_namer = yang.schema._UniqueNamer(s)
+                def uname(n):
+                    return unique_namer.unique_name(n.name, n.prefix)
+
+                child_point = rest_path[0]
+                child_rest_path = rest_path[1:]
+
+                local_name, module = _parse_qualified_name(child_point)
+
+                lchild = s.get(local_name, module, allow_unqualified=False)
+                if isinstance(lchild, yang.schema.DNodeInner):
+                    # Now extract gdata for the rest of the path, from the child point
+                    inner_result = _from_json_path_recursive(lchild, data, child_rest_path, op, loose, current_path + [point, child_point], False, False)
+
+                    # Add it to the structural list element, next to the existing keys
+                    slist.elements[0].children[uname(lchild)] = inner_result
+                    return slist
+                else:
+                    raise ValueError("Node {child_point} is not inner")
+
+            raise ValueError("unreachable")
+        raise ValueError("Unable to resolve path, no keys provided")
+
+
+    raise ValueError("missing")
+
+
+
+def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
     """Generic function to convert data to gdata tree based on schema
 
     Args:
@@ -294,7 +434,9 @@ def _from_data(s: yang.schema.DNodeInner, data, loose: bool=False, set_ns: bool=
                 print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
                 wrapped_node = data.wrap(taken_nodes)
                 print("Child data wrapped, processing further", err=True)
-                yang.gdata.maybe_add(children, uname(child), lambda x: _from_data(child, x, loose, set_ns=s.namespace != child.namespace), wrapped_node)
+                maybe = _from_data(child, wrapped_node, loose, set_ns=s.namespace != child.namespace)
+                if maybe is not None:
+                    children[uname(child)] = maybe
             elif isinstance(child, yang.schema.DNodeLeaf):
                 # Process leaf nodes
                 print("Processing leaf node: {child.name} with taker {taker_name} {ns}", err=True)
@@ -305,12 +447,9 @@ def _from_data(s: yang.schema.DNodeInner, data, loose: bool=False, set_ns: bool=
             else:
                 raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
 
-    if s.gname == "Container":
-        if isinstance(s, yang.schema.DContainer):
-            return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
-        else:
-            return yang.gdata.Container(children, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns else None)
-    elif s.gname == "List" and isinstance(s, yang.schema.DList):
+    if isinstance(s, yang.schema.DContainer):
+        return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns and s.module != "" else None)
+    elif isinstance(s, yang.schema.DList) or isinstance(s, yang.schema.DRoot):
         # When processing a list element, return it as a Container
         # The List wrapper is created by the parent when processing all elements
         return yang.gdata.Container(children)
@@ -471,3 +610,343 @@ def _test_root_path():
     gd_nested = from_xml(s, xml.decode(xml_in), root_path=["y1:top", "nested"])
 
     return gd_nested.prsrc()
+
+
+def _test_json_path_basic():
+    """Test basic JSON path navigation"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    leaf l1 {
+      type string;
+    }
+    container c2 {
+      leaf l2 {
+        type string;
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test navigating to a leaf in a nested container
+    gd = from_json_path(s, {"l2": "test value"}, ["y1:c1", "c2"])
+    expected = yang.gdata.Container({
+        "c1": yang.gdata.Container({
+            "c2": yang.gdata.Container({
+                "l2": yang.gdata.Leaf("string", "test value")
+            })
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_json_path_qualified_names():
+    """Test JSON path with module-qualified names"""
+    mod1 = r"""module mod1 {
+  namespace "urn:example:mod1";
+  prefix m1;
+
+  container c1 {
+    leaf l1 {
+      type string;
+    }
+  }
+}"""
+
+    mod2 = r"""module mod2 {
+  namespace "urn:example:mod2";
+  prefix m2;
+  import mod1 { prefix m1; }
+
+  augment "/m1:c1" {
+    leaf l2 {
+      type string;
+    }
+  }
+}"""
+
+    s = yang.compile([mod1, mod2])
+
+    # Test navigating with qualified name
+    gd = from_json_path(s, {"mod2:l2": "augmented value"}, ["mod1:c1"])
+    expected = yang.gdata.Container({
+        "c1": yang.gdata.Container({
+            "l2": yang.gdata.Leaf("string", "augmented value", ns="urn:example:mod2", module="mod2")
+        }, ns="urn:example:mod1", module="mod1")
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_json_path_list():
+    """Test JSON path navigation to list elements"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l1 {
+      key name;
+      leaf name {
+        type string;
+      }
+      leaf value {
+        type string;
+      }
+      container inner {
+        leaf data {
+          type string;
+        }
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test navigating to a specific list element
+    gd = from_json_path(s, {"name": "test", "value": "data"}, ["y1:c1", "l1", "test"])
+    # Should create a list with single element
+    expected = yang.gdata.Container({
+      'c1': yang.gdata.Container({
+        'l1': yang.gdata.List(['name'], elements=[
+          yang.gdata.Container({
+            'name': yang.gdata.Leaf('string', 'test'),
+            'value': yang.gdata.Leaf('string', 'data')
+          })
+        ])
+      }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_json_path_remove():
+    """Test JSON path with remove operation"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l1 {
+      key name;
+      leaf name {
+        type string;
+      }
+      leaf value {
+        type string;
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test remove operation on a list element
+    gd = from_json_path(s, {}, ["y1:c1", "l1", "test"], "remove")
+    # Should contain an Absent node with the key
+    expected = yang.gdata.Container({
+      'c1': yang.gdata.Container({
+        'l1': yang.gdata.List(['name'], elements=[
+          yang.gdata.Absent({
+            'name': yang.gdata.Leaf('string', 'test')
+          })
+        ])
+      }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_json_path_errors():
+    """Test error handling in JSON path navigation"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    leaf l1 {
+      type string;
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test missing namespace qualification
+    try:
+        from_json_path(s, {}, ["y1:c1", "nonexistent"])
+        testing.error("Should have raised ValueError for missing namespace qualification")
+    except ValueError as e:
+        testing.assertIn("Child 'nonexistent' not found", e.error_message)
+
+    # Test navigating beyond leaf
+    try:
+        from_json_path(s, {}, ["y1:c1", "l1", "beyond"])
+        testing.error("Should have raised ValueError for navigating beyond leaf")
+    except ValueError as e:
+        testing.assertIn("Invalid JSON path to non-inner node", e.error_message)
+
+    # Test invalid operation
+    try:
+        from_json_path(s, {}, ["y1:c1"], "invalid")
+        testing.error("Should have raised ValueError for invalid operation")
+    except ValueError as e:
+        testing.assertIn("Invalid operation", e.error_message)
+
+
+def _test_json_path_nested_lists():
+    """Test JSON path navigation through nested lists"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list outer {
+      key "outer-key";
+      leaf outer-key {
+        type string;
+      }
+      list inner {
+        key "inner-key";
+        leaf inner-key {
+          type string;
+        }
+        leaf value {
+          type string;
+        }
+        list deep {
+          key "deep-key";
+          leaf deep-key {
+            type string;
+          }
+          leaf data {
+            type int32;
+          }
+        }
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test navigating to a nested list element
+    gd = from_json_path(s, {"value": "test-value"}, ["y1:c1", "outer", "key1", "inner", "key2"])
+    expected = yang.gdata.Container({
+        'c1': yang.gdata.Container({
+            'outer': yang.gdata.List(['outer-key'], elements=[
+                yang.gdata.Container({
+                    'outer-key': yang.gdata.Leaf('string', 'key1'),
+                    'inner': yang.gdata.List(['inner-key'], elements=[
+                        yang.gdata.Container({
+                            'inner-key': yang.gdata.Leaf('string', 'key2'),
+                            'value': yang.gdata.Leaf('string', 'test-value')
+                        })
+                    ])
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+    # Test navigating to a deeply nested list element (3 levels)
+    gd2 = from_json_path(s, {"data": 42}, ["y1:c1", "outer", "key1", "inner", "key2", "deep", "key3"])
+    expected2 = yang.gdata.Container({
+        'c1': yang.gdata.Container({
+            'outer': yang.gdata.List(['outer-key'], elements=[
+                yang.gdata.Container({
+                    'outer-key': yang.gdata.Leaf('string', 'key1'),
+                    'inner': yang.gdata.List(['inner-key'], elements=[
+                        yang.gdata.Container({
+                            'inner-key': yang.gdata.Leaf('string', 'key2'),
+                            'deep': yang.gdata.List(['deep-key'], elements=[
+                                yang.gdata.Container({
+                                    'deep-key': yang.gdata.Leaf('string', 'key3'),
+                                    'data': yang.gdata.Leaf('int32', 42)
+                                })
+                            ])
+                        })
+                    ])
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd2.prsrc(), expected2.prsrc())
+
+    # Test remove operation on nested list element
+    gd3 = from_json_path(s, {}, ["y1:c1", "outer", "key1", "inner", "key2"], "remove")
+    expected3 = yang.gdata.Container({
+        'c1': yang.gdata.Container({
+            'outer': yang.gdata.List(['outer-key'], elements=[
+                yang.gdata.Container({
+                    'outer-key': yang.gdata.Leaf('string', 'key1'),
+                    'inner': yang.gdata.List(['inner-key'], elements=[
+                        yang.gdata.Absent({
+                            'inner-key': yang.gdata.Leaf('string', 'key2')
+                        })
+                    ])
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd3.prsrc(), expected3.prsrc())
+
+
+def _test_json_path_container_list_container():
+    """Test JSON path navigation through container -> list -> container pattern"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container top {
+    list middle {
+      key "name";
+      leaf name {
+        type string;
+      }
+      container bottom {
+        leaf data {
+          type string;
+        }
+        leaf value {
+          type int32;
+        }
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test navigating through container -> list -> container and setting data
+    gd = from_json_path(s, {"data": "test", "value": 42}, ["y1:top", "middle", "item1", "bottom"])
+    expected = yang.gdata.Container({
+        'top': yang.gdata.Container({
+            'middle': yang.gdata.List(['name'], elements=[
+                yang.gdata.Container({
+                    'name': yang.gdata.Leaf('string', 'item1'),
+                    'bottom': yang.gdata.Container({
+                        'data': yang.gdata.Leaf('string', 'test'),
+                        'value': yang.gdata.Leaf('int32', 42)
+                    })
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+    # Test remove operation on the inner container
+    gd2 = from_json_path(s, {}, ["y1:top", "middle", "item1", "bottom"], "remove")
+    expected2 = yang.gdata.Container({
+        'top': yang.gdata.Container({
+            'middle': yang.gdata.List(['name'], elements=[
+                yang.gdata.Container({
+                    'name': yang.gdata.Leaf('string', 'item1'),
+                    'bottom': yang.gdata.Absent()
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd2.prsrc(), expected2.prsrc())
