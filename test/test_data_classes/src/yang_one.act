@@ -4,8 +4,14 @@ import json
 import xml
 import yang.adata
 import yang.gdata
+from yang.common import Identityref
 
 # == This file is generated ==
+
+
+mod_to_ns = {'foo':'http://example.com/foo'}
+ns_to_mod = {'http://example.com/foo':'foo'}
+prefix_to_mod = {'f':'foo'}
 
 
 mut def from_json_foo__tc1__l1(val: value) -> yang.gdata.Leaf:
@@ -432,6 +438,10 @@ def src_yang():
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "f";
+    identity basey;
+    identity fooy {
+        base basey;
+    }
     container tc1 {
         leaf l1 {
             type string;
@@ -463,6 +473,8 @@ def src_yang():
 def src_schema():
     res = {}
     res["foo"] = Module('foo', yang_version=1.1, namespace='http://example.com/foo', prefix='f', children=[
+    Identity('basey'),
+    Identity('fooy', base=['basey']),
     Container('tc1', children=[
         Leaf('l1', type_=Type('string'), mandatory=True),
         Leaf('l2', type_=Type('string'))
@@ -480,6 +492,8 @@ def src_schema():
 def src_schema_compiled():
     res = {}
     res["foo"] = Module('foo', yang_version=1.1, namespace='http://example.com/foo', prefix='f', children=[
+    Identity('basey'),
+    Identity('fooy', base=['basey']),
     Container('tc1', children=[
         Leaf('l1', type_=Type('string'), mandatory=True),
         Leaf('l2', type_=Type('string'))

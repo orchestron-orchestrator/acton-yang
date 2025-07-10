@@ -1385,6 +1385,39 @@ type string;
     root = yang.compile([ys])
     return root.prdaclass()
 
+def _test_prdaclass_identityref_list_key():
+    ys = r"""module foo {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+
+  identity id1 {
+    description "Identity 1";
+  }
+
+  identity id2 {
+    description "Identity 2";
+    base id1;
+  }
+
+  container c1 {
+    list l1 {
+      key "k1 k2";
+      leaf k1 {
+        type string;
+      }
+      leaf k2 {
+        type identityref {
+          base id1;
+        }
+      }
+    }
+  }
+}
+"""
+    root = yang.compile([ys])
+    return root.prdaclass()
+
 def _test_compile_bundle1():
     ys_foo = r"""module foo {
     yang-version "1.1";
@@ -2078,6 +2111,7 @@ def _test_leaf_defaults():
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "foo";
+    identity id1;
     container c {
         leaf l_str_def {
             type string;
@@ -2086,6 +2120,12 @@ def _test_leaf_defaults():
         leaf l_boolean_def {
             type boolean;
             default "true";
+        }
+        leaf l_identityref_def {
+            type identityref {
+                base id1;
+            }
+            default id1;
         }
     }
 }"""
@@ -2102,6 +2142,12 @@ def _test_leaf_defaults():
         testing.assertEqual(l_boolean_def.default, "true")
     else:
         testing.error("Expected Leaf instance for l_boolean_def")
+
+    l_identityref_def = root.get("c").get("l_identityref_def")
+    if isinstance(l_identityref_def, yang.schema.DLeaf):
+        testing.assertEqual(l_identityref_def.default, "id1")
+    else:
+        testing.error("Expected Leaf instance for l_identityref_def")
 
 def _test_prdaclass_max_elements_unbounded():
     ys_base = r"""module foo {
@@ -2190,5 +2236,86 @@ def _test_prdaclass_dot():
     }
 }"""
     root = yang.compile([ys_base])
+    src = root.prdaclass()
+    return src
+
+def _test_identityref():
+    # Base module with base identity and a leaf that references it
+    ys_base = r"""module base {
+    yang-version "1.1";
+    namespace "http://example.com/base";
+    prefix "base";
+
+    identity protocol-type {
+        description "Base identity for protocol types";
+    }
+
+    container config {
+        leaf active-protocol {
+            type identityref {
+                base protocol-type;
+            }
+            description "Currently active protocol";
+        }
+    }
+}"""
+
+    # First module extending the base identity
+    ys_foo = r"""module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+    import base {
+        prefix "base";
+    }
+
+    identity tcp {
+        base base:protocol-type;
+        description "TCP protocol";
+    }
+
+    identity udp {
+        base base:protocol-type;
+        description "UDP protocol";
+    }
+}"""
+
+    # Second module extending the base identity
+    ys_bar = r"""module bar {
+    yang-version "1.1";
+    namespace "http://example.com/bar";
+    prefix "bar";
+    import base {
+        prefix "base";
+    }
+
+    identity sctp {
+        base base:protocol-type;
+        description "SCTP protocol";
+    }
+
+    identity dccp {
+        base base:protocol-type;
+        description "DCCP protocol";
+    }
+}"""
+
+    # Compile all modules together
+    root = yang.compile([ys_base, ys_foo, ys_bar])
+
+    # Get the leaf with identityref type
+    config = root.get("config")
+    active_protocol = config.get("active-protocol")
+
+    # Verify the leaf has the correct type
+    if isinstance(active_protocol, yang.schema.DLeaf):
+        leaf_type = active_protocol.type_
+        if isinstance(leaf_type, yang.schema.Type):
+            testing.assertEqual(leaf_type.name, "identityref")
+        else:
+            testing.error("Expected Type instance")
+    else:
+        testing.error("Expected DLeaf instance")
+
     src = root.prdaclass()
     return src

@@ -44,6 +44,10 @@ ys_one = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
     prefix "f";
+    identity basey;
+    identity fooy {
+        base basey;
+    }
     container tc1 {
         leaf l1 {
             type string;
@@ -109,6 +113,18 @@ ys_foo = r"""module foo {
         }
         leaf-list ll_str {
             type string;
+        }
+        leaf l_identityref {
+            type identityref {
+                base basey;
+
+            }
+        }
+        leaf-list ll_identityref {
+            type identityref {
+                base basey;
+
+            }
         }
     }
     container pc1 {
@@ -260,6 +276,9 @@ ys_bar = r"""module bar {
     import foo {
         prefix "f";
     }
+    identity bary {
+        base f:basey;
+    }
     augment /f:c1 {
         // create a conflict with /f:c1/l1
         uses f:g1;
@@ -319,6 +338,7 @@ ys_basics = r"""module basics {
     yang-version "1.1";
     namespace "http://example.com/basics";
     prefix "b";
+    identity id1;
     container c {
         leaf l_str_def {
             type string;
@@ -372,6 +392,12 @@ ys_basics = r"""module basics {
         leaf l_binary_def {
             type binary;
             default "SGVsbG8gQWN0b24g8J+roQ==";
+        }
+        leaf l_identityref_def {
+            type identityref {
+                base id1;
+            }
+            default id1;
         }
     }
 }"""

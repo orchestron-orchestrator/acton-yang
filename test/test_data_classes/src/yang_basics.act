@@ -4,8 +4,14 @@ import json
 import xml
 import yang.adata
 import yang.gdata
+from yang.common import Identityref
 
 # == This file is generated ==
+
+
+mod_to_ns = {'basics':'http://example.com/basics'}
+ns_to_mod = {'http://example.com/basics':'basics'}
+prefix_to_mod = {'b':'basics'}
 
 
 mut def from_json_basics__c__l_str_def(val: value) -> yang.gdata.Leaf:
@@ -62,6 +68,14 @@ mut def from_json_basics__c__l_binary_def(val: value) -> yang.gdata.Leaf:
 mut def from_xml_basics__c__l_binary_def(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('binary', val)
 
+mut def from_json_basics__c__l_identityref_def(val: Identityref) -> yang.gdata.Leaf:
+    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
+    return yang.gdata.Leaf('identityref', new_val)
+
+mut def from_xml_basics__c__l_identityref_def(val: Identityref) -> yang.gdata.Leaf:
+    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
+    return yang.gdata.Leaf('identityref', new_val)
+
 class basics__c(yang.adata.MNode):
     l_str_def: str
     l_str_def_quoted: str
@@ -72,8 +86,9 @@ class basics__c(yang.adata.MNode):
     l_union_def_bool: value
     l_union_def_enumeration: value
     l_binary_def: bytes
+    l_identityref_def: Identityref
 
-    mut def __init__(self, l_str_def: ?str=None, l_str_def_quoted: ?str=None, l_uint64_def: ?int=None, l_union_def_str: ?value=None, l_union_def_int: ?value=None, l_union_def_float: ?value=None, l_union_def_bool: ?value=None, l_union_def_enumeration: ?value=None, l_binary_def: ?bytes=None):
+    mut def __init__(self, l_str_def: ?str=None, l_str_def_quoted: ?str=None, l_uint64_def: ?int=None, l_union_def_str: ?value=None, l_union_def_int: ?value=None, l_union_def_float: ?value=None, l_union_def_bool: ?value=None, l_union_def_enumeration: ?value=None, l_binary_def: ?bytes=None, l_identityref_def: ?Identityref=None):
         self._ns = 'http://example.com/basics'
         self.l_str_def = l_str_def if l_str_def is not None else "foo"
         self.l_str_def_quoted = l_str_def_quoted if l_str_def_quoted is not None else "\"foo\""
@@ -84,6 +99,7 @@ class basics__c(yang.adata.MNode):
         self.l_union_def_bool = l_union_def_bool if l_union_def_bool is not None else False
         self.l_union_def_enumeration = l_union_def_enumeration if l_union_def_enumeration is not None else "unlimited"
         self.l_binary_def = l_binary_def if l_binary_def is not None else base64.decode('SGVsbG8gQWN0b24g8J+roQ=='.encode())
+        self.l_identityref_def = l_identityref_def if l_identityref_def is not None else Identityref('id1', mod_to_ns[prefix_to_mod["b"]], prefix_to_mod["b"])
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
@@ -114,12 +130,15 @@ class basics__c(yang.adata.MNode):
         _l_binary_def = self.l_binary_def
         if _l_binary_def is not None:
             children['l_binary_def'] = yang.gdata.Leaf('binary', _l_binary_def)
+        _l_identityref_def = self.l_identityref_def
+        if _l_identityref_def is not None:
+            children['l_identityref_def'] = yang.gdata.Leaf('identityref', _l_identityref_def)
         return yang.gdata.Container(children, ns='http://example.com/basics', module='basics')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> basics__c:
         if n != None:
-            return basics__c(l_str_def=n.get_opt_str('l_str_def'), l_str_def_quoted=n.get_opt_str('l_str_def_quoted'), l_uint64_def=n.get_opt_int('l_uint64_def'), l_union_def_str=n.get_opt_value('l_union_def_str'), l_union_def_int=n.get_opt_value('l_union_def_int'), l_union_def_float=n.get_opt_value('l_union_def_float'), l_union_def_bool=n.get_opt_value('l_union_def_bool'), l_union_def_enumeration=n.get_opt_value('l_union_def_enumeration'), l_binary_def=n.get_opt_bytes('l_binary_def'))
+            return basics__c(l_str_def=n.get_opt_str('l_str_def'), l_str_def_quoted=n.get_opt_str('l_str_def_quoted'), l_uint64_def=n.get_opt_int('l_uint64_def'), l_union_def_str=n.get_opt_value('l_union_def_str'), l_union_def_int=n.get_opt_value('l_union_def_int'), l_union_def_float=n.get_opt_value('l_union_def_float'), l_union_def_bool=n.get_opt_value('l_union_def_bool'), l_union_def_enumeration=n.get_opt_value('l_union_def_enumeration'), l_binary_def=n.get_opt_bytes('l_binary_def'), l_identityref_def=n.get_opt_Identityref('l_identityref_def'))
         return basics__c()
 
     def prsrc(self, self_name='ad', top=True, list_element=False):
@@ -155,6 +174,9 @@ class basics__c(yang.adata.MNode):
         _l_binary_def = self.l_binary_def
         if _l_binary_def is not None:
             leaves.append('{self_name}.l_binary_def = {repr(_l_binary_def)}')
+        _l_identityref_def = self.l_identityref_def
+        if _l_identityref_def is not None:
+            leaves.append('{self_name}.l_identityref_def = {repr(_l_identityref_def)}')
         if leaves:
             if not list_element:
                res = ['', '# Container: /c'] + leaves + res
@@ -183,6 +205,8 @@ mut def from_xml_basics__c(node: xml.Node) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'l_union_def_enumeration', from_xml_basics__c__l_union_def_enumeration, child_l_union_def_enumeration)
     child_l_binary_def = yang.gdata.from_xml_opt_bytes(node, 'l_binary_def')
     yang.gdata.maybe_add(children, 'l_binary_def', from_xml_basics__c__l_binary_def, child_l_binary_def)
+    child_l_identityref_def = yang.gdata.from_xml_opt_Identityref(node, 'l_identityref_def')
+    yang.gdata.maybe_add(children, 'l_identityref_def', from_xml_basics__c__l_identityref_def, child_l_identityref_def)
     return yang.gdata.Container(children, ns='http://example.com/basics', module='basics')
 
 mut def from_json_path_basics__c(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
@@ -207,6 +231,8 @@ mut def from_json_path_basics__c(jd: value, path: list[str]=[], op: ?str='merge'
         if point == 'l_union_def_enumeration':
             raise ValueError("Invalid json path to non-inner node")
         if point == 'l_binary_def':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'l_identityref_def':
             raise ValueError("Invalid json path to non-inner node")
         raise ValueError("Invalid path")
     elif len(path) == 0:
@@ -237,6 +263,8 @@ mut def from_json_basics__c(jd: dict[str, ?value]) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'l_union_def_enumeration', from_json_basics__c__l_union_def_enumeration, child_l_union_def_enumeration)
     child_l_binary_def = yang.gdata.take_json_opt_bytes(jd, 'l_binary_def')
     yang.gdata.maybe_add(children, 'l_binary_def', from_json_basics__c__l_binary_def, child_l_binary_def)
+    child_l_identityref_def = yang.gdata.take_json_opt_Identityref(jd, 'l_identityref_def')
+    yang.gdata.maybe_add(children, 'l_identityref_def', from_json_basics__c__l_identityref_def, child_l_identityref_def)
     return yang.gdata.Container(children, ns='http://example.com/basics', module='basics')
 
 class root(yang.adata.MNode):
@@ -314,6 +342,7 @@ def src_yang():
     yang-version "1.1";
     namespace "http://example.com/basics";
     prefix "b";
+    identity id1;
     container c {
         leaf l_str_def {
             type string;
@@ -368,6 +397,12 @@ def src_yang():
             type binary;
             default "SGVsbG8gQWN0b24g8J+roQ==";
         }
+        leaf l_identityref_def {
+            type identityref {
+                base id1;
+            }
+            default id1;
+        }
     }
 }""")
     return res
@@ -375,6 +410,7 @@ def src_yang():
 def src_schema():
     res = {}
     res["basics"] = Module('basics', yang_version=1.1, namespace='http://example.com/basics', prefix='b', children=[
+    Identity('id1'),
     Container('c', children=[
         Leaf('l_str_def', type_=Type('string'), default='foo'),
         Leaf('l_str_def_quoted', type_=Type('string'), default='"foo"'),
@@ -401,7 +437,8 @@ def src_schema():
             ]),
         Type('uint16')
     ]), default='unlimited'),
-        Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ==')
+        Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ=='),
+        Leaf('l_identityref_def', type_=Type('identityref', base=['id1']), default='id1')
     ])
 ])
     return res
@@ -409,6 +446,7 @@ def src_schema():
 def src_schema_compiled():
     res = {}
     res["basics"] = Module('basics', yang_version=1.1, namespace='http://example.com/basics', prefix='b', children=[
+    Identity('id1'),
     Container('c', children=[
         Leaf('l_str_def', type_=Type('string'), default='foo'),
         Leaf('l_str_def_quoted', type_=Type('string'), default='"foo"'),
@@ -435,7 +473,8 @@ def src_schema_compiled():
             ]),
         Type('uint16')
     ]), default='unlimited'),
-        Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ==')
+        Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ=='),
+        Leaf('l_identityref_def', type_=Type('identityref', base=['id1']), default='id1')
     ])
 ])
     return res

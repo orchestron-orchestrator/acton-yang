@@ -93,6 +93,7 @@
 # and then running .to_dnode().
 
 import re
+from yang.common import Identityref
 
 RECURSION_LIMIT = 512
 
@@ -307,10 +308,17 @@ class DNodeInner(DNode):
             res.append("import xml")
             res.append("import yang.adata")
             res.append("import yang.gdata")
+            res.append("from yang.common import Identityref")
             res.append("")
             res.append("# == This file is generated ==")
             res.append("")
             res.append("")
+            if isinstance(self, DRoot):
+                res.append("mod_to_ns = {repr(self.mod_to_ns)}")
+                res.append("ns_to_mod = {repr(self.ns_to_mod)}")
+                res.append("prefix_to_mod = {repr(self.prefix_to_mod)}")
+                res.append("")
+                res.append("")
 
         # Reorder children so that positional arguments, like list keys, come first
         new_children = []
@@ -429,6 +437,15 @@ class DNodeInner(DNode):
             elif isinstance(child, DLeaf):
                 child_default = child.default
                 if not loose and child_default is not None:
+                    if child.type_.name == "identityref":
+                        parts = child_default.split(":")
+                        if len(parts) == 1:
+                            prefix = child.prefix
+                            name = parts[0]
+                        else:
+                            prefix = parts[0]
+                            name = parts[1]
+                        child_default = """Identityref('{name}', mod_to_ns[prefix_to_mod["{prefix}"]], prefix_to_mod["{prefix}"])"""
                     res.append("        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {prsrc_literal(child.type_.name, child_default)}")
                 else:
                     res.append("        self.{usname(child)} = {usname(child)}")
@@ -855,7 +872,11 @@ class DNodeInner(DNode):
                 for child in self.children:
                     try:
                         idx = self.key.index(child.name)
-                        res += ["        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
+                        if isinstance(child, DLeaf) and child.type_.name == "identityref":
+                            # Key child is of course always DLeaf, but the compiler doesn't know that ...
+                            res += ["        children['{uname(child)}'] = from_json_{pname(child)}(Identityref.from_json(keys[{idx}]))"]
+                        else:
+                            res += ["        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
                     except KeyError:
                         if child.namespace != self.namespace:
                             res += ["        if point == '{child.module}:{child.name}':"]
@@ -1192,12 +1213,22 @@ class DLeaf(DNodeLeaf):
         gdata_nsq = ", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
         if gen_json:
-            res.append("mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
-            res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
+            if self.type_.name == "identityref":
+                res.append("mut def from_json_{pname(self)}(val: Identityref) -> yang.gdata.Leaf:")
+                res.append("    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)")
+                res.append("    return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
+            else:
+                res.append("mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
+                res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
         if gen_xml:
-            res.append("mut def from_xml_{pname(self)}(val: value) -> yang.gdata.Leaf:")
-            res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
+            if self.type_.name == "identityref":
+                res.append("mut def from_xml_{pname(self)}(val: Identityref) -> yang.gdata.Leaf:")
+                res.append("    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)")
+                res.append("    return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
+            else:
+                res.append("mut def from_xml_{pname(self)}(val: value) -> yang.gdata.Leaf:")
+                res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
         return "\n".join(res)
 
@@ -1243,12 +1274,22 @@ class DLeafList(DNodeLeaf):
         gdata_nsq = ", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
         if gen_json:
-            res.append("mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
+            if self.type_.name == "identityref":
+                res.append("mut def from_json_{pname(self)}(val: list[Identityref]) -> yang.gdata.LeafList:")
+                res.append("    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]")
+                res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
+            else:
+                res.append("mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
+                res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
         if gen_xml:
-            res.append("mut def from_xml_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
+            if self.type_.name == "identityref":
+                res.append("mut def from_xml_{pname(self)}(val: list[Identityref]) -> yang.gdata.LeafList:")
+                res.append("    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]")
+                res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
+            else:
+                res.append("mut def from_xml_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
+                res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
         return "\n".join(res)
 
@@ -1290,10 +1331,16 @@ class DRoot(DNodeInner):
         self.gname = "Container"
         self.config = True
         self.children=[]
+        self.mod_to_ns = {}
+        self.ns_to_mod = {}
+        self.prefix_to_mod = {}
         for module in modules:
             if isinstance(module, DModule):
                 for child in module.children:
                     self.children.append(child)
+                self.mod_to_ns[module.name] = module.namespace
+                self.ns_to_mod[module.namespace] = module.name
+                self.prefix_to_mod[module.prefix] = module.name
             else:
                 raise ValueError("DRoot can only contain DModule")
 
@@ -2232,7 +2279,7 @@ def yang_typename_to_acton_type(type_name: str) -> str:
         # TODO: use acton unions of fixed strings!?
         return "str"
     elif type_name == "identityref":
-        return "str"
+        return "Identityref"
     elif type_name == "instance-identifier":
         return "str"
     elif type_name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
@@ -2334,7 +2381,7 @@ def prsrc_literal(ytype: str, value: str) -> str:
     elif ytype == "enumeration":
         return '"' + value + '"'
     elif ytype == "identityref":
-        return '"' + value + '"'
+        return value
     elif ytype in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
         return value
     elif ytype == "binary":

@@ -4,8 +4,14 @@ import json
 import xml
 import yang.adata
 import yang.gdata
+from yang.common import Identityref
 
 # == This file is generated ==
+
+
+mod_to_ns = {'foo':'http://example.com/foo', 'bar':'http://example.com/bar'}
+ns_to_mod = {'http://example.com/foo':'foo', 'http://example.com/bar':'bar'}
+prefix_to_mod = {'f':'foo', 'bar':'bar'}
 
 
 mut def from_json_foo__c1__f_l1(val: value) -> yang.gdata.Leaf:
@@ -195,6 +201,22 @@ mut def from_json_foo__c1__ll_str(val: list[value]) -> yang.gdata.LeafList:
 mut def from_xml_foo__c1__ll_str(val: list[value]) -> yang.gdata.LeafList:
     return yang.gdata.LeafList('string', val)
 
+mut def from_json_foo__c1__l_identityref(val: Identityref) -> yang.gdata.Leaf:
+    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
+    return yang.gdata.Leaf('identityref', new_val)
+
+mut def from_xml_foo__c1__l_identityref(val: Identityref) -> yang.gdata.Leaf:
+    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
+    return yang.gdata.Leaf('identityref', new_val)
+
+mut def from_json_foo__c1__ll_identityref(val: list[Identityref]) -> yang.gdata.LeafList:
+    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]
+    return yang.gdata.LeafList('identityref', new_val)
+
+mut def from_xml_foo__c1__ll_identityref(val: list[Identityref]) -> yang.gdata.LeafList:
+    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]
+    return yang.gdata.LeafList('identityref', new_val)
+
 mut def from_json_foo__c1__l4(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
@@ -220,11 +242,13 @@ class foo__c1(yang.adata.MNode):
     li: foo__c1__li
     ll_uint64: list[int]
     ll_str: list[str]
+    l_identityref: ?Identityref
+    ll_identityref: list[Identityref]
     l4: ?str
     bar_l1: ?str
     l2: ?str
 
-    mut def __init__(self, f_l1: ?str, l3: ?int, l_empty: ?bool, li: list[foo__c1__li_entry]=[], ll_uint64: ?list[int]=None, ll_str: ?list[str]=None, l4: ?str, bar_l1: ?str, l2: ?str):
+    mut def __init__(self, f_l1: ?str, l3: ?int, l_empty: ?bool, li: list[foo__c1__li_entry]=[], ll_uint64: ?list[int]=None, ll_str: ?list[str]=None, l_identityref: ?Identityref, ll_identityref: ?list[Identityref]=None, l4: ?str, bar_l1: ?str, l2: ?str):
         self._ns = 'http://example.com/foo'
         self.f_l1 = f_l1
         self.l3 = l3
@@ -232,6 +256,8 @@ class foo__c1(yang.adata.MNode):
         self.li = foo__c1__li(elements=li)
         self.ll_uint64 = ll_uint64 if ll_uint64 is not None else []
         self.ll_str = ll_str if ll_str is not None else []
+        self.l_identityref = l_identityref
+        self.ll_identityref = ll_identityref if ll_identityref is not None else []
         self.l4 = l4
         self.bar_l1 = bar_l1
         self.l2 = l2
@@ -252,6 +278,10 @@ class foo__c1(yang.adata.MNode):
             children['li'] = _li.to_gdata()
         children['ll_uint64'] = yang.gdata.LeafList('uint64', self.ll_uint64)
         children['ll_str'] = yang.gdata.LeafList('string', self.ll_str)
+        _l_identityref = self.l_identityref
+        if _l_identityref is not None:
+            children['l_identityref'] = yang.gdata.Leaf('identityref', _l_identityref)
+        children['ll_identityref'] = yang.gdata.LeafList('identityref', self.ll_identityref)
         _l4 = self.l4
         if _l4 is not None:
             children['l4'] = yang.gdata.Leaf('string', _l4)
@@ -266,7 +296,7 @@ class foo__c1(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
         if n != None:
-            return foo__c1(f_l1=n.get_opt_str('f:l1'), l3=n.get_opt_int('l3'), l_empty=n.get_opt_empty('l_empty'), li=foo__c1__li.from_gdata(n.get_opt_list('li')), ll_uint64=n.get_opt_ints('ll_uint64'), ll_str=n.get_opt_strs('ll_str'), l4=n.get_opt_str('l4'), bar_l1=n.get_opt_str('bar:l1'), l2=n.get_opt_str('l2'))
+            return foo__c1(f_l1=n.get_opt_str('f:l1'), l3=n.get_opt_int('l3'), l_empty=n.get_opt_empty('l_empty'), li=foo__c1__li.from_gdata(n.get_opt_list('li')), ll_uint64=n.get_opt_ints('ll_uint64'), ll_str=n.get_opt_strs('ll_str'), l_identityref=n.get_opt_Identityref('l_identityref'), ll_identityref=n.get_opt_Identityrefs('ll_identityref'), l4=n.get_opt_str('l4'), bar_l1=n.get_opt_str('bar:l1'), l2=n.get_opt_str('l2'))
         return foo__c1()
 
     def prsrc(self, self_name='ad', top=True, list_element=False):
@@ -297,6 +327,12 @@ class foo__c1(yang.adata.MNode):
         _ll_str = self.ll_str
         if _ll_str is not None:
             leaves.append('{self_name}.ll_str = {repr(_ll_str)}')
+        _l_identityref = self.l_identityref
+        if _l_identityref is not None:
+            leaves.append('{self_name}.l_identityref = {repr(_l_identityref)}')
+        _ll_identityref = self.ll_identityref
+        if _ll_identityref is not None:
+            leaves.append('{self_name}.ll_identityref = {repr(_ll_identityref)}')
         _l4 = self.l4
         if _l4 is not None:
             leaves.append('{self_name}.l4 = {repr(_l4)}')
@@ -328,6 +364,10 @@ mut def from_xml_foo__c1(node: xml.Node) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'll_uint64', from_xml_foo__c1__ll_uint64, child_ll_uint64)
     child_ll_str = yang.gdata.from_xml_opt_strs(node, 'll_str')
     yang.gdata.maybe_add(children, 'll_str', from_xml_foo__c1__ll_str, child_ll_str)
+    child_l_identityref = yang.gdata.from_xml_opt_Identityref(node, 'l_identityref')
+    yang.gdata.maybe_add(children, 'l_identityref', from_xml_foo__c1__l_identityref, child_l_identityref)
+    child_ll_identityref = yang.gdata.from_xml_opt_Identityrefs(node, 'll_identityref')
+    yang.gdata.maybe_add(children, 'll_identityref', from_xml_foo__c1__ll_identityref, child_ll_identityref)
     child_l4 = yang.gdata.from_xml_opt_str(node, 'l4')
     yang.gdata.maybe_add(children, 'l4', from_xml_foo__c1__l4, child_l4)
     child_bar_l1 = yang.gdata.from_xml_opt_str(node, 'l1', 'http://example.com/bar')
@@ -353,6 +393,10 @@ mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') 
         if point == 'll_uint64':
             raise ValueError("Invalid json path to non-inner node")
         if point == 'll_str':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'l_identityref':
+            raise ValueError("Invalid json path to non-inner node")
+        if point == 'll_identityref':
             raise ValueError("Invalid json path to non-inner node")
         if point == 'l4':
             raise ValueError("Invalid json path to non-inner node")
@@ -383,6 +427,10 @@ mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'll_uint64', from_json_foo__c1__ll_uint64, child_ll_uint64)
     child_ll_str = yang.gdata.take_json_opt_strs(jd, 'll_str')
     yang.gdata.maybe_add(children, 'll_str', from_json_foo__c1__ll_str, child_ll_str)
+    child_l_identityref = yang.gdata.take_json_opt_Identityref(jd, 'l_identityref')
+    yang.gdata.maybe_add(children, 'l_identityref', from_json_foo__c1__l_identityref, child_l_identityref)
+    child_ll_identityref = yang.gdata.take_json_opt_Identityrefs(jd, 'll_identityref')
+    yang.gdata.maybe_add(children, 'll_identityref', from_json_foo__c1__ll_identityref, child_ll_identityref)
     child_l4 = yang.gdata.take_json_opt_str(jd, 'l4')
     yang.gdata.maybe_add(children, 'l4', from_json_foo__c1__l4, child_l4)
     child_bar_l1 = yang.gdata.take_json_opt_str(jd, 'l1', 'bar')
@@ -3225,6 +3273,18 @@ def src_yang():
         leaf-list ll_str {
             type string;
         }
+        leaf l_identityref {
+            type identityref {
+                base basey;
+
+            }
+        }
+        leaf-list ll_identityref {
+            type identityref {
+                base basey;
+
+            }
+        }
     }
     container pc1 {
         presence "p";
@@ -3391,6 +3451,9 @@ def src_yang():
     import foo {
         prefix "f";
     }
+    identity bary {
+        base f:basey;
+    }
     augment /f:c1 {
         // create a conflict with /f:c1/l1
         uses f:g1;
@@ -3447,7 +3510,9 @@ def src_schema():
             Leaf('val', type_=Type('string'))
         ]),
         LeafList('ll_uint64', type_=Type('uint64')),
-        LeafList('ll_str', type_=Type('string'))
+        LeafList('ll_str', type_=Type('string')),
+        Leaf('l_identityref', type_=Type('identityref', base=['basey'])),
+        LeafList('ll_identityref', type_=Type('identityref', base=['basey']))
     ]),
     Container('pc1', presence='p', children=[
         Container('foo', children=[
@@ -3558,6 +3623,7 @@ def src_schema():
             Leaf('bar', type_=Type('string'))
         ])
     ], children=[
+    Identity('bary', base=['f:basey']),
     Container('conflict', children=[
         Leaf('foo', type_=Type('string'))
     ])
@@ -3585,6 +3651,8 @@ def src_schema_compiled():
         ]),
         LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
+        Leaf('l_identityref', type_=Type('identityref', base=['basey'])),
+        LeafList('ll_identityref', type_=Type('identityref', base=['basey'])),
         Leaf('l4', type_=Type('string')),
         Leaf('l1', type_=Type('string')),
         Leaf('l2', type_=Type('string'))
@@ -3700,6 +3768,7 @@ def src_schema_compiled():
             Leaf('bar', type_=Type('string'))
         ])
     ], children=[
+    Identity('bary', base=['f:basey']),
     Container('conflict', children=[
         Leaf('foo', type_=Type('string'))
     ])

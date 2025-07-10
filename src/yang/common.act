@@ -1,0 +1,138 @@
+
+def maybe_str(s):
+    if s is not None:
+        return "'{s}'"
+    else:
+        return "None"
+
+class Identityref:
+    val: value
+    ns: ?str
+    mod: ?str
+
+    def __init__(self, val, ns, mod):
+        self.val = val
+        self.ns = ns
+        self.mod = mod
+
+    def __str__(self):
+        return "Identityref('{self.val}', {maybe_str(self.ns)}, {maybe_str(self.mod)})"
+
+    def __repr__(self):
+        return str(self)
+
+    @staticmethod
+    def complete(partial: Identityref, ns_to_mod, mod_to_ns):
+        print(partial, ns_to_mod, mod_to_ns, err=True)
+        partial_ns = partial.ns
+        partial_mod = partial.mod
+        if partial_ns is not None and partial_mod is None:
+            return Identityref(partial.val, partial_ns, ns_to_mod[partial_ns])
+        elif partial_ns is None and partial_mod is not None:
+            return Identityref(partial.val, mod_to_ns[partial_mod], partial_mod)
+        else:
+            return partial
+
+    @staticmethod
+    def from_json(val):
+        """Create Identityref from JSON-encoded value
+        """
+        parts = val.split(":")
+        if len(parts) == 1:
+            return Identityref(parts[0], None, None)
+        elif len(parts) == 2:
+            return Identityref(parts[1], None, parts[0])
+        raise ValueError("Invalid identityref format: {val}")
+
+    @staticmethod
+    def from_xml(val: str, nsdefs: list[(?str, str)]):
+        parts = val.split(":")
+        if len(parts) == 1:
+            return Identityref(parts[0], None, None)
+        elif len(parts) == 2:
+            for nsname, nsuri in nsdefs:
+                if nsname == parts[0]:
+                    return Identityref(parts[1], nsuri, None)
+        raise ValueError("Namespace {parts[0]} not defined in node: {nsdefs}")
+
+
+extension Identityref (Ord):
+    def __eq__(self, other: Identityref) -> bool:
+        self_ns = self.ns
+        self_mod = self.mod
+        other_ns = other.ns
+        other_mod = other.mod
+        return vals_equal(self.val, other.val)
+
+       # return self.name == other.name and (self_arg is None and other_arg is None or (self_arg is not None and other_arg is not None and self_arg == other_arg))
+
+    def __lt__(self, other: Identityref) -> bool:
+        return vals_less_than(self.val, other.val)
+
+def vals_equal(a: value, b: value) -> bool:
+    # Compare known leaf value types
+    if isinstance(a, int) and isinstance(b, int):
+        return a == b
+    if isinstance(a, bool) and isinstance(b, bool):
+        return a == b
+    if isinstance(a, float) and isinstance(b, float):
+        return a == b
+    if isinstance(a, str) and isinstance(b, str):
+        return a == b
+    if isinstance(a, bytes) and isinstance(b, bytes):
+        return a == b
+    # TODO: Add support for u8 and i8
+    #if isinstance(a, u8) and isinstance(b, u8):
+    #    return a == b
+    if isinstance(a, u16) and isinstance(b, u16):
+        return a == b
+    if isinstance(a, u32) and isinstance(b, u32):
+        return a == b
+    if isinstance(a, u64) and isinstance(b, u64):
+        return a == b
+    # TODO: Add support for u8 and i8
+    #if isinstance(a, i8) and isinstance(b, i8):
+    #    return a == b
+    if isinstance(a, i16) and isinstance(b, i16):
+        return a == b
+    if isinstance(a, i32) and isinstance(b, i32):
+        return a == b
+    if isinstance(a, i64) and isinstance(b, i64):
+        return a == b
+    if isinstance(a, Identityref) and isinstance(b, Identityref):
+        return a == b
+    raise ValueError("Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
+
+def vals_less_than(a: value, b: value) -> bool:
+    # Compare known leaf value types
+    if isinstance(a, int) and isinstance(b, int):
+        return a < b
+    if isinstance(a, bool) and isinstance(b, bool):
+        return not a  # False (0) before True (1)
+    if isinstance(a, float) and isinstance(b, float):
+        return a < b
+    if isinstance(a, str) and isinstance(b, str):
+        return a < b
+    if isinstance(a, bytes) and isinstance(b, bytes):
+        return a < b
+    # TODO: Add support for u8 and i8
+    #if isinstance(a, u8) and isinstance(b, u8):
+    #    return a < b
+    if isinstance(a, u16) and isinstance(b, u16):
+        return a < b
+    if isinstance(a, u32) and isinstance(b, u32):
+        return a < b
+    if isinstance(a, u64) and isinstance(b, u64):
+        return a < b
+    # TODO: Add support for u8 and i8
+    #if isinstance(a, i8) and isinstance(b, i8):
+    #    return a < b
+    if isinstance(a, i16) and isinstance(b, i16):
+        return a < b
+    if isinstance(a, i32) and isinstance(b, i32):
+        return a < b
+    if isinstance(a, i64) and isinstance(b, i64):
+        return a < b
+    if isinstance(a, Identityref) and isinstance(b, Identityref):
+        return a < b
+    raise ValueError("Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")

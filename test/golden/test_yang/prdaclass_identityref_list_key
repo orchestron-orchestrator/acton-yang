@@ -13,60 +13,76 @@ ns_to_mod = {'http://example.com/foo':'foo'}
 prefix_to_mod = {'foo':'foo'}
 
 
-mut def from_json_foo__c1__li1__l1(val: value) -> yang.gdata.Leaf:
+mut def from_json_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
-mut def from_xml_foo__c1__li1__l1(val: value) -> yang.gdata.Leaf:
+mut def from_xml_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
-class foo__c1__li1_entry(yang.adata.MNode):
-    l1: str
+mut def from_json_foo__c1__l1__k2(val: Identityref) -> yang.gdata.Leaf:
+    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
+    return yang.gdata.Leaf('identityref', new_val)
 
-    mut def __init__(self, l1: str):
+mut def from_xml_foo__c1__l1__k2(val: Identityref) -> yang.gdata.Leaf:
+    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
+    return yang.gdata.Leaf('identityref', new_val)
+
+class foo__c1__l1_entry(yang.adata.MNode):
+    k1: str
+    k2: Identityref
+
+    mut def __init__(self, k1: str, k2: Identityref):
         self._ns = 'http://example.com/foo'
-        self.l1 = l1
+        self.k1 = k1
+        self.k2 = k2
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('string', _l1)
+        _k1 = self.k1
+        if _k1 is not None:
+            children['k1'] = yang.gdata.Leaf('string', _k1)
+        _k2 = self.k2
+        if _k2 is not None:
+            children['k2'] = yang.gdata.Leaf('identityref', _k2)
         return yang.gdata.Container(children)
 
     @staticmethod
-    mut def from_gdata(n: yang.gdata.Node) -> foo__c1__li1_entry:
-        return foo__c1__li1_entry(l1=n.get_str('l1'))
+    mut def from_gdata(n: yang.gdata.Node) -> foo__c1__l1_entry:
+        return foo__c1__l1_entry(k1=n.get_str('k1'), k2=n.get_Identityref('k2'))
 
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
-            res.append('# Top node: /c1/li1')
-            res.append('{self_name} = foo__c1__li1({repr(self.l1)})')
+            res.append('# Top node: /c1/l1')
+            res.append('{self_name} = foo__c1__l1({repr(self.k1)}, {repr(self.k2)})')
         leaves = []
         if leaves:
             if not list_element:
-               res = ['', '# Container: /c1/li1'] + leaves + res
+               res = ['', '# Container: /c1/l1'] + leaves + res
             else:
                 res = leaves + res
         return '\n'.join(res)
 
-class foo__c1__li1(yang.adata.MNode):
-    elements: list[foo__c1__li1_entry]
+class foo__c1__l1(yang.adata.MNode):
+    elements: list[foo__c1__l1_entry]
     mut def __init__(self, elements=[]):
         self._ns = 'http://example.com/foo'
-        self._name = 'li1'
+        self._name = 'l1'
         self.elements = elements
 
-    mut def create(self, l1):
+    mut def create(self, k1, k2):
         for e in self.elements:
             match = True
-            if e.l1 != l1:
+            if e.k1 != k1:
+                match = False
+                continue
+            if e.k2 != k2:
                 match = False
                 continue
             if match:
                 return e
 
-        res = foo__c1__li1_entry(l1)
+        res = foo__c1__l1_entry(k1, k2)
         self.elements.append(res)
         return res
 
@@ -76,46 +92,49 @@ class foo__c1__li1(yang.adata.MNode):
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
-        return yang.gdata.List(['l1'], elements)
+        return yang.gdata.List(['k1', 'k2'], elements)
 
     @staticmethod
-    mut def from_gdata(n: ?yang.gdata.List) -> list[foo__c1__li1_entry]:
+    mut def from_gdata(n: ?yang.gdata.List) -> list[foo__c1__l1_entry]:
         if n is not None:
-            return [foo__c1__li1_entry.from_gdata(e) for e in n.elements]
+            return [foo__c1__l1_entry.from_gdata(e) for e in n.elements]
         return []
 
 
-mut def from_xml_foo__c1__li1_element(node: xml.Node) -> yang.gdata.Node:
+mut def from_xml_foo__c1__l1_element(node: xml.Node) -> yang.gdata.Node:
     children = {}
-    child_l1 = yang.gdata.from_xml_str(node, 'l1')
-    yang.gdata.maybe_add(children, 'l1', from_xml_foo__c1__li1__l1, child_l1)
+    child_k1 = yang.gdata.from_xml_str(node, 'k1')
+    yang.gdata.maybe_add(children, 'k1', from_xml_foo__c1__l1__k1, child_k1)
+    child_k2 = yang.gdata.from_xml_Identityref(node, 'k2')
+    yang.gdata.maybe_add(children, 'k2', from_xml_foo__c1__l1__k2, child_k2)
     return yang.gdata.Container(children)
 
-mut def from_xml_foo__c1__li1(nodes: list[xml.Node]) -> yang.gdata.List:
-    elements = [from_xml_foo__c1__li1_element(e) for e in nodes]
-    return yang.gdata.List(keys=['l1'], elements=elements)
+mut def from_xml_foo__c1__l1(nodes: list[xml.Node]) -> yang.gdata.List:
+    elements = [from_xml_foo__c1__l1_element(e) for e in nodes]
+    return yang.gdata.List(keys=['k1', 'k2'], elements=elements)
 
-mut def from_json_path_foo__c1__li1_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+mut def from_json_path_foo__c1__l1_element(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     if len(path) == 1:
         point = path[0]
         keys = point.split(",")
         jd_dict = yang.gdata.unwrap_dict(jd)
-        val = from_json_foo__c1__li1_element(jd_dict)
+        val = from_json_foo__c1__l1_element(jd_dict)
         if op == "merge":
             return val
         elif op == "remove":
-            return yang.gdata.Absent(val.key_children(['l1']))
+            return yang.gdata.Absent(val.key_children(['k1', 'k2']))
         raise ValueError("Invalid operation")
     elif len(path) > 1:
         keys = path[0].split(",")
         point = path[1]
         rest_path = path[2:]
         children: dict[str, yang.gdata.Node] = {}
-        children['l1'] = from_json_foo__c1__li1__l1(keys[0])
+        children['k1'] = from_json_foo__c1__l1__k1(keys[0])
+        children['k2'] = from_json_foo__c1__l1__k2(Identityref.from_json(keys[1]))
         return yang.gdata.Container(children)
     raise ValueError("unreachable - no keys to list element")
 
-mut def from_json_path_foo__c1__li1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.List:
+mut def from_json_path_foo__c1__l1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.List:
     if len(path) == 1:
         point = path[0]
         keys = point.split(",")
@@ -123,51 +142,53 @@ mut def from_json_path_foo__c1__li1(jd: value, path: list[str]=[], op: ?str='mer
         # Check that all keys are present in payload.
         # If present, they must equal the keys in the path
         # If not present, fill in from path
-        for key in ['l1']:
+        for key in ['k1', 'k2']:
             if key not in jd_dict:
                 jd_dict[key] = keys.pop(0)
             else:
                 if str(jd_dict[key]) != keys.pop(0):
                     raise ValueError("Key value mismatch between path and payload")
-        element = from_json_foo__c1__li1_element(jd_dict)
+        element = from_json_foo__c1__l1_element(jd_dict)
         elements = []
         if op == "merge":
             elements.append(element)
         elif op == "remove":
-            elements.append(yang.gdata.Absent(element.key_children(['l1'])))
-        return yang.gdata.List(['l1'], elements)
+            elements.append(yang.gdata.Absent(element.key_children(['k1', 'k2'])))
+        return yang.gdata.List(['k1', 'k2'], elements)
     elif len(path) > 1:
-        return yang.gdata.List(['l1'], [from_json_path_foo__c1__li1_element(jd, path, op)])
+        return yang.gdata.List(['k1', 'k2'], [from_json_path_foo__c1__l1_element(jd, path, op)])
     raise ValueError("Unable to resolve path, no keys provided")
 
-mut def from_json_foo__c1__li1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
+mut def from_json_foo__c1__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     children = {}
-    child_l1 = yang.gdata.take_json_str(jd, 'l1')
-    yang.gdata.maybe_add(children, 'l1', from_json_foo__c1__li1__l1, child_l1)
+    child_k1 = yang.gdata.take_json_str(jd, 'k1')
+    yang.gdata.maybe_add(children, 'k1', from_json_foo__c1__l1__k1, child_k1)
+    child_k2 = yang.gdata.take_json_Identityref(jd, 'k2')
+    yang.gdata.maybe_add(children, 'k2', from_json_foo__c1__l1__k2, child_k2)
     return yang.gdata.Container(children)
 
-mut def from_json_foo__c1__li1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
-    elements = [from_json_foo__c1__li1_element(e) for e in jd if isinstance(e, dict)]
-    return yang.gdata.List(keys=['l1'], elements=elements)
+mut def from_json_foo__c1__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
+    elements = [from_json_foo__c1__l1_element(e) for e in jd if isinstance(e, dict)]
+    return yang.gdata.List(keys=['k1', 'k2'], elements=elements)
 
 class foo__c1(yang.adata.MNode):
-    li1: foo__c1__li1
+    l1: foo__c1__l1
 
-    mut def __init__(self, li1: list[foo__c1__li1_entry]=[]):
+    mut def __init__(self, l1: list[foo__c1__l1_entry]=[]):
         self._ns = 'http://example.com/foo'
-        self.li1 = foo__c1__li1(elements=li1)
+        self.l1 = foo__c1__l1(elements=l1)
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        _li1 = self.li1
-        if _li1 is not None:
-            children['li1'] = _li1.to_gdata()
+        _l1 = self.l1
+        if _l1 is not None:
+            children['l1'] = _l1.to_gdata()
         return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
         if n != None:
-            return foo__c1(li1=foo__c1__li1.from_gdata(n.get_opt_list('li1')))
+            return foo__c1(l1=foo__c1__l1.from_gdata(n.get_opt_list('l1')))
         return foo__c1()
 
     def prsrc(self, self_name='ad', top=True, list_element=False):
@@ -176,13 +197,13 @@ class foo__c1(yang.adata.MNode):
             res.append('# Top node: /c1')
             res.append('{self_name} = foo__c1()')
         leaves = []
-        _li1 = self.li1
-        for _element in _li1.elements:
+        _l1 = self.l1
+        for _element in _l1.elements:
             res.append('')
-            res.append("# List /c1/li1 element: {_element.to_gdata().key_str(['l1'])}")
-            list_elem = 'li1_element = {self_name}.li1.create({repr(_element.l1)})'
+            res.append("# List /c1/l1 element: {_element.to_gdata().key_str(['k1', 'k2'])}")
+            list_elem = 'l1_element = {self_name}.l1.create({repr(_element.k1)}, {repr(_element.k2)})'
             res.append(list_elem)
-            res.extend(_element.prsrc('li1_element', False, list_element=True).splitlines())
+            res.extend(_element.prsrc('l1_element', False, list_element=True).splitlines())
         if leaves:
             if not list_element:
                res = ['', '# Container: /c1'] + leaves + res
@@ -193,8 +214,8 @@ class foo__c1(yang.adata.MNode):
 
 mut def from_xml_foo__c1(node: xml.Node) -> yang.gdata.Container:
     children = {}
-    child_li1 = yang.gdata.from_xml_opt_list(node, 'li1')
-    yang.gdata.maybe_add(children, 'li1', from_xml_foo__c1__li1, child_li1)
+    child_l1 = yang.gdata.from_xml_opt_list(node, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_xml_foo__c1__l1, child_l1)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
@@ -202,8 +223,8 @@ mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') 
     if len(path) > 0:
         point = path[0]
         rest_path = path[1:]
-        if point == 'li1':
-            child = {'li1': from_json_path_foo__c1__li1(jd, rest_path, op) }
+        if point == 'l1':
+            child = {'l1': from_json_path_foo__c1__l1(jd, rest_path, op) }
             return yang.gdata.Container(child, ns='http://example.com/foo', module='foo')
         raise ValueError("Invalid path")
     elif len(path) == 0:
@@ -216,8 +237,8 @@ mut def from_json_path_foo__c1(jd: value, path: list[str]=[], op: ?str='merge') 
 
 mut def from_json_foo__c1(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
-    child_li1 = yang.gdata.take_json_opt_list(jd, 'li1')
-    yang.gdata.maybe_add(children, 'li1', from_json_foo__c1__li1, child_li1)
+    child_l1 = yang.gdata.take_json_opt_list(jd, 'l1')
+    yang.gdata.maybe_add(children, 'l1', from_json_foo__c1__l1, child_l1)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
 class root(yang.adata.MNode):

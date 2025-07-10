@@ -1,0 +1,157 @@
+import base64
+import json
+import xml
+import yang.adata
+import yang.gdata
+from yang.common import Identityref
+
+# == This file is generated ==
+
+
+mod_to_ns = {'base':'http://example.com/base', 'bar':'http://example.com/bar', 'foo':'http://example.com/foo'}
+ns_to_mod = {'http://example.com/base':'base', 'http://example.com/bar':'bar', 'http://example.com/foo':'foo'}
+prefix_to_mod = {'base':'base', 'bar':'bar', 'foo':'foo'}
+
+
+mut def from_json_base__config__active_protocol(val: Identityref) -> yang.gdata.Leaf:
+    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
+    return yang.gdata.Leaf('identityref', new_val)
+
+mut def from_xml_base__config__active_protocol(val: Identityref) -> yang.gdata.Leaf:
+    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
+    return yang.gdata.Leaf('identityref', new_val)
+
+class base__config(yang.adata.MNode):
+    active_protocol: ?Identityref
+
+    mut def __init__(self, active_protocol: ?Identityref):
+        self._ns = 'http://example.com/base'
+        self.active_protocol = active_protocol
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _active_protocol = self.active_protocol
+        if _active_protocol is not None:
+            children['active-protocol'] = yang.gdata.Leaf('identityref', _active_protocol)
+        return yang.gdata.Container(children, ns='http://example.com/base', module='base')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> base__config:
+        if n != None:
+            return base__config(active_protocol=n.get_opt_Identityref('active-protocol'))
+        return base__config()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append('# Top node: /config')
+            res.append('{self_name} = base__config()')
+        leaves = []
+        _active_protocol = self.active_protocol
+        if _active_protocol is not None:
+            leaves.append('{self_name}.active_protocol = {repr(_active_protocol)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /config'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml_base__config(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_active_protocol = yang.gdata.from_xml_opt_Identityref(node, 'active-protocol')
+    yang.gdata.maybe_add(children, 'active-protocol', from_xml_base__config__active_protocol, child_active_protocol)
+    return yang.gdata.Container(children, ns='http://example.com/base', module='base')
+
+mut def from_json_path_base__config(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'active-protocol':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_base__config(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_base__config(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_active_protocol = yang.gdata.take_json_opt_Identityref(jd, 'active-protocol')
+    yang.gdata.maybe_add(children, 'active-protocol', from_json_base__config__active_protocol, child_active_protocol)
+    return yang.gdata.Container(children, ns='http://example.com/base', module='base')
+
+class root(yang.adata.MNode):
+    config: base__config
+
+    mut def __init__(self, config: ?base__config=None):
+        self._ns = ''
+        self.config = config if config is not None else base__config()
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _config = self.config
+        if _config is not None:
+            children['config'] = _config.to_gdata()
+        return yang.gdata.Container(children)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> root:
+        if n != None:
+            return root(config=base__config.from_gdata(n.get_opt_cnt('config')))
+        return root()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append('# Top node: /root')
+            res.append('{self_name} = root()')
+        leaves = []
+        _config = self.config
+        if _config is not None:
+            res.extend(_config.prsrc('{self_name}.config', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /root'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_config = yang.gdata.from_xml_opt_cnt(node, 'config', 'http://example.com/base')
+    yang.gdata.maybe_add(children, 'config', from_xml_base__config, child_config)
+    return yang.gdata.Container(children)
+
+mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'base:config':
+            child = {'config': from_json_path_base__config(jd, rest_path, op) }
+            return yang.gdata.Container(child)
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_config = yang.gdata.take_json_opt_cnt(jd, 'config', 'base')
+    yang.gdata.maybe_add(children, 'config', from_json_base__config, child_config)
+    return yang.gdata.Container(children)
+
+schema_namespaces: set[str] = {
+    'http://example.com/base',
+}
