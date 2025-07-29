@@ -3239,6 +3239,9 @@ def src_yang():
     namespace "http://example.com/foo";
     prefix "f";
     include qux;
+    identity fooy {
+        base basey;
+    }
     grouping g1 {
         leaf l1 {
             type string;
@@ -3281,7 +3284,7 @@ def src_yang():
         }
         leaf-list ll_identityref {
             type identityref {
-                base basey;
+                base fooy;
 
             }
         }
@@ -3432,6 +3435,7 @@ def src_yang():
     belongs-to foo {
         prefix "f";
     }
+    identity basey;
     // Must not conflict with /f:c1
     container c2 {
         leaf l1 {
@@ -3497,6 +3501,7 @@ def src_schema():
     res["foo"] = Module('foo', yang_version=1.1, namespace='http://example.com/foo', prefix='f', include=[
         Include('qux')
     ], children=[
+    Identity('fooy', base=['basey']),
     Grouping('g1', children=[
         Leaf('l1', type_=Type('string')),
         Leaf('l2', type_=Type('string'))
@@ -3512,7 +3517,7 @@ def src_schema():
         LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
         Leaf('l_identityref', type_=Type('identityref', base=['basey'])),
-        LeafList('ll_identityref', type_=Type('identityref', base=['basey']))
+        LeafList('ll_identityref', type_=Type('identityref', base=['fooy']))
     ]),
     Container('pc1', presence='p', children=[
         Container('foo', children=[
@@ -3597,6 +3602,7 @@ def src_schema():
             Leaf('l4', type_=Type('string'))
         ])
     ], children=[
+    Identity('basey'),
     Container('c2', children=[
         Leaf('l1', type_=Type('string'))
     ])
@@ -3637,6 +3643,7 @@ def src_schema_compiled():
             Leaf('l4', type_=Type('string'))
         ])
     ], children=[
+    Identity('fooy', base=['f:basey']),
     Grouping('g1', children=[
         Leaf('l1', type_=Type('string')),
         Leaf('l2', type_=Type('string'))
@@ -3652,7 +3659,7 @@ def src_schema_compiled():
         LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
         Leaf('l_identityref', type_=Type('identityref', base=['basey'])),
-        LeafList('ll_identityref', type_=Type('identityref', base=['basey'])),
+        LeafList('ll_identityref', type_=Type('identityref', base=['fooy'])),
         Leaf('l4', type_=Type('string')),
         Leaf('l1', type_=Type('string')),
         Leaf('l2', type_=Type('string'))
@@ -3742,6 +3749,7 @@ def src_schema_compiled():
             Leaf('l2', type_=Type('string'))
         ])
     ]),
+    Identity('basey'),
     Container('c2', children=[
         Leaf('l1', type_=Type('string'))
     ])
