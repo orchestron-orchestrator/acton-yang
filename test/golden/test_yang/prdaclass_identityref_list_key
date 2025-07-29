@@ -3,14 +3,18 @@ import json
 import xml
 import yang.adata
 import yang.gdata
-from yang.common import Identityref
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref
+from yang.schema import DIdentity
 
 # == This file is generated ==
 
 
-mod_to_ns = {'foo':'http://example.com/foo'}
-ns_to_mod = {'http://example.com/foo':'foo'}
-prefix_to_mod = {'foo':'foo'}
+_base_foo_id1 = DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1', base=[])
+_identities = [
+    _base_foo_id1,
+    DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id2', base=[_base_foo_id1]),
+]
 
 
 mut def from_json_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
@@ -20,12 +24,18 @@ mut def from_xml_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
 mut def from_json_foo__c1__l1__k2(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+    new_val, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf k2: {error}')
 
 mut def from_xml_foo__c1__l1__k2(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+    new_val, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf k2: {error}')
 
 class foo__c1__l1_entry(yang.adata.MNode):
     k1: str
