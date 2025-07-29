@@ -3,23 +3,36 @@ import json
 import xml
 import yang.adata
 import yang.gdata
-from yang.common import Identityref
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref
+from yang.schema import DIdentity
 
 # == This file is generated ==
 
 
-mod_to_ns = {'base':'http://example.com/base', 'bar':'http://example.com/bar', 'foo':'http://example.com/foo'}
-ns_to_mod = {'http://example.com/base':'base', 'http://example.com/bar':'bar', 'http://example.com/foo':'foo'}
-prefix_to_mod = {'base':'base', 'bar':'bar', 'foo':'foo'}
+_base_base_protocol_type = DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type', base=[])
+_identities = [
+    _base_base_protocol_type,
+    DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='sctp', base=[_base_base_protocol_type]),
+    DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='dccp', base=[_base_base_protocol_type]),
+    DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='tcp', base=[_base_base_protocol_type]),
+    DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='udp', base=[_base_base_protocol_type]),
+]
 
 
 mut def from_json_base__config__active_protocol(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+    new_val, error = complete_and_validate_identityref(val, _identities, ['base:protocol-type'], 'base')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
 
 mut def from_xml_base__config__active_protocol(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+    new_val, error = complete_and_validate_identityref(val, _identities, ['base:protocol-type'], 'base')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
 
 class base__config(yang.adata.MNode):
     active_protocol: ?Identityref
