@@ -20,6 +20,78 @@ _identities = [
 basics_id1 = Identityref('id1', ns='http://example.com/basics', mod='basics', pfx='b')
 
 
+def src_yang():
+    res = []
+    res.append(r"""module basics {
+    yang-version "1.1";
+    namespace "http://example.com/basics";
+    prefix "b";
+    identity id1;
+    container c {
+        leaf l_str_def {
+            type string;
+            default "foo";
+        }
+        leaf l_str_def_quoted {
+            type string;
+            default "\"foo\"";
+        }
+        leaf l_uint64_def {
+            type uint64;
+            default 1234567890;
+        }
+        leaf l_union_def_str {
+            type union {
+                type string;
+                type uint64;
+            }
+            default "foo";
+        }
+        leaf l_union_def_int {
+            type union {
+                type string;
+                type uint64;
+            }
+            default 1234567890;
+        }
+        leaf l_union_def_float {
+            type union {
+                type string;
+                type decimal64;
+            }
+            default 1.23;
+        }
+        leaf l_union_def_bool {
+            type union {
+                type string;
+                type boolean;
+            }
+            default false;
+        }
+        leaf l_union_def_enumeration {
+            type union {
+                type enumeration {
+                enum unlimited;
+                }
+                type uint16;
+            }
+            default unlimited;
+        }
+        leaf l_binary_def {
+            type binary;
+            default "SGVsbG8gQWN0b24g8J+roQ==";
+        }
+        leaf l_identityref_def {
+            type identityref {
+                base id1;
+            }
+            default id1;
+        }
+    }
+}""")
+    return res
+
+
 mut def from_json_basics__c__l_str_def(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
@@ -357,77 +429,6 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
 schema_namespaces: set[str] = {
     'http://example.com/basics',
 }
-def src_yang():
-    res = []
-    res.append(r"""module basics {
-    yang-version "1.1";
-    namespace "http://example.com/basics";
-    prefix "b";
-    identity id1;
-    container c {
-        leaf l_str_def {
-            type string;
-            default "foo";
-        }
-        leaf l_str_def_quoted {
-            type string;
-            default "\"foo\"";
-        }
-        leaf l_uint64_def {
-            type uint64;
-            default 1234567890;
-        }
-        leaf l_union_def_str {
-            type union {
-                type string;
-                type uint64;
-            }
-            default "foo";
-        }
-        leaf l_union_def_int {
-            type union {
-                type string;
-                type uint64;
-            }
-            default 1234567890;
-        }
-        leaf l_union_def_float {
-            type union {
-                type string;
-                type decimal64;
-            }
-            default 1.23;
-        }
-        leaf l_union_def_bool {
-            type union {
-                type string;
-                type boolean;
-            }
-            default false;
-        }
-        leaf l_union_def_enumeration {
-            type union {
-                type enumeration {
-                enum unlimited;
-                }
-                type uint16;
-            }
-            default unlimited;
-        }
-        leaf l_binary_def {
-            type binary;
-            default "SGVsbG8gQWN0b24g8J+roQ==";
-        }
-        leaf l_identityref_def {
-            type identityref {
-                base id1;
-            }
-            default id1;
-        }
-    }
-}""")
-    return res
-
 def src_schema():
     res = {}
     res["basics"] = Module('basics', yang_version=1.1, namespace='http://example.com/basics', prefix='b', children=[

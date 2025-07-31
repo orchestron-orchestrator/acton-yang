@@ -347,7 +347,7 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('DNode pdc')
@@ -355,7 +355,7 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
         if self.namespace != "":
@@ -379,6 +379,22 @@ class DNodeInner(DNode):
                 res.append("")
                 res.append("")
                 res.extend(DIdentity.format_identityref_constants(self.identities))
+                res.append("")
+                res.append("")
+            if schema_yang is not None:
+# TODO: serialize list[str] of YANG models with repr(), use raw string to avoid interpolation?!
+# TODO: Why is the src_yang() function not found in from_xml, if it is
+# defined at the bottom of the module?!
+# After these two are addressed, then we can do away with these hacky workarounds
+#
+#"""def src_yang():
+#   return {repr(self.src)}
+#"""
+                res.append("def src_yang():")
+                res.append("    res = []")
+                for s in schema_yang:
+                    res.append('    res.append(r"""{s}""")')
+                res.append("    return res")
                 res.append("")
                 res.append("")
 
@@ -422,7 +438,7 @@ class DNodeInner(DNode):
             return ", user_order=True" if n.ordered_by == "user" else ""
 
         for child in self.children:
-            res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
+            res.append(child.prdaclass(schema_yang=schema_yang, loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -1369,7 +1385,7 @@ class DLeaf(DNodeLeaf):
                     return True
         return False
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
@@ -1435,7 +1451,7 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
