@@ -10,6 +10,8 @@ import xml
 import yang
 import yang.gdata
 import yang.schema
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref, PartialIdentityref
 
 
 # Map of taker function names to actual functions
@@ -210,7 +212,7 @@ def _parse_qualified_name(name: str) -> (str, ?str):
     return (name, None)
 
 
-def from_json_path(s: yang.schema.DNodeInner, data: dict[str, ?value], path: list[str], op: str="merge", loose: bool=False) -> yang.gdata.Container:
+def from_json_path(root: yang.schema.DRoot, data: dict[str, ?value], path: list[str], op: str="merge", loose: bool=False) -> yang.gdata.Container:
     r"""Convert JSON to a gdata tree rooted at the schema root, with data applied
     at the specified path.
 
@@ -242,7 +244,7 @@ def from_json_path(s: yang.schema.DNodeInner, data: dict[str, ?value], path: lis
         # Creates: root -> list1[key1] as Absent (for removal)
         from_json_path(schema, {}, ["mod:list1", "key1"], "remove")
     """
-    result = _from_json_path_recursive(s, data, path, op, loose, [], True, True)
+    result = _from_json_path_recursive(root, root.identities, data, path, op, loose, [], True, True)
     # The top-level call always returns a Container because:
     # - If path is empty, from_data returns Container
     # - If path is non-empty, we wrap in Container
@@ -252,14 +254,14 @@ def from_json_path(s: yang.schema.DNodeInner, data: dict[str, ?value], path: lis
         raise ValueError("Internal error: expected Container at root level")
 
 
-def _from_json_path_recursive(s: yang.schema.DNodeInner, data: dict[str, ?value], path: list[str], op: str, loose: bool, current_path: list[str], top: bool, set_ns: bool) -> yang.gdata.Node:
+def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: dict[str, ?value], path: list[str], op: str, loose: bool, current_path: list[str], top: bool, set_ns: bool) -> yang.gdata.Node:
     if isinstance(s, yang.schema.DRoot) or isinstance(s, yang.schema.DContainer):
         if len(path) == 0:
             # Base case: no more path elements, process the data
             if op == "merge":
                 json_data = JsonYangData(data)
                 # TODO: set_ns??
-                return _from_data(s, json_data, loose=loose, set_ns=set_ns)
+                return _from_data(s, global_identity, json_data, loose=loose, set_ns=set_ns)
             elif op == "remove":
                 return yang.gdata.Absent()
             raise ValueError(f"Invalid operation: {op}")
@@ -278,7 +280,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, data: dict[str, ?value]
             if isinstance(child, yang.schema.DNodeInner):
                 # Recursively process the child node
                 perhaps = True if (top or set_ns) and s.namespace != "" else False
-                cchild = _from_json_path_recursive(child, data, rest_path, op, loose, current_path + [point], False, s.namespace != child.namespace)
+                cchild = _from_json_path_recursive(child, global_identity, data, rest_path, op, loose, current_path + [point], False, s.namespace != child.namespace)
                 # Create a container with just this one child
                 return yang.gdata.Container({uname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
 
@@ -300,7 +302,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, data: dict[str, ?value]
                     if str(data_with_keys[key]) != keys.pop(0):
                         raise ValueError("Key value mismatch between path and payload")
             element_data = JsonYangData(data_with_keys)
-            element_gdata = _from_data(s, element_data, loose, set_ns=False)
+            element_gdata = _from_data(s, global_identity, element_data, loose, set_ns=False)
             elements = []
             if op == "merge":
                 elements.append(element_gdata)
@@ -317,7 +319,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, data: dict[str, ?value]
 
             # First create this list with a single element with only key children.
             # For nested lists, we always use "merge" for intermediate elements.
-            slist = _from_json_path_recursive(s, {}, [point], "merge", loose, current_path + [point], top, set_ns)
+            slist = _from_json_path_recursive(s, global_identity, {}, [point], "merge", loose, current_path + [point], top, set_ns)
 
             # The return type must be a List, we just requested it
             if isinstance(slist, yang.gdata.List):
@@ -334,7 +336,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, data: dict[str, ?value]
                 lchild = s.get(local_name, module, allow_unqualified=False)
                 if isinstance(lchild, yang.schema.DNodeInner):
                     # Now extract gdata for the rest of the path, from the child point
-                    inner_result = _from_json_path_recursive(lchild, data, child_rest_path, op, loose, current_path + [point, child_point], False, False)
+                    inner_result = _from_json_path_recursive(lchild, global_identity, data, child_rest_path, op, loose, current_path + [point, child_point], False, False)
 
                     # Add it to the structural list element, next to the existing keys
                     slist.elements[0].children[uname(lchild)] = inner_result
@@ -350,11 +352,12 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, data: dict[str, ?value]
 
 
 
-def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
+def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, global_identity, data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
     """Generic function to convert data to gdata tree based on schema
 
     Args:
         s: Schema node (container or list) - the root of the schema tree to start parsing from
+        global_identity: List of identity definitions for resolving identityref values
         data: Data wrapped in a YangData protocol implementation (XML or JSON)
         loose: Whether to use loose parsing (allows optional fields to be missing)
         set_ns: Whether to set namespace information on generated nodes
@@ -377,7 +380,7 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, data: A, loose: bool=F
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return _from_data(child, data, loose, set_ns, path + [next], root_path)
+            return _from_data(child, global_identity, data, loose, set_ns, path + [next], root_path)
         raise ValueError("Node on path {path} is not inner")
 
     children: dict[str, yang.gdata.Node] = {}
@@ -421,7 +424,7 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, data: A, loose: bool=F
                     list_elements = []
                     wrapped_nodes = data.wrap_list(taken_nodes)
                     for element_data in wrapped_nodes:
-                        element_gdata = _from_data(child, element_data, loose, set_ns=False)
+                        element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False)
                         list_elements.append(element_gdata)
 
                     # Create the List with processed elements
@@ -434,16 +437,47 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, data: A, loose: bool=F
                 print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
                 wrapped_node = data.wrap(taken_nodes)
                 print("Child data wrapped, processing further", err=True)
-                maybe = _from_data(child, wrapped_node, loose, set_ns=s.namespace != child.namespace)
+                maybe = _from_data(child, global_identity, wrapped_node, loose, set_ns=s.namespace != child.namespace)
                 if maybe is not None:
                     children[uname(child)] = maybe
             elif isinstance(child, yang.schema.DNodeLeaf):
                 # Process leaf nodes
                 print("Processing leaf node: {child.name} with taker {taker_name} {ns}", err=True)
-                if isinstance(child, yang.schema.DLeafList) and isinstance(taken_nodes, list):
-                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, taken_nodes, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+
+                # Normalize identityref values
+                leaf_value = taken_nodes
+                if child.type_.name == "identityref":
+                    if isinstance(taken_nodes, PartialIdentityref):
+                        # Single identityref value
+                        validated, error = complete_and_validate_identityref(
+                            taken_nodes, global_identity, child.type_.base, child.module
+                        )
+                        if validated is not None:
+                            leaf_value = validated
+                        else:
+                            raise ValueError(f"Invalid value for identityref {child.name}: {error}")
+                    elif isinstance(taken_nodes, list): # list[PartialIdentityref]
+                        # Leaf-list of identityref values
+                        leaf_value = []
+                        for val in taken_nodes:
+                            if isinstance(val, PartialIdentityref):
+                                validated, error = complete_and_validate_identityref(
+                                    val, global_identity, child.type_.base, child.module
+                                )
+                                if validated is not None and isinstance(leaf_value, list):
+                                    leaf_value.append(validated)
+                                else:
+                                    raise ValueError(f"Invalid value for identityref {child.name}: {error}")
+                            else:
+                                raise ValueError(f"Expected PartialIdentityref, got {type(val)}")
+                    else:
+                        raise ValueError("Expected union type PartialIdentityref | list[PartialIdentityref], got {type(taken_nodes)}")
+
+                # Create leaf or leaf-list with normalized value
+                if isinstance(child, yang.schema.DLeafList) and isinstance(leaf_value, list):
+                    children[uname(child)] = yang.gdata.LeafList(child.type_.name, leaf_value, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
                 else:
-                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, taken_nodes, ns=ns, module=mod)
+                    children[uname(child)] = yang.gdata.Leaf(child.type_.name, leaf_value, ns=ns, module=mod)
             else:
                 raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
 
@@ -457,16 +491,16 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, data: A, loose: bool=F
         raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
 
 
-def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
+def from_xml(root: yang.schema.DRoot, node: xml.Node, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
     """Convert XML node to gdata tree based on schema"""
     xml_data = XmlYangData(node)
-    return _from_data(s, xml_data, loose, root_path=root_path)
+    return _from_data(root, root.identities, xml_data, loose, root_path=root_path)
 
 
-def from_json(s: yang.schema.DNodeInner, node: dict[str, ?value], loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Node:
+def from_json(root: yang.schema.DRoot, node: dict[str, ?value], loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
     """Convert JSON node to gdata tree based on schema"""
     json_data = JsonYangData(node)
-    return _from_data(s, json_data, loose, root_path=root_path)
+    return _from_data(root, root.identities, json_data, loose, root_path=root_path)
 
 
 def _test_y1_xml():
@@ -515,15 +549,22 @@ def _test_y1_xml():
     return gd.prsrc()
 
 def _test_mandatory_leaf():
-    # Well, this is clearly less readable than YANG ...
-    s = yang.schema.DContainer("y1", "urn:example:y1", "y1", name="c1", config=True, presence=False, children=[
-        yang.schema.DLeaf("y1", "urn:example:y1", "y1", name="l1", config=True, mandatory=True, type_=yang.schema.Type("string"))
-    ])
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+  container c1 {
+    leaf l1 {
+      type string;
+      mandatory true;
+    }
+  }
+}"""
+    s = yang.compile([y1])
 
     try:
-        from_xml(s, xml.decode("<c1/>"))
+        from_xml(s, xml.decode('<data><c1 xmlns="urn:example:y1"/></data>'))
     except ValueError as err:
-        if err.error_message != "Error reading /l1: Cannot find xml child with name l1":
+        if err.error_message != "Error reading /c1/l1: Cannot find xml child with name l1":
             testing.error("Unexpected error: {err}")
 
 
