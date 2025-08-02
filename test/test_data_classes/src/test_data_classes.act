@@ -935,3 +935,43 @@ def _test_json_ops():
             if ds4 is not None:
                 return ds4.prsrc()
     return ""
+
+def _test_validate_identityref():
+    # valid
+    c1 = yang_foo.foo__c1(
+        l_identityref=Identityref.from_adata("f:fooy")
+    )
+    gdata = c1.to_gdata()
+
+    # invalid
+    try:
+        invalid_c1 = yang_foo.foo__c1(
+            l_identityref=Identityref.from_adata("invalid-identity")
+        )
+        invalid_c1.to_gdata()
+        testing.error("Expected ValueError for invalid identityref value")
+    except ValueError as exc:
+        testing.assertEqual("Invalid value for identityref leaf l_identityref: Identityref invalid-identity not found in current module foo", exc.error_message)
+
+def _test_validate_identityref_leaflist():
+    # valid
+    c1 = yang_foo.foo__c1(
+        ll_identityref=[
+            Identityref.from_adata("f:fooy"),
+            Identityref.from_adata("bar:bary")
+        ]
+    )
+    gdata = c1.to_gdata()
+
+    # invalid
+    try:
+        invalid_c1 = yang_foo.foo__c1(
+            ll_identityref=[
+                Identityref.from_adata("fooy"),
+                Identityref.from_adata("f:invalid-identity")
+            ]
+        )
+        invalid_c1.to_gdata()
+        testing.error("Expected ValueError for invalid identityref value in leaf-list")
+    except ValueError as exc:
+        testing.assertEqual("Invalid value for identityref leaf-list ll_identityref: Identityref invalid-identity not found in namespace=None module=None prefix=f", exc.error_message)

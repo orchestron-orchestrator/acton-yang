@@ -299,12 +299,31 @@ class foo__c1(yang.adata.MNode):
         _li = self.li
         if _li is not None:
             children['li'] = _li.to_gdata()
-        children['ll_uint64'] = yang.gdata.LeafList('uint64', self.ll_uint64)
-        children['ll_str'] = yang.gdata.LeafList('string', self.ll_str)
+        _ll_uint64 = self.ll_uint64
+        if _ll_uint64 is not None:
+            children['ll_uint64'] = yang.gdata.LeafList('uint64', _ll_uint64)
+        _ll_str = self.ll_str
+        if _ll_str is not None:
+            children['ll_str'] = yang.gdata.LeafList('string', _ll_str)
         _l_identityref = self.l_identityref
         if _l_identityref is not None:
+            _identityref_l_identityref, error = complete_and_validate_identityref(_l_identityref, _identities, ['f:basey'], 'foo')
+            if _identityref_l_identityref is not None:
+                _l_identityref = _identityref_l_identityref
+            else:
+                raise ValueError('Invalid value for identityref leaf l_identityref: {error}')
             children['l_identityref'] = yang.gdata.Leaf('identityref', _l_identityref)
-        children['ll_identityref'] = yang.gdata.LeafList('identityref', self.ll_identityref)
+        _ll_identityref = self.ll_identityref
+        if _ll_identityref is not None:
+            _identityref_ll_identityref = []
+            for v in _ll_identityref:
+                nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'foo')
+                if nv is not None:
+                    _identityref_ll_identityref.append(nv)
+                else:
+                    raise ValueError('Invalid value for identityref leaf-list ll_identityref: {error}')
+            _ll_identityref = _identityref_ll_identityref
+            children['ll_identityref'] = yang.gdata.LeafList('identityref', _ll_identityref)
         _l4 = self.l4
         if _l4 is not None:
             children['l4'] = yang.gdata.Leaf('string', _l4)
@@ -477,7 +496,9 @@ class foo__pc1__foo(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        children['l1'] = yang.gdata.LeafList('binary', self.l1)
+        _l1 = self.l1
+        if _l1 is not None:
+            children['l1'] = yang.gdata.LeafList('binary', _l1)
         return yang.gdata.Container(children)
 
     @staticmethod
