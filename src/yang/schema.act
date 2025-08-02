@@ -434,14 +434,11 @@ class DNodeInner(DNode):
                 child_default = child.default
                 if not loose and child_default is not None:
                     if child.type_.name == "identityref":
-                        parts = child_default.split(":")
-                        if len(parts) == 1:
-                            prefix = child.prefix
-                            name = parts[0]
+                        prefix, name = split_prefix_name(child_default)
+                        if prefix is None or prefix == child.prefix:
+                            child_default = "Identityref('{name}')"
                         else:
-                            prefix = parts[0]
-                            name = parts[1]
-                        child_default = """Identityref('{name}', mod_to_ns[prefix_to_mod["{prefix}"]], prefix_to_mod["{prefix}"])"""
+                            child_default = """Identityref('{name}', mod_to_ns[prefix_to_mod["{prefix}"]], prefix_to_mod["{prefix}"])"""
                     res.append("        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {prsrc_literal(child.type_.name, child_default)}")
                 else:
                     res.append("        self.{usname(child)} = {usname(child)}")
