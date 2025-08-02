@@ -45,6 +45,11 @@ class base__config(yang.adata.MNode):
         children = {}
         _active_protocol = self.active_protocol
         if _active_protocol is not None:
+            _identityref_active_protocol, error = complete_and_validate_identityref(_active_protocol, _identities, ['base:protocol-type'], 'base')
+            if _identityref_active_protocol is not None:
+                _active_protocol = _identityref_active_protocol
+            else:
+                raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
             children['active-protocol'] = yang.gdata.Leaf('identityref', _active_protocol)
         return yang.gdata.Container(children, ns='http://example.com/base', module='base')
 
