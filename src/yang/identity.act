@@ -23,29 +23,35 @@ def find_identity_by_ref(identities: list[yang.schema.DIdentity], name: str, nam
     return None
 
 
-def complete_identityref(partial: Identityref, identities: list[yang.schema.DIdentity], current_module: str) -> (?Identityref, ?yang.schema.DIdentity, ?str):
+def complete_identityref(partial: value, identities: list[yang.schema.DIdentity], current_module: str) -> (?Identityref, ?yang.schema.DIdentity, ?str):
     """Complete an Identityref by filling in missing namespace or module, if only one is set"""
-    partial_ns = partial.ns
-    partial_mod = partial.mod
-    partial_pfx = partial.pfx
-    if partial_ns is None and partial_mod is None and partial_pfx is None:
-        identity = find_identity_by_ref(identities, partial.val, module=current_module)
+    if isinstance(partial, Identityref):
+        identity = find_identity_by_ref(identities, partial.val, namespace=partial.ns, module=partial.mod, prefix=partial.pfx)
         if identity is not None:
             return partial, identity, None
         else:
-            return None, None, "Identityref {partial.val} not found in current module {current_module}"
-    else:
-        # Have namespace or module (also both, but that doesn't happen when we parse XML / JSON)
-        identity = find_identity_by_ref(identities, partial.val, namespace=partial_ns, module=partial_mod, prefix=partial_pfx)
-        if identity is not None:
-            # Strip namespace qualifiers if matching identity is defined in the same module
-            if identity.module == current_module:
-                complete = Identityref(partial.val)
-            else:
-                complete = Identityref(partial.val, identity.namespace, identity.module, identity.prefix)
-            return complete, identity, None
-        else:
             return None, None, "Identityref {partial.val} not found in namespace={partial.ns} module={partial.mod} prefix={partial.pfx}"
+    elif isinstance(partial, PartialIdentityref):
+        partial_ns = partial.ns
+        partial_mod = partial.mod
+        partial_pfx = partial.pfx
+        if partial_ns is None and partial_mod is None and partial_pfx is None:
+            identity = find_identity_by_ref(identities, partial.val, module=current_module)
+            if identity is not None:
+                complete = Identityref(partial.val, identity.namespace, identity.module, identity.prefix)
+                return complete, identity, None
+            else:
+                return None, None, "Identityref {partial.val} not found in current module {current_module}"
+        else:
+            # Have namespace or module (also both, but that doesn't happen when we parse XML / JSON)
+            identity = find_identity_by_ref(identities, partial.val, namespace=partial_ns, module=partial_mod, prefix=partial_pfx)
+            if identity is not None:
+                complete = Identityref(partial.val, identity.namespace, identity.module, identity.prefix)
+                return complete, identity, None
+            else:
+                return None, None, "Identityref {partial.val} not found in namespace={partial.ns} module={partial.mod} prefix={partial.pfx}"
+    else:
+        raise ValueError('"partial" argument type is a union of Identityref, PartialIdentityref')
 
 
 def is_derived_from(identity: yang.schema.DIdentity, bases: list[yang.schema.DIdentity]) -> bool:
@@ -65,7 +71,8 @@ def is_derived_from(identity: yang.schema.DIdentity, bases: list[yang.schema.DId
     return False
 
 
-def complete_and_validate_identityref(partial: Identityref, identities: list[yang.schema.DIdentity], base: list[str], current_module: str):
+# partial is a union of Identityref, PartialIdentityref
+def complete_and_validate_identityref(partial: value, identities: list[yang.schema.DIdentity], base: list[str], current_module: str):
     identityref, identity, error = complete_identityref(partial, identities, current_module)
     if identity is not None:
         bases = get_bases(identities, base)

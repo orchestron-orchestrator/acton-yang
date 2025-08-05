@@ -1,10 +1,22 @@
-class Identityref:
+class PartialIdentityref:
     val: str
     ns: ?str
     mod: ?str
     pfx: ?str
 
     def __init__(self, val, ns: ?str=None, mod: ?str=None, pfx: ?str=None):
+        self.val = val
+        self.ns = ns
+        self.mod = mod
+        self.pfx = pfx
+
+class Identityref:
+    val: str
+    ns: str
+    mod: str
+    pfx: str
+
+    def __init__(self, val, ns, mod, pfx):
         self.val = val
         self.ns = ns
         self.mod = mod
@@ -18,33 +30,33 @@ class Identityref:
 
     @staticmethod
     def from_json(val):
-        """Create Identityref from JSON-encoded value
+        """Create PartialIdentityref from JSON-encoded value
         """
         parts = val.split(":")
         if len(parts) == 1:
-            return Identityref(parts[0])
+            return PartialIdentityref(parts[0])
         elif len(parts) == 2:
-            return Identityref(parts[1], mod=parts[0])
+            return PartialIdentityref(parts[1], mod=parts[0])
         raise ValueError("Invalid identityref format: {val}")
 
     @staticmethod
     def from_xml(val: str, nsdefs: list[(?str, str)]):
         parts = val.split(":")
         if len(parts) == 1:
-            return Identityref(parts[0])
+            return PartialIdentityref(parts[0])
         elif len(parts) == 2:
             for nsname, nsuri in nsdefs:
                 if nsname == parts[0]:
-                    return Identityref(parts[1], ns=nsuri)
+                    return PartialIdentityref(parts[1], ns=nsuri)
         raise ValueError("Namespace {parts[0]} not defined in node: {nsdefs}")
 
     @staticmethod
     def from_adata(val):
         parts = val.split(":")
         if len(parts) == 1:
-            return Identityref(parts[0])
+            return PartialIdentityref(parts[0])
         elif len(parts) == 2:
-            return Identityref(parts[1], pfx=parts[0])
+            return PartialIdentityref(parts[1], pfx=parts[0])
         raise ValueError("Invalid identityref format: {val}")
 
 
