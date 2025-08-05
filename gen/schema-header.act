@@ -315,8 +315,11 @@ class DNodeInner(DNode):
             res.append("# == This file is generated ==")
             res.append("")
             res.append("")
-            if isinstance(self, DRoot):
+            if isinstance(self, DRoot) and len(self.identities) > 0:
                 res.extend(DIdentity.format_identity_list(self.identities))
+                res.append("")
+                res.append("")
+                res.extend(DIdentity.format_identityref_constants(self.identities))
                 res.append("")
                 res.append("")
 
@@ -1164,6 +1167,25 @@ class DIdentity(DNode):
                 base_refs = [base_var_map[base.key()] for base in identity.base]
                 result.append("    DIdentity(module={repr(identity.module)}, namespace={repr(identity.namespace)}, prefix={repr(identity.prefix)}, name={repr(identity.name)}, base=[{', '.join(base_refs)}]),")
         result.append("]")
+
+        return result
+
+    @staticmethod
+    def format_identityref_constants(identities: list[DIdentity]) -> list[str]:
+        """Format a list of Identityref constants for each identity
+
+        Returns a list of strings to be added to the result
+        """
+        if not identities:
+            return []
+
+        result = []
+        result.append("# Identityref constants")
+
+        for identity in identities:
+            # Create variable name by replacing hyphens with underscores
+            var_name = "{identity.module}_{identity.name}".replace("-", "_")
+            result.append("{var_name} = Identityref({repr(identity.name)}, ns={repr(identity.namespace)}, mod={repr(identity.module)}, pfx={repr(identity.prefix)})")
 
         return result
 
