@@ -4,14 +4,20 @@ import json
 import xml
 import yang.adata
 import yang.gdata
-from yang.common import Identityref
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref, PartialIdentityref
+from yang.schema import DIdentity
 
 # == This file is generated ==
 
 
-mod_to_ns = {'basics':'http://example.com/basics'}
-ns_to_mod = {'http://example.com/basics':'basics'}
-prefix_to_mod = {'b':'basics'}
+_identities = [
+    DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id1', base=[]),
+]
+
+
+# Identityref constants
+basics_id1 = Identityref('id1', ns='http://example.com/basics', mod='basics', pfx='b')
 
 
 mut def from_json_basics__c__l_str_def(val: value) -> yang.gdata.Leaf:
@@ -68,13 +74,19 @@ mut def from_json_basics__c__l_binary_def(val: value) -> yang.gdata.Leaf:
 mut def from_xml_basics__c__l_binary_def(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('binary', val)
 
-mut def from_json_basics__c__l_identityref_def(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+mut def from_json_basics__c__l_identityref_def(val: PartialIdentityref) -> yang.gdata.Leaf:
+    new_val, error = complete_and_validate_identityref(val, _identities, ['b:id1'], 'basics')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf l_identityref_def: {error}')
 
-mut def from_xml_basics__c__l_identityref_def(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+mut def from_xml_basics__c__l_identityref_def(val: PartialIdentityref) -> yang.gdata.Leaf:
+    new_val, error = complete_and_validate_identityref(val, _identities, ['b:id1'], 'basics')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf l_identityref_def: {error}')
 
 class basics__c(yang.adata.MNode):
     l_str_def: str
@@ -99,7 +111,11 @@ class basics__c(yang.adata.MNode):
         self.l_union_def_bool = l_union_def_bool if l_union_def_bool is not None else False
         self.l_union_def_enumeration = l_union_def_enumeration if l_union_def_enumeration is not None else "unlimited"
         self.l_binary_def = l_binary_def if l_binary_def is not None else base64.decode('SGVsbG8gQWN0b24g8J+roQ=='.encode())
-        self.l_identityref_def = l_identityref_def if l_identityref_def is not None else Identityref('id1')
+        _default_l_identityref_def, error = complete_and_validate_identityref(Identityref.from_adata('id1'), _identities, ['b:id1'], 'basics')
+        if _default_l_identityref_def is not None:
+            self.l_identityref_def = l_identityref_def if l_identityref_def is not None else _default_l_identityref_def
+        else:
+            raise ValueError('Invalid default value for identityref leaf c: {error}')
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
@@ -132,6 +148,11 @@ class basics__c(yang.adata.MNode):
             children['l_binary_def'] = yang.gdata.Leaf('binary', _l_binary_def)
         _l_identityref_def = self.l_identityref_def
         if _l_identityref_def is not None:
+            _identityref_l_identityref_def, error = complete_and_validate_identityref(_l_identityref_def, _identities, ['b:id1'], 'basics')
+            if _identityref_l_identityref_def is not None:
+                _l_identityref_def = _identityref_l_identityref_def
+            else:
+                raise ValueError('Invalid value for identityref leaf l_identityref_def: {error}')
             children['l_identityref_def'] = yang.gdata.Leaf('identityref', _l_identityref_def)
         return yang.gdata.Container(children, ns='http://example.com/basics', module='basics')
 
@@ -474,7 +495,7 @@ def src_schema_compiled():
         Type('uint16')
     ]), default='unlimited'),
         Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ=='),
-        Leaf('l_identityref_def', type_=Type('identityref', base=['id1']), default='id1')
+        Leaf('l_identityref_def', type_=Type('identityref', base=['b:id1']), default='id1')
     ])
 ])
     return res

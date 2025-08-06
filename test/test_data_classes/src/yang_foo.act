@@ -4,14 +4,25 @@ import json
 import xml
 import yang.adata
 import yang.gdata
-from yang.common import Identityref
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref, PartialIdentityref
+from yang.schema import DIdentity
 
 # == This file is generated ==
 
 
-mod_to_ns = {'foo':'http://example.com/foo', 'bar':'http://example.com/bar'}
-ns_to_mod = {'http://example.com/foo':'foo', 'http://example.com/bar':'bar'}
-prefix_to_mod = {'f':'foo', 'bar':'bar'}
+_base_foo_basey = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey', base=[])
+_identities = [
+    DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='fooy', base=[_base_foo_basey]),
+    _base_foo_basey,
+    DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='bary', base=[_base_foo_basey]),
+]
+
+
+# Identityref constants
+foo_fooy = Identityref('fooy', ns='http://example.com/foo', mod='foo', pfx='f')
+foo_basey = Identityref('basey', ns='http://example.com/foo', mod='foo', pfx='f')
+bar_bary = Identityref('bary', ns='http://example.com/bar', mod='bar', pfx='bar')
 
 
 mut def from_json_foo__c1__f_l1(val: value) -> yang.gdata.Leaf:
@@ -201,20 +212,38 @@ mut def from_json_foo__c1__ll_str(val: list[value]) -> yang.gdata.LeafList:
 mut def from_xml_foo__c1__ll_str(val: list[value]) -> yang.gdata.LeafList:
     return yang.gdata.LeafList('string', val)
 
-mut def from_json_foo__c1__l_identityref(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+mut def from_json_foo__c1__l_identityref(val: PartialIdentityref) -> yang.gdata.Leaf:
+    new_val, error = complete_and_validate_identityref(val, _identities, ['f:basey'], 'foo')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf l_identityref: {error}')
 
-mut def from_xml_foo__c1__l_identityref(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+mut def from_xml_foo__c1__l_identityref(val: PartialIdentityref) -> yang.gdata.Leaf:
+    new_val, error = complete_and_validate_identityref(val, _identities, ['f:basey'], 'foo')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf l_identityref: {error}')
 
-mut def from_json_foo__c1__ll_identityref(val: list[Identityref]) -> yang.gdata.LeafList:
-    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]
+mut def from_json_foo__c1__ll_identityref(val: list[PartialIdentityref]) -> yang.gdata.LeafList:
+    new_val = []
+    for v in val:
+        nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'foo')
+        if nv is not None:
+            new_val.append(nv)
+        else:
+            raise ValueError('Invalid value for identityref leaf-list ll_identityref: {error}')
     return yang.gdata.LeafList('identityref', new_val)
 
-mut def from_xml_foo__c1__ll_identityref(val: list[Identityref]) -> yang.gdata.LeafList:
-    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]
+mut def from_xml_foo__c1__ll_identityref(val: list[PartialIdentityref]) -> yang.gdata.LeafList:
+    new_val = []
+    for v in val:
+        nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'foo')
+        if nv is not None:
+            new_val.append(nv)
+        else:
+            raise ValueError('Invalid value for identityref leaf-list ll_identityref: {error}')
     return yang.gdata.LeafList('identityref', new_val)
 
 mut def from_json_foo__c1__l4(val: value) -> yang.gdata.Leaf:
@@ -276,12 +305,31 @@ class foo__c1(yang.adata.MNode):
         _li = self.li
         if _li is not None:
             children['li'] = _li.to_gdata()
-        children['ll_uint64'] = yang.gdata.LeafList('uint64', self.ll_uint64)
-        children['ll_str'] = yang.gdata.LeafList('string', self.ll_str)
+        _ll_uint64 = self.ll_uint64
+        if _ll_uint64 is not None:
+            children['ll_uint64'] = yang.gdata.LeafList('uint64', _ll_uint64)
+        _ll_str = self.ll_str
+        if _ll_str is not None:
+            children['ll_str'] = yang.gdata.LeafList('string', _ll_str)
         _l_identityref = self.l_identityref
         if _l_identityref is not None:
+            _identityref_l_identityref, error = complete_and_validate_identityref(_l_identityref, _identities, ['f:basey'], 'foo')
+            if _identityref_l_identityref is not None:
+                _l_identityref = _identityref_l_identityref
+            else:
+                raise ValueError('Invalid value for identityref leaf l_identityref: {error}')
             children['l_identityref'] = yang.gdata.Leaf('identityref', _l_identityref)
-        children['ll_identityref'] = yang.gdata.LeafList('identityref', self.ll_identityref)
+        _ll_identityref = self.ll_identityref
+        if _ll_identityref is not None:
+            _identityref_ll_identityref = []
+            for v in _ll_identityref:
+                nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'foo')
+                if nv is not None:
+                    _identityref_ll_identityref.append(nv)
+                else:
+                    raise ValueError('Invalid value for identityref leaf-list ll_identityref: {error}')
+            _ll_identityref = _identityref_ll_identityref
+            children['ll_identityref'] = yang.gdata.LeafList('identityref', _ll_identityref)
         _l4 = self.l4
         if _l4 is not None:
             children['l4'] = yang.gdata.Leaf('string', _l4)
@@ -454,7 +502,9 @@ class foo__pc1__foo(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
-        children['l1'] = yang.gdata.LeafList('binary', self.l1)
+        _l1 = self.l1
+        if _l1 is not None:
+            children['l1'] = yang.gdata.LeafList('binary', _l1)
         return yang.gdata.Container(children)
 
     @staticmethod
@@ -3238,6 +3288,9 @@ def src_yang():
     namespace "http://example.com/foo";
     prefix "f";
     include qux;
+    identity fooy {
+        base basey;
+    }
     grouping g1 {
         leaf l1 {
             type string;
@@ -3431,6 +3484,7 @@ def src_yang():
     belongs-to foo {
         prefix "f";
     }
+    identity basey;
     // Must not conflict with /f:c1
     container c2 {
         leaf l1 {
@@ -3496,6 +3550,7 @@ def src_schema():
     res["foo"] = Module('foo', yang_version=1.1, namespace='http://example.com/foo', prefix='f', include=[
         Include('qux')
     ], children=[
+    Identity('fooy', base=['basey']),
     Grouping('g1', children=[
         Leaf('l1', type_=Type('string')),
         Leaf('l2', type_=Type('string'))
@@ -3596,6 +3651,7 @@ def src_schema():
             Leaf('l4', type_=Type('string'))
         ])
     ], children=[
+    Identity('basey'),
     Container('c2', children=[
         Leaf('l1', type_=Type('string'))
     ])
@@ -3636,6 +3692,7 @@ def src_schema_compiled():
             Leaf('l4', type_=Type('string'))
         ])
     ], children=[
+    Identity('fooy', base=['f:basey']),
     Grouping('g1', children=[
         Leaf('l1', type_=Type('string')),
         Leaf('l2', type_=Type('string'))
@@ -3650,8 +3707,8 @@ def src_schema_compiled():
         ]),
         LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
-        Leaf('l_identityref', type_=Type('identityref', base=['basey'])),
-        LeafList('ll_identityref', type_=Type('identityref', base=['basey'])),
+        Leaf('l_identityref', type_=Type('identityref', base=['f:basey'])),
+        LeafList('ll_identityref', type_=Type('identityref', base=['f:basey'])),
         Leaf('l4', type_=Type('string')),
         Leaf('l1', type_=Type('string')),
         Leaf('l2', type_=Type('string'))
@@ -3741,6 +3798,7 @@ def src_schema_compiled():
             Leaf('l2', type_=Type('string'))
         ])
     ]),
+    Identity('basey'),
     Container('c2', children=[
         Leaf('l1', type_=Type('string'))
     ])
