@@ -2344,6 +2344,24 @@ def _test_fail_identityref_undefined_base():
     else:
         testing.error("Expected ValueError for undefined base identity")
 
+def _test_fail_identity_duplicate():
+    """Test that compilation fails when the identity graphs is cyclic"""
+    ys = r"""module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+
+    identity a;
+    identity a;
+}"""
+    try:
+        root = yang.compile([ys])
+        print(root.prdaclass())
+    except ValueError as exc:
+        testing.assertEqual(exc.error_message, "Identity foo:a is duplicated")
+    else:
+        testing.error("Expected ValueError for duplicate identity")
+
 def assert_true_with_error(result):
     testing.assertTrue(result.0, result.1)
 
