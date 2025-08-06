@@ -1482,7 +1482,7 @@ class DRoot(DNodeInner):
             else:
                 raise ValueError("DRoot can only contain DModule")
 
-        # Resolve base references using the global map
+        # Resolve base references using the global map, ensure all bases exist
         for id in identity_map.values():
             resolved_bases = []
             for base_key in id.base:
@@ -1491,6 +1491,42 @@ class DRoot(DNodeInner):
                 else:
                     raise ValueError("Could not find {id.identity.prefix}:{id.identity.name} in any module")
             id.identity.base = resolved_bases
+
+        # Detect cycles in the identity hierarchy (DFS)
+        # visited_global is shared across all DFS traversals to avoid re-checking
+        # nodes that were already visited
+        visited_global = set()
+
+        def detect_cycles(identity_key: str, path: list[str], rec_stack: set[str]) -> ?str:
+            if identity_key in rec_stack:
+                # Found a cycle - build error message
+                cycle_start = path.index(identity_key)
+                cycle = " -> ".join(path[cycle_start:] + [identity_key])
+                return "Cycle detected in identity hierarchy: {cycle}"
+
+            if identity_key in visited_global:
+                return None
+
+            # Remember we already visited this node so we can skip it later
+            visited_global.add(identity_key)
+            rec_stack.add(identity_key)
+
+            # Check our base identities
+            for base_key in identity_map[identity_key].base:
+                result = detect_cycles(base_key, path + [identity_key], rec_stack)
+                if result is not None:
+                    return result
+
+            # Remove from rec_stack when backtracking
+            rec_stack.discard(identity_key)
+            return None
+
+        for identity_key in identity_map.keys():
+            if identity_key in visited_global:
+                continue
+            error = detect_cycles(identity_key, [], set())
+            if error is not None:
+                raise ValueError(error)
 
         self.identities = [v.identity for v in identity_map.values()]
 
