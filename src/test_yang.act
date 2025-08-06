@@ -2362,6 +2362,29 @@ def _test_fail_identity_duplicate():
     else:
         testing.error("Expected ValueError for duplicate identity")
 
+def _test_fail_identity_cyclic():
+    """Test that compilation fails when the identity graphs is cyclic"""
+    ys = r"""module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+
+    identity a {
+      base b;
+    }
+
+    identity b {
+      base a;
+    }
+}"""
+    try:
+        root = yang.compile([ys])
+        print(root.prdaclass())
+    except ValueError as exc:
+        testing.assertEqual(exc.error_message, "Cycle detected in identity hierarchy: foo:a -> foo:b -> foo:a")
+    else:
+        testing.error("Expected ValueError for cycle in identity hierarchy")
+
 def assert_true_with_error(result):
     testing.assertTrue(result.0, result.1)
 
