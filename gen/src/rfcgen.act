@@ -1004,7 +1004,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         kwattrs = sort_attributes(unsorted_attrs, module_order, mandatory)
 
         # The substatement that is the argument to the current statement is placed first
-        cattrs = [arg_name] + kwattrs if arg_name != None else kwattrs
+        cattrs = [arg_name] + kwattrs if arg_name is not None else kwattrs
 
         parent_class = "SchemaNodeInner" if have_children else "SchemaNodeOuter"
         res.append("class {_class_name(stmt_name)}({parent_class}):")
@@ -1161,7 +1161,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 refine_cardinality = stmts["refine"].substmts[attr].cardinality
                 if target_cardinality == "0..1" and refine_cardinality == "0..1":
                     res.append("        ref_{_attr_name(attr)} = refine.{_attr_name(attr)}")
-                    res.append("        if ref_{_attr_name(attr)} != None:")
+                    res.append("        if ref_{_attr_name(attr)} is not None:")
                     res.append("            self.{_attr_name(attr)} = ref_{_attr_name(attr)}")
                 elif target_cardinality == "0..1" and refine_cardinality == "0..n":
                     res.append("        if len(refine.{_attr_name(attr)}) == 1:")
