@@ -176,7 +176,7 @@ class Statement(object):
         """
         res = _yind(indent)
         prefix = self.prefix
-        if prefix != None:
+        if prefix is not None:
             res += prefix + ":"
         res += self.kw
         arg = self.arg
@@ -185,7 +185,7 @@ class Statement(object):
             # that require quoting to make it valid YANG (RFC 7950, section 6.1.3):
             res += " "
             m = re.match(r"[\s'\";{}]|//|/\\*|\\*/", arg)
-            quoted_arg = True if self.kw in _quoted_arg_keywords or m != None else False
+            quoted_arg = True if self.kw in _quoted_arg_keywords or m is not None else False
             if quoted_arg:
                 res += '"' + arg.replace('\\', '\\\\').replace('"', '\\"') + '"'
             else:
@@ -409,7 +409,7 @@ class DNodeInner(DNode):
             elif isinstance(child, DLeaf):
                 defval = ""
                 child_default = child.default
-                if not loose and child_default != None:
+                if not loose and child_default is not None:
                     defval = "=None"
                 child_arg = "{usname(child)}: {yang_leaf_to_acton_arg_type(child, loose)}{defval}"
                 if is_optional_arg_yang_leaf(child, loose):
@@ -534,7 +534,7 @@ class DNodeInner(DNode):
         else:
             opt_cnt = True if isinstance(self, DContainer) and self.presence else False
             res.append("    mut def from_gdata(n: ?yang.gdata.Node) -> {'?' if opt_cnt else ''}{pname(self)}:")
-            res.append("        if n != None:")
+            res.append("        if n is not None:")
             res.append("            return {pname(self)}({from_gdata_args})")
             if opt_cnt:
                 res.append("        return None")
@@ -2157,12 +2157,12 @@ def is_optional_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
         # Mandatory leaf in YANG model are non-optional in Acton
         mandatory = False
         leafmandatory = leaf.mandatory
-        if leafmandatory != None:
+        if leafmandatory is not None:
             mandatory = leafmandatory
 
         has_default = False
         if isinstance(leaf, DLeaf):
-            if leaf.default != None:
+            if leaf.default is not None:
                 has_default = True
 
         optional = not (mandatory or has_default)
@@ -2200,7 +2200,7 @@ def is_optional_arg_yang_leaf(leaf: DNodeLeaf, loose: bool=False) -> bool:
     optional = is_optional_yang_leaf(leaf, loose)
 
     if isinstance(leaf, DLeaf):
-        if leaf.default != None:
+        if leaf.default is not None:
             optional = True
 
     return optional
@@ -2214,7 +2214,7 @@ def yang_leaf_to_acton_type(leaf: DNodeLeaf, loose: bool=False) -> str:
 def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, loose: bool=False) -> str:
     optional = is_optional_yang_leaf(leaf, loose)
     if isinstance(leaf, DLeaf):
-        if leaf.default != None:
+        if leaf.default is not None:
             optional = True
     optional_str = "?" if optional else ""
     t = yang_type_to_acton_type(leaf.type_)
