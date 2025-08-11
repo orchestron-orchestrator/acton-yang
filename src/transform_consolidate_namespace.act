@@ -1,0 +1,136 @@
+import testing
+
+import yang
+import yang.schema
+
+
+mut def consolidate_namespace(root: yang.schema.DRoot, target_module: str, 
+                              target_namespace: str, target_prefix: str) -> None:
+    """Consolidate all nodes to appear under a single namespace.
+    
+    This modifies the DRoot in place, updating all DNode children recursively
+    to use the specified module, namespace, and prefix.
+    """
+    
+    def update_node(node: yang.schema.DNode) -> None:
+        """Recursively update a node and its children with new namespace info."""
+        node.module = target_module
+        node.namespace = target_namespace  
+        node.prefix = target_prefix
+        
+        if isinstance(node, yang.schema.DNodeInner):
+            for child in node.children:
+                update_node(child)
+    
+    # Update all top-level nodes and their descendants
+    for node in root.children:
+        update_node(node)
+    
+    # Update the root's namespace mappings
+    root.mod_to_ns = {target_module: target_namespace}
+    root.ns_to_mod = {target_namespace: target_module}
+    root.prefix_to_mod = {target_prefix: target_module}
+
+
+def _test_consolidate_namespace():
+    ys_foo = r"""module foo {
+        yang-version "1.1";
+        namespace "http://example.com/foo";
+        prefix "foo";
+        container c1 {
+            leaf l1 { type string; }
+        }
+    }"""
+    
+    ys_bar = r"""module bar {
+        yang-version "1.1";
+        namespace "http://example.com/bar";
+        prefix "bar";
+        import foo { prefix "foo"; }
+        augment "/foo:c1" {
+            leaf l2 { type string; }
+        }
+    }"""
+    
+    # Compile normally first
+    root = yang.compile([ys_foo, ys_bar])
+    
+    # Verify initial state - l2 should be from bar module
+    l2 = root.get("c1").get("l2")
+    testing.assertEqual(l2.module, "bar")
+    testing.assertEqual(l2.namespace, "http://example.com/bar")
+    
+    # Apply the transform
+    consolidate_namespace(root, "foo", "http://example.com/foo", "foo")
+    
+    # Verify all nodes now have the foo namespace
+    l1 = root.get("c1").get("l1")
+    l2_after = root.get("c1").get("l2")
+    
+    testing.assertEqual(l1.module, "foo")
+    testing.assertEqual(l1.namespace, "http://example.com/foo")
+    testing.assertEqual(l2_after.module, "foo")  # Was "bar", now "foo"
+    testing.assertEqual(l2_after.namespace, "http://example.com/foo")  # Was bar's namespace
+
+
+def _test_consolidate_namespace_multi_level():
+    """Test consolidation with multi-level augments across three modules."""
+    ys_foo = r"""module foo {
+        yang-version "1.1";
+        namespace "http://example.com/foo";
+        prefix "foo";
+        container c1 {
+            leaf l1 { type string; }
+        }
+    }"""
+    
+    ys_bar = r"""module bar {
+        yang-version "1.1";
+        namespace "http://example.com/bar";
+        prefix "bar";
+        import foo { prefix "foo"; }
+        augment "/foo:c1" {
+            container c2 {
+                leaf l2 { type string; }
+            }
+        }
+    }"""
+    
+    ys_baz = r"""module baz {
+        yang-version "1.1";
+        namespace "http://example.com/baz";
+        prefix "baz";
+        import foo { prefix "foo"; }
+        import bar { prefix "bar"; }
+        augment "/foo:c1/bar:c2" {
+            leaf l3 { type string; }
+        }
+    }"""
+    
+    # Compile all three modules
+    root = yang.compile([ys_foo, ys_bar, ys_baz])
+    
+    # Verify initial state - nodes from different modules
+    l1 = root.get("c1").get("l1")
+    c2 = root.get("c1").get("c2")
+    l2 = root.get("c1").get("c2").get("l2")
+    l3 = root.get("c1").get("c2").get("l3")
+    
+    testing.assertEqual(l1.module, "foo")
+    testing.assertEqual(c2.module, "bar")
+    testing.assertEqual(l2.module, "bar")
+    testing.assertEqual(l3.module, "baz")
+    
+    # Consolidate everything under foo
+    consolidate_namespace(root, "foo", "http://example.com/foo", "foo")
+    
+    # Verify all nodes now belong to foo
+    testing.assertEqual(l1.module, "foo")
+    testing.assertEqual(c2.module, "foo")
+    testing.assertEqual(l2.module, "foo")
+    testing.assertEqual(l3.module, "foo")
+    
+    testing.assertEqual(l1.namespace, "http://example.com/foo")
+    testing.assertEqual(c2.namespace, "http://example.com/foo")
+    testing.assertEqual(l2.namespace, "http://example.com/foo")
+    testing.assertEqual(l3.namespace, "http://example.com/foo")
