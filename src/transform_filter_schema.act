@@ -1,0 +1,331 @@
+import testing
+
+import yang
+import yang.schema
+import yang.parser
+from transform_list_order import get_schema_nodeid
+
+
+mut def filter_schema(node: yang.schema.DNode, filter_paths: list[str]) -> None:
+    """Filter a compiled schema tree to only include nodes in the filter_paths list.
+
+    This modifies the schema in place, removing any nodes whose paths are not
+    in the filter_paths list. This is useful when you want to work with only
+    a subset of a large schema.
+
+    TODO: Current implementation is naive - filter paths must exactly match the
+    output of get_schema_nodeid:
+    - Filter paths with redundant prefixes (prefix:name where prefix is unnecessary) won't match
+    - get_schema_nodeid includes module prefix for root element even when not required
+    - No error raised when prefix required for disambiguation but not provided
+
+    In a proper implementation would:
+    - Accept paths with optional prefixes where unambiguous
+    - Require prefixes where needed to dismbiguate the nodes
+    - Validate the path to ensure the referenced node exists
+
+    Args:
+        node: The root DNode to filter (typically a DRoot)
+        filter_paths: List of absolute schema node paths to keep (e.g., ["/module:container", "/module:container/leaf"])
+    """
+
+    def should_keep_node(path: str) -> bool:
+        """Check if a node should be kept based on the filter.
+
+        A node is kept if:
+        1. Its exact path is in the filter, OR
+        2. It's an ancestor of a path in the filter (parent paths are implied)
+        """
+        # Direct match or ancestor of filtered path
+        return path in filter_paths or any([fp.startswith(path + "/") for fp in filter_paths])
+
+    def filter_node_recursive(node: yang.schema.DNode, path: list[yang.schema.DNode]) -> bool:
+        """Recursively filter the schema tree.
+        Returns True if this node should be kept.
+        """
+        new_path = path + [node]
+        node_path = get_schema_nodeid(new_path)
+
+        if not should_keep_node(node_path):
+            return False
+
+        # Filter children if this is an inner node
+        if isinstance(node, yang.schema.DNodeInner):
+            is_presence = isinstance(node, yang.schema.DContainer) and node.presence
+            is_listed = node_path in filter_paths
+            has_listed_children = any([fp.startswith(node_path + "/") for fp in filter_paths])
+
+            # Keep all children only if non-presence container is listed without specific children
+            if not (is_listed and not is_presence and not has_listed_children):
+                # Filter children
+                node.children = [
+                    child for child in node.children
+                    if filter_node_recursive(child, new_path)
+                ]
+
+        return True
+
+    # Handle root node specially - always keep it
+    if isinstance(node, yang.schema.DRoot):
+        node.children = [
+            child for child in node.children
+            if filter_node_recursive(child, [node])
+        ]
+    else:
+        filter_node_recursive(node, [])
+
+
+# Test YANG module
+test_yang = r"""module test_filter {
+  yang-version "1.1";
+  namespace "http://example.com/test_filter";
+  prefix "test_filter";
+
+  container c1 {
+    description "container 1";
+    leaf l1 {
+      type string;
+    }
+    leaf l2 {
+      type int32;
+    }
+    container c2 {
+      leaf l3 {
+        type string;
+      }
+      leaf l4 {
+        type boolean;
+      }
+    }
+  }
+
+  container c3 {
+    leaf l5 {
+      type string;
+    }
+  }
+
+  container presence_container {
+    presence "This is a presence container";
+    leaf p1 {
+      type string;
+    }
+    leaf p2 {
+      type int32;
+    }
+  }
+
+  list items {
+    key "id";
+    leaf id {
+      type string;
+    }
+    leaf value {
+      type int32;
+    }
+  }
+}
+"""
+
+
+# Test helper functions
+def _assert_children(node: yang.schema.DNode, expected_names: list[str], msg: str=""):
+    """Assert that a node has exactly the expected children."""
+    if isinstance(node, yang.schema.DNodeInner):
+        actual_names = [child.name for child in node.children]
+        testing.assertEqual(len(actual_names), len(expected_names),
+                            f"{msg}: expected {len(expected_names)} children, got {len(actual_names)}")
+        for name in expected_names:
+            testing.assertIn(name, actual_names, f"{msg}: {name} should be present")
+    else:
+        testing.error("node is not DNodeInner")
+
+def _assert_no_children(node: yang.schema.DNode, excluded_names: list[str], msg: str=""):
+    """Assert that a node doesn't have the specified children."""
+    if isinstance(node, yang.schema.DNodeInner):
+        actual_names = [child.name for child in node.children]
+        for name in excluded_names:
+            testing.assertNotIn(name, actual_names, f"{msg}: {name} should not be present")
+    else:
+        testing.error("node is not DNodeInner")
+
+def _compile_and_filter(yang_src: str, filter_paths: list[str]) -> yang.schema.DRoot:
+    """Compile YANG source and apply filter."""
+    root = yang.compile([yang_src])
+    filter_schema(root, filter_paths)
+    return root
+
+
+def _test_filter_all():
+    """Test filtering that keeps all nodes"""
+    root = _compile_and_filter(test_yang, [
+        "/test_filter:c1",
+        "/test_filter:c3",
+        "/test_filter:items"
+    ])
+
+    # Check all top-level containers are present
+    testing.assertNotNone(root.get("c1"), "c1 should be present")
+    testing.assertNotNone(root.get("c3"), "c3 should be present")
+    testing.assertNotNone(root.get("items"), "items should be present")
+
+    # Check c1's children are all present
+    _assert_children(root.get("c1"), ["l1", "l2", "c2"], "c1")
+
+
+def _test_filter_specific_children():
+    """Test filtering that keeps only specific children"""
+    root = _compile_and_filter(test_yang, [
+        "/test_filter:c1/l1",
+        "/test_filter:c1/c2/l3"
+    ])
+
+    # Check c1 is present with correct children
+    c1 = root.get("c1")
+    testing.assertNotNone(c1, "c1 should be present")
+    _assert_children(c1, ["l1", "c2"], "c1")
+    _assert_no_children(c1, ["l2"], "c1")
+
+    # Check c2's children - only l3 should be present
+    c2 = c1.get("c2")
+    testing.assertNotNone(c2, "c2 should be present")
+    _assert_children(c2, ["l3"], "c2")
+    _assert_no_children(c2, ["l4"], "c2")
+
+    # Check c3 and items are not present
+    _assert_no_children(root, ["c3", "items"], "root")
+
+
+def _test_filter_nested():
+    """Test filtering with nested paths"""
+    root = _compile_and_filter(test_yang, ["/test_filter:c1/c2/l4"])
+
+    c1 = root.get("c1")
+    testing.assertNotNone(c1, "c1 should be present")
+    _assert_children(c1, ["c2"], "c1")
+
+    c2 = c1.get("c2")
+    testing.assertNotNone(c2, "c2 should be present")
+    _assert_children(c2, ["l4"], "c2")
+
+
+def _test_filter_empty():
+    """Test filtering with empty filter list"""
+    root = _compile_and_filter(test_yang, [])
+    testing.assertEqual(len(root.children), 0, "root should have no children")
+
+
+def _test_filter_list():
+    """Test filtering list nodes"""
+    root = _compile_and_filter(test_yang, ["/test_filter:items/id"])
+
+    items = root.get("items")
+    testing.assertNotNone(items, "items should be present")
+    _assert_children(items, ["id"], "items")
+    _assert_no_children(items, ["value"], "items")
+
+    # Other containers should not be present
+    _assert_no_children(root, ["c1", "c3"], "root")
+
+
+def _test_presence_container_only():
+    """Test filtering presence container without its children"""
+    root = _compile_and_filter(test_yang, ["/test_filter:presence_container"])
+
+    pc = root.get("presence_container")
+    testing.assertNotNone(pc, "presence_container should be present")
+    if isinstance(pc, yang.schema.DContainer):
+        testing.assertEqual(len(pc.children), 0, "presence_container should have no children")
+
+    # Other containers should not be present
+    _assert_no_children(root, ["c1", "c3", "items"], "root")
+
+
+def _test_presence_container_with_child():
+    """Test filtering presence container with specific children"""
+    root = _compile_and_filter(test_yang, [
+        "/test_filter:presence_container",
+        "/test_filter:presence_container/p1"
+    ])
+
+    pc = root.get("presence_container")
+    testing.assertNotNone(pc, "presence_container should be present")
+    _assert_children(pc, ["p1"], "presence_container")
+    _assert_no_children(pc, ["p2"], "presence_container")
+
+
+def _test_list_multiple_children():
+    """Test filtering list with multiple children specified"""
+    list_yang = r"""module test_list {
+        yang-version "1.1";
+        namespace "http://example.com/test_list";
+        prefix "test_list";
+
+        container configuration {
+            container groups {
+                container interfaces {
+                    list interface {
+                        key "name";
+                        leaf name { type string; }
+                        leaf description { type string; }
+                        leaf encapsulation { type string; }
+                        leaf mtu { type uint16; }
+                    }
+                }
+            }
+        }
+    }
+    """
+
+    root = _compile_and_filter(list_yang, [
+        "/test_list:configuration/groups/interfaces/interface/description",
+        "/test_list:configuration/groups/interfaces/interface/encapsulation"
+    ])
+
+    # Navigate to interface list
+    interface = root.get("configuration").get("groups").get("interfaces").get("interface")
+    testing.assertNotNone(interface, "interface list should be present")
+
+    # Verify correct children
+    _assert_children(interface, ["description", "encapsulation"], "interface")
+    _assert_no_children(interface, ["mtu"], "interface")
+
+
+def _test_presence_container_nested_path():
+    """Test filtering presence container with deeply nested path"""
+    nested_yang = r"""module test_nested {
+        yang-version "1.1";
+        namespace "http://example.com/test_nested";
+        prefix "test_nested";
+
+        container config {
+            container family {
+                container inet {
+                    presence "IPv4 configuration";
+                    container address {
+                        leaf name { type string; }
+                        leaf prefix { type uint8; }
+                    }
+                    leaf mtu { type uint16; }
+                }
+            }
+        }
+    }
+    """
+
+    root = _compile_and_filter(nested_yang, [
+        "/test_nested:config/family/inet",
+        "/test_nested:config/family/inet/address/name"
+    ])
+
+    # Navigate to inet container
+    inet = root.get("config").get("family").get("inet")
+    testing.assertNotNone(inet, "inet should be present")
+    _assert_children(inet, ["address"], "inet")
+    _assert_no_children(inet, ["mtu"], "inet")
+
+    # Check address container
+    address = inet.get("address")
+    testing.assertNotNone(address, "address should be present")
+    _assert_children(address, ["name"], "address")
+    _assert_no_children(address, ["prefix"], "address")
