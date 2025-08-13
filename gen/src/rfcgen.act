@@ -440,6 +440,29 @@ snode_methods = {
 
 """
     },
+    "identity": {
+        "compile": r"""    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        # Normalize identity base to always include the module prefix. In doing
+        # so we make it easier to later look up bases in DIdentity.
+        fq_base = []
+        for base in self.base:
+            base_identity = self.get_identity(base, context)
+            fq_base.append("{base_identity.pfx}:{base_identity.name}")
+
+        new = Identity(self.name,
+                       base=fq_base,
+                       description=self.description,
+                       if_feature=self.if_feature,
+                       reference=self.reference,
+                       status=self.status,
+                       exts=self.exts,
+                       mod=new_mod if new_mod is not None else self.mod,
+                       ns=new_ns if new_ns is not None else self.ns,
+                       pfx=new_pfx if new_pfx is not None else self.pfx)
+        return new
+
+"""
+    },
     "module": {
         "get_import_by_prefix": r"""    def get_import_by_prefix(self, prefix: str) -> Import:
         for imp in self.import_:
@@ -489,6 +512,7 @@ snode_methods = {
             prefix=self.get_prefix(),
             name=self.name,
             description=self.description,
+            identity=[c for c in self.children if isinstance(c, Identity)],
             revision=self.revision,
             reference=self.reference,
             exts=self.exts,
@@ -821,13 +845,42 @@ snode_methods = {
             return self
 
 """,
+        "resolve_identities": r"""    def resolve_identities(self, context: Context) -> Type:
+        if self.name == "identityref":
+            # Normalize identity base to always include the module prefix. In doing
+            # so we make it easier to later look up bases in DIdentity.
+            fq_base = []
+            for base in self.base:
+                base_identity = self.get_identity(base, context)
+                fq_base.append("{base_identity.pfx}:{base_identity.name}")
+
+            new = Type(self.name,
+                    base=fq_base,
+                    bit=self.bit,
+                    enum=self.enum,
+                    fraction_digits=self.fraction_digits,
+                    length=self.length,
+                    path=self.path,
+                    pattern=self.pattern,
+                    range_=self.range_,
+                    require_instance=self.require_instance,
+                    type_=self.type_,
+                    exts=self.exts,
+                    mod=self.mod,
+                    ns=self.ns,
+                    pfx=self.pfx)
+            return new
+        else:
+            return self
+
+""",
         "resolve_typedef": r"""    def resolve_typedef(self, context: Context) -> Typedef:
         if self.name in _builtin_types:
-            return Typedef(self.name, type_=self.resolve_union_types(context))
+            return Typedef(self.name, type_=self.resolve_union_types(context).resolve_identities(context))
         td = self.get_typedef(self.name, context)
         for i in range(RECURSION_LIMIT+1):
             if td.type_.name in _builtin_types:
-                new_t = td.type_.resolve_union_types(context)
+                new_t = td.type_.resolve_union_types(context).resolve_identities(context)
                 td.type_ = new_t
                 return td
             td = td.type_.resolve_typedef(context)

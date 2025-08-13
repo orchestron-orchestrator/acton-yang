@@ -1,5 +1,6 @@
 import testing
 
+import yang.identity
 import yang.parser
 import yang.schema
 import yang
@@ -2319,3 +2320,131 @@ def _test_identityref():
 
     src = root.prdaclass()
     return src
+
+def _test_fail_identityref_undefined_base():
+    """Test that compilation fails when identityref references undefined base identity"""
+    ys = r"""module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+
+    container c1 {
+        leaf protocol {
+            type identityref {
+                base undefined-identity;
+            }
+            description "Protocol type - references undefined base identity";
+        }
+    }
+}"""
+    try:
+        root = yang.compile([ys])
+    except ValueError as exc:
+        testing.assertEqual(exc.error_message, "foo - Compile - Failed: Unable to find identity 'undefined-identity' in module 'foo'")
+    else:
+        testing.error("Expected ValueError for undefined base identity")
+
+def _test_fail_identity_duplicate():
+    """Test that compilation fails when the identity graphs is cyclic"""
+    ys = r"""module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+
+    identity a;
+    identity a;
+}"""
+    try:
+        root = yang.compile([ys])
+        print(root.prdaclass())
+    except ValueError as exc:
+        testing.assertEqual(exc.error_message, "Identity foo:a is duplicated")
+    else:
+        testing.error("Expected ValueError for duplicate identity")
+
+def _test_fail_identity_cyclic():
+    """Test that compilation fails when the identity graphs is cyclic"""
+    ys = r"""module foo {
+    yang-version "1.1";
+    namespace "http://example.com/foo";
+    prefix "foo";
+
+    identity a {
+      base b;
+    }
+
+    identity b {
+      base a;
+    }
+}"""
+    try:
+        root = yang.compile([ys])
+        print(root.prdaclass())
+    except ValueError as exc:
+        testing.assertEqual(exc.error_message, "Cycle detected in identity hierarchy: foo:a -> foo:b -> foo:a")
+    else:
+        testing.error("Expected ValueError for cycle in identity hierarchy")
+
+def assert_true_with_error(result):
+    testing.assertTrue(result.0, result.1)
+
+def _test_is_derived_from():
+    # Test the is_derived_from function
+    base = yang.schema.DIdentity("example-one", "uri:example:one", "example-one", "base", base=[])
+    base_two = yang.schema.DIdentity("example-two", "uri:example:two", "example-two", "base-two", base=[])
+    one = yang.schema.DIdentity("example-one", "uri:example:one", "example-one", "one", base=[base])
+    two = yang.schema.DIdentity("example-two", "uri:example:two", "example-two", "two", base=[base, base_two])
+    unrelated = yang.schema.DIdentity("example-three", "uri:example:three", "example-three", "unrelated", base=[])
+
+    # Test direct base identity
+    testing.assertTrue(yang.identity.is_derived_from(base, [base]), "base should be derived from itself")
+
+    # Test derived identity
+    testing.assertTrue(yang.identity.is_derived_from(one, [base]), "one should be derived from base")
+
+    # Test multi-base derived identity
+    testing.assertTrue(yang.identity.is_derived_from(two, [base]), "two should be derived from base")
+    testing.assertTrue(yang.identity.is_derived_from(two, [base_two]), "two should be derived from base_two")
+    testing.assertTrue(yang.identity.is_derived_from(two, [base, base_two]), "two should be derived from base or base_two")
+
+    # Test unrelated identity
+    testing.assertFalse(yang.identity.is_derived_from(unrelated, [base]), "unrelated should not be derived from base")
+    testing.assertFalse(yang.identity.is_derived_from(unrelated, [base_two]), "unrelated should not be derived from base_two")
+
+    # Test transitive derivation
+    three = yang.schema.DIdentity("example-one", "uri:example:one", "example-one", "three", base=[one])
+    testing.assertTrue(yang.identity.is_derived_from(three, [base]), "three should be transitively derived from base through one")
+    testing.assertTrue(yang.identity.is_derived_from(three, [one]), "three should be directly derived from one")
+
+def _test_fail_identity_missing_imported_base():
+    """Test that compilation fails when identity references a missing base from imported module"""
+    ys_base = r"""module base {
+    yang-version "1.1";
+    namespace "http://example.com/base";
+    prefix "base";
+
+    identity interface-type {
+        description "Base identity for interface types";
+    }
+}"""
+
+    ys_derived = r"""module derived {
+    yang-version "1.1";
+    namespace "http://example.com/derived";
+    prefix "derived";
+    import base {
+        prefix "base";
+    }
+
+    identity ethernet {
+        base base:network-type;  // References non-existent identity
+        description "Ethernet interface type";
+    }
+}"""
+
+    try:
+        root = yang.compile([ys_base, ys_derived])
+    except ValueError as exc:
+        testing.assertEqual(exc.error_message, "derived - Compile - Failed: Unable to find identity 'network-type' in module 'base'")
+    else:
+        testing.error("Expected ValueError for undefined imported base identity")
