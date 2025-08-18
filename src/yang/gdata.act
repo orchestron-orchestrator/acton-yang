@@ -3,7 +3,7 @@ import testing
 import json
 import xml
 
-from yang.common import Identityref
+from yang.identityref import Identityref, PartialIdentityref
 
 """YANG data
 
@@ -190,10 +190,7 @@ def nsq(node_ns, v: ?value=None):
     if node_ns is not None:
         r[""] = node_ns
     if isinstance(v, Identityref):
-        vns = v.ns
-        vmod = v.mod
-        if vns is not None and vmod is not None:
-            r[vmod] = vns
+        r[v.mod] = v.ns
     return r
 
 
@@ -202,11 +199,7 @@ def yang_str(v) -> str:
         s = base64.encode(v).decode()
         return s
     if isinstance(v, Identityref):
-        vmod = v.mod
-        if vmod is not None:
-            s = "{vmod}:{v.val}"
-        else:
-            s = str(v.val)
+        s = "{v.mod}:{v.val}"
         return s
     s = str(v)
     if isinstance(v, bool):
@@ -219,11 +212,7 @@ def json_val(yang_type: str, v: value) -> ?value:
     if yang_type == "int64" or yang_type == "uint64":
         return str(v)
     if isinstance(v, Identityref):
-        vmod = v.mod
-        if vmod is not None:
-            return "{v.mod}:{v.val}"
-        else:
-            return str(v.val)
+        return "{v.mod}:{v.val}"
     return v
 
 
@@ -857,7 +846,7 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a == b
-    raise ValueError("Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
+    raise ValueError("Unsupported value type or mismatch in eq comparison: {type(a)}, {type(b)}")
 
 # For leaf-lists we need to compare a list of values
 def vals_list_equal(a: list[value], b: list[value]) -> bool:
@@ -898,7 +887,9 @@ def vals_less_than(a: value, b: value) -> bool:
         return a < b
     if isinstance(a, i64) and isinstance(b, i64):
         return a < b
-    raise ValueError("Unsupported value type or mismatch in comparison: {type(a)}, {type(b)}")
+    if isinstance(a, Identityref) and isinstance(b, Identityref):
+        return a < b
+    raise ValueError("Unsupported value type or mismatch in lt comparison: {type(a)}, {type(b)}")
 
 def vals_list_sorted(a: list[value]) -> list[value]:
     """Sort a list of values, comparing only values of the same type
@@ -1531,7 +1522,7 @@ def from_xml_value(n: xml.Node, name: str, ns: ?str) -> value:
         return r
     raise ValueError("Cannot find xml child with name {name}")
 
-def from_xml_opt_Identityref(n: xml.Node, name: str, ns: ?str) -> ?Identityref:
+def from_xml_opt_Identityref(n: xml.Node, name: str, ns: ?str) -> ?PartialIdentityref:
     try:
         c = get_xml_child(n, name, ns)
         t = c.text
@@ -1540,14 +1531,14 @@ def from_xml_opt_Identityref(n: xml.Node, name: str, ns: ?str) -> ?Identityref:
     except ValueError:
         return None
 
-def from_xml_Identityref(n: xml.Node, name: str, ns: ?str) -> Identityref:
+def from_xml_Identityref(n: xml.Node, name: str, ns: ?str) -> PartialIdentityref:
     r = from_xml_opt_Identityref(n, name, ns)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name {name}")
 
 # plural
-def from_xml_opt_Identityrefs(n: xml.Node, name: str, ns: ?str) -> ?list[Identityref]:
+def from_xml_opt_Identityrefs(n: xml.Node, name: str, ns: ?str) -> ?list[PartialIdentityref]:
     res = []
     for child in get_xml_children(n, name, ns):
         t = child.text
@@ -1557,7 +1548,7 @@ def from_xml_opt_Identityrefs(n: xml.Node, name: str, ns: ?str) -> ?list[Identit
         return None
     return res
 
-def from_xml_Identityrefs(n: xml.Node, name: str, ns: ?str) -> list[Identityref]:
+def from_xml_Identityrefs(n: xml.Node, name: str, ns: ?str) -> list[PartialIdentityref]:
     r = from_xml_opt_Identityrefs(n, name, ns)
     if r is not None:
         return r
@@ -1960,7 +1951,7 @@ def take_json_values(jd: dict[str, ?value], name: str, module: ?str=None) -> lis
         return val
     raise ValueError("Cannot find json value child with name {name}")
 
-def take_json_opt_Identityref(jd: dict[str, ?value], name: str, module: ?str=None) -> ?Identityref:
+def take_json_opt_Identityref(jd: dict[str, ?value], name: str, module: ?str=None) -> ?PartialIdentityref:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, str):
@@ -1968,13 +1959,13 @@ def take_json_opt_Identityref(jd: dict[str, ?value], name: str, module: ?str=Non
         raise ValueError("Expected a string for identityref {name}")
     return None
 
-def take_json_Identityref(jd: dict[str, ?value], name: str, module: ?str=None) -> Identityref:
+def take_json_Identityref(jd: dict[str, ?value], name: str, module: ?str=None) -> PartialIdentityref:
     val = take_json_opt_Identityref(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json identityref child with name {name}")
 
-def take_json_opt_Identityrefs(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[Identityref]:
+def take_json_opt_Identityrefs(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[PartialIdentityref]:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, list):
@@ -1990,7 +1981,7 @@ def take_json_opt_Identityrefs(jd: dict[str, ?value], name: str, module: ?str=No
         raise ValueError(name + " is not a list of identityrefs")
     return None
 
-def take_json_Identityrefs(jd: dict[str, ?value], name: str, module: ?str=None) -> list[Identityref]:
+def take_json_Identityrefs(jd: dict[str, ?value], name: str, module: ?str=None) -> list[PartialIdentityref]:
     val = take_json_opt_Identityrefs(jd, name, module)
     if val is not None:
         return val
@@ -2714,6 +2705,15 @@ def _test_prsrc_leaf_ns():
 
     return y1.prsrc()
 
+def _test_prsrc_identityref():
+    y1 = Container({
+        "identity-local": Leaf("identityref", Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+    }, ns="http://example.com/acme", module="acme")
+
+    return y1.prsrc()
+
 def _test_to_json():
     y1 = Container({
         "acme:foo": Container({
@@ -2753,10 +2753,10 @@ def _test_to_json_empty_leaf():
 
 def _test_to_json_identityref():
     y1 = Container({
-        "identity-local": Leaf("identityref", Identityref("foo")),
-        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar")),
-        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar"), "http://example.com/augmentor", "augmentor"),
-    })
+        "identity-local": Leaf("identityref", Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+    }, ns="http://example.com/acme", module="acme")
 
     return y1.to_json(pretty=True)
 
@@ -2885,9 +2885,9 @@ def _test_to_xmlstr_empty_leaf():
 
 def _test_to_xmlstr_identityref():
     y1 = Container({
-        "identity-local": Leaf("identityref", Identityref("foo")),
-        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar")),
-        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar"), "http://example.com/augmentor", "augmentor"),
-    })
+        "identity-local": Leaf("identityref", Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+    }, ns="http://example.com/acme", module="acme")
 
     return y1.to_xmlstr()

@@ -3,23 +3,44 @@ import json
 import xml
 import yang.adata
 import yang.gdata
-from yang.common import Identityref
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref, PartialIdentityref
+from yang.schema import DIdentity
 
 # == This file is generated ==
 
 
-mod_to_ns = {'base':'http://example.com/base', 'bar':'http://example.com/bar', 'foo':'http://example.com/foo'}
-ns_to_mod = {'http://example.com/base':'base', 'http://example.com/bar':'bar', 'http://example.com/foo':'foo'}
-prefix_to_mod = {'base':'base', 'bar':'bar', 'foo':'foo'}
+_base_base_protocol_type = DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type', base=[])
+_identities = [
+    _base_base_protocol_type,
+    DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='sctp', base=[_base_base_protocol_type]),
+    DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='dccp', base=[_base_base_protocol_type]),
+    DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='tcp', base=[_base_base_protocol_type]),
+    DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='udp', base=[_base_base_protocol_type]),
+]
 
 
-mut def from_json_base__config__active_protocol(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+# Identityref constants
+base_protocol_type = Identityref('protocol-type', ns='http://example.com/base', mod='base', pfx='base')
+bar_sctp = Identityref('sctp', ns='http://example.com/bar', mod='bar', pfx='bar')
+bar_dccp = Identityref('dccp', ns='http://example.com/bar', mod='bar', pfx='bar')
+foo_tcp = Identityref('tcp', ns='http://example.com/foo', mod='foo', pfx='foo')
+foo_udp = Identityref('udp', ns='http://example.com/foo', mod='foo', pfx='foo')
 
-mut def from_xml_base__config__active_protocol(val: Identityref) -> yang.gdata.Leaf:
-    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)
-    return yang.gdata.Leaf('identityref', new_val)
+
+mut def from_json_base__config__active_protocol(val: PartialIdentityref) -> yang.gdata.Leaf:
+    new_val, error = complete_and_validate_identityref(val, _identities, ['base:protocol-type'], 'base')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
+
+mut def from_xml_base__config__active_protocol(val: PartialIdentityref) -> yang.gdata.Leaf:
+    new_val, error = complete_and_validate_identityref(val, _identities, ['base:protocol-type'], 'base')
+    if new_val is not None:
+        return yang.gdata.Leaf('identityref', new_val)
+    else:
+        raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
 
 class base__config(yang.adata.MNode):
     active_protocol: ?Identityref
@@ -32,6 +53,11 @@ class base__config(yang.adata.MNode):
         children = {}
         _active_protocol = self.active_protocol
         if _active_protocol is not None:
+            _identityref_active_protocol, error = complete_and_validate_identityref(_active_protocol, _identities, ['base:protocol-type'], 'base')
+            if _identityref_active_protocol is not None:
+                _active_protocol = _identityref_active_protocol
+            else:
+                raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
             children['active-protocol'] = yang.gdata.Leaf('identityref', _active_protocol)
         return yang.gdata.Container(children, ns='http://example.com/base', module='base')
 

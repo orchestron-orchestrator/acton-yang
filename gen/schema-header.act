@@ -93,7 +93,7 @@
 # and then running .to_dnode().
 
 import re
-from yang.common import Identityref
+from yang.identityref import Identityref
 
 RECURSION_LIMIT = 512
 
@@ -308,15 +308,18 @@ class DNodeInner(DNode):
             res.append("import xml")
             res.append("import yang.adata")
             res.append("import yang.gdata")
-            res.append("from yang.common import Identityref")
+            res.append("from yang.identity import complete_and_validate_identityref")
+            res.append("from yang.identityref import Identityref, PartialIdentityref")
+            res.append("from yang.schema import DIdentity")
             res.append("")
             res.append("# == This file is generated ==")
             res.append("")
             res.append("")
-            if isinstance(self, DRoot):
-                res.append("mod_to_ns = {repr(self.mod_to_ns)}")
-                res.append("ns_to_mod = {repr(self.ns_to_mod)}")
-                res.append("prefix_to_mod = {repr(self.prefix_to_mod)}")
+            if isinstance(self, DRoot) and len(self.identities) > 0:
+                res.extend(DIdentity.format_identity_list(self.identities))
+                res.append("")
+                res.append("")
+                res.extend(DIdentity.format_identityref_constants(self.identities))
                 res.append("")
                 res.append("")
 
@@ -438,12 +441,13 @@ class DNodeInner(DNode):
                 child_default = child.default
                 if not loose and child_default is not None:
                     if child.type_.name == "identityref":
-                        prefix, name = split_prefix_name(child_default)
-                        if prefix is None or prefix == child.prefix:
-                            child_default = "Identityref('{name}')"
-                        else:
-                            child_default = """Identityref('{name}', mod_to_ns[prefix_to_mod["{prefix}"]], prefix_to_mod["{prefix}"])"""
-                    res.append("        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {prsrc_literal(child.type_.name, child_default)}")
+                        res.append("        _default_{usname(child)}, error = complete_and_validate_identityref(Identityref.from_adata('{child_default}'), _identities, {repr(child.type_.base)}, {repr(child.module)})")
+                        res.append("        if _default_{usname(child)} is not None:")
+                        res.append("            self.{usname(child)} = {usname(child)} if {usname(child)} is not None else _default_{usname(child)}")
+                        res.append("        else:")
+                        res.append("            raise ValueError('Invalid default value for identityref leaf {self.name}: {{error}}')")
+                    else:
+                        res.append("        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {prsrc_literal(child.type_.name, child_default)}")
                 else:
                     res.append("        self.{usname(child)} = {usname(child)}")
             elif isinstance(child, DLeafList):
@@ -488,22 +492,37 @@ class DNodeInner(DNode):
         res.append("        children = {{}}")
 
         for child in self.children:
-            if not isinstance(child, DLeafList):
-                res.append("        _{usname(child)} = self.{usname(child)}")
             if child.namespace != self.namespace:
                 child_ns = ", ns='{child.namespace}', module='{child.module}'"
             else:
                 child_ns = ""
-            if isinstance(child, DLeafList):
-                res.append("        children['{uname(child)}'] = yang.gdata.LeafList('{child.type_.name}', self.{usname(child)}{maybe_user_order_ll(child)}{child_ns})")
-            else:
-                res.append("        if _{usname(child)} is not None:")
-                if isinstance(child, DLeaf):
-                    res.append("            children['{uname(child)}'] = yang.gdata.Leaf('{child.type_.name}', _{usname(child)}{child_ns})")
-                elif isinstance(child, DContainer):
-                    res.append("            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
-                elif isinstance(child, DList):
-                    res.append("            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
+            res.append("        _{usname(child)} = self.{usname(child)}")
+            res.append("        if _{usname(child)} is not None:")
+            if isinstance(child, DLeaf):
+                if child.type_.name == "identityref":
+                    res.append("            _identityref_{usname(child)}, error = complete_and_validate_identityref(_{usname(child)}, _identities, {repr(child.type_.base)}, {repr(child.module)})")
+                    res.append("            if _identityref_{usname(child)} is not None:")
+                    res.append("                _{usname(child)} = _identityref_{usname(child)}")
+                    res.append("            else:")
+                    res.append("                raise ValueError('Invalid value for identityref leaf {child.name}: {{error}}')")
+                res.append("            children['{uname(child)}'] = yang.gdata.Leaf('{child.type_.name}', _{usname(child)}{child_ns})")
+            elif isinstance(child, DLeafList):
+                # None check for leaf-list is redundant (always defaults to []),
+                # but this makes the generator more readable
+                if child.type_.name == "identityref":
+                    res.append("            _identityref_{usname(child)} = []")
+                    res.append("            for v in _{usname(child)}:")
+                    res.append("                nv, error = complete_and_validate_identityref(v, _identities, {repr(child.type_.base)}, {repr(child.module)})")
+                    res.append("                if nv is not None:")
+                    res.append("                    _identityref_{usname(child)}.append(nv)")
+                    res.append("                else:")
+                    res.append("                    raise ValueError('Invalid value for identityref leaf-list {child.name}: {{error}}')")
+                    res.append("            _{usname(child)} = _identityref_{usname(child)}")
+                res.append("            children['{uname(child)}'] = yang.gdata.LeafList('{child.type_.name}', _{usname(child)}{maybe_user_order_ll(child)}{child_ns})")
+            elif isinstance(child, DContainer):
+                res.append("            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
+            elif isinstance(child, DList):
+                res.append("            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
 
         if isinstance(self, DList):
             # List element is a Container, but it needs no namespace qualifiers
@@ -612,7 +631,7 @@ class DNodeInner(DNode):
         # Uses nested f-strings with two evaluation phases:
         # 1. Generation-time: Outer f-strings resolve class names, paths, variable names
         # 2. Runtime: Inner f-strings {{...}} become {...} and evaluate when prsrc() executes
-        # 
+        #
         # The 'top' parameter is internal and controls how the top element is created:
         # - top=True: Generate constructor call (for root/independent objects)
         # - top=False: Skip constructor, generate only assignments (for nested objects)
@@ -1079,6 +1098,97 @@ class DContainer(DNodeInner):
         self.exts = exts
         self.children = children
 
+class DIdentity(DNode):
+    base: list[DIdentity]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, base: list[DIdentity]=[]):
+        self.module = module
+        self.namespace = namespace
+        self.prefix = prefix
+        self.name = name
+        self.base = base
+
+    def __repr__(self):
+        base_reprs = [repr(b) for b in self.base]
+        return "DIdentity(module={repr(self.module)}, namespace={repr(self.namespace)}, prefix={repr(self.prefix)}, name={repr(self.name)}, base=[{', '.join(base_reprs)}])"
+
+    def key(self):
+        return "{self.module}:{self.name}"
+
+    @staticmethod
+    def format_identity_list(identities: list[DIdentity]) -> list[str]:
+        """Format a list of identities with proper variable declarations for bases
+
+        Returns a list of strings to be added to the result
+        """
+        if not identities:
+            return ["_identities = []"]
+
+        result = []
+
+        # Sort identities topologically (bases before derived)
+        sorted_identities = []
+        visited = set()
+
+        def visit(identity):
+            if identity.key() in visited:
+                return
+            visited.add(identity.key())
+            # Visit bases first
+            for base in identity.base:
+                if isinstance(base, DIdentity):
+                    visit(base)
+            sorted_identities.append(identity)
+
+        for identity in identities:
+            visit(identity)
+
+        # Assign (base) identity var name and also track it as a base
+        base_var_map = {}
+        for identity in identities:
+            for base in identity.base:
+                base_var_map[base.key()] = "_base_{base.module}_{base.name}".replace("-", "_")
+
+        # Print variable declarations for identities that are used as bases in order of precedence
+        for identity in sorted_identities:
+            if identity.key() in base_var_map:
+                var_name = base_var_map[identity.key()]
+                base_refs = [base_var_map[base.key()] for base in identity.base]
+                result.append("{var_name} = DIdentity(module={repr(identity.module)}, namespace={repr(identity.namespace)}, prefix={repr(identity.prefix)}, name={repr(identity.name)}, base=[{', '.join(base_refs)}])")
+
+        # Build the global _identities list
+        result.append("_identities = [")
+        for identity in identities:
+            if identity.key() in base_var_map:
+                # Reference the variable
+                result.append("    {base_var_map[identity.key()]},")
+            else:
+                # Inline declaration with base references
+                base_refs = [base_var_map[base.key()] for base in identity.base]
+                result.append("    DIdentity(module={repr(identity.module)}, namespace={repr(identity.namespace)}, prefix={repr(identity.prefix)}, name={repr(identity.name)}, base=[{', '.join(base_refs)}]),")
+        result.append("]")
+
+        return result
+
+    @staticmethod
+    def format_identityref_constants(identities: list[DIdentity]) -> list[str]:
+        """Format a list of Identityref constants for each identity
+
+        Returns a list of strings to be added to the result
+        """
+        if not identities:
+            return []
+
+        result = []
+        result.append("# Identityref constants")
+
+        for identity in identities:
+            # Create variable name by replacing hyphens with underscores
+            var_name = "{identity.module}_{identity.name}".replace("-", "_")
+            result.append("{var_name} = Identityref({repr(identity.name)}, ns={repr(identity.namespace)}, mod={repr(identity.module)}, pfx={repr(identity.prefix)})")
+
+        return result
+
 class DInput(DNodeInner):
     must: list[Must]
 
@@ -1099,13 +1209,14 @@ class DModule(DNodeInner):
     deviation: list[str]
     extension_: list[Extension]
     feature: list[Feature]
+    identity: list[Identity]
     import_: list[Import]
     include: list[Include]
     organization: ?str
     revision: list[Revision]
     yang_version: float
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension_=[], feature=[], import_=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension_=[], feature=[], identity=[], import_=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
         self.module = module
         self.name = name
         self.gname = "Container"
@@ -1123,6 +1234,7 @@ class DModule(DNodeInner):
         self.deviation = deviation
         self.extension_ = extension_
         self.feature = feature
+        self.identity = identity
         self.import_ = import_
         self.include = include
         self.organization = organization
@@ -1211,18 +1323,24 @@ class DLeaf(DNodeLeaf):
         res = []
         if gen_json:
             if self.type_.name == "identityref":
-                res.append("mut def from_json_{pname(self)}(val: Identityref) -> yang.gdata.Leaf:")
-                res.append("    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)")
-                res.append("    return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
+                res.append("mut def from_json_{pname(self)}(val: PartialIdentityref) -> yang.gdata.Leaf:")
+                res.append("    new_val, error = complete_and_validate_identityref(val, _identities, {repr(self.type_.base)}, {repr(self.module)})")
+                res.append("    if new_val is not None:")
+                res.append("        return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
+                res.append("    else:")
+                res.append("        raise ValueError('Invalid value for identityref leaf {self.name}: {{error}}')")
             else:
                 res.append("mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
                 res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
         if gen_xml:
             if self.type_.name == "identityref":
-                res.append("mut def from_xml_{pname(self)}(val: Identityref) -> yang.gdata.Leaf:")
-                res.append("    new_val = Identityref.complete(val, ns_to_mod, mod_to_ns)")
-                res.append("    return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
+                res.append("mut def from_xml_{pname(self)}(val: PartialIdentityref) -> yang.gdata.Leaf:")
+                res.append("    new_val, error = complete_and_validate_identityref(val, _identities, {repr(self.type_.base)}, {repr(self.module)})")
+                res.append("    if new_val is not None:")
+                res.append("        return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
+                res.append("    else:")
+                res.append("        raise ValueError('Invalid value for identityref leaf {self.name}: {{error}}')")
             else:
                 res.append("mut def from_xml_{pname(self)}(val: value) -> yang.gdata.Leaf:")
                 res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
@@ -1272,8 +1390,14 @@ class DLeafList(DNodeLeaf):
         res = []
         if gen_json:
             if self.type_.name == "identityref":
-                res.append("mut def from_json_{pname(self)}(val: list[Identityref]) -> yang.gdata.LeafList:")
-                res.append("    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]")
+                res.append("mut def from_json_{pname(self)}(val: list[PartialIdentityref]) -> yang.gdata.LeafList:")
+                res.append("    new_val = []")
+                res.append("    for v in val:")
+                res.append("        nv, error = complete_and_validate_identityref(v, _identities, {repr(self.type_.base)}, {repr(self.module)})")
+                res.append("        if nv is not None:")
+                res.append("            new_val.append(nv)")
+                res.append("        else:")
+                res.append("            raise ValueError('Invalid value for identityref leaf-list {self.name}: {{error}}')")
                 res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
             else:
                 res.append("mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
@@ -1281,8 +1405,14 @@ class DLeafList(DNodeLeaf):
             res.append("")
         if gen_xml:
             if self.type_.name == "identityref":
-                res.append("mut def from_xml_{pname(self)}(val: list[Identityref]) -> yang.gdata.LeafList:")
-                res.append("    new_val = [Identityref.complete(v, ns_to_mod, mod_to_ns) for v in val]")
+                res.append("mut def from_xml_{pname(self)}(val: list[PartialIdentityref]) -> yang.gdata.LeafList:")
+                res.append("    new_val = []")
+                res.append("    for v in val:")
+                res.append("        nv, error = complete_and_validate_identityref(v, _identities, {repr(self.type_.base)}, {repr(self.module)})")
+                res.append("        if nv is not None:")
+                res.append("            new_val.append(nv)")
+                res.append("        else:")
+                res.append("            raise ValueError('Invalid value for identityref leaf-list {self.name}: {{error}}')")
                 res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
             else:
                 res.append("mut def from_xml_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
@@ -1328,18 +1458,77 @@ class DRoot(DNodeInner):
         self.gname = "Container"
         self.config = True
         self.children=[]
-        self.mod_to_ns = {}
-        self.ns_to_mod = {}
-        self.prefix_to_mod = {}
+        self.identities = []
+
+        # Build a global identity map from all modules
+        identity_map = {}  # Map from "prefix:name" to DIdentity instance
         for module in modules:
             if isinstance(module, DModule):
                 for child in module.children:
                     self.children.append(child)
-                self.mod_to_ns[module.name] = module.namespace
-                self.ns_to_mod[module.namespace] = module.name
-                self.prefix_to_mod[module.prefix] = module.name
+
+                # Add identities to global map
+                for identity in module.identity:
+                    key = "{identity.pfx}:{identity.name}"
+                    if key in identity_map:
+                        raise ValueError("Identity {identity.pfx}:{identity.name} is duplicated")
+                    identity_map[key] = (
+                        identity=DIdentity(
+                            module=identity.get_module_name(),
+                            namespace=identity.get_namespace(),
+                            prefix=identity.get_prefix(),
+                            name=identity.name),
+                        base=identity.base)
             else:
                 raise ValueError("DRoot can only contain DModule")
+
+        # Resolve base references using the global map, ensure all bases exist
+        for id in identity_map.values():
+            resolved_bases = []
+            for base_key in id.base:
+                if base_key in identity_map:
+                    resolved_bases.append(identity_map[base_key].identity)
+                else:
+                    raise ValueError("Could not find {id.identity.prefix}:{id.identity.name} in any module")
+            id.identity.base = resolved_bases
+
+        # Detect cycles in the identity hierarchy (DFS)
+        # visited_global is shared across all DFS traversals to avoid re-checking
+        # nodes that were already visited
+        visited_global = set()
+
+        def detect_cycles(identity_key: str, path: list[str], rec_stack: set[str]) -> ?str:
+            if identity_key in rec_stack:
+                # Found a cycle - build error message
+                cycle_start = path.index(identity_key)
+                cycle = " -> ".join(path[cycle_start:] + [identity_key])
+                return "Cycle detected in identity hierarchy: {cycle}"
+
+            if identity_key in visited_global:
+                return None
+
+            # Remember we already visited this node so we can skip it later
+            visited_global.add(identity_key)
+            rec_stack.add(identity_key)
+
+            # Check our base identities
+            for base_key in identity_map[identity_key].base:
+                result = detect_cycles(base_key, path + [identity_key], rec_stack)
+                if result is not None:
+                    return result
+
+            # Remove from rec_stack when backtracking
+            rec_stack.discard(identity_key)
+            return None
+
+        for identity_key in identity_map.keys():
+            if identity_key in visited_global:
+                continue
+            error = detect_cycles(identity_key, [], set())
+            if error is not None:
+                raise ValueError(error)
+
+        self.identities = [v.identity for v in identity_map.values()]
 
 class DRpc(DNodeInner):
     if_feature: list[str]
@@ -1895,6 +2084,36 @@ class SchemaNode(object):
             if i == RECURSION_LIMIT:
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find typedef '{name}'")
+
+    def get_identity(self, name: str, context: Context) -> Identity:
+        """Find a identity in the local module or an imported module
+        """
+        prefix, identity_name = split_prefix_name(name)
+        if prefix is not None:
+            imported_module = self.get_module_by_prefix(prefix, context)
+            return imported_module.get_identity(identity_name, context)
+        else:
+            return self.get_identity_in_module(identity_name)
+
+    def get_identity_in_module(self, name: str) -> Identity:
+        """Find a identity in the current module
+        """
+        n = self
+        for i in range(RECURSION_LIMIT+1):
+            identitys: list[Identity] = []
+            if isinstance(n, Module):
+                for child in n.children:
+                    if isinstance(child, Identity) and child.name == name:
+                        return child
+            nparent = n.parent
+            if nparent is not None:
+                n = nparent
+                continue
+            else:
+                break
+            if i == RECURSION_LIMIT:
+                raise ValueError("Recursion limit reached")
+        raise ValueError("Unable to find identity '{name}' in module '{self.get_module_name()}'")
 
     def to_statement(self) -> Statement:
         """Convert this schema node to a Statement

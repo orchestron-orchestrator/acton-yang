@@ -4,14 +4,23 @@ import json
 import xml
 import yang.adata
 import yang.gdata
-from yang.common import Identityref
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref, PartialIdentityref
+from yang.schema import DIdentity
 
 # == This file is generated ==
 
 
-mod_to_ns = {'foo':'http://example.com/foo'}
-ns_to_mod = {'http://example.com/foo':'foo'}
-prefix_to_mod = {'f':'foo'}
+_base_foo_basey = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey', base=[])
+_identities = [
+    _base_foo_basey,
+    DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='fooy', base=[_base_foo_basey]),
+]
+
+
+# Identityref constants
+foo_basey = Identityref('basey', ns='http://example.com/foo', mod='foo', pfx='f')
+foo_fooy = Identityref('fooy', ns='http://example.com/foo', mod='foo', pfx='f')
 
 
 mut def from_json_foo__tc1__l1(val: value) -> yang.gdata.Leaf:
@@ -493,7 +502,7 @@ def src_schema_compiled():
     res = {}
     res["foo"] = Module('foo', yang_version=1.1, namespace='http://example.com/foo', prefix='f', children=[
     Identity('basey'),
-    Identity('fooy', base=['basey']),
+    Identity('fooy', base=['f:basey']),
     Container('tc1', children=[
         Leaf('l1', type_=Type('string'), mandatory=True),
         Leaf('l2', type_=Type('string'))
