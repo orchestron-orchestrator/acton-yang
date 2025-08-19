@@ -510,8 +510,12 @@ def _test_foo_from_xml_empty():
     return gd2.prsrc()
 
 def _test_foo_from_json_empty():
-    gd = yang_foo.from_json(json.decode(r"{}"))
-    return gd.prsrc()
+    json_in = json.decode(r"{}")
+    gd2 = yang_foo.from_json(json_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_gen3(json_in)
+    testing.assertEqual(gd2, gd3)
+    return gd2.prsrc()
 
 def _test_foo_from_gdata_c1_l1():
     gd = yang.gdata.Container(children={
@@ -587,8 +591,11 @@ def _test_leaf_default_from_xml():
 def _test_leaf_default_from_json():
     json_text = r"""{"basics:c": {}}"""
     json_in = json.decode(json_text)
-    gd = yang_basics.from_json(json_in)
-    r = yang_basics.root.from_gdata(gd)
+    gd2 = yang_basics.from_json(json_in)
+    # Parse with gen3 and compare
+    gd3 = yang_basics.from_json_gen3(json_in)
+    testing.assertEqual(gd2, gd3)
+    r = yang_basics.root.from_gdata(gd2)
     basics_leaf_defaults(r)
 
 def _test_leaf_default_from_gdata():
@@ -711,22 +718,27 @@ json_full = {
 }
 
 def _test_foo_from_json_full():
-    gdata_json = yang_foo.from_json(json_full)
-    print(gdata_json.prsrc(), err=True)
-    json_out = gdata_json.to_json()
+    gd2 = yang_foo.from_json(json_full)
+    print(gd2.prsrc(), err=True)
+    gd3 = yang_foo.from_json_gen3(json_full)
+    testing.assertEqual(gd2, gd3)
+    json_out = gd2.to_json()
     testing.assertEqual(json.encode(json_full, pretty=True), json_out)
-    return gdata_json.prsrc()
+    return gd2.prsrc()
 
 def _test_foo_from_json_empty_leaf():
     json_text = r"""{"foo:c1":{"l_empty":[null]}}"""
     json_in = json.decode(json_text)
-    gdata_json = yang_foo.from_json(json_in)
-    ad = yang_foo_root.from_gdata(gdata_json)
+    gd2 = yang_foo.from_json(json_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_gen3(json_in)
+    testing.assertEqual(gd2, gd3)
+    ad = yang_foo_root.from_gdata(gd2)
     testing.assertNotNone(ad.c1.l_empty)
     l_empty = ad.c1.l_empty
     if l_empty is not None:
         testing.assertTrue(l_empty)
-    json_out_text = gdata_json.to_json(pretty=False)
+    json_out_text = gd2.to_json(pretty=False)
     testing.assertEqual(json_text, json_out_text)
 
 def _test_from_json():
@@ -737,10 +749,13 @@ def _test_from_json():
         }
     }
     # Should successfully parse since mandatory field is present
-    gdata = yang_one.from_json(json_data)
-    #root = yang_one.root.from_gdata(gdata)
+    gd2 = yang_one.from_json(json_data)
+    # Parse with gen3 and compare
+    gd3 = yang_one.from_json_gen3(json_data)
+    testing.assertEqual(gd2, gd3)
+    #root = yang_one.root.from_gdata(gd2)
     #testing.assertEqual(root.children["tc1"].children["l1"].val, "foo")
-    return gdata.to_xmlstr()
+    return gd2.to_xmlstr()
 
 # example JSON data
 jd1 = {
@@ -777,13 +792,19 @@ jd1 = {
 
 def _test_json_to_gdata():
     """Test JSON to GData conversion"""
-    gdata = yang_foo.from_json(jd1)
-    return gdata.prsrc()
+    gd2 = yang_foo.from_json(jd1)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_gen3(jd1)
+    testing.assertEqual(gd2, gd3)
+    return gd2.prsrc()
 
 def _test_json_roundtrip():
     """Test JSON roundtrip"""
-    gdata = yang_foo.from_json(jd1)
-    json_out = gdata.to_json()
+    gd2 = yang_foo.from_json(jd1)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_gen3(jd1)
+    testing.assertEqual(gd2, gd3)
+    json_out = gd2.to_json()
     testing.assertEqual(json.encode(jd1, pretty=True), json_out)
 
 
@@ -1102,8 +1123,11 @@ def _test_validate_identityref_json_qual():
             "l_identityref": "foo:fooy"
         }
     }
-    gd = yang_foo.from_json(json_text)
-    return gd.prsrc()
+    gd2 = yang_foo.from_json(json_text)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_gen3(json_text)
+    testing.assertEqual(gd2, gd3)
+    return gd2.prsrc()
 
 def _test_validate_identityref_json_no_qual():
     # Test validation through JSON parsing - valid case without qualifier (should use current module)
@@ -1112,8 +1136,11 @@ def _test_validate_identityref_json_no_qual():
             "l_identityref": "fooy"
         }
     }
-    gd = yang_foo.from_json(json_text)
-    return gd.prsrc()
+    gd2 = yang_foo.from_json(json_text)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_gen3(json_text)
+    testing.assertEqual(gd2, gd3)
+    return gd2.prsrc()
 
 def _test_validate_identityref_json_invalid():
     # Test validation through JSON parsing - invalid case
@@ -1123,11 +1150,21 @@ def _test_validate_identityref_json_invalid():
         }
     }
     try:
-        gd = yang_foo.from_json(json_text)
-        ad = yang_foo_root.from_gdata(gd)
+        gd2 = yang_foo.from_json(json_text)
+        ad = yang_foo_root.from_gdata(gd2)
         # Try to convert back to gdata to trigger validation
-        gd2 = ad.to_gdata()
+        gd_out = ad.to_gdata()
         testing.error("Expected ValueError for invalid identityref value")
+    except ValueError as exc:
+        if "Invalid value for identityref" not in exc.error_message:
+            raise exc
+    # Also test with gen3 - should fail the same way
+    try:
+        gd3 = yang_foo.from_json_gen3(json_text)
+        ad3 = yang_foo_root.from_gdata(gd3)
+        # Try to convert back to gdata to trigger validation
+        gd_out3 = ad3.to_gdata()
+        testing.error("Expected ValueError for invalid identityref value from gen3")
     except ValueError as exc:
         if "Invalid value for identityref" not in exc.error_message:
             raise exc
@@ -1142,8 +1179,11 @@ def _test_validate_identityref_leaflist_json_qual():
             "ll_identityref": ["foo:fooy", "bar:bary"]
         }
     }
-    gd = yang_foo.from_json(json_text)
-    return gd.prsrc()
+    gd2 = yang_foo.from_json(json_text)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_gen3(json_text)
+    testing.assertEqual(gd2, gd3)
+    return gd2.prsrc()
 
 def _test_validate_identityref_leaflist_json_no_qual():
     # Test validation through JSON parsing - valid case without qualifier
@@ -1152,8 +1192,11 @@ def _test_validate_identityref_leaflist_json_no_qual():
             "ll_identityref": ["fooy"]
         }
     }
-    gd = yang_foo.from_json(json_text)
-    return gd.prsrc()
+    gd2 = yang_foo.from_json(json_text)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_gen3(json_text)
+    testing.assertEqual(gd2, gd3)
+    return gd2.prsrc()
 
 def _test_validate_identityref_leaflist_json_invalid():
     # Test validation through JSON parsing - invalid case
@@ -1163,11 +1206,21 @@ def _test_validate_identityref_leaflist_json_invalid():
         }
     }
     try:
-        gd = yang_foo.from_json(json_text)
-        ad = yang_foo_root.from_gdata(gd)
+        gd2 = yang_foo.from_json(json_text)
+        ad = yang_foo_root.from_gdata(gd2)
         # Try to convert back to gdata to trigger validation
-        gd2 = ad.to_gdata()
+        gd_out = ad.to_gdata()
         testing.error("Expected ValueError for invalid identityref value in leaf-list")
+    except ValueError as exc:
+        if "Invalid value for identityref" not in exc.error_message:
+            raise exc
+    # Also test with gen3 - should fail the same way
+    try:
+        gd3 = yang_foo.from_json_gen3(json_text)
+        ad3 = yang_foo_root.from_gdata(gd3)
+        # Try to convert back to gdata to trigger validation
+        gd_out3 = ad3.to_gdata()
+        testing.error("Expected ValueError for invalid identityref value in leaf-list from gen3")
     except ValueError as exc:
         if "Invalid value for identityref" not in exc.error_message:
             raise exc
