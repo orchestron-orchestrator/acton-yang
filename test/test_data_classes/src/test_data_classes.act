@@ -821,9 +821,12 @@ def _test_json_path():
     jdb = {
         "foo": "WINNING"
         }
-    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner"])
+    testing.assertEqual(gdb2, gdb3)
 
-    testing.assertEqual(gda.prsrc(), gdb.prsrc())
+    testing.assertEqual(gda.prsrc(), gdb2.prsrc())
 
 def _test_json_path_nested_key_in_payload():
     jda = {
@@ -844,10 +847,13 @@ def _test_json_path_nested_key_in_payload():
         "name": "AAA",
         "bar": "WINNING"
         }
-    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(gdb2, gdb3)
 
-    testing.assertEqual(gda.prsrc(), gdb.prsrc())
-    return gdb.prsrc()
+    testing.assertEqual(gda.prsrc(), gdb2.prsrc())
+    return gdb2.prsrc()
 
 def _test_json_path_nested_no_key_in_payload():
     jda = {
@@ -867,10 +873,13 @@ def _test_json_path_nested_no_key_in_payload():
     jdb = {
         "bar": "WINNING"
         }
-    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(gdb2, gdb3)
 
-    testing.assertEqual(gda.prsrc(), gdb.prsrc())
-    return gdb.prsrc()
+    testing.assertEqual(gda.prsrc(), gdb2.prsrc())
+    return gdb2.prsrc()
 
 def _test_json_path_nested_key_mismatch():
     jda = {
@@ -892,8 +901,14 @@ def _test_json_path_nested_key_mismatch():
         "bar": "WINNING"
         }
     try:
-        gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+        gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
         testing.error("Expected exception on key mismatch")
+    except ValueError:
+        pass
+    # Also test with gen3 - should fail the same way
+    try:
+        gdb3 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+        testing.error("Expected exception on key mismatch from gen3")
     except ValueError:
         return
 
@@ -921,10 +936,13 @@ def _test_json_path_nested():
     jdb = {
         "baz": "WINNING"
         }
-    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA", "li2", "BBB,CCC"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA", "li2", "BBB,CCC"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA", "li2", "BBB,CCC"])
+    testing.assertEqual(gdb2, gdb3)
 
-    testing.assertEqual(gda.prsrc(), gdb.prsrc())
-    return gdb.prsrc()
+    testing.assertEqual(gda.prsrc(), gdb2.prsrc())
+    return gdb2.prsrc()
 
 def _test_json_path_conflict():
     jda = {
@@ -946,9 +964,12 @@ def _test_json_path_conflict():
         "bar": "WINNING",
         "bar:bar": "WINNING2"
     }
-    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
-    testing.assertEqual(gda.prsrc(), gdb.prsrc())
-    return gdb.prsrc()
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(gdb2, gdb3)
+    testing.assertEqual(gda.prsrc(), gdb2.prsrc())
+    return gdb2.prsrc()
 
 def _test_json_path_conflict_other():
     jda = {
@@ -963,9 +984,12 @@ def _test_json_path_conflict_other():
     jdb = {
         "foo": "WINNING"
     }
-    gdb = yang_foo.from_json_path(jdb, ["foo:nested", "bar:inner"])
-    testing.assertEqual(gda.prsrc(), gdb.prsrc())
-    return gdb.prsrc()
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "bar:inner"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "bar:inner"])
+    testing.assertEqual(gdb2, gdb3)
+    testing.assertEqual(gda.prsrc(), gdb2.prsrc())
+    return gdb2.prsrc()
 
 def _test_json_path_conflict_supefluous_namespace_qualifier():
     jda = {
@@ -983,25 +1007,43 @@ def _test_json_path_conflict_supefluous_namespace_qualifier():
     except ValueError as e:
         if str(e) != "ValueError: Invalid path":
             testing.error("Expected exception on invalid path")
+    # Also test with gen3 - should fail the same way
+    try:
+        yang_foo.from_json_path_gen3({}, ["foo:nested", "foo:inner"])
+    except ValueError as e:
+        if str(e) != "ValueError: Invalid path":
+            testing.error("Expected exception on invalid path from gen3")
 
 def _test_json_path_remove():
-    gd = yang_foo.from_json_path({}, ["foo:nested", "inner"], "remove")
-    return gd.prsrc()
+    gd2 = yang_foo.from_json_path({}, ["foo:nested", "inner"], "remove")
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_path_gen3({}, ["foo:nested", "inner"], "remove")
+    testing.assertEqual(gd2, gd3)
+    return gd2.prsrc()
 
 def _test_json_path_remove_list_element():
-    gd = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
-    return gd.prsrc()
+    gd2 = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_path_gen3({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+    testing.assertEqual(gd2, gd3)
+    return gd2.prsrc()
 
 def _test_json_ops():
     ds1 = yang_foo.from_json({})
-    p1 = yang_foo.from_json_path({"bar": "p1"}, ["foo:nested", "inner", "li1", "AAA"])
-    ds2 = yang.gdata.patch(ds1, p1)
+    p1_2 = yang_foo.from_json_path({"bar": "p1"}, ["foo:nested", "inner", "li1", "AAA"])
+    p1_3 = yang_foo.from_json_path_gen3({"bar": "p1"}, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(p1_2, p1_3)
+    ds2 = yang.gdata.patch(ds1, p1_2)
     if ds2 is not None:
-        p2 = yang_foo.from_json_path({"bar": "p2"}, ["foo:nested", "inner", "li1", "BBB"])
-        ds3 = yang.gdata.patch(ds2, p2)
+        p2_2 = yang_foo.from_json_path({"bar": "p2"}, ["foo:nested", "inner", "li1", "BBB"])
+        p2_3 = yang_foo.from_json_path_gen3({"bar": "p2"}, ["foo:nested", "inner", "li1", "BBB"])
+        testing.assertEqual(p2_2, p2_3)
+        ds3 = yang.gdata.patch(ds2, p2_2)
         if ds3 is not None:
-            p3 = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
-            ds4 = yang.gdata.patch(ds3, p3)
+            p3_2 = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+            p3_3 = yang_foo.from_json_path_gen3({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+            testing.assertEqual(p3_2, p3_3)
+            ds4 = yang.gdata.patch(ds3, p3_2)
             if ds4 is not None:
                 return ds4.prsrc()
     return ""
