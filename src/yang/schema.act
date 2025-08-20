@@ -361,8 +361,10 @@ class DNodeInner(DNode):
             res.append("import base64")
             res.append("import json")
             res.append("import xml")
+            res.append("import yang")
             res.append("import yang.adata")
             res.append("import yang.gdata")
+            res.append("import yang.gen3")
             res.append("from yang.identity import complete_and_validate_identityref")
             res.append("from yang.identityref import Identityref, PartialIdentityref")
             res.append("from yang.schema import DIdentity")
@@ -925,6 +927,13 @@ class DNodeInner(DNode):
             res.append("mut def from_xml_{pname(self)}(nodes: list[xml.Node]) -> yang.gdata.List:")
             res.append("    elements = [from_xml_{pname(self)}_element(e) for e in nodes]")
             res.append("    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
+            res.append("")
+
+        if gen_xml and isinstance(self, DRoot):
+            res.append("def from_xml_gen3(node: xml.Node, root_path: list[str]=[]) -> yang.gdata.Container:")
+            res.append("    # WARNING: this wrapper for the gen3.from_xml schema-driven parser compiles the schema on every call!")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.from_xml(s, node, loose={loose}, root_path=root_path)")
             res.append("")
 
         # == JSON serde ================================

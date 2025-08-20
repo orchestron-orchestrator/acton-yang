@@ -1,8 +1,10 @@
 import base64
 import json
 import xml
+import yang
 import yang.adata
 import yang.gdata
+import yang.gen3
 from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 from yang.schema import DIdentity
@@ -123,6 +125,11 @@ mut def from_xml(node: xml.Node) -> yang.gdata.Container:
     child_ieee_802_3 = yang.gdata.from_xml_opt_cnt(node, 'ieee-802.3', 'http://example.com/foo')
     yang.gdata.maybe_add(children, 'ieee-802.3', from_xml_foo__ieee_802_3, child_ieee_802_3)
     return yang.gdata.Container(children)
+
+def from_xml_gen3(node: xml.Node, root_path: list[str]=[]) -> yang.gdata.Container:
+    # WARNING: this wrapper for the gen3.from_xml schema-driven parser compiles the schema on every call!
+    s = yang.compile(src_yang())
+    return yang.gen3.from_xml(s, node, loose=False, root_path=root_path)
 
 mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
