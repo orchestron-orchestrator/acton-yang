@@ -1140,8 +1140,42 @@ def diff(old: Node, new: Node) -> ?Node:
             return entry_diff
         return None
 
-    # Helper function for diffing Lists which have ordered elements
-    def diff_list_elements(old_list: List, new_list: List) -> ?list[Node]:
+    # Helper function for diffing system-ordered lists (order doesn't matter)
+    def diff_system_ordered_list_elements(old_list: List, new_list: List) -> ?list[Node]:
+        if old_list.keys != new_list.keys:
+            raise ValueError("List keys differ: {str(old_list.keys)} vs {str(new_list.keys)}")
+
+        # Map elements by key for both lists
+        old_map = {e.key_str(old_list.keys): e for e in old_list.elements}
+        new_map = {e.key_str(new_list.keys): e for e in new_list.elements}
+
+        result: list[Node] = []
+
+        # Check all keys (union of both sets)
+        all_keys = set(old_map.keys()) | set(new_map.keys())
+
+        # Sort keys for consistent output
+        for key in sorted(all_keys):
+            if key in old_map and key in new_map:
+                # Element exists in both - check for differences
+                elem_diff = diff_list_element(old_map[key], new_map[key], old_list.keys)
+                if elem_diff is not None:
+                    result.append(elem_diff)
+            elif key in old_map:
+                # Element only in old - mark as absent
+                oe = old_map[key]
+                result.append(Absent(oe.key_children(old_list.keys)))
+            else:
+                # Element only in new - add it
+                ne = new_map[key]
+                result.append(ne)
+
+        if len(result) == 0:
+            return None
+        return result
+
+    # Helper function for diffing user-ordered lists (order matters)
+    def diff_user_ordered_list_elements(old_list: List, new_list: List) -> ?list[Node]:
 
         if old_list.keys != new_list.keys:
             raise ValueError("List keys differ: {str(old_list.keys)} vs {str(new_list.keys)}")
@@ -1217,8 +1251,13 @@ def diff(old: Node, new: Node) -> ?Node:
         return Container(children=diff_children, presence=new.presence, ns=new.ns, module=new.module)
 
     elif isinstance(old, List) and isinstance(new, List):
-        # For lists, we have elements instead of children
-        result = diff_list_elements(old, new)
+        if old.user_order != new.user_order:
+            raise ValueError("Cannot diff lists with different ordering types")
+
+        if old.user_order:
+            result = diff_user_ordered_list_elements(old, new)
+        else:
+            result = diff_system_ordered_list_elements(old, new)
         if result is None:
             return None
         return List(new.keys, elements=result, user_order=new.user_order, ns=new.ns, module=new.module)
@@ -2531,6 +2570,42 @@ def _test_patch_leaflist():
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
+
+def _test_diff_system_ordered_list_no_diff():
+    """Test that diff returns None for reordered elements in system-ordered lists.
+
+    System-ordered lists (user_order=False, which is the default) should not care about
+    element ordering. The system is free to reorder elements, so reordering should not
+    generate any diff. The diff should be None when comparing two system-ordered lists
+    with the same elements in different order.
+    """
+    elem1 = Container({
+        "id": Leaf("string", "1"),
+        "name": Leaf("string", "first")
+    })
+    elem2 = Container({
+        "id": Leaf("string", "2"),
+        "name": Leaf("string", "second")
+    })
+    elem3 = Container({
+        "id": Leaf("string", "3"),
+        "name": Leaf("string", "third")
+    })
+
+    old_list = List(
+        keys=["id"],
+        elements=[elem1, elem2, elem3],
+        user_order=False
+    )
+
+    new_list = List(
+        keys=["id"],
+        elements=[elem2, elem1, elem3],
+        user_order=False
+    )
+
+    result = diff(old_list, new_list)
+    testing.assertNone(result, "System-ordered list reordering should not generate a diff")
 
 def _test_diff_and_patch_large_tree():
     # Construct a large 'old' data tree under a Container node
