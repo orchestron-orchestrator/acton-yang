@@ -846,7 +846,12 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a == b
-    raise ValueError("Unsupported value type or mismatch in eq comparison: {type(a)}, {type(b)}")
+    if type(a) != type(b):
+        # It is valid to compare values of different type, which happens if
+        # leaves are of type union and value a and b happen to be of different
+        # type.
+        return False
+    raise ValueError("Unsupported value type in eq comparison")
 
 # For leaf-lists we need to compare a list of values
 def vals_list_equal(a: list[value], b: list[value]) -> bool:
