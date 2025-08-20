@@ -259,32 +259,91 @@ class DNode(object):
     reference: ?str
     exts: list[Ext]
 
-    def get(self, name: str) -> DNode:
-        """Get child node by name
+    def get(self, name: str, module: ?str=None, namespace: ?str=None, prefix: ?str=None, allow_unqualified=True) -> DNode:
+        """Get child node by name with optional namespace qualifiers.
+
+        Unqualified names first match against parent's module. If no match and allow_unqualified=True,
+        searches other modules, returning match if unambiguous.
         """
         if isinstance(self, DNodeInner):
+            # Collect all matching children
+            matches = []
+            same_module_match = None
+
             for child in self.children:
+                # Check if child matches the name
+                name_matches = False
                 if isinstance(child, DAction) and child.name == name:
-                    return child
+                    name_matches = True
                 elif isinstance(child, DAnydata) and child.name == name:
-                    return child
+                    name_matches = True
                 elif isinstance(child, DAnyxml) and child.name == name:
-                    return child
+                    name_matches = True
                 elif isinstance(child, DContainer) and child.name == name:
-                    return child
+                    name_matches = True
                 elif isinstance(child, DInput) and name == 'input':
-                    return child
+                    name_matches = True
                 elif isinstance(child, DLeaf) and child.name == name:
-                    return child
+                    name_matches = True
                 elif isinstance(child, DLeafList) and child.name == name:
-                    return child
+                    name_matches = True
                 elif isinstance(child, DList) and child.name == name:
-                    return child
+                    name_matches = True
                 elif isinstance(child, DOutput) and name == 'output':
-                    return child
+                    name_matches = True
                 elif isinstance(child, DRpc) and child.name == name:
-                    return child
-            raise ValueError("Child {name} not found")
+                    name_matches = True
+
+                if not name_matches:
+                    continue
+
+                # Check qualifiers if provided (all must match)
+                if module is not None or namespace is not None or prefix is not None:
+                    if (module is not None and child.module == module or module is None) and \
+                       (namespace is not None and child.namespace == namespace or namespace is None) and \
+                       (prefix is not None and child.prefix == prefix or prefix is None):
+                        return child
+
+                # No qualifier provided - collect matches
+                matches.append(child)
+                # Track if we have a match in the same module as parent
+                if self.module is not None and child.module == self.module:
+                    same_module_match = child
+
+            # Qualified search failed
+            quals = []
+            if module is not None:
+                quals.append("module='{module}'")
+            if namespace is not None:
+                quals.append("namespace='{namespace}'")
+            if prefix is not None:
+                quals.append("prefix='{prefix}'")
+            if quals:
+                raise ValueError("Child '{name}' not found with qualifiers: {", ".join(quals)}")
+
+            # First, prefer match in same module as parent
+            if same_module_match is not None:
+                return same_module_match
+
+            # Should found qualified match in loop, or found unqualified match
+            # in same module as parent
+            if not allow_unqualified:
+                if len(matches) > 0:
+                    modules = {m.module for m in matches}
+                    raise ValueError("Child '{name}' not found, requires qualifier, found in modules {modules}")
+                else:
+                    raise ValueError("Child '{name}' not found")
+
+            # allow_unqualified=True
+            # Return match if unambiguous
+            if len(matches) == 0:
+                raise ValueError("Child '{name}' not found")
+            elif len(matches) == 1:
+                return matches[0]
+
+            # Multiple matches in different modules - ambiguous
+            modules = {m.module for m in matches}
+            raise ValueError("Child '{name}' not found, requires qualification, found in modules: {modules}")
 
         raise ValueError("Unable to get child from non-inner node")
 
