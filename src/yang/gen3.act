@@ -97,8 +97,42 @@ def _user_order(ordered_by):
     return True if ordered_by == "user" else False
 
 
-def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_ns: bool=True) -> yang.gdata.Container:
-    """Convert XML node to gdata tree based on schema"""
+def _parse_qualified_name(name: str) -> (str, ?str):
+    if ":" in name:
+        parts = name.split(":", 1)
+        return (parts[1], parts[0])
+    return (name, None)
+
+
+def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
+    """Convert XML node to gdata tree based on schema
+
+    Args:
+        s: Schema node (container or list) - the root of the schema tree to start parsing from
+        data: Data wrapped in a YangData protocol implementation (XML or JSON)
+        loose: Whether to use loose parsing (allows optional fields to be missing)
+        set_ns: Whether to set namespace information on generated nodes
+        path: Internal parameter for recursion tracking (leave as default)
+        root_path: Path from s to the actual data location in the input. This enables
+                  partial parsing where the data doesn't start at the schema root but
+                  at some inner node. For example, if root_path=["mod:c1", "c2"],
+                  the function will navigate from s through c1 and c2 before starting
+                  to parse the actual data.
+
+    Returns:
+        A yang.gdata.Container containing the parsed data tree
+    """
+
+    # Navigate to root path if specified
+    if root_path != [] and len(path) < len(root_path):
+        next = root_path[len(path)]
+        print("Getting inner node {next} on path {path}", err=True)
+
+        local_name, module = _parse_qualified_name(next)
+        child = s.get(local_name, module, allow_unqualified=False)
+        if isinstance(child, yang.schema.DNodeInner):
+            return from_xml(child, node, loose, set_ns, path + [next], root_path)
+        raise ValueError("Node on path {path} is not inner")
 
     children: dict[str, yang.gdata.Node] = {}
 
@@ -178,8 +212,15 @@ def from_xml(s: yang.schema.DNodeInner, node: xml.Node, loose: bool=False, set_n
         raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
 
 
-def from_json(s: yang.schema.DNodeInner, node: dict[str, ?value], loose: bool=False, set_ns: bool=True) -> yang.gdata.Container:
+def from_json(s: yang.schema.DNodeInner, node: dict[str, ?value], loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
     """Convert XML node to gdata tree based on schema"""
+
+    # Navigate to root path if specified
+    if root_path != [] and len(path) < len(root_path):
+        inner = s.get(root_path[len(path)])
+        if isinstance(inner, yang.schema.DNodeInner):
+            return from_json(inner, node, loose, set_ns, path + [root_path[len(path)]], root_path)
+        raise ValueError("Node on path {path} is not inner")
 
     # Process container
     children: dict[str, yang.gdata.Node] = {}
@@ -359,3 +400,40 @@ def _test_y1_json():
     s = yang.compile([y1])
     gd = from_json(s, json_data)
     return gd.prsrc()
+
+
+def _test_root_path():
+    """Test root_path argument for navigating to nested containers"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container top {
+    description "Top container";
+    container nested {
+      description "Nested container";
+      leaf value {
+        type string;
+        description "Test value";
+      }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<top xmlns="urn:example:y1">
+  <nested>
+    <value>test data</value>
+  </nested>
+</top>
+</data>"""
+
+    s = yang.compile([y1])
+
+    # Test parsing from root (should include top container)
+    gd_root = from_xml(s, xml.decode(xml_in))
+
+    # Test parsing with root_path to navigate directly to nested container
+    gd_nested = from_xml(s, xml.decode(xml_in), root_path=["y1:top", "nested"])
+
+    return gd_nested.prsrc()
