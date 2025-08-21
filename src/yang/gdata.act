@@ -240,84 +240,72 @@ class Node(value):
     module: ?str
     children: dict[str, Node]
 
+    def __repr__(self) -> str:
+        return self.prsrc()
+
     def key_str(self, key_names: list[str]) -> str:
         return ",".join([str(self.get_leaf(kn).val).replace(",", "\\,") for kn in key_names])
 
     def key_children(self, key_names: list[str]) -> dict[str, Leaf]:
         return {kn: self.get_leaf(kn) for kn in key_names}
 
-    def prsrc(self, indent=0, name="") -> str:
-        args = []
-        sns = self.ns
-        if sns is not None:
-            args += ["ns='{sns}'"]
-        smodule = self.module
-        if smodule is not None:
-            args += ["module='{smodule}'"]
-        res = []
+    pure def prsrc(self, indent=0, name="") -> str:
+        ns_args = ["ns='{self.ns}'"] if self.ns is not None else []
+        module_args = ["module='{self.module}'"] if self.module is not None else []
+        base_args = ns_args + module_args
+
         if isinstance(self, Leaf):
-            args.insert(0, "'{str(self.t)}'")
-            if isinstance(self.val, str):
-                val = "'{self.val}'"
-            else:
-                val = str(self.val)
-            args.insert(1, val)
+            val = "'{self.val}'" if isinstance(self.val, str) else str(self.val)
+            args = ["'{str(self.t)}'", val] + base_args
             return "Leaf({", ".join(args)})"
         elif isinstance(self, LeafList):
-            args.insert(0, "'{str(self.t)}'")
-            args.insert(1, str(self.vals if self.user_order else vals_list_sorted(self.vals)))
-            if self.user_order:
-                args.append("user_order=True")
+            vals_str = str(self.vals if self.user_order else vals_list_sorted(self.vals))
+            order_args = ["user_order=True"] if self.user_order else []
+            args = ["'{str(self.t)}'", vals_str] + base_args + order_args
             return "LeafList({", ".join(args)})"
         elif isinstance(self, Absent):
             sname = "Absent"
             if len(self.children) == 0:
-                res.append("{sname}({", ".join(args)})")
+                return "{sname}({", ".join(base_args)})"
             else:
-                child_res = []
-                for nm,child in self.children.items():
-                    child_res.append("{_ind(indent+1)}'{nm}': {child.prsrc(indent+1, nm)}")
-                res.append(sname + r"({")
-                res.append(",\n".join(child_res))
-
-                args_str = ""
-                if len(args) > 0:
-                    args_str = ", {", ".join(args)}"
-                res.append("{_ind(indent)}}}{args_str})")
-            return "\n".join(res)
+                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(indent+1, nm)}"
+                             for nm,child in self.children.items()]
+                args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
+                return "\n".join([
+                    sname + r"({",
+                    ",\n".join(child_strs),
+                    "{_ind(indent)}}}{args_str})"
+                ])
         elif isinstance(self, List):
-            args.insert(0, str(self.keys))
-            if self.user_order:
-                args.append("user_order=True")
+            keys_arg = [str(self.keys)]
+            order_args = ["user_order=True"] if self.user_order else []
+            args = keys_arg + base_args + order_args
             if len(self.elements) == 0:
-                res.append("List({", ".join(args)})")
+                return "List({", ".join(args)})"
             else:
-                args.append("elements=[")
-                res.append("List({", ".join(args)}")
-                child_res = []
-                for elem in self.elements if self.user_order else sorted_elements(self.elements, self.keys):
-                    child_res.append(_ind(indent+1) + elem.prsrc(indent+1))
-                res.append(",\n".join(child_res))
-                res.append(_ind(indent) + "])")
-            return "\n".join(res)
+                elems = self.elements if self.user_order else sorted_elements(self.elements, self.keys)
+                elem_strs = [_ind(indent+1) + elem.prsrc(indent+1) for elem in elems]
+                args_with_elements = args + ["elements=["]
+                return "\n".join([
+                    "List({", ".join(args_with_elements)}",
+                    ",\n".join(elem_strs),
+                    _ind(indent) + "])"
+                ])
         elif isinstance(self, Container):
             sname = "Container"
-            if self.presence:
-                args.insert(0, "presence=True")
+            presence_args = ["presence=True"] if self.presence else []
+            args = presence_args + base_args
             if len(self.children) == 0:
-                res.append("{sname}({", ".join(args)})")
+                return "{sname}({", ".join(args)})"
             else:
-                child_res = []
-                for nm,child in self.children.items():
-                    child_res.append("{_ind(indent+1)}'{nm}': {child.prsrc(indent+1, nm)}")
-                res.append(sname + r"({")
-                res.append(",\n".join(child_res))
-
-                args_str = ""
-                if len(args) > 0:
-                    args_str = ", {", ".join(args)}"
-                res.append("{_ind(indent)}}}{args_str})")
-            return "\n".join(res)
+                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(indent+1, nm)}"
+                             for nm,child in self.children.items()]
+                args_str = ", {", ".join(args)}" if len(args) > 0 else ""
+                return "\n".join([
+                    sname + r"({",
+                    ",\n".join(child_strs),
+                    "{_ind(indent)}}}{args_str})"
+                ])
         else:
             raise ValueError("Unsupported node type in prsrc")
 
@@ -896,29 +884,33 @@ def vals_less_than(a: value, b: value) -> bool:
         return a < b
     raise ValueError("Unsupported value type or mismatch in lt comparison: {type(a)}, {type(b)}")
 
-def vals_list_sorted(a: list[value]) -> list[value]:
+pure def vals_list_sorted(a: list[value]) -> list[value]:
     """Sort a list of values, comparing only values of the same type
 
-    Uses an insertion sort implementation that respects type safety
-    by only comparing values of the same type.
+    Uses a functional approach to avoid mutations so that we can be called
+    from pure functions. Perhaps this can be made more efficient by mutation -
+    look into later once we can contain scope local mutation from leaking
+    https://github.com/actonlang/acton/issues/1632
     """
     n = len(a)
     if n <= 1:
         return a
 
-    result = a.copy()  # Create a copy to avoid modifying the input list
-
-    # Insertion sort implementation
+    # Functional bubble sort: recursively sort by finding minimum and building result
+    # Find the minimum element
+    min_val = a[0]
+    min_idx = 0
     for i in range(1, n):
-        key = result[i]
-        j = i - 1
-        # Move elements that are greater than key to one position ahead
-        while j >= 0 and not vals_less_than(result[j], key):
-            result[j + 1] = result[j]
-            j -= 1
-        result[j + 1] = key
+        if vals_less_than(a[i], min_val):
+            min_val = a[i]
+            min_idx = i
 
-    return result
+    # Build new list with minimum at front and recursively sort the rest
+    remaining = a[:min_idx] + a[min_idx+1:]
+    if len(remaining) == 0:
+        return [min_val]
+    else:
+        return [min_val] + vals_list_sorted(remaining)
 
 def merge(a: Node, b: Node) -> Node:
     if type(a) != type(b):
