@@ -246,6 +246,9 @@ class Node(value):
     children: dict[str, Node]
     txid: ?str
 
+    def __str__(self) -> str:
+        return self.prsrc(deterministic=False)
+
     def __repr__(self) -> str:
         return self.prsrc(deterministic=False)
 
@@ -325,6 +328,45 @@ class Node(value):
                     "List({", ".join(args_with_elements)}",
                     ",\n".join(elem_strs),
                     _ind(indent) + "])"
+                ])
+        elif isinstance(self, Delete):
+            sname = "Delete"
+            if len(self.children) == 0:
+                return "{sname}({", ".join(base_args)})"
+            else:
+                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                             for nm,child in self.children.items()]
+                args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
+                return "\n".join([
+                    sname + r"({",
+                    ",\n".join(child_strs),
+                    "{_ind(indent)}}}{args_str})"
+                ])
+        elif isinstance(self, Create):
+            sname = "Create"
+            if len(self.children) == 0:
+                return "{sname}({", ".join(base_args)})"
+            else:
+                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                             for nm,child in self.children.items()]
+                args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
+                return "\n".join([
+                    sname + r"({",
+                    ",\n".join(child_strs),
+                    "{_ind(indent)}}}{args_str})"
+                ])
+        elif isinstance(self, Replace):
+            sname = "Replace"
+            if len(self.children) == 0:
+                return "{sname}({", ".join(base_args)})"
+            else:
+                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                             for nm,child in self.children.items()]
+                args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
+                return "\n".join([
+                    sname + r"({",
+                    ",\n".join(child_strs),
+                    "{_ind(indent)}}}{args_str})"
                 ])
         elif isinstance(self, Container):
             sname = "Container"
@@ -820,6 +862,30 @@ extension Node(Eq):
             return True
 
         if isinstance(self, Absent) and isinstance(other, Absent):
+            if set(self.children.keys()) != set(other.children.keys()):
+                return False
+            for key in self.children.keys():
+                if self.children[key] != other.children[key]:
+                    return False
+            return True
+
+        if isinstance(self, Delete) and isinstance(other, Delete):
+            if set(self.children.keys()) != set(other.children.keys()):
+                return False
+            for key in self.children.keys():
+                if self.children[key] != other.children[key]:
+                    return False
+            return True
+
+        if isinstance(self, Create) and isinstance(other, Create):
+            if set(self.children.keys()) != set(other.children.keys()):
+                return False
+            for key in self.children.keys():
+                if self.children[key] != other.children[key]:
+                    return False
+            return True
+
+        if isinstance(self, Replace) and isinstance(other, Replace):
             if set(self.children.keys()) != set(other.children.keys()):
                 return False
             for key in self.children.keys():
@@ -2952,6 +3018,128 @@ def _test_prsrc_identityref():
     }, ns="http://example.com/acme", module="acme")
 
     return y1.prsrc()
+
+def _test_prsrc_delete():
+    # Test Delete node with children
+    d = Delete({
+        "leaf1": Leaf("str", "to_delete"),
+        "container1": Container({
+            "inner": Leaf("int", 42)
+        })
+    }, ns="http://example.com/test", module="test")
+    return repr(d)
+
+def _test_prsrc_create():
+    # Test Create node with children
+    c = Create({
+        "leaf1": Leaf("str", "value1"),
+        "leaf2": Leaf("int", 42)
+    }, ns="http://example.com/test", module="test")
+    return repr(c)
+
+def _test_prsrc_replace():
+    # Test Replace node with children
+    r = Replace({
+        "container1": Container({
+            "leaf": Leaf("str", "test")
+        })
+    }, module="test")
+    return repr(r)
+
+def _test_prsrc_netconf_ops():
+    # Test all NETCONF operations in one structure
+    root = Container({
+        "config": Container({
+            "delete_node": Delete(module="test"),
+            "create_node": Create({
+                "new_leaf": Leaf("str", "created")
+            }, module="test"),
+            "replace_node": Replace({
+                "replaced_leaf": Leaf("int", 100)
+            }, module="test"),
+            "absent_node": Absent({
+                "removed_leaf": Leaf("str", "gone")
+            }, module="test")
+        })
+    })
+
+    return repr(root)
+
+def _test_eq_delete():
+    d1 = Delete({
+        "leaf1": Leaf("str", "value1")
+    }, ns="http://example.com/test", module="test")
+
+    d2 = Delete({
+        "leaf1": Leaf("str", "value1")
+    }, ns="http://example.com/test", module="test")
+
+    d3 = Delete({
+        "leaf1": Leaf("str", "different")
+    }, ns="http://example.com/test", module="test")
+
+    d4 = Delete(ns="http://example.com/other", module="test")
+
+    testing.assertEqual(d1, d2)
+    testing.assertNotEqual(d1, d3)
+    testing.assertNotEqual(d1, d4)
+
+def _test_eq_create():
+    c1 = Create({
+        "leaf1": Leaf("str", "value1"),
+        "leaf2": Leaf("int", 42)
+    }, ns="http://example.com/test", module="test")
+
+    c2 = Create({
+        "leaf1": Leaf("str", "value1"),
+        "leaf2": Leaf("int", 42)
+    }, ns="http://example.com/test", module="test")
+
+    c3 = Create({
+        "leaf1": Leaf("str", "different"),
+        "leaf2": Leaf("int", 42)
+    }, ns="http://example.com/test", module="test")
+
+    testing.assertEqual(c1, c2)
+    testing.assertNotEqual(c1, c3)
+
+def _test_eq_replace():
+    r1 = Replace({
+        "container1": Container({
+            "leaf": Leaf("str", "test")
+        })
+    }, module="test")
+
+    r2 = Replace({
+        "container1": Container({
+            "leaf": Leaf("str", "test")
+        })
+    }, module="test")
+
+    r3 = Replace({
+        "container1": Container({
+            "leaf": Leaf("str", "different")
+        })
+    }, module="test")
+
+    testing.assertEqual(r1, r2)
+    testing.assertNotEqual(r1, r3)
+
+def _test_eq_absent():
+    a1 = Absent({
+        "removed": Container({})
+    }, ns="http://example.com/test")
+
+    a2 = Absent({
+        "removed": Container({})
+    }, ns="http://example.com/test")
+
+    a3 = Absent({
+        "different": Container({})
+    }, ns="http://example.com/test")
+
+    testing.assertEqual(a1, a2)
+    testing.assertNotEqual(a1, a3)
 
 def _test_to_json():
     y1 = Container({
