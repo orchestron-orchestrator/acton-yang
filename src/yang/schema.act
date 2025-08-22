@@ -343,15 +343,15 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
-        raise NotImplementedError('SchemaNode pdc')
+        raise NotImplementedError('DNode pdc')
 
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
         if self.namespace != "":
@@ -361,8 +361,10 @@ class DNodeInner(DNode):
             res.append("import base64")
             res.append("import json")
             res.append("import xml")
+            res.append("import yang")
             res.append("import yang.adata")
             res.append("import yang.gdata")
+            res.append("import yang.gen3")
             res.append("from yang.identity import complete_and_validate_identityref")
             res.append("from yang.identityref import Identityref, PartialIdentityref")
             res.append("from yang.schema import DIdentity")
@@ -375,6 +377,22 @@ class DNodeInner(DNode):
                 res.append("")
                 res.append("")
                 res.extend(DIdentity.format_identityref_constants(self.identities))
+                res.append("")
+                res.append("")
+            if schema_yang is not None:
+# TODO: serialize list[str] of YANG models with repr(), use raw string to avoid interpolation?!
+# TODO: Why is the src_yang() function not found in from_xml, if it is
+# defined at the bottom of the module?!
+# After these two are addressed, then we can do away with these hacky workarounds
+#
+#"""def src_yang():
+#   return {repr(self.src)}
+#"""
+                res.append("def src_yang():")
+                res.append("    res = []")
+                for s in schema_yang:
+                    res.append('    res.append(r"""{s}""")')
+                res.append("    return res")
                 res.append("")
                 res.append("")
 
@@ -418,7 +436,7 @@ class DNodeInner(DNode):
             return ", user_order=True" if n.ordered_by == "user" else ""
 
         for child in self.children:
-            res.append(child.prdaclass(loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
+            res.append(child.prdaclass(schema_yang=schema_yang, loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -911,6 +929,13 @@ class DNodeInner(DNode):
             res.append("    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
             res.append("")
 
+        if gen_xml and isinstance(self, DRoot):
+            res.append("def from_xml_gen3(node: xml.Node, root_path: list[str]=[]) -> yang.gdata.Container:")
+            res.append("    # WARNING: this wrapper for the gen3.from_xml schema-driven parser compiles the schema on every call!")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.from_xml(s, node, loose={loose}, root_path=root_path)")
+            res.append("")
+
         # == JSON serde ================================
 
         # from_json(): from JSON -> gdata
@@ -1048,6 +1073,17 @@ class DNodeInner(DNode):
             res.append("mut def from_json_{pname(self)}(jd: list[dict[str, ?value]]) -> yang.gdata.List:")
             res.append("    elements = [from_json_{pname(self)}_element(e) for e in jd if isinstance(e, dict)]")
             res.append("    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
+            res.append("")
+
+        if gen_json and isinstance(self, DRoot):
+            res.append("def from_json_gen3(jd: dict[str, ?value], root_path: list[str]=[]) -> yang.gdata.Container:")
+            res.append("    # WARNING: this wrapper for the gen3.from_json schema-driven parser compiles the schema on every call!")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.from_json(s, jd, loose={loose}, root_path=root_path)")
+            res.append("")
+            res.append("def from_json_path_gen3(jd: dict[str, ?value], path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.from_json_path(s, jd, path, op, loose={loose})")
             res.append("")
 
         if top:
@@ -1365,7 +1401,7 @@ class DLeaf(DNodeLeaf):
                     return True
         return False
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
@@ -1431,7 +1467,7 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
