@@ -1,15 +1,15 @@
-* YANG YANG YANG
+# YANG YANG YANG
 The schema.act module, which implements the core of the YANG schema in, is
 generated from the YANG RFC 7950 by rfcgen.act. The output is concatenated with
 a manually written top half, in schema-manual.act
 
-** Compile
+## Compile
 
-#+BEGIN_SRC shell
+```shell
 make
-#+END_SRC
+```
 
-* Things we should do (TO DO) [2/26]
+# Things we should do (TO DO) [2/26]
 - [X] TODO: drop y_ prefix
 - [X] TODO: group multiple YANG modules into a tree so that the generated output has a common root for multiple modules
 - [x] TODO: use DNode
@@ -41,16 +41,16 @@ make
     - but nodes are placed in target path module
       - thus all nodes in target module need to have namespace so we can correct
 
-* Documentation
-** Identities
+# Documentation
+## Identities
 YANG identities define globally unique constants organized into a hierarchical structure. An identity defined in a YANG module belongs to the namespace of that YANG module. Each identity may be derived from one or more base identities.
 
 Identities are then used in leafs and leaf-lists of type *identityref*. The *identityref* type may then restrict the set of valid values to one or more base identities. The global nature of identities and the possibility to create cross-module relationships influenced the decision to compose the list of identities in the global context. In acton-yang they are available in the *DRoot.identities* attribute (*DRoot* is the output of *yang.compile(list_of_yang_modules)*).
 
-*** User Interface (adata)
+### User Interface (adata)
 A leaf of YANG type identityref with a restricted set of bases only accepts a limited set of valid values. We enforce that in the generated Acton module (adata), partially also at compile time. In adata we use the type *yang.identityref.Identityref* for a list. This type holds information that maps to a single identity - its name and namespace qualifiers. For example, the following YANG module with local identities and a leaf:
 
-#+BEGIN_SRC yang
+```yang
 module foo {
   namespace "uri:example:foo";
   prefix "f";
@@ -69,11 +69,11 @@ module foo {
     }
   }
 }
-#+END_SRC
+```
 
 Results in the following abbreviated Acton module
 
-#+BEGIN_SRC acton
+```acton
 # ...
 # Identityref constants
 foo_name = Identityref('name', ns='uri:example:foo', mod='foo', pfx='f')
@@ -85,29 +85,29 @@ foo_rick = Identityref('rick', ns='uri:example:foo', mod='foo', pfx='f')
 class root(yang.adata.MNode):
     name: Identityref
 # ...
-#+END_SRC
+```
 
 The Identityref module constants at the top of the generated module are available as a convenience to users. In the transform code they may reference these constants for assignment or equality checks:
 
-#+BEGIN_SRC acton
+```acton
 if root.name == foo.foo_bob:
     print("Hello Bob!")
 
 new = root(foo.foo_rick)
-#+END_SRC
+```
 
 The generated module constants do not (yet) encode the identity hierarchy. This means that it is possible to assign an invalid identity - one that is not derived from any of the allowed bases and that will not result in a compilation error. When the adata object graph is converted to the internal gdata representation, identityref leaf values are validated though and an invalid identity assignment will result in a runtime error.
 
-*** Internal implementation
-**** Compiling the modules
+### Internal implementation
+#### Compiling the modules
 *yang.schema.DRoot* joins the top-level data nodes from all compiled modules under a single root node. At this point we also collect the identities defined in all modules and compose a global list of identities. These are represented as *yang.schema.DIdentity*. We also validate the existence of all referenced base identities, including cross-module dependencies, and also check that the identity hierarchy is acyclic. The resulting *list[DIdentity]* is the global registry of identities with the base identities resolved as references to objects in the same list.
 
 The global identity list is also printed in the generated adata module and made available as the *_identities* module constant for internal use.
 
 Note: the decision to use a list instead of a dictionary was influenced by the requirements for identity lookup from partial data. In XML and JSON data formats the namespace qualifiers for an identity (namespace and module name respectivelly) are optional if the identity is defined in the same namespace.
 
-**** Converting input data (XML, JSON) to gdata
+#### Converting input data (XML, JSON) to gdata
 The *yang.gdata* functions that "take" an XML node or JSON dict and return a value, return a *yang.identityref.PartialIdentityref* value. The attributes of this type are the same as *Identityref* which is user-facing, with the exception that everything but the identity name is optional. This allows the generated gdata conversion free functions to look up an identity (*yang.schema.DIdentity*) from the global identity registry and then also validate whether this identity conforms to the type restrictions (is derived from listed bases). As part of this the input *PartialIdentityref* is converted to a complete *Identityref* with all namespace qualifiers set. That *Identityref* is then also used as the value for a *yang.gdata.Leaf*.
 
-**** Converting gdata to output (XML, JSON)
+#### Converting gdata to output (XML, JSON)
 The guiding principle for gdata has always been that it should contain just enough information necessary to convert the internal gdata representation to a user-facing format: XML or JSON. The *Identityref* values could be seen as an exception to this, in that they always include the namespace qualifiers, even in cases where they are optional because the namespace is implicitly set to that of the containing data node. As a result of this design decision, the identityref leaf values output as XML always include the namespace attribute and when output to JSON they always include the module prefix.
