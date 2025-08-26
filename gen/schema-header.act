@@ -1871,18 +1871,24 @@ class SchemaNode(object):
     def is_config(self) -> bool:
         n = self
         for i in range(RECURSION_LIMIT+1):
-            if (isinstance(n, Anydata)
+            if (isinstance(n, Action)
+                or isinstance(n, Anydata)
                 or isinstance(n, Anyxml)
                 or isinstance(n, Case)
                 or isinstance(n, Choice)
                 or isinstance(n, Container)
+                or isinstance(n, Input)
                 or isinstance(n, Module)
-                or isinstance(n, Notification)
                 or isinstance(n, Leaf)
                 or isinstance(n, LeafList)
-                or isinstance(n, List)):
+                or isinstance(n, List)
+                or isinstance(n, Notification)
+                or isinstance(n, Output)
+                or isinstance(n, Rpc)):
                 found_config = True
-                if isinstance(n, Anydata):
+                if isinstance(n, Action):
+                    return False
+                elif isinstance(n, Anydata):
                     nconfig = n.config
                     if nconfig is not None:
                         return nconfig
@@ -1904,9 +1910,7 @@ class SchemaNode(object):
                     if nconfig is not None:
                         return nconfig
                     found_config = False
-                elif isinstance(n, Module):
-                    return True
-                elif isinstance(n, Notification):
+                elif isinstance(n, Input):
                     return False
                 elif isinstance(n, Leaf):
                     nconfig = n.config
@@ -1923,6 +1927,14 @@ class SchemaNode(object):
                     if nconfig is not None:
                         return nconfig
                     found_config = False
+                elif isinstance(n, Module):
+                    return True
+                elif isinstance(n, Notification):
+                    return False
+                elif isinstance(n, Output):
+                    return False
+                elif isinstance(n, Rpc):
+                    return False
 
                 if not found_config:
                     nparent = n.parent
