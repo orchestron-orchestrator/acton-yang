@@ -1623,10 +1623,11 @@ class DRoot(DNodeInner):
 
 class DRpc(DNodeInner):
     if_feature: list[str]
-    must: list[Must]
+    input: ?DInput
+    output: ?DOutput
     status: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], input: ?DInput=None, output: ?DOutput=None, reference=None, status=None, exts=[], children=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1635,6 +1636,8 @@ class DRpc(DNodeInner):
         self.config = False
         self.description = description
         self.if_feature = if_feature
+        self.input = input
+        self.output = output
         self.reference = reference
         self.status = status
         self.exts = exts
@@ -3219,6 +3222,16 @@ class Action(SchemaNodeInner):
         return new
 
     def to_dnode(self) -> DAction:
+        dnode_children = []
+        self_input = self.input
+        if self_input is not None:
+            input_dnode = self_input.to_dnode()
+            dnode_children.append(input_dnode)
+        self_output = self.output
+        if self_output is not None:
+            output_dnode = self_output.to_dnode()
+            dnode_children.append(output_dnode)
+
         new_dnode = DAction(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -3229,7 +3242,7 @@ class Action(SchemaNodeInner):
             reference=self.reference,
             status=self.status,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=dnode_children
         )
         for child in new_dnode.children:
             child.parent = new_dnode
@@ -6631,6 +6644,23 @@ class Rpc(SchemaNodeInner):
         return new
 
     def to_dnode(self) -> DRpc:
+        # Convert SchemaNode Rpc.input/output to DRpc.input/output and add to
+        # its children, but only if Input and Output actually contain data
+        # nodes.
+        dnode_children = []
+        self_input = self.input
+        if self_input is not None and len(self_input.children) > 0:
+            input_dnode = self_input.to_dnode()
+            dnode_children.append(input_dnode)
+        else:
+            input_dnode = None
+        self_output = self.output
+        if self_output is not None and len(self_output.children) > 0:
+            output_dnode = self_output.to_dnode()
+            dnode_children.append(output_dnode)
+        else:
+            output_dnode = None
+
         new_dnode = DRpc(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -6638,10 +6668,12 @@ class Rpc(SchemaNodeInner):
             name=self.name,
             description=self.description,
             if_feature=self.if_feature,
+            input=input_dnode if isinstance(input_dnode, DInput) else None,
+            output=output_dnode if isinstance(output_dnode, DOutput) else None,
             reference=self.reference,
             status=self.status,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=dnode_children
         )
         for child in new_dnode.children:
             child.parent = new_dnode
