@@ -1090,6 +1090,80 @@ class DNodeInner(DNode):
             res.append("    return yang.gen3.from_json_path(s, jd, path, op, loose={loose})")
             res.append("")
 
+        if isinstance(self, DRoot) and len(self.rpcs) > 0:
+            # First generate data classes for RPC input/output
+            for rpc in self.rpcs:
+                # Generate adata classes for DInput, DOutput, but override:
+                # - set_ns: from DRpc (=True)
+                # - include_state=True
+                for child in rpc.children:
+                    child_class_src = child.prdaclass(schema_yang=schema_yang, loose=loose, top=False, set_ns=set_ns, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=True)
+                    res.append(child_class_src)
+
+            # TODO: unique safe name for RPC function!
+            # Generate rpc_handler actor
+            res.append("actor rpc_handler(tp: yang.gdata.TreeProvider):")
+            for rpc in self.rpcs:
+                input_node = rpc.input
+                output_node = rpc.output
+
+                # Get the actual generated class names using get_path_name
+                input_class_name = get_path_name(input_node) if input_node is not None else None
+                output_class_name = get_path_name(output_node) if output_node is not None else None
+
+
+                if input_node is not None:
+                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{output_class_name}, ?Exception) -> None, inp: {input_class_name}):")
+                else:
+                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{output_class_name}, ?Exception) -> None):")
+                res.append("        def cb_wrap(res: ?xml.Node, err: ?Exception):")
+                res.append("            if res is not None:")
+                if output_node is not None:
+                    res.append("                gdata_res = from_xml_{output_class_name}(res)")
+                    res.append("                adata_res = {output_class_name}.from_gdata(gdata_res)")
+                    res.append("                cb(adata_res, err)")
+                else:
+                    res.append("                cb(None, err)")
+                res.append("            else:")
+                res.append("                cb(None, err)")
+                res.append("")
+                if input_node is not None:
+                    res.append("""        xmlstr = '<{rpc.name} xmlns="{rpc.namespace}">{{inp.to_gdata().to_xmlstr()}}</{rpc.name}>'""")
+                else:
+                    res.append("""        xmlstr = '<{rpc.name} xmlns="{rpc.namespace}" />'""")
+                res.append("        print(xmlstr, err=True)")
+                res.append("        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))")
+                res.append("")
+            res.append("")
+
+            # Generate rpc_root class
+            # TODO: this wrapper class is not needed! We need an actor
+            # (currently rpc_handler) because we pass callback references, but
+            # we could instantiate it directly instead
+            res.append("class rpc_root(yang.adata.RpcRoot):")
+            res.append("    _handler: rpc_handler")
+            res.append("")
+            res.append("    def __init__(self, tp: yang.gdata.TreeProvider):")
+            res.append("        yang.adata.RpcRoot.__init__(self, tp)")
+            res.append("        self._handler = rpc_handler(tp)")
+            res.append("")
+            for rpc in self.rpcs:
+                input_node = rpc.input
+                output_node = rpc.output
+
+                # Get the actual generated class names using get_path_name
+                input_class_name = get_path_name(input_node) if input_node is not None else None
+                output_class_name = get_path_name(output_node) if output_node is not None else None
+
+                if input_node is not None:
+                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_class_name}, ?Exception) -> None, inp: {input_class_name}) -> None:")
+                    res.append("        self._handler.{_safe_name(rpc.name)}(cb, inp)")
+                else:
+                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_class_name}, ?Exception) -> None) -> None:")
+                    res.append("        self._handler.{_safe_name(rpc.name)}(cb)")
+                res.append("")
+            res.append("")
+
         if top:
             res.append("schema_namespaces: set[str] = {{")
             for ns in sorted(schema_ns):
@@ -1292,7 +1366,7 @@ class DInput(DNodeInner):
         self.namespace = namespace
         self.prefix = prefix
         self.name = "input"
-        self.gname = "Input"
+        self.gname = "Container"
         self.config = False
         self.must = must
         self.exts = exts
@@ -1539,7 +1613,7 @@ class DOutput(DNodeInner):
         self.namespace = namespace
         self.prefix = prefix
         self.name = "output"
-        self.gname = "Output"
+        self.gname = "Container"
         self.config = False
         self.must = must
         self.exts = exts
@@ -1552,7 +1626,8 @@ class DRoot(DNodeInner):
         self.name = "root"
         self.gname = "Container"
         self.config = True
-        self.children=[]
+        self.children = []
+        self.rpcs = []
         self.identities = []
 
         # Build a global identity map from all modules
@@ -1560,7 +1635,10 @@ class DRoot(DNodeInner):
         for module in modules:
             if isinstance(module, DModule):
                 for child in module.children:
-                    self.children.append(child)
+                    if isinstance(child, DRpc):
+                        self.rpcs.append(child)
+                    else:
+                        self.children.append(child)
 
                 # Add identities to global map
                 for identity in module.identity:
