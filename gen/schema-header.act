@@ -1113,13 +1113,16 @@ class DNodeInner(DNode):
 
 
                 if input_node is not None:
-                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{output_class_name}, ?Exception) -> None, inp: {input_class_name}):")
+                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{output_class_name}, ?Exception) -> None, inp: {input_class_name}, gen3: bool=False):")
                 else:
-                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{output_class_name}, ?Exception) -> None):")
+                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{output_class_name}, ?Exception) -> None, gen3: bool=False):")
                 res.append("        def cb_wrap(res: ?xml.Node, err: ?Exception):")
                 res.append("            if res is not None:")
                 if output_node is not None:
-                    res.append("                gdata_res = from_xml_{output_class_name}(res)")
+                    res.append("                if gen3:")
+                    res.append('                    gdata_res = from_xml_gen3(res, ["{rpc.module}:{rpc.name}", "output"])')
+                    res.append("                else:")
+                    res.append("                    gdata_res = from_xml_{output_class_name}(res)")
                     res.append("                adata_res = {output_class_name}.from_gdata(gdata_res)")
                     res.append("                cb(adata_res, err)")
                 else:
@@ -1156,11 +1159,11 @@ class DNodeInner(DNode):
                 output_class_name = get_path_name(output_node) if output_node is not None else None
 
                 if input_node is not None:
-                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_class_name}, ?Exception) -> None, inp: {input_class_name}) -> None:")
-                    res.append("        self._handler.{_safe_name(rpc.name)}(cb, inp)")
+                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_class_name}, ?Exception) -> None, inp: {input_class_name}, gen3: bool=False) -> None:")
+                    res.append("        self._handler.{_safe_name(rpc.name)}(cb, inp, gen3)")
                 else:
-                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_class_name}, ?Exception) -> None) -> None:")
-                    res.append("        self._handler.{_safe_name(rpc.name)}(cb)")
+                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_class_name}, ?Exception) -> None, gen3: bool=False) -> None:")
+                    res.append("        self._handler.{_safe_name(rpc.name)}(cb, gen3)")
                 res.append("")
             res.append("")
 

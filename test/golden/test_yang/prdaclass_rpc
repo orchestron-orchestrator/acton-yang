@@ -307,10 +307,13 @@ mut def from_json_yangrpc__foo__output(jd: dict[str, ?value]) -> yang.gdata.Cont
     return yang.gdata.Container(children, ns='http://example.com/yangrpc', module='yangrpc')
 
 actor rpc_handler(tp: yang.gdata.TreeProvider):
-    def foo(cb: action(?yangrpc__foo__output, ?Exception) -> None, inp: yangrpc__foo__input):
+    def foo(cb: action(?yangrpc__foo__output, ?Exception) -> None, inp: yangrpc__foo__input, gen3: bool=False):
         def cb_wrap(res: ?xml.Node, err: ?Exception):
             if res is not None:
-                gdata_res = from_xml_yangrpc__foo__output(res)
+                if gen3:
+                    gdata_res = from_xml_gen3(res, ["yangrpc:foo", "output"])
+                else:
+                    gdata_res = from_xml_yangrpc__foo__output(res)
                 adata_res = yangrpc__foo__output.from_gdata(gdata_res)
                 cb(adata_res, err)
             else:
@@ -328,8 +331,8 @@ class rpc_root(yang.adata.RpcRoot):
         yang.adata.RpcRoot.__init__(self, tp)
         self._handler = rpc_handler(tp)
 
-    proc def foo(self, cb: action(?yangrpc__foo__output, ?Exception) -> None, inp: yangrpc__foo__input) -> None:
-        self._handler.foo(cb, inp)
+    proc def foo(self, cb: action(?yangrpc__foo__output, ?Exception) -> None, inp: yangrpc__foo__input, gen3: bool=False) -> None:
+        self._handler.foo(cb, inp, gen3)
 
 
 schema_namespaces: set[str] = {
