@@ -239,6 +239,7 @@ class Node(value):
     ns: ?str
     module: ?str
     children: dict[str, Node]
+    txid: ?str
 
     def __repr__(self) -> str:
         return self.prsrc(deterministic=False)
@@ -713,12 +714,13 @@ class List(Node):
     elements: list[Node]
     user_order: bool
 
-    def __init__(self, keys: list[str], elements: list[Node]=[], user_order=False, ns: ?str=None, module: ?str=None):
+    def __init__(self, keys: list[str], elements: list[Node]=[], user_order=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.keys = keys
         self.elements = elements
         self.user_order = user_order
         self.ns = ns
         self.module = module
+        self.txid = txid
 
     def get_opt_list_entry(self, key: str) -> ?Node:
         """Get a list entry by key value
@@ -741,33 +743,36 @@ class List(Node):
         raise ValueError("Cannot find list entry with key {key}")
 
 class Container(Node):
-    def __init__(self, children: dict[str, Node]={}, presence: bool=False, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[str, Node]={}, presence: bool=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.children = children
         self.presence = presence
         self.ns = ns
         self.module = module
+        self.txid = txid
 
 class Leaf(Node):
     t: str
     val: value
 
-    def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None):
+    def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.t = t
         self.val = val
         self.ns = ns
         self.module = module
+        self.txid = txid
 
 class LeafList(Node):
     t: str
     vals: list[value]
     user_order: bool
 
-    def __init__(self, t:str, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None):
+    def __init__(self, t:str, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.t = t
         self.ns = ns
         self.module = module
         self.vals = vals
         self.user_order = user_order
+        self.txid = txid
 
 class Absent(Node):
     """Declarative definition of the absence of a node
@@ -781,6 +786,7 @@ class Absent(Node):
         self.ns = ns
         self.module = module
         self.children = children
+        self.txid = None
 
 class Delete(Node):
     """Imperative delete of a node
@@ -792,6 +798,7 @@ class Delete(Node):
         self.ns = ns
         self.module = module
         self.children = {}
+        self.txid = None
 
 class Create(Node):
     """Imperative create of a node
@@ -803,6 +810,7 @@ class Create(Node):
         self.ns = ns
         self.module = module
         self.children = children
+        self.txid = None
 
 class Replace(Node):
     """Imperative replace of a node
@@ -812,6 +820,7 @@ class Replace(Node):
         self.ns = ns
         self.module = module
         self.children = children
+        self.txid = None
 
 def sorted_elements(elements, key_names):
     keys = list(map(lambda elem: elem.key_str(key_names), elements))
