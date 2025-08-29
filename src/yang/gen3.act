@@ -546,11 +546,20 @@ def from_json(root: yang.schema.DRoot, node: dict[str, ?value], loose: bool=Fals
     return _from_data(root, root.identities, json_data, loose, root_path=root_path)
 
 
-def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False):
-    return _pradata_recursive(root, node, self_name, loose, top=True)
+def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
+    return _pradata_recursive(root, node, self_name, loose, top=True, root_path=root_path)
 
 
-def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False):
+def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False, root_path: list[str]=[], path: list[str]=[]):
+    # Navigate to root path if specified
+    if root_path != [] and len(path) < len(root_path):
+        next = root_path[len(path)]
+        local_name, module = _parse_qualified_name(next)
+        child = s.get(local_name, module, allow_unqualified=False)
+        if isinstance(child, yang.schema.DNodeInner):
+            return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, path + [next])
+        raise ValueError("Node on path {path} is not inner")
+
     def pname(n):
         return yang.schema.get_path_name(n)
 
@@ -673,9 +682,9 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     pc_args_str = ", ".join(pc_args)
                     res.append("{child_accessor} = {self_name}.create_{usname(child)}({pc_args_str})")
                     # Recursive call to pradata() for the P-container, to fill in the rest of the optional children
-                    res.extend(_pradata_recursive(child, taken_nodes, usname(child), loose).splitlines())
+                    res.extend(_pradata_recursive(child, taken_nodes, usname(child), loose, root_path=root_path, path=path).splitlines())
                 else:
-                    res.extend(_pradata_recursive(child, taken_nodes, "{self_name}.{usname(child)}", loose).splitlines())
+                    res.extend(_pradata_recursive(child, taken_nodes, "{self_name}.{usname(child)}", loose, root_path=root_path, path=path).splitlines())
             elif isinstance(child, yang.schema.DList) and isinstance(taken_nodes, yang.gdata.List):
                 child_unique_namer = yang.schema._UniqueNamer(child)
                 for element in taken_nodes.elements:
@@ -693,7 +702,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     create_args_str = ", ".join(list_create_args)
                     res.append("{usname(child)}_element = {self_name}.{usname(child)}.create({create_args_str})")
                     # Recursive call to pradata() for the list element
-                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True).splitlines())
+                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, path=path).splitlines())
             else:
                 raise ValueError("Unhandled child type in .pradata(): {type(child)}")
 
@@ -1198,6 +1207,44 @@ def _test_pradata():
     })
 
     result = pradata(s, gdata_tree)
+    return result
+
+
+def _test_pradata_root_path():
+    schema_str = r"""module test {
+      namespace "urn:example:test";
+      prefix test;
+
+      container outer {
+        container middle {
+          leaf value1 {
+            type string;
+          }
+          container inner {
+            leaf value2 {
+              type int32;
+            }
+          }
+        }
+      }
+    }"""
+
+    s = yang.compile([schema_str])
+
+    gdata_tree = yang.gdata.Container({
+        "outer": yang.gdata.Container({
+            "middle": yang.gdata.Container({
+                "value1": yang.gdata.Leaf("string", "test value"),
+                "inner": yang.gdata.Container({
+                    "value2": yang.gdata.Leaf("int32", 42)
+                })
+            })
+        })
+    })
+
+    middle_node = gdata_tree.get_cnt("outer").get_cnt("middle")
+    result = pradata(s, middle_node, root_path=["test:outer", "middle"])
+
     return result
 
 
