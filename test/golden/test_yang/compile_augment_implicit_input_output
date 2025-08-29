@@ -144,6 +144,245 @@ def from_json_path_gen3(jd: dict[str, ?value], path: list[str]=[], op: ?str='mer
     s = yang.compile(src_yang())
     return yang.gen3.from_json_path(s, jd, path, op, loose=False)
 
+mut def from_json_foo__r1__input__c3__l3(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__r1__input__c3__l3(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+class foo__r1__input__c3(yang.adata.MNode):
+    l3: ?str
+
+    mut def __init__(self, l3: ?str):
+        self._ns = 'http://example.com/foo'
+        self.l3 = l3
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _l3 = self.l3
+        if _l3 is not None:
+            children['l3'] = yang.gdata.Leaf('string', _l3)
+        return yang.gdata.Container(children)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__r1__input__c3:
+        if n is not None:
+            return foo__r1__input__c3(l3=n.get_opt_str('l3'))
+        return foo__r1__input__c3()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append('# Top node: /r1/input/c3')
+            res.append('{self_name} = foo__r1__input__c3()')
+        leaves = []
+        _l3 = self.l3
+        if _l3 is not None:
+            leaves.append('{self_name}.l3 = {repr(_l3)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /r1/input/c3'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml_foo__r1__input__c3(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l3 = yang.gdata.from_xml_opt_str(node, 'l3')
+    yang.gdata.maybe_add(children, 'l3', from_xml_foo__r1__input__c3__l3, child_l3)
+    return yang.gdata.Container(children)
+
+mut def from_json_path_foo__r1__input__c3(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'l3':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__r1__input__c3(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__r1__input__c3(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l3 = yang.gdata.take_json_opt_str(jd, 'l3')
+    yang.gdata.maybe_add(children, 'l3', from_json_foo__r1__input__c3__l3, child_l3)
+    return yang.gdata.Container(children)
+
+class foo__r1__input(yang.adata.MNode):
+    c3: foo__r1__input__c3
+
+    mut def __init__(self, c3: ?foo__r1__input__c3=None):
+        self._ns = 'http://example.com/foo'
+        self.c3 = c3 if c3 is not None else foo__r1__input__c3()
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _c3 = self.c3
+        if _c3 is not None:
+            children['c3'] = _c3.to_gdata()
+        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__r1__input:
+        if n is not None:
+            return foo__r1__input(c3=foo__r1__input__c3.from_gdata(n.get_opt_cnt('c3')))
+        return foo__r1__input()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append('# Top node: /r1/input')
+            res.append('{self_name} = foo__r1__input()')
+        leaves = []
+        _c3 = self.c3
+        if _c3 is not None:
+            res.extend(_c3.prsrc('{self_name}.c3', False).splitlines())
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /r1/input'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml_foo__r1__input(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_c3 = yang.gdata.from_xml_opt_cnt(node, 'c3')
+    yang.gdata.maybe_add(children, 'c3', from_xml_foo__r1__input__c3, child_c3)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+
+mut def from_json_path_foo__r1__input(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'c3':
+            child = {'c3': from_json_path_foo__r1__input__c3(jd, rest_path, op) }
+            return yang.gdata.Container(child, ns='http://example.com/foo', module='foo')
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__r1__input(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__r1__input(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_c3 = yang.gdata.take_json_opt_cnt(jd, 'c3')
+    yang.gdata.maybe_add(children, 'c3', from_json_foo__r1__input__c3, child_c3)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+
+mut def from_json_foo__r1__output__l4(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+mut def from_xml_foo__r1__output__l4(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+class foo__r1__output(yang.adata.MNode):
+    l4: ?str
+
+    mut def __init__(self, l4: ?str):
+        self._ns = 'http://example.com/foo'
+        self.l4 = l4
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _l4 = self.l4
+        if _l4 is not None:
+            children['l4'] = yang.gdata.Leaf('string', _l4)
+        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__r1__output:
+        if n is not None:
+            return foo__r1__output(l4=n.get_opt_str('l4'))
+        return foo__r1__output()
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append('# Top node: /r1/output')
+            res.append('{self_name} = foo__r1__output()')
+        leaves = []
+        _l4 = self.l4
+        if _l4 is not None:
+            leaves.append('{self_name}.l4 = {repr(_l4)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /r1/output'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+
+mut def from_xml_foo__r1__output(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l4 = yang.gdata.from_xml_opt_str(node, 'l4')
+    yang.gdata.maybe_add(children, 'l4', from_xml_foo__r1__output__l4, child_l4)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+
+mut def from_json_path_foo__r1__output(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'l4':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__r1__output(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__r1__output(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l4 = yang.gdata.take_json_opt_str(jd, 'l4')
+    yang.gdata.maybe_add(children, 'l4', from_json_foo__r1__output__l4, child_l4)
+    return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+
+actor rpc_handler(tp: yang.gdata.TreeProvider):
+    def r1(cb: action(?foo__r1__output, ?Exception) -> None, inp: ?foo__r1__input, gen3: bool=False):
+        def cb_wrap(res: ?xml.Node, err: ?Exception):
+            if res is not None:
+                if gen3:
+                    gdata_res = from_xml_gen3(res, ["foo:r1", "output"])
+                else:
+                    gdata_res = from_xml_foo__r1__output(res)
+                adata_res = foo__r1__output.from_gdata(gdata_res)
+                cb(adata_res, err)
+            else:
+                cb(None, err)
+
+        if inp is not None:
+            xmlstr = '<r1 xmlns="http://example.com/foo">{inp.to_gdata().to_xmlstr()}</r1>'
+        else:
+            xmlstr = '<r1 xmlns="http://example.com/foo" />'
+        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))
+
+
+class rpc_root(yang.adata.RpcRoot):
+    _handler: rpc_handler
+
+    def __init__(self, tp: yang.gdata.TreeProvider):
+        yang.adata.RpcRoot.__init__(self, tp)
+        self._handler = rpc_handler(tp)
+
+    proc def r1(self, cb: action(?foo__r1__output, ?Exception) -> None, inp: ?foo__r1__input, gen3: bool=False) -> None:
+        self._handler.r1(cb, inp, gen3)
+
+
 schema_namespaces: set[str] = {
     'http://example.com/foo',
 }

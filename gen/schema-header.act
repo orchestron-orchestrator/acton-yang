@@ -406,6 +406,8 @@ class DNodeInner(DNode):
         for child in self.children:
             if include_state == False and child.config == False:
                 continue
+            elif isinstance(child, DRpc):
+                continue
             if isinstance(child, DLeaf) and child.is_key():
                 new_children.insert(pos_child_idx, child)
                 pos_child_idx += 1
@@ -1090,6 +1092,100 @@ class DNodeInner(DNode):
             res.append("    return yang.gen3.from_json_path(s, jd, path, op, loose={loose})")
             res.append("")
 
+        if isinstance(self, DRoot) and len(self.rpcs) > 0:
+            # First generate data classes for RPC input/output
+            for rpc in self.rpcs:
+                # Generate adata classes for DInput, DOutput, but override:
+                # - set_ns: from DRpc (=True)
+                # - include_state=True
+                for child in rpc.children:
+                    child_class_src = child.prdaclass(schema_yang=schema_yang, loose=loose, top=False, set_ns=set_ns, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=True)
+                    res.append(child_class_src)
+
+            # TODO: unique safe name for RPC function!
+            # Generate rpc_handler actor
+            res.append("actor rpc_handler(tp: yang.gdata.TreeProvider):")
+            for rpc in self.rpcs:
+                input_node = rpc.input
+                output_node = rpc.output
+
+                if input_node is not None:
+                    input_param = "inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(input_node)}"
+                else:
+                    input_param = "inp: ?None"
+
+                if output_node is not None:
+                    output_type = get_path_name(output_node)
+                else:
+                    output_type = None
+
+                res.append("    def {_safe_name(rpc.name)}(cb: action(?{output_type}, ?Exception) -> None, {input_param}, gen3: bool=False):")
+                res.append("        def cb_wrap(res: ?xml.Node, err: ?Exception):")
+                res.append("            if res is not None:")
+                if output_type is not None:
+                    res.append("                if gen3:")
+                    res.append('                    gdata_res = from_xml_gen3(res, ["{rpc.module}:{rpc.name}", "output"])')
+                    res.append("                else:")
+                    res.append("                    gdata_res = from_xml_{output_type}(res)")
+                    res.append("                adata_res = {output_type}.from_gdata(gdata_res)")
+                    res.append("                cb(adata_res, err)")
+                else:
+                    res.append("                cb(None, err)")
+                res.append("            else:")
+                res.append("                cb(None, err)")
+                res.append("")
+                if input_node is not None:
+                    res.append("        if inp is not None:")
+                    res.append("""            xmlstr = '<{rpc.name} xmlns="{rpc.namespace}">{{inp.to_gdata().to_xmlstr()}}</{rpc.name}>'""")
+                    res.append("        else:")
+                    res.append("""            xmlstr = '<{rpc.name} xmlns="{rpc.namespace}" />'""")
+                    res.append("        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))")
+                else:
+                    res.append("""        xmlstr = '<{rpc.name} xmlns="{rpc.namespace}" />'""")
+                    res.append("        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))")
+                res.append("")
+            res.append("")
+
+            # Generate rpc_root class
+            # TODO: this wrapper class is not needed! We need an actor
+            # (currently rpc_handler) because we pass callback references, but
+            # we could instantiate it directly instead
+            res.append("class rpc_root(yang.adata.RpcRoot):")
+            res.append("    _handler: rpc_handler")
+            res.append("")
+            res.append("    def __init__(self, tp: yang.gdata.TreeProvider):")
+            res.append("        yang.adata.RpcRoot.__init__(self, tp)")
+            res.append("        self._handler = rpc_handler(tp)")
+            res.append("")
+            for rpc in self.rpcs:
+                input_node = rpc.input
+                output_node = rpc.output
+
+                if input_node is not None:
+                    input_param = "inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(input_node)}"
+                else:
+                    input_param = ""
+
+                if output_node is not None:
+                    output_type = get_path_name(output_node)
+                else:
+                    output_type = ""
+
+                if input_node is not None and output_node is not None:
+                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_type}, ?Exception) -> None, {input_param}, gen3: bool=False) -> None:")
+                    res.append("        self._handler.{_safe_name(rpc.name)}(cb, inp, gen3)")
+                elif input_node is not None:
+                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?Exception) -> None, {input_param}, gen3: bool=False) -> None:")
+                    res.append("        self._handler.{_safe_name(rpc.name)}(lambda _, err: cb(err), inp, gen3)")
+                elif output_node is not None:
+                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_type}, ?Exception) -> None, gen3: bool=False) -> None:")
+                    res.append("        self._handler.{_safe_name(rpc.name)}(cb, None, gen3)")
+                else:
+                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?Exception) -> None, gen3: bool=False) -> None:")
+                    res.append("        self._handler.{_safe_name(rpc.name)}(lambda _, err: cb(err), None, gen3)")
+                res.append("")
+            res.append("")
+
         if top:
             res.append("schema_namespaces: set[str] = {{")
             for ns in sorted(schema_ns):
@@ -1292,7 +1388,7 @@ class DInput(DNodeInner):
         self.namespace = namespace
         self.prefix = prefix
         self.name = "input"
-        self.gname = "Input"
+        self.gname = "Container"
         self.config = False
         self.must = must
         self.exts = exts
@@ -1539,7 +1635,7 @@ class DOutput(DNodeInner):
         self.namespace = namespace
         self.prefix = prefix
         self.name = "output"
-        self.gname = "Output"
+        self.gname = "Container"
         self.config = False
         self.must = must
         self.exts = exts
@@ -1552,7 +1648,8 @@ class DRoot(DNodeInner):
         self.name = "root"
         self.gname = "Container"
         self.config = True
-        self.children=[]
+        self.children = []
+        self.rpcs = []
         self.identities = []
 
         # Build a global identity map from all modules
@@ -1560,6 +1657,8 @@ class DRoot(DNodeInner):
         for module in modules:
             if isinstance(module, DModule):
                 for child in module.children:
+                    if isinstance(child, DRpc):
+                        self.rpcs.append(child)
                     self.children.append(child)
 
                 # Add identities to global map
@@ -1627,10 +1726,11 @@ class DRoot(DNodeInner):
 
 class DRpc(DNodeInner):
     if_feature: list[str]
-    must: list[Must]
+    input: ?DInput
+    output: ?DOutput
     status: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], input: ?DInput=None, output: ?DOutput=None, reference=None, status=None, exts=[], children=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1639,6 +1739,8 @@ class DRpc(DNodeInner):
         self.config = False
         self.description = description
         self.if_feature = if_feature
+        self.input = input
+        self.output = output
         self.reference = reference
         self.status = status
         self.exts = exts
@@ -1868,18 +1970,24 @@ class SchemaNode(object):
     def is_config(self) -> bool:
         n = self
         for i in range(RECURSION_LIMIT+1):
-            if (isinstance(n, Anydata)
+            if (isinstance(n, Action)
+                or isinstance(n, Anydata)
                 or isinstance(n, Anyxml)
                 or isinstance(n, Case)
                 or isinstance(n, Choice)
                 or isinstance(n, Container)
+                or isinstance(n, Input)
                 or isinstance(n, Module)
-                or isinstance(n, Notification)
                 or isinstance(n, Leaf)
                 or isinstance(n, LeafList)
-                or isinstance(n, List)):
+                or isinstance(n, List)
+                or isinstance(n, Notification)
+                or isinstance(n, Output)
+                or isinstance(n, Rpc)):
                 found_config = True
-                if isinstance(n, Anydata):
+                if isinstance(n, Action):
+                    return False
+                elif isinstance(n, Anydata):
                     nconfig = n.config
                     if nconfig is not None:
                         return nconfig
@@ -1901,9 +2009,7 @@ class SchemaNode(object):
                     if nconfig is not None:
                         return nconfig
                     found_config = False
-                elif isinstance(n, Module):
-                    return True
-                elif isinstance(n, Notification):
+                elif isinstance(n, Input):
                     return False
                 elif isinstance(n, Leaf):
                     nconfig = n.config
@@ -1920,6 +2026,14 @@ class SchemaNode(object):
                     if nconfig is not None:
                         return nconfig
                     found_config = False
+                elif isinstance(n, Module):
+                    return True
+                elif isinstance(n, Notification):
+                    return False
+                elif isinstance(n, Output):
+                    return False
+                elif isinstance(n, Rpc):
+                    return False
 
                 if not found_config:
                     nparent = n.parent
