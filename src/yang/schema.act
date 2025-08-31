@@ -736,9 +736,14 @@ class DNodeInner(DNode):
                     # Do not print non-optional leafs if not top level, because
                     # they are implicitly set with .create*()
                     continue
-                # DLeaf and DLeafList are both copied verbatim
+                # DLeaf and DLeafList are both copied verbatim, except for empty
+                # leaf-list. The gdata takers for leaf-list return an empty list
+                # as default: (see yang.gdata.get_opt_*s)
                 res.append("        _{usname(child)} = self.{usname(child)}")
-                res.append("        if _{usname(child)} is not None:")
+                if isinstance(child, DLeafList):
+                    res.append("        if len(_{usname(child)}) != 0:")
+                else:
+                    res.append("        if _{usname(child)} is not None:")
                 res.append("            leaves.append('{{self_name}}.{usname(child)} = {{repr(_{usname(child)})}}')")
             elif isinstance(child, DContainer):
                 res.append("        _{usname(child)} = self.{usname(child)}")

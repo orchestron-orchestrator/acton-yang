@@ -665,8 +665,11 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     # Do not print non-optional leafs if not top level, because
                     # they are implicitly set with .create*()
                     continue
-                # DLeaf and DLeafList are both copied verbatim
-                # TODO: what about identityref?
+                # DLeaf and DLeafList are both copied verbatim, except for empty
+                # leaf-list. The gdata takers for leaf-list return an empty list
+                # as default: (see yang.gdata.get_opt_*s)
+                if isinstance(child, yang.schema.DLeafList) and isinstance(taken_nodes, list) and len(taken_nodes) == 0:
+                    continue
                 leaves.append("{self_name}.{usname(child)} = {repr(taken_nodes)}")
             elif isinstance(child, yang.schema.DContainer) and isinstance(taken_nodes, yang.gdata.Container):
                 if child.presence:
@@ -1179,6 +1182,10 @@ def _test_pradata():
           leaf value {
             type int32;
           }
+        }
+        leaf-list always-empty {
+          // Leave this empty, we check that empty leaf-list is not printed
+          type string;
         }
       }
     }"""
