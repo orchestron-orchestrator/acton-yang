@@ -433,7 +433,7 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, global_identity, data:
     for child in s.children:
         # Only process data nodes
         if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
-            print("Skipping chilld: {child.name} of type {type(child)}", err=True)
+            print("Skipping child: {child.name} of type {type(child)}", err=True)
             continue
         # Get the appropriate taker function name
         taker_name = yang.schema.taker_name(child, data.format_name(), loose)
@@ -597,6 +597,8 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         unique_namer = yang.schema._UniqueNamer(container)
 
         for cchild in container.children:
+            if not (isinstance(cchild, yang.schema.DNodeLeaf) or isinstance(cchild, yang.schema.DContainer) or isinstance(cchild, yang.schema.DList)):
+                continue
             if isinstance(cchild, yang.schema.DLeaf):
                 # The list of children is already sorted so that key leaves
                 # come first in the correct order.
@@ -652,9 +654,14 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             res.append("{self_name} = {pname(s)}()")
     leaves = []
     for child in s.children:
+        # Only process data nodes
+        if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
+            print("Skipping child: {child.name} of type {type(child)}", err=True)
+            continue
+        taker_name = yang.schema.taker_name(child, "gdata", loose)
+        print("Processing child: {child.name} with taker {taker_name}", err=True)
         taken_nodes = None
         try:
-            taker_name = yang.schema.taker_name(child, "gdata", loose)
             taken_nodes = GDATA_TAKERS[taker_name](node, uname(child))
         except ValueError as err:
             raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
