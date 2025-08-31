@@ -195,7 +195,8 @@ def _test_foo_from_xml_full():
   }, ns='http://example.com/foo', module='foo'),
   'state': Container({
     'c1': Container()
-  }, ns='http://example.com/foo', module='foo')
+  }, ns='http://example.com/foo', module='foo'),
+  'll-empty': LeafList('string', [], ns='http://example.com/foo', module='foo')
 })"""
         testing.assertEqual(gdiff.prsrc(), diff)
     else:
@@ -246,6 +247,9 @@ def adata():
     return ad
 """.encode())
     await async wf.close()
+    # Print the adata source with gen3 schema-driven parser
+    # .. and it must match the gen2 prsrc output
+    testing.assertEqual(ad.prsrc(), yang_foo.prsrc_gen3(gd))
     t.success()
 
 actor _test_adata_source_roundtrip_xml_full_loose(t: testing.EnvT):
@@ -262,6 +266,9 @@ def adata():
     return ad
 """.encode())
     await async wf.close()
+    # Print the adata source with gen3 schema-driven parser
+    # .. and it must match the gen2 prsrc output
+    testing.assertEqual(ad.prsrc(), yang_foo_loose.prsrc_gen3(gd))
     t.success()
 
 def _test_foo_from_xml1():

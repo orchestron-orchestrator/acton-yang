@@ -279,6 +279,11 @@ class basics__c(yang.adata.MNode):
                 res = leaves + res
         return '\n'.join(res)
 
+    def prsrc_gen3(self, self_name='ad'):
+        # WARNING: this wrapper for the gen3.pradata schema-driven parser compiles the schema on every call!
+        s = yang.compile(src_yang())
+        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose=False, root_path=['basics:c'])
+
 
 mut def from_xml_basics__c(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -398,6 +403,11 @@ class root(yang.adata.MNode):
                 res = leaves + res
         return '\n'.join(res)
 
+    def prsrc_gen3(self, self_name='ad'):
+        # WARNING: this wrapper for the gen3.pradata schema-driven parser compiles the schema on every call!
+        s = yang.compile(src_yang())
+        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose=False)
+
 
 mut def from_xml(node: xml.Node) -> yang.gdata.Container:
     children = {}
@@ -445,6 +455,11 @@ def from_json_path_gen3(jd: dict[str, ?value], path: list[str]=[], op: ?str='mer
 schema_namespaces: set[str] = {
     'http://example.com/basics',
 }
+
+def prsrc_gen3(data, self_name='ad'):
+    # WARNING: this wrapper for the gen3.prsrc schema-driven parser compiles the schema on every call!
+    s = yang.compile(src_yang())
+    return yang.gen3.pradata(s, data, self_name, loose=False)
 def src_schema():
     res = {}
     res["basics"] = Module('basics', yang_version=1.1, namespace='http://example.com/basics', prefix='b', children=[

@@ -736,9 +736,14 @@ class DNodeInner(DNode):
                     # Do not print non-optional leafs if not top level, because
                     # they are implicitly set with .create*()
                     continue
-                # DLeaf and DLeafList are both copied verbatim
+                # DLeaf and DLeafList are both copied verbatim, except for empty
+                # leaf-list. The gdata takers for leaf-list return an empty list
+                # as default: (see yang.gdata.get_opt_*s)
                 res.append("        _{usname(child)} = self.{usname(child)}")
-                res.append("        if _{usname(child)} is not None:")
+                if isinstance(child, DLeafList):
+                    res.append("        if len(_{usname(child)}) != 0:")
+                else:
+                    res.append("        if _{usname(child)} is not None:")
                 res.append("            leaves.append('{{self_name}}.{usname(child)} = {{repr(_{usname(child)})}}')")
             elif isinstance(child, DContainer):
                 res.append("        _{usname(child)} = self.{usname(child)}")
@@ -796,6 +801,19 @@ class DNodeInner(DNode):
         res.append("            else:")
         res.append("                res = leaves + res")
         res.append("        return '\\n'.join(res)")
+        res.append("")
+        res.append("    def prsrc_gen3(self, self_name='ad'):")
+        res.append("        # WARNING: this wrapper for the gen3.pradata schema-driven parser compiles the schema on every call!")
+        res.append("        s = yang.compile(src_yang())")
+        if isinstance(self, DRoot):
+            res.append("        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose={loose})")
+        else:
+            # TODO: refactor prdaclass to accumulate the nodes (DNode) it traverses into a path parameter!
+            root_path = get_path(self).split("/")[1:]
+            # TODO: use a common function that takes a list[DNode] and builds a
+            # string path, obeying the rules for mandatory and optional qualifiers
+            root_path[0] = "{self.module}:{root_path[0]}"
+            res.append("        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose={loose}, root_path={repr(root_path)})")
         res.append("")
 
         if isinstance(self, DList):
@@ -1187,6 +1205,11 @@ class DNodeInner(DNode):
             for ns in sorted(schema_ns):
                 res.append("    '{ns}',")
             res.append("}}")
+            res.append("")
+            res.append("def prsrc_gen3(data, self_name='ad'):")
+            res.append("    # WARNING: this wrapper for the gen3.prsrc schema-driven parser compiles the schema on every call!")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.pradata(s, data, self_name, loose={loose})")
             res.append("")
 
         return "\n".join(res)
