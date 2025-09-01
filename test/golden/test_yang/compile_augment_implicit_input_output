@@ -377,7 +377,7 @@ mut def from_json_foo__r1__output(jd: dict[str, ?value]) -> yang.gdata.Container
     yang.gdata.maybe_add(children, 'l4', from_json_foo__r1__output__l4, child_l4)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
-actor rpc_handler(tp: yang.gdata.TreeProvider):
+actor rpc_root(tp: yang.gdata.TreeProvider):
     def r1(cb: action(?foo__r1__output, ?Exception) -> None, inp: ?foo__r1__input, gen3: bool=False):
         def cb_wrap(res: ?xml.Node, err: ?Exception):
             if res is not None:
@@ -396,16 +396,6 @@ actor rpc_handler(tp: yang.gdata.TreeProvider):
             xmlstr = '<r1 xmlns="http://example.com/foo" />'
         tp.rpc_xml(cb_wrap, xml.decode(xmlstr))
 
-
-class rpc_root(yang.adata.RpcRoot):
-    _handler: rpc_handler
-
-    def __init__(self, tp: yang.gdata.TreeProvider):
-        yang.adata.RpcRoot.__init__(self, tp)
-        self._handler = rpc_handler(tp)
-
-    proc def r1(self, cb: action(?foo__r1__output, ?Exception) -> None, inp: ?foo__r1__input, gen3: bool=False) -> None:
-        self._handler.r1(cb, inp, gen3)
 
 
 schema_namespaces: set[str] = {
