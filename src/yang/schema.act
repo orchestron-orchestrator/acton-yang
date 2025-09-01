@@ -1117,87 +1117,58 @@ class DNodeInner(DNode):
                     res.append(child_class_src)
 
             # TODO: unique safe name for RPC function!
-            # Generate rpc_handler actor
-            res.append("actor rpc_handler(tp: yang.gdata.TreeProvider):")
+            # Generate rpc_root actor
+            res.append("actor rpc_root(tp: yang.gdata.TreeProvider):")
             for rpc in self.rpcs:
                 input_node = rpc.input
                 output_node = rpc.output
 
-                if input_node is not None:
-                    input_param = "inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(input_node)}"
+                # Build method signature based on input/output presence:
+                # - no input: in inp parameter in the wrapper signature
+                # - no output: no output adata parameter in the callback signature
+                if input_node is not None and output_node is not None:
+                    # RPC with both input and output
+                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{get_path_name(output_node)}, ?Exception) -> None, inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(input_node)}, gen3: bool=False):")
+                elif input_node is not None and output_node is None:
+                    # RPC with only input (no output)
+                    res.append("    def {_safe_name(rpc.name)}(cb: action(?Exception) -> None, inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(input_node)}, gen3: bool=False):")
+                elif input_node is None and output_node is not None:
+                    # RPC with only output (no input)
+                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{get_path_name(output_node)}, ?Exception) -> None, gen3: bool=False):")
                 else:
-                    input_param = "inp: ?None"
+                    # RPC with neither input nor output
+                    res.append("    def {_safe_name(rpc.name)}(cb: action(?Exception) -> None, gen3: bool=False):")
 
+                # Generate callback wrapper for parsing RPC output XML -> gdata -> adata
                 if output_node is not None:
-                    output_type = get_path_name(output_node)
-                else:
-                    output_type = None
-
-                res.append("    def {_safe_name(rpc.name)}(cb: action(?{output_type}, ?Exception) -> None, {input_param}, gen3: bool=False):")
-                res.append("        def cb_wrap(res: ?xml.Node, err: ?Exception):")
-                res.append("            if res is not None:")
-                if output_type is not None:
+                    res.append("        def cb_wrap(res: ?xml.Node, err: ?Exception):")
+                    res.append("            if res is not None:")
                     res.append("                if gen3:")
                     res.append('                    gdata_res = from_xml_gen3(res, ["{rpc.module}:{rpc.name}", "output"])')
                     res.append("                else:")
-                    res.append("                    gdata_res = from_xml_{output_type}(res)")
-                    res.append("                adata_res = {output_type}.from_gdata(gdata_res)")
+                    res.append("                    gdata_res = from_xml_{get_path_name(output_node)}(res)")
+                    res.append("                adata_res = {get_path_name(output_node)}.from_gdata(gdata_res)")
                     res.append("                cb(adata_res, err)")
-                else:
+                    res.append("            else:")
                     res.append("                cb(None, err)")
-                res.append("            else:")
-                res.append("                cb(None, err)")
-                res.append("")
+                    res.append("")
+
+                # Generate RPC XML, add input
                 if input_node is not None:
                     res.append("        if inp is not None:")
                     res.append("""            xmlstr = '<{rpc.name} xmlns="{rpc.namespace}">{{inp.to_gdata().to_xmlstr()}}</{rpc.name}>'""")
                     res.append("        else:")
                     res.append("""            xmlstr = '<{rpc.name} xmlns="{rpc.namespace}" />'""")
-                    res.append("        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))")
                 else:
                     res.append("""        xmlstr = '<{rpc.name} xmlns="{rpc.namespace}" />'""")
-                    res.append("        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))")
-                res.append("")
-            res.append("")
 
-            # Generate rpc_root class
-            # TODO: this wrapper class is not needed! We need an actor
-            # (currently rpc_handler) because we pass callback references, but
-            # we could instantiate it directly instead
-            res.append("class rpc_root(yang.adata.RpcRoot):")
-            res.append("    _handler: rpc_handler")
-            res.append("")
-            res.append("    def __init__(self, tp: yang.gdata.TreeProvider):")
-            res.append("        yang.adata.RpcRoot.__init__(self, tp)")
-            res.append("        self._handler = rpc_handler(tp)")
-            res.append("")
-            for rpc in self.rpcs:
-                input_node = rpc.input
-                output_node = rpc.output
-
-                if input_node is not None:
-                    input_param = "inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(input_node)}"
-                else:
-                    input_param = ""
-
+                # Call tp.rpc_xml with appropriate callback
                 if output_node is not None:
-                    output_type = get_path_name(output_node)
+                    res.append("        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))")
                 else:
-                    output_type = ""
-
-                if input_node is not None and output_node is not None:
-                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_type}, ?Exception) -> None, {input_param}, gen3: bool=False) -> None:")
-                    res.append("        self._handler.{_safe_name(rpc.name)}(cb, inp, gen3)")
-                elif input_node is not None:
-                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?Exception) -> None, {input_param}, gen3: bool=False) -> None:")
-                    res.append("        self._handler.{_safe_name(rpc.name)}(lambda _, err: cb(err), inp, gen3)")
-                elif output_node is not None:
-                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?{output_type}, ?Exception) -> None, gen3: bool=False) -> None:")
-                    res.append("        self._handler.{_safe_name(rpc.name)}(cb, None, gen3)")
-                else:
-                    res.append("    proc def {_safe_name(rpc.name)}(self, cb: action(?Exception) -> None, gen3: bool=False) -> None:")
-                    res.append("        self._handler.{_safe_name(rpc.name)}(lambda _, err: cb(err), None, gen3)")
+                    res.append("        tp.rpc_xml(lambda _, err: cb(err), xml.decode(xmlstr))")
                 res.append("")
+            res.append("")
             res.append("")
 
         if top:
