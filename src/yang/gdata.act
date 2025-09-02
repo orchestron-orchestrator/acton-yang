@@ -1531,8 +1531,12 @@ def from_xml_cnt(n: xml.Node, name: str, ns: ?str) -> xml.Node:
 def from_xml_opt_bool(n: xml.Node, name: str, ns: ?str) -> ?bool:
     try:
         text = get_xml_child(n, name, ns).text
-        if text is not None:
-            return bool(text)
+        if text == "true":
+            return True
+        elif text == "false":
+            return False
+        elif text is not None:
+            raise ValueError("Expected 'true' or 'false' for boolean type leaf, got '{text}'")
     except ValueError:
         return None
 
@@ -1746,8 +1750,12 @@ def from_xml_opt_bools(n: xml.Node, name: str, ns: ?str) -> ?list[bool]:
     res = []
     for child in get_xml_children(n, name, ns):
         ctext = child.text
-        if ctext is not None:
-            res.append(bool(ctext))
+        if ctext == "true":
+            res.append(True)
+        elif ctext == "false":
+            res.append(False)
+        elif ctext is not None:
+            raise ValueError("Expected 'true' or 'false' for boolean type leaf-list, got '{ctext}'")
     if len(res) == 0:
         return None
     return res
