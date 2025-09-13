@@ -1206,10 +1206,10 @@ class DNodeLeaf(DNode):
 
 class DAction(DNodeInner):
     if_feature: list[str]
-    must: list[Must]
     status: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], reference=None, status=None, exts=[], children=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1231,6 +1231,7 @@ class DAnydata(DNode):
     when: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1254,6 +1255,7 @@ class DAnyxml(DNode):
     when: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1276,6 +1278,7 @@ class DContainer(DNodeInner):
     status: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature=[], must=[], presence: bool, reference=None, status=None, when=None, exts=[], children=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1288,6 +1291,7 @@ class DContainer(DNodeInner):
         self.presence = presence
         self.reference = reference
         self.status = status
+        self.when = when
         self.exts = exts
         self.children = children
 
@@ -1295,10 +1299,16 @@ class DIdentity(DNode):
     base: list[DIdentity]
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, base: list[DIdentity]=[]):
+        self.parent = None
+        self.gname = "Identity"
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
         self.name = name
+        self.config = False
+        self.description = None
+        self.reference = None
+        self.exts = []
         self.base = base
 
     def __repr__(self):
@@ -1386,12 +1396,15 @@ class DInput(DNodeInner):
     must: list[Must]
 
     def __init__(self, module: str, namespace: str, prefix: str, must=[], exts=[], children=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
         self.name = "input"
         self.gname = "Container"
         self.config = False
+        self.description = None
+        self.reference = None
         self.must = must
         self.exts = exts
         self.children = children
@@ -1410,6 +1423,7 @@ class DModule(DNodeInner):
     yang_version: float
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension_=[], feature=[], identity=[], import_=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
+        self.parent = None
         self.module = module
         self.name = name
         self.gname = "Container"
@@ -1423,6 +1437,7 @@ class DModule(DNodeInner):
                            # of the data tree and the default is config=True, so
                            # we set it here
         self.description = description
+        self.augment = []
         self.contact = contact
         self.deviation = deviation
         self.extension_ = extension_
@@ -1448,6 +1463,7 @@ class DList(DNodeInner):
     when: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1474,6 +1490,7 @@ class DLeaf(DNodeLeaf):
     units: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1549,6 +1566,7 @@ class DLeafList(DNodeLeaf):
     units: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1615,15 +1633,21 @@ class DLeafList(DNodeLeaf):
 
 
 class DNotification(DNodeInner):
+    if_feature: list[str]
+    must: list[Must]
     status: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
         self.name = name
         self.gname = "Notification"
+        self.config = False
         self.description = description
+        self.if_feature = if_feature
+        self.must = must
         self.reference = reference
         self.status = status
         self.exts = exts
@@ -1633,23 +1657,31 @@ class DOutput(DNodeInner):
     must: list[Must]
 
     def __init__(self, module: str, namespace: str, prefix: str, must=[], exts=[], children=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
         self.name = "output"
         self.gname = "Container"
         self.config = False
+        self.description = None
+        self.reference = None
         self.must = must
         self.exts = exts
         self.children = children
 
 class DRoot(DNodeInner):
     def __init__(self, modules: list[DNode]=[]):
+        self.parent = None
+        self.module = ""
         self.namespace = ""
         self.prefix = ""
         self.name = "root"
         self.gname = "Container"
         self.config = True
+        self.description = None
+        self.reference = None
+        self.exts = []
         self.children = []
         self.rpcs = []
         self.identities = []
@@ -1733,6 +1765,7 @@ class DRpc(DNodeInner):
     status: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], input: ?DInput=None, output: ?DOutput=None, reference=None, status=None, exts=[], children=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -2370,6 +2403,11 @@ class Ext(SchemaNode):
     arg: ?str
 
     def __init__(self, prefix: str, name: str, arg: ?str=None, exts=[]):
+        self.parent = None
+        self.mod = None
+        self.ns = None
+        self.pfx = None
+        self._yname = ""
         self.prefix = prefix
         self.name = name
         self.arg = arg
@@ -3234,28 +3272,6 @@ class Action(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "action"
-        if input is not None:
-            input.parent = self
-            n_mod = input.mod
-            if n_mod is None:
-                input.mod = self.mod
-            n_ns = input.ns
-            if n_ns is None:
-                input.ns = self.ns
-            n_pfx = input.pfx
-            if n_pfx is None:
-                input.pfx = self.pfx
-        if output is not None:
-            output.parent = self
-            n_mod = output.mod
-            if n_mod is None:
-                output.mod = self.mod
-            n_ns = output.ns
-            if n_ns is None:
-                output.ns = self.ns
-            n_pfx = output.pfx
-            if n_pfx is None:
-                output.pfx = self.pfx
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -3264,7 +3280,32 @@ class Action(SchemaNodeInner):
         self.reference = reference
         self.status = status
         self.exts = exts
-        for n in children:
+        self.children = children
+        self_input = self.input
+        if self_input is not None:
+            self_input.parent = self
+            n_mod = self_input.mod
+            if n_mod is None:
+                self_input.mod = self.mod
+            n_ns = self_input.ns
+            if n_ns is None:
+                self_input.ns = self.ns
+            n_pfx = self_input.pfx
+            if n_pfx is None:
+                self_input.pfx = self.pfx
+        self_output = self.output
+        if self_output is not None:
+            self_output.parent = self
+            n_mod = self_output.mod
+            if n_mod is None:
+                self_output.mod = self.mod
+            n_ns = self_output.ns
+            if n_ns is None:
+                self_output.ns = self.ns
+            n_pfx = self_output.pfx
+            if n_pfx is None:
+                self_output.pfx = self.pfx
+        for n in self.children:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -3275,7 +3316,6 @@ class Action(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -3417,17 +3457,6 @@ class Anydata(SchemaNodeOuter):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "anydata"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.config = config
         self.description = description
@@ -3438,6 +3467,17 @@ class Anydata(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
+        for n in self.must:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -3555,17 +3595,6 @@ class Anyxml(SchemaNodeOuter):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "anyxml"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.config = config
         self.description = description
@@ -3576,6 +3605,17 @@ class Anyxml(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
+        for n in self.must:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -3697,7 +3737,8 @@ class Augment(SchemaNodeInner):
         self.status = status
         self.when = when
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.children:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -3708,7 +3749,6 @@ class Augment(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -3949,7 +3989,8 @@ class Case(SchemaNodeInner):
         self.status = status
         self.when = when
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.children:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -3960,7 +4001,6 @@ class Case(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -4057,7 +4097,8 @@ class Choice(SchemaNodeInner):
         self.status = status
         self.when = when
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.children:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -4068,7 +4109,6 @@ class Choice(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -4171,17 +4211,6 @@ class Container(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "container"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.config = config
         self.description = description
@@ -4192,7 +4221,8 @@ class Container(SchemaNodeInner):
         self.status = status
         self.when = when
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.must:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -4203,7 +4233,17 @@ class Container(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
+        for n in self.children:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -4588,7 +4628,8 @@ class Grouping(SchemaNodeInner):
         self.reference = reference
         self.status = status
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.children:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -4599,7 +4640,6 @@ class Grouping(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -4927,20 +4967,10 @@ class Input(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "input"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.must = must
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.must:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -4951,7 +4981,17 @@ class Input(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
+        for n in self.children:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -5039,27 +5079,6 @@ class Leaf(SchemaNodeOuter):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "leaf"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        type_.parent = self
-        n_mod = type_.mod
-        if n_mod is None:
-            type_.mod = self.mod
-        n_ns = type_.ns
-        if n_ns is None:
-            type_.ns = self.ns
-        n_pfx = type_.pfx
-        if n_pfx is None:
-            type_.pfx = self.pfx
         self.name = name
         self.config = config
         self.default = default
@@ -5073,6 +5092,27 @@ class Leaf(SchemaNodeOuter):
         self.units = units
         self.when = when
         self.exts = exts
+        for n in self.must:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        self.type_.parent = self
+        n_mod = self.type_.mod
+        if n_mod is None:
+            self.type_.mod = self.mod
+        n_ns = self.type_.ns
+        if n_ns is None:
+            self.type_.ns = self.ns
+        n_pfx = self.type_.pfx
+        if n_pfx is None:
+            self.type_.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -5219,27 +5259,6 @@ class LeafList(SchemaNodeOuter):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "leaf-list"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        type_.parent = self
-        n_mod = type_.mod
-        if n_mod is None:
-            type_.mod = self.mod
-        n_ns = type_.ns
-        if n_ns is None:
-            type_.ns = self.ns
-        n_pfx = type_.pfx
-        if n_pfx is None:
-            type_.pfx = self.pfx
         self.name = name
         self.config = config
         self.default = default
@@ -5255,6 +5274,27 @@ class LeafList(SchemaNodeOuter):
         self.units = units
         self.when = when
         self.exts = exts
+        for n in self.must:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        self.type_.parent = self
+        n_mod = self.type_.mod
+        if n_mod is None:
+            self.type_.mod = self.mod
+        n_ns = self.type_.ns
+        if n_ns is None:
+            self.type_.ns = self.ns
+        n_pfx = self.type_.pfx
+        if n_pfx is None:
+            self.type_.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -5497,17 +5537,6 @@ class List(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "list"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.config = config
         self.description = description
@@ -5522,7 +5551,8 @@ class List(SchemaNodeInner):
         self.unique = unique
         self.when = when
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.must:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -5533,7 +5563,17 @@ class List(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
+        for n in self.children:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -5694,72 +5734,6 @@ class Module(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "module"
-        for n in augment:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in extension_:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in feature:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in import_:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in include:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in revision:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.augment = augment
         self.contact = contact
@@ -5776,7 +5750,8 @@ class Module(SchemaNodeInner):
         self.revision = revision
         self.yang_version = yang_version
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.augment:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -5787,7 +5762,72 @@ class Module(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
+        for n in self.extension_:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.feature:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.import_:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.include:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.revision:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.children:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6032,17 +6072,6 @@ class Notification(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "notification"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -6050,7 +6079,8 @@ class Notification(SchemaNodeInner):
         self.reference = reference
         self.status = status
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.must:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -6061,7 +6091,17 @@ class Notification(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
+        for n in self.children:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6163,20 +6203,10 @@ class Output(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "output"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.must = must
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.must:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -6187,7 +6217,17 @@ class Output(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
+        for n in self.children:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6445,17 +6485,6 @@ class Refine(SchemaNodeOuter):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "refine"
-        for n in must:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.target_node = target_node
         self.config = config
         self.default = default
@@ -6468,6 +6497,17 @@ class Refine(SchemaNodeOuter):
         self.presence = presence
         self.reference = reference
         self.exts = exts
+        for n in self.must:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6656,28 +6696,6 @@ class Rpc(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "rpc"
-        if input is not None:
-            input.parent = self
-            n_mod = input.mod
-            if n_mod is None:
-                input.mod = self.mod
-            n_ns = input.ns
-            if n_ns is None:
-                input.ns = self.ns
-            n_pfx = input.pfx
-            if n_pfx is None:
-                input.pfx = self.pfx
-        if output is not None:
-            output.parent = self
-            n_mod = output.mod
-            if n_mod is None:
-                output.mod = self.mod
-            n_ns = output.ns
-            if n_ns is None:
-                output.ns = self.ns
-            n_pfx = output.pfx
-            if n_pfx is None:
-                output.pfx = self.pfx
         self.name = name
         self.description = description
         self.if_feature = if_feature
@@ -6686,7 +6704,32 @@ class Rpc(SchemaNodeInner):
         self.reference = reference
         self.status = status
         self.exts = exts
-        for n in children:
+        self.children = children
+        self_input = self.input
+        if self_input is not None:
+            self_input.parent = self
+            n_mod = self_input.mod
+            if n_mod is None:
+                self_input.mod = self.mod
+            n_ns = self_input.ns
+            if n_ns is None:
+                self_input.ns = self.ns
+            n_pfx = self_input.pfx
+            if n_pfx is None:
+                self_input.pfx = self.pfx
+        self_output = self.output
+        if self_output is not None:
+            self_output.parent = self
+            n_mod = self_output.mod
+            if n_mod is None:
+                self_output.mod = self.mod
+            n_ns = self_output.ns
+            if n_ns is None:
+                self_output.ns = self.ns
+            n_pfx = self_output.pfx
+            if n_pfx is None:
+                self_output.pfx = self.pfx
+        for n in self.children:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -6697,7 +6740,6 @@ class Rpc(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6853,82 +6895,6 @@ class Submodule(SchemaNodeInner):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "submodule"
-        for n in augment:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        belongs_to.parent = self
-        n_mod = belongs_to.mod
-        if n_mod is None:
-            belongs_to.mod = self.mod
-        n_ns = belongs_to.ns
-        if n_ns is None:
-            belongs_to.ns = self.ns
-        n_pfx = belongs_to.pfx
-        if n_pfx is None:
-            belongs_to.pfx = self.pfx
-        for n in extension_:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in feature:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in import_:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in include:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in revision:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.augment = augment
         self.belongs_to = belongs_to
@@ -6944,7 +6910,8 @@ class Submodule(SchemaNodeInner):
         self.revision = revision
         self.yang_version = yang_version
         self.exts = exts
-        for n in children:
+        self.children = children
+        for n in self.augment:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -6955,7 +6922,82 @@ class Submodule(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.children = children
+        self.belongs_to.parent = self
+        n_mod = self.belongs_to.mod
+        if n_mod is None:
+            self.belongs_to.mod = self.mod
+        n_ns = self.belongs_to.ns
+        if n_ns is None:
+            self.belongs_to.ns = self.ns
+        n_pfx = self.belongs_to.pfx
+        if n_pfx is None:
+            self.belongs_to.pfx = self.pfx
+        for n in self.extension_:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.feature:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.import_:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.include:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.revision:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.children:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -7067,72 +7109,6 @@ class Type(SchemaNodeOuter):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "type"
-        for n in bit:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in enum:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        if length is not None:
-            length.parent = self
-            n_mod = length.mod
-            if n_mod is None:
-                length.mod = self.mod
-            n_ns = length.ns
-            if n_ns is None:
-                length.ns = self.ns
-            n_pfx = length.pfx
-            if n_pfx is None:
-                length.pfx = self.pfx
-        for n in pattern:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        if range_ is not None:
-            range_.parent = self
-            n_mod = range_.mod
-            if n_mod is None:
-                range_.mod = self.mod
-            n_ns = range_.ns
-            if n_ns is None:
-                range_.ns = self.ns
-            n_pfx = range_.pfx
-            if n_pfx is None:
-                range_.pfx = self.pfx
-        for n in type_:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.base = base
         self.bit = bit
@@ -7145,6 +7121,74 @@ class Type(SchemaNodeOuter):
         self.require_instance = require_instance
         self.type_ = type_
         self.exts = exts
+        for n in self.bit:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.enum:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        self_length = self.length
+        if self_length is not None:
+            self_length.parent = self
+            n_mod = self_length.mod
+            if n_mod is None:
+                self_length.mod = self.mod
+            n_ns = self_length.ns
+            if n_ns is None:
+                self_length.ns = self.ns
+            n_pfx = self_length.pfx
+            if n_pfx is None:
+                self_length.pfx = self.pfx
+        for n in self.pattern:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        self_range_ = self.range_
+        if self_range_ is not None:
+            self_range_.parent = self
+            n_mod = self_range_.mod
+            if n_mod is None:
+                self_range_.mod = self.mod
+            n_ns = self_range_.ns
+            if n_ns is None:
+                self_range_.ns = self.ns
+            n_pfx = self_range_.pfx
+            if n_pfx is None:
+                self_range_.pfx = self.pfx
+        for n in self.type_:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -7287,16 +7331,6 @@ class Typedef(SchemaNodeOuter):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "typedef"
-        type_.parent = self
-        n_mod = type_.mod
-        if n_mod is None:
-            type_.mod = self.mod
-        n_ns = type_.ns
-        if n_ns is None:
-            type_.ns = self.ns
-        n_pfx = type_.pfx
-        if n_pfx is None:
-            type_.pfx = self.pfx
         self.name = name
         self.default = default
         self.description = description
@@ -7305,6 +7339,16 @@ class Typedef(SchemaNodeOuter):
         self.type_ = type_
         self.units = units
         self.exts = exts
+        self.type_.parent = self
+        n_mod = self.type_.mod
+        if n_mod is None:
+            self.type_.mod = self.mod
+        n_ns = self.type_.ns
+        if n_ns is None:
+            self.type_.ns = self.ns
+        n_pfx = self.type_.pfx
+        if n_pfx is None:
+            self.type_.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -7399,28 +7443,6 @@ class Uses(SchemaNodeOuter):
         self.ns = new_ns
         self.pfx = new_pfx
         self._yname = "uses"
-        for n in augment:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
-        for n in refine:
-            n.parent = self
-            n_mod = n.mod
-            if n_mod is None:
-                n.mod = self.mod
-            n_ns = n.ns
-            if n_ns is None:
-                n.ns = self.ns
-            n_pfx = n.pfx
-            if n_pfx is None:
-                n.pfx = self.pfx
         self.name = name
         self.augment = augment
         self.description = description
@@ -7430,6 +7452,28 @@ class Uses(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
+        for n in self.augment:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
+        for n in self.refine:
+            n.parent = self
+            n_mod = n.mod
+            if n_mod is None:
+                n.mod = self.mod
+            n_ns = n.ns
+            if n_ns is None:
+                n.ns = self.ns
+            n_pfx = n.pfx
+            if n_pfx is None:
+                n.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
