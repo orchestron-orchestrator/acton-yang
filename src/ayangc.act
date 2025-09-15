@@ -7,49 +7,157 @@ import transform_unions
 import testing
 
 
-actor main(env):
-    """ayangc: Acton YANG Compiler
+proc def cmd_transform(env, file_cap, args):
+    """Transform command: Parse a YANG file and apply transformations
 
-    This is an experimental tool that exposes some functions from the acton-yang
-    library in a command-line interface. The interface is likely to change in
-    future as the needs evolve. Right now, it parses a YANG file into low-level
-    Statement tree. Then it optionally applies transforms to the SchemaNode tree
-    and prints out the resulting YANG after converting it back to Statement
-    tree.
+    This command parses a YANG file into low-level Statement tree, then
+    optionally applies transforms to the SchemaNode tree and prints out
+    the resulting YANG after converting it back to Statement tree.
 
     As a side effect, the comments in YANG are removed entirely, some YANG
     statements may be reordered or have their arguments quoted. But from the
     modeling point of view, the resulting YANG should be equivalent to the input
     YANG (less the changes made by transform).
     """
-    p = argparse.Parser()
-    p.add_arg("infile", "input yang file")
-    p.add_option("transform", "strlist", "+", [], "transforms to apply")
-    args = p.parse(env.argv)
+    infile = args.get_str("infile")
+    transforms = args.get_strlist("transform")
+
+    rfc = file.ReadFileCap(file_cap)
+
+    try:
+        rf = file.ReadFile(rfc, infile)
+        yang_content = rf.read().decode()
+        rf.close()
+    except OSError as e:
+        print("Error reading file {infile}: {e}", err=True)
+        env.exit(1)
+    else:
+        y = yang.parser.parse(yang_content)
+
+        if len(transforms) > 0:
+            n = yang.schema.stmt_to_snode(y)
+            for transform in transforms:
+                if transform == "unions":
+                    print("Applying transform '{transform}' to {infile}", err=True)
+                    transform_unions.rewrite_unions(n)
+                else:
+                    print("Unknown transform: {transform}", err=True)
+                    env.exit(1)
+            y = n.to_statement()
+
+        yang_out = y.pryang()
+        print(yang_out)
+
+
+proc def cmd_compile(env, file_cap, args):
+    """Compile command: Compile YANG modules from files or directories
+
+    This command reads YANG modules from specified files or directories and
+    compiles them together using yang.compile(). The compiled schema can be
+    output as Acton data classes or printed as a schema tree.
+    """
+    infiles = args.get_strlist("infile")
+    loose = args.get_bool("loose")
+
+    if len(infiles) == 0:
+        print("Error: no input files or directories specified", err=True)
+        env.exit(1)
+
+    fs = file.FS(file_cap)
+    rfc = file.ReadFileCap(file_cap)
+
+    # Collect all YANG modules from files and directories
+    yang_sources = []
+    for infile in infiles:
+        try:
+            stat = fs.stat(infile)
+            if stat.is_dir():
+                # Read all .yang files from the directory
+                for filename in fs.listdir(infile):
+                    if filename.endswith(".yang"):
+                        file_path = file.join_path([infile, filename])
+                        rf = file.ReadFile(rfc, file_path)
+                        yang_content = rf.read().decode()
+                        rf.close()
+                        yang_sources.append(yang_content)
+                        print("Loaded {file_path}", err=True)
+            else:
+                # Read single file
+                if infile.endswith(".yang"):
+                    rf = file.ReadFile(rfc, infile)
+                    yang_content = rf.read().decode()
+                    rf.close()
+                    yang_sources.append(yang_content)
+                    print("Loaded {infile}", err=True)
+                else:
+                    print("Warning: skipping non-.yang file: {infile}", err=True)
+        except OSError as e:
+            print("Error accessing {infile}: {e}", err=True)
+            env.exit(1)
+
+    if len(yang_sources) == 0:
+        print("Error: no .yang files found in specified directories", err=True)
+        env.exit(1)
+
+    print("Compiling {len(yang_sources)} YANG modules...", err=True)
+
+    try:
+        root = yang.compile(yang_sources)
+        print(root.prdaclass(loose=loose))
+    except Exception as exc:
+        print("Error during compilation: {exc}", err=True)
+        env.exit(1)
+
+
+actor main(env):
+    """ayangc: Acton YANG Compiler
+
+    This is an experimental tool that exposes some functions from the acton-yang
+    library in a command-line interface. The interface is likely to change in
+    future as the needs evolve.
+
+    Commands:
+    - transform: Parse YANG files and apply transformations
+    - compile: Compile multiple YANG modules together into a schema tree
+    """
     file_cap = file.FileCap(env.cap)
 
-    infile = file.ReadFile(
-        file.ReadFileCap(file_cap),
-        args.get_str("infile")).read().decode()
+    # Create command handlers that capture env and file_cap
+    proc def _cmd_transform(args):
+        cmd_transform(env, file_cap, args)
 
-    y = yang.parser.parse(infile)
-    transforms = args.get_strlist("transform")
-    if len(transforms) > 0:
-        n = yang.schema.stmt_to_snode(y)
-        for transform in args.get_strlist("transform"):
-            if transform == "unions":
-                print("Applying transform: {transform}", err=True)
-                transform_unions.rewrite_unions(n)
-                print("Done", err=True)
-            else:
-                print("Unknown transform: {transform}", err=True)
-                env.exit(1)
-        y = n.to_statement()
+    proc def _cmd_compile(args):
+        cmd_compile(env, file_cap, args)
 
-    yang_out = y.pryang()
-    print(yang_out)
+    p = argparse.Parser()
 
-    env.exit(0)
+    # Transform subcommand
+    transform_cmd = p.add_cmd("transform", "apply transforms to a YANG module", _cmd_transform)
+    transform_cmd.add_arg("infile", "input YANG file", required=True)
+    transform_cmd.add_arg("transform", "transform(s) to apply (e.g., unions)", required=True, nargs="+")
+
+    # Compile subcommand
+    compile_cmd = p.add_cmd("compile", "compile YANG modules together", _cmd_compile)
+    compile_cmd.add_option("infile", "strlist", "+", [], "input YANG file(s) or directory(s)")
+    compile_cmd.add_bool("loose", "generate loose validation mode classes", short="l")
+
+    try:
+        args = p.parse(env.argv)
+    except argparse.PrintUsage as exc:
+        print(exc.error_message)
+        env.exit(0)
+    except argparse.ArgumentError as exc:
+        print(exc.error_message, err=True)
+        env.exit(1)
+    else:
+        cmd = args.cmd
+        if cmd is not None:
+            cmd(args)
+        else:
+            print("Error: No command specified. Use --help for usage.", err=True)
+            env.exit(1)
+
+        env.exit(0)
 
 
 test_yang = r"""module test_ayangc {
