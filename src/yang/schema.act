@@ -1717,7 +1717,7 @@ class DRoot(DNodeInner):
                 if base_key in identity_map:
                     resolved_bases.append(identity_map[base_key].identity)
                 else:
-                    raise ValueError("Could not find {id.identity.prefix}:{id.identity.name} in any module")
+                    raise ValueError("Could not resolve base '{base_key}' for identity '{id.identity.prefix}:{id.identity.name}'")
             id.identity.base = resolved_bases
 
         # Detect cycles in the identity hierarchy (DFS)
@@ -4751,8 +4751,11 @@ class Identity(SchemaNodeOuter):
         # so we make it easier to later look up bases in DIdentity.
         fq_base = []
         for base in self.base:
-            base_identity = self.get_identity(base, context)
-            fq_base.append("{base_identity.pfx}:{base_identity.name}")
+            if ":" not in base:
+                base_identity = self.get_identity(base, context)
+                fq_base.append("{base_identity.pfx}:{base_identity.name}")
+            else:
+                fq_base.append(base)
 
         new = Identity(self.name,
                        base=fq_base,
@@ -7230,8 +7233,11 @@ class Type(SchemaNodeOuter):
             # so we make it easier to later look up bases in DIdentity.
             fq_base = []
             for base in self.base:
-                base_identity = self.get_identity(base, context)
-                fq_base.append("{base_identity.pfx}:{base_identity.name}")
+                if ":" not in base:
+                    base_identity = self.get_identity(base, context)
+                    fq_base.append("{base_identity.pfx}:{base_identity.name}")
+                else:
+                    fq_base.append(base)
 
             new = Type(self.name,
                     base=fq_base,
