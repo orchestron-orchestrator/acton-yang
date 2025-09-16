@@ -1,11 +1,12 @@
 import argparse
 import file
 import fs
+import time
+
 import yang
 import yang.parser
 import yang.schema
 import transform_unions
-import testing
 
 
 proc def cmd_transform(env, file_cap, args):
@@ -118,7 +119,10 @@ proc def cmd_compile(env, file_cap, args):
     print("Compiling {len(yang_sources)} YANG modules...", err=True)
 
     try:
+        sw = time.Stopwatch()
         root = yang.compile(yang_sources)
+        t1 = sw.elapsed()
+        print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
         print(root.prdaclass(loose=loose))
     except Exception as exc:
         print("Error during compilation: {exc}", err=True)
