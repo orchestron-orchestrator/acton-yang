@@ -1,5 +1,32 @@
 
 
+def _remap_path_prefix(path: str, old_prefix: str, new_prefix: str) -> str:
+    """Remap prefix in augment/deviation paths from old to new prefix
+
+    Example: "/old:foo/old:bar/baz" -> "/new:foo/new:bar/baz"
+    """
+    if old_prefix == new_prefix:
+        return path
+
+    # Split path into segments
+    segments = path.split("/")
+    result = []
+
+    for segment in segments:
+        sp = segment.split(":", 1)
+        if len(sp) > 1:
+            prefix = sp[0]
+            name = sp[1]
+            if prefix == old_prefix:
+                result.append(new_prefix + ":" + name)
+            else:
+                result.append(segment)
+        else:
+            result.append(segment)
+
+    return "/".join(result)
+
+
 def stmt_to_smodule(stmt):
     m = stmt_to_snode(stmt)
     if isinstance(m, Module):

@@ -1298,6 +1298,109 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                     res.append("        new.expand_augments(context)")
             res.append("        return new")
             res.append("")
+        # ==============================================================
+
+        # -- update_namespace_qualifiers
+        if "update_namespace_qualifiers" not in manual_methods:
+            res.append("    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:")
+            res.append('        """Update namespace qualifiers and remap prefix references')
+            res.append('')
+            res.append('        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.')
+            res.append('        If old_pfx differs from new_pfx, remaps all prefix-qualified references.')
+            res.append('        """')
+            res.append("        self.ns = new_ns")
+            res.append("        self.pfx = new_pfx")
+            res.append("        self.mod = new_mod")
+            res.append("")
+
+            if have_children:
+                res.append("        # Recursively update children")
+                res.append("        for child in self.children:")
+                res.append("            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+                res.append("")
+
+            res.append("        # Exit early if no prefix remapping is needed")
+            res.append("        if old_pfx == new_pfx:")
+            res.append("            return")
+            res.append("")
+            res.append("        # Remap prefix references")
+
+            for substmt in stmt.substmts.values():
+                attr = _attr_name(substmt.name)
+
+                # XPath expressions that need remapping
+                if substmt.name == "when":
+                    res.append(f"        self_{attr} = self.{attr}")
+                    res.append(f"        if self_{attr} is not None:")
+                    res.append(f"            self.{attr} = _remap_path_prefix(self_{attr}, old_pfx, new_pfx)")
+                elif substmt.name == "path":
+                    res.append(f"        self_{attr} = self.{attr}")
+                    res.append(f"        if self_{attr} is not None:")
+                    res.append(f"            self.{attr} = _remap_path_prefix(self_{attr}, old_pfx, new_pfx)")
+
+                # Must statements need special handling
+                elif substmt.name == "must":
+                    res.append(f"        for must in self.{attr}:")
+                    res.append(f"            must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)")
+
+                # if-feature expressions
+                elif substmt.name == "if-feature":
+                    res.append(f"        self.{attr} = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.{attr}]")
+
+                # Unique statements (for list)
+                elif substmt.name == "unique":
+                    res.append(f"        self.{attr} = [_remap_path_prefix(u, old_pfx, new_pfx) for u in self.{attr}]")
+
+                # Default values that might contain prefixed identities
+                elif substmt.name == "default":
+                    if substmt.cardinality == "0..1":
+                        res.append(f"        self_{attr} = self.{attr}")
+                        res.append(f"        if self_{attr} is not None:")
+                        res.append(f"            self.{attr} = _remap_path_prefix(self_{attr}, old_pfx, new_pfx)")
+                    elif substmt.cardinality == "0..n":
+                        res.append(f"        self.{attr} = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.{attr}]")
+
+                # Base identities
+                elif substmt.name == "base":
+                    res.append(f"        self.{attr} = [_remap_path_prefix(b, old_pfx, new_pfx) for b in self.{attr}]")
+
+                # Type statements in leaf, leaf-list, deviate (unions are handled separately)
+                elif substmt.name == "type":
+                    if substmt.cardinality == "1":
+                        res.append(f"        self.{attr}.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+
+                # Deviation target paths
+                elif substmt.name == "deviation":
+                    res.append(f"        self.{attr} = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.{attr}]")
+
+            # Special handling for specific statement types
+            if stmt_name == "uses":
+                # Uses name can be prefixed
+                res.append(f"        self.name = _remap_path_prefix(self.name, old_pfx, new_pfx)")
+                # Handle refine and augment within uses
+                res.append(f"        for refine in self.refine:")
+                res.append(f"            refine.target_node = _remap_path_prefix(refine.target_node, old_pfx, new_pfx)")
+                res.append(f"            refine.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+                res.append(f"        for aug in self.augment:")
+                res.append(f"            aug.target_node = _remap_path_prefix(aug.target_node, old_pfx, new_pfx)")
+                res.append(f"            aug.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+
+            elif stmt_name == "augment":
+                # Augment target path
+                res.append(f"        self.target_node = _remap_path_prefix(self.target_node, old_pfx, new_pfx)")
+
+            elif stmt_name == "refine":
+                # Refine target path
+                res.append(f"        self.target_node = _remap_path_prefix(self.target_node, old_pfx, new_pfx)")
+
+            elif stmt_name == "type":
+                # Type name can be prefixed for user-defined types
+                res.append(f"        self.name = _remap_path_prefix(self.name, old_pfx, new_pfx)")
+                # Handle nested types for union
+                res.append(f"        for nested_type in self.type_:")
+                res.append(f"            nested_type.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+
+            res.append("")
 
         res.append("    def __str__(self):")
         strret = ""
