@@ -250,7 +250,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
             # Base case: no more path elements, process the data
             if op == "merge":
                 # TODO: set_ns??
-                return _from_data(s, global_identity, data, loose=loose, set_ns=set_ns)
+                return from_data(s, global_identity, data, loose=loose, set_ns=set_ns)
             elif op == "remove":
                 return yang.gdata.Absent()
             raise ValueError(f"Invalid operation: {op}")
@@ -290,7 +290,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 else:
                     if str(data_with_keys[key]) != keys.pop(0):
                         raise ValueError("Key value mismatch between path and payload")
-            element_gdata = _from_data(s, global_identity, data_with_keys, loose, set_ns=False)
+            element_gdata = from_data(s, global_identity, data_with_keys, loose, set_ns=False)
             elements = []
             if op == "merge":
                 elements.append(element_gdata)
@@ -340,7 +340,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
 
 
 
-def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, global_identity, data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
+def from_data[A(YangData[A])](s: yang.schema.DNodeInner, global_identity, data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
     """Generic function to convert data to gdata tree based on schema
 
     Args:
@@ -368,7 +368,7 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, global_identity, data:
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return _from_data(child, global_identity, data, loose, set_ns, path + [next], root_path)
+            return from_data(child, global_identity, data, loose, set_ns, path + [next], root_path)
         raise ValueError("Node on path {path} is not inner")
 
     children: dict[str, yang.gdata.Node] = {}
@@ -412,10 +412,10 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, global_identity, data:
                     list_elements = []
                     for element_data in taken_nodes:
                         if isinstance(element_data, dict):
-                            element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False)
+                            element_gdata = from_data(child, global_identity, element_data, loose, set_ns=False)
                             list_elements.append(element_gdata)
                         elif isinstance(element_data, xml.Node):
-                            element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False)
+                            element_gdata = from_data(child, global_identity, element_data, loose, set_ns=False)
                             list_elements.append(element_gdata)
                         else:
                             raise ValueError("Unsupported type for YangData protocol: {type(element_data)}")
@@ -430,9 +430,9 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, global_identity, data:
                 print("Processing inner node: {child.name} with taker {taker_name} {ns}", err=True)
                 maybe = None
                 if isinstance(taken_nodes, dict):
-                    maybe = _from_data(child, global_identity, taken_nodes, loose, set_ns=s.namespace != child.namespace)
+                    maybe = from_data(child, global_identity, taken_nodes, loose, set_ns=s.namespace != child.namespace)
                 elif isinstance(taken_nodes, xml.Node):
-                    maybe = _from_data(child, global_identity, taken_nodes, loose, set_ns=s.namespace != child.namespace)
+                    maybe = from_data(child, global_identity, taken_nodes, loose, set_ns=s.namespace != child.namespace)
                 else:
                         raise ValueError("Unsupported type for YangData protocol: {type(taken_nodes)}")
                 if maybe is not None:
@@ -488,16 +488,6 @@ def _from_data[A(YangData[A])](s: yang.schema.DNodeInner, global_identity, data:
         return yang.gdata.Container(children)
     else:
         raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
-
-
-def from_xml(root: yang.schema.DRoot, node: xml.Node, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
-    """Convert XML node to gdata tree based on schema"""
-    return _from_data(root, root.identities, node, loose, root_path=root_path)
-
-
-def from_json(root: yang.schema.DRoot, node: dict[str, ?value], loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
-    """Convert JSON node to gdata tree based on schema"""
-    return _from_data(root, root.identities, node, loose, root_path=root_path)
 
 
 def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
@@ -721,7 +711,7 @@ def _test_y1_xml():
 </data>"""
 
     s = yang.compile([y1])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, s.identities, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_mandatory_leaf():
@@ -738,7 +728,7 @@ def _test_mandatory_leaf():
     s = yang.compile([y1])
 
     try:
-        from_xml(s, xml.decode('<data><c1 xmlns="urn:example:y1"/></data>'))
+        from_data(s, s.identities, xml.decode('<data><c1 xmlns="urn:example:y1"/></data>'))
     except ValueError as err:
         if err.error_message != "Error reading /c1/l1: Cannot find xml child with name l1":
             testing.error("Unexpected error: {err}")
@@ -788,7 +778,7 @@ def _test_y1_json():
     }
 
     s = yang.compile([y1])
-    gd = from_json(s, json_data)
+    gd = from_data(s, s.identities, json_data)
     return gd.prsrc()
 
 
@@ -821,10 +811,10 @@ def _test_root_path():
     s = yang.compile([y1])
 
     # Test parsing from root (should include top container)
-    gd_root = from_xml(s, xml.decode(xml_in))
+    gd_root = from_data(s, s.identities, xml.decode(xml_in))
 
     # Test parsing with root_path to navigate directly to nested container
-    gd_nested = from_xml(s, xml.decode(xml_in), root_path=["y1:top", "nested"])
+    gd_nested = from_data(s, s.identities, xml.decode(xml_in), root_path=["y1:top", "nested"])
 
     return gd_nested.prsrc()
 
