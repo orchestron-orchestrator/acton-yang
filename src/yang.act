@@ -138,36 +138,36 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
 
         m.include = []
 
-        # Compile in dependency by import depth-first search
-        build_stack: list[(yang.schema.Module, list[yang.schema.Import])] = []
-        while True:
-            if len(build_stack) > 0:
-                m, unresolved_imports = build_stack.pop()
-                if len(unresolved_imports) > 0:
-                    # Push first remaining import to build stack
-                    m_import = unresolved_imports.pop()
-                    build_stack.append((m, unresolved_imports))
-                    try:
-                        imported_module = modules.pop(m_import.module, m_import.revision_date)
-                    except KeyError:
-                        pass # Import either already processed, missing or cyclic
-                    else:
-                        build_stack.append((imported_module, list(imported_module.import_)))
+    # Compile in dependency by import depth-first search
+    build_stack: list[(yang.schema.Module, list[yang.schema.Import])] = []
+    while True:
+        if len(build_stack) > 0:
+            m, unresolved_imports = build_stack.pop()
+            if len(unresolved_imports) > 0:
+                # Push first remaining import to build stack
+                m_import = unresolved_imports.pop()
+                build_stack.append((m, unresolved_imports))
+                try:
+                    imported_module = modules.pop(m_import.module, m_import.revision_date)
+                except KeyError:
+                    pass # Import either already processed, missing or cyclic
                 else:
-                    try:
-                        mc = m.compile(ctx)
-                    except Exception as ex:
-                        raise ValueError("{m.name} - Compile - Failed: {ex.error_message}")
-                    else:
-                        if isinstance(mc, yang.schema.Module):
-                            ctx.add_module(mc)
-                        else:
-                            raise ValueError(m.name + " - Compile - Failed: not a module")
-            elif len(modules) > 0:
-                m = modules.pop_any()
-                build_stack.append((m, list(m.import_)))
+                    build_stack.append((imported_module, list(imported_module.import_)))
             else:
-                break
+                try:
+                    mc = m.compile(ctx)
+                except Exception as ex:
+                    raise ValueError("{m.name} - Compile - Failed: {ex.error_message}")
+                else:
+                    if isinstance(mc, yang.schema.Module):
+                        ctx.add_module(mc)
+                    else:
+                        raise ValueError(m.name + " - Compile - Failed: not a module")
+        elif len(modules) > 0:
+            m = modules.pop_any()
+            build_stack.append((m, list(m.import_)))
+        else:
+            break
 
     no_rev_modules: list[yang.schema.Module] = []
     for mod_rev, m in ctx.modules.items():
