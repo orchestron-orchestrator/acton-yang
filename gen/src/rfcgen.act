@@ -1152,36 +1152,46 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         res.append('        self._yname = "{stmt_name}"')
 
         for substmt in stmt.substmts.values():
+            if substmt.name not in child_stmts: # Attribute
+                res.append("        self.{_attr_name(substmt.name)} = {_attr_name(substmt.name)}")
+
+        res.append("        self.exts = exts")
+
+        if have_children:
+            res.append("        self.children = children")
+
+        for substmt in stmt.substmts.values():
             if substmt.name == stmt.argument_name:
                 continue
             elif substmt.name not in child_stmts: # Attribute
                 if substmt.name in stmts: # Another statement (not a child)
                     # Set parent for substatement objects & inherit namespace + prefix
                     if substmt.cardinality == "0..1":
-                        res.append("        if {_attr_name(substmt.name)} is not None:")
-                        res.append("            {_attr_name(substmt.name)}.parent = self")
-                        res.append("            n_mod = {_attr_name(substmt.name)}.mod")
+                        res.append("        self_{_attr_name(substmt.name)} = self.{_attr_name(substmt.name)}")
+                        res.append("        if self_{_attr_name(substmt.name)} is not None:")
+                        res.append("            self_{_attr_name(substmt.name)}.parent = self")
+                        res.append("            n_mod = self_{_attr_name(substmt.name)}.mod")
                         res.append("            if n_mod is None:")
-                        res.append("                {_attr_name(substmt.name)}.mod = self.mod")
-                        res.append("            n_ns = {_attr_name(substmt.name)}.ns")
+                        res.append("                self_{_attr_name(substmt.name)}.mod = self.mod")
+                        res.append("            n_ns = self_{_attr_name(substmt.name)}.ns")
                         res.append("            if n_ns is None:")
-                        res.append("                {_attr_name(substmt.name)}.ns = self.ns")
-                        res.append("            n_pfx = {_attr_name(substmt.name)}.pfx")
+                        res.append("                self_{_attr_name(substmt.name)}.ns = self.ns")
+                        res.append("            n_pfx = self_{_attr_name(substmt.name)}.pfx")
                         res.append("            if n_pfx is None:")
-                        res.append("                {_attr_name(substmt.name)}.pfx = self.pfx")
+                        res.append("                self_{_attr_name(substmt.name)}.pfx = self.pfx")
                     elif substmt.cardinality == "1":
-                        res.append("        {_attr_name(substmt.name)}.parent = self")
-                        res.append("        n_mod = {_attr_name(substmt.name)}.mod")
+                        res.append("        self.{_attr_name(substmt.name)}.parent = self")
+                        res.append("        n_mod = self.{_attr_name(substmt.name)}.mod")
                         res.append("        if n_mod is None:")
-                        res.append("            {_attr_name(substmt.name)}.mod = self.mod")
-                        res.append("        n_ns = {_attr_name(substmt.name)}.ns")
+                        res.append("            self.{_attr_name(substmt.name)}.mod = self.mod")
+                        res.append("        n_ns = self.{_attr_name(substmt.name)}.ns")
                         res.append("        if n_ns is None:")
-                        res.append("            {_attr_name(substmt.name)}.ns = self.ns")
-                        res.append("        n_pfx = {_attr_name(substmt.name)}.pfx")
+                        res.append("            self.{_attr_name(substmt.name)}.ns = self.ns")
+                        res.append("        n_pfx = self.{_attr_name(substmt.name)}.pfx")
                         res.append("        if n_pfx is None:")
-                        res.append("            {_attr_name(substmt.name)}.pfx = self.pfx")
+                        res.append("            self.{_attr_name(substmt.name)}.pfx = self.pfx")
                     elif substmt.cardinality == "0..n":
-                        res.append("        for n in {_attr_name(substmt.name)}:")
+                        res.append("        for n in self.{_attr_name(substmt.name)}:")
                         res.append("            n.parent = self")
                         res.append("            n_mod = n.mod")
                         res.append("            if n_mod is None:")
@@ -1195,14 +1205,8 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                     else:
                         raise ValueError("Unknown cardinality: {substmt.cardinality}")
 
-        for substmt in stmt.substmts.values():
-            if substmt.name not in child_stmts: # Attribute
-                res.append("        self.{_attr_name(substmt.name)} = {_attr_name(substmt.name)}")
-
-        res.append("        self.exts = exts")
-
         if have_children:
-            res.append("        for n in children:")
+            res.append("        for n in self.children:")
             res.append("            n.parent = self")
             res.append("            n_mod = n.mod")
             res.append("            if n_mod is None:")
@@ -1213,7 +1217,6 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             res.append("            n_pfx = n.pfx")
             res.append("            if n_pfx is None:")
             res.append("                n.pfx = self.pfx")
-            res.append("        self.children = children")
         res.append("")
 
         # -- get_attrs
