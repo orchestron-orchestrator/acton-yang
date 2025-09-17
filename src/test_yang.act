@@ -1657,6 +1657,114 @@ def _test_compile_submodules1():
     testing.assertEqual(l2.config, True)
     return root.prdaclass()
 
+def _test_compile_submodule_different_prefix():
+    """Test that submodules can use different prefixes for their parent module"""
+    ys_main = r"""module main-module {
+    yang-version "1.1";
+    namespace "http://example.com/main";
+    prefix "main";
+
+    include sub-module;
+
+    grouping main-group {
+        container group-container {
+            leaf group-leaf {
+                type string;
+            }
+        }
+    }
+
+    container main-container {
+        leaf main-leaf {
+            type string;
+        }
+        uses sub-group;  // Use grouping from submodule
+    }
+}"""
+
+    ys_sub = r"""submodule sub-module {
+    yang-version "1.1";
+    belongs-to main-module {
+        prefix "m";  // Different prefix than parent module uses
+    }
+
+    grouping sub-group {
+        container sub-group-container {
+            leaf sub-group-leaf {
+                type string;
+                default "from-submodule";
+            }
+        }
+    }
+
+    augment "/m:main-container" {
+        leaf sub-leaf {
+            type string;
+            when "../m:main-leaf = 'trigger'";
+            must "string-length(.) > 5" {
+                description "Sub-leaf must be longer than 5 characters";
+            }
+        }
+
+        list sub-list {
+            key "name";
+            unique "m:main-leaf sub-value";
+
+            leaf name {
+                type string;
+            }
+
+            leaf sub-value {
+                type string;
+            }
+
+            leaf ref-to-main {
+                type leafref {
+                    path "/m:main-container/m:main-leaf";
+                }
+            }
+        }
+
+        uses m:main-group {
+            when "m:main-leaf = 'use-group'";
+            refine "group-container/group-leaf" {
+                must "string-length(.) > 3";
+                default "refined-default";
+            }
+            augment "group-container" {
+                when "../m:main-leaf";
+                leaf augmented-in-group {
+                    type string;
+                }
+            }
+        }
+    }
+
+    deviation "/m:main-container/m:main-leaf" {
+        deviate add {
+            default "default-value";
+        }
+    }
+}"""
+
+    # Compile the module with its submodule
+    root = yang.compile([ys_main, ys_sub])
+
+    # Verify the augmented structure exists
+    main_container = root.get("main-container")
+    testing.assertNotNone(main_container, "main-container should exist")
+
+    # Verify augmented leaf exists
+    sub_leaf = main_container.get("sub-leaf")
+    testing.assertNotNone(sub_leaf, "sub-leaf should exist after augment")
+
+    # Verify the sub-list exists
+    sub_list = main_container.get("sub-list")
+    testing.assertNotNone(sub_list, "sub-list should exist after augment")
+
+    # Generate and return the Acton data classes to verify it works end-to-end
+    return root.prdaclass()
+
 def _test_compile_submodules2():
     ys_foo = r"""module foo {
     yang-version "1.1";

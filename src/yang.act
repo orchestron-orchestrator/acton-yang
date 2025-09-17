@@ -8,6 +8,7 @@ def eq_optional[T(Eq)](a: ?T, b: ?T) -> bool:
 def optional_str[T](v: ?T, default: str = "None") -> str:
     return str(v) if v is not None else default
 
+
 class NameRevMap[T](object):
     items: dict[str, (?str, T)]
 
@@ -88,9 +89,12 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
             except KeyError:
                 raise ValueError("{m.name} - submodule {include.module} not found.")
             else:
+                # Track all prefix remappings needed (including parent module prefix)
+                prefix_remaps: dict[str, str] = {}
+
+                # If submodule uses different prefix for parent module, track that remapping
                 if submod.belongs_to.prefix != m.prefix:
-                    # TODO: Remap submodule children to parent prefix, or shift to global namespace?
-                    raise NotImplementedError("Submodule alias to parent module prefix")
+                    prefix_remaps[submod.belongs_to.prefix] = m.prefix
 
                 for sub_import in submod.import_:
                     try:
@@ -111,29 +115,79 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
                         m.import_.append(new_import)
                     else:
                         if sub_import.prefix != import_prefix:
-                            # TODO: Handle import of same module under different prefixes by combined module/submodules
-                            #       E.g. remap submodule children to parent prefix, or shift to global namespace?
-                            raise NotImplementedError("Module/submodule with multiple import prefix to same module")
+                            # Track that we need to remap this prefix in the submodule's content
+                            prefix_remaps[sub_import.prefix] = import_prefix
                         # else: # Duplicate import. We're fine!
 
                 for c in submod.children:
-                    # TODO: Align submodule-local import prefixes to parent module imports
-                    # Attach subtree to parent module, inherit identifier namespace from parent module
+                    # Set parent attribute for direct children only
                     c.parent = m
-                    c.ns = m.get_namespace()
-                    c.pfx = m.get_prefix()
-                    c.mod = m.get_module_name()
+
+                    # Always update namespace qualifiers to parent module's values
+                    c.update_namespace_qualifiers(m.namespace, m.prefix, m.name, m.prefix)
+
+                    # Apply all prefix remappings (parent module and imports)
+                    for old_pfx, new_pfx in prefix_remaps.items():
+                        c.update_namespace_qualifiers(m.namespace, new_pfx, m.name, old_pfx)
+
                     m.children.append(c)
+
+                # Update augment nodes
+                for aug in submod.augment:
+                    # Set parent attribute
+                    aug.parent = m
+
+                    # Update the augment node's namespace qualifiers
+                    aug.update_namespace_qualifiers(m.namespace, m.prefix, m.name, m.prefix)
+
+                    # Apply all prefix remappings to augment paths and content
+                    for old_pfx, new_pfx in prefix_remaps.items():
+                        aug.target_node = yang.schema._remap_path_prefix(aug.target_node, old_pfx, new_pfx)
+                        aug.update_namespace_qualifiers(m.namespace, new_pfx, m.name, old_pfx)
 
                 m.augment.extend(submod.augment)
                 # discard contact
                 # discard description
-                m.deviation.extend(submod.deviation)
+
+                # Remap deviation paths if needed
+                for dev in submod.deviation:
+                    remapped_dev = dev
+                    for old_pfx, new_pfx in prefix_remaps.items():
+                        remapped_dev = yang.schema._remap_path_prefix(remapped_dev, old_pfx, new_pfx)
+                    m.deviation.append(remapped_dev)
+
+                # Update extension nodes
+                for ext in submod.extension_:
+                    # Set parent attribute
+                    ext.parent = m
+
+                    # Update namespace qualifiers
+                    ext.update_namespace_qualifiers(m.namespace, m.prefix, m.name, m.prefix)
+
+                    # Apply all prefix remappings
+                    for old_pfx, new_pfx in prefix_remaps.items():
+                        ext.update_namespace_qualifiers(m.namespace, new_pfx, m.name, old_pfx)
+
                 m.extension_.extend(submod.extension_)
+
                 # discard organization
                 # discard reference
                 # discard revision
+
+                # Update feature nodes
+                for feat in submod.feature:
+                    # Set parent attribute
+                    feat.parent = m
+
+                    # Update namespace qualifiers
+                    feat.update_namespace_qualifiers(m.namespace, m.prefix, m.name, m.prefix)
+
+                    # Apply all prefix remappings
+                    for old_pfx, new_pfx in prefix_remaps.items():
+                        feat.update_namespace_qualifiers(m.namespace, new_pfx, m.name, old_pfx)
+
                 m.feature.extend(submod.feature)
+
                 m.exts.extend(submod.exts)
 
         m.include = []
