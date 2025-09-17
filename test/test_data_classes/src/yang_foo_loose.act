@@ -253,16 +253,23 @@ def src_yang():
     namespace "http://example.com/bar";
     prefix "bar";
     import foo {
-        prefix "f";
+        prefix "foo-local";
     }
     identity bary {
-        base f:basey;
+        base foo-local:basey;
     }
-    augment /f:c1 {
-        // create a conflict with /f:c1/l1
-        uses f:g1;
+    container test-idref {
+        leaf-list idref {
+            type identityref {
+                base foo-local:basey;
+            }
+        }
     }
-    augment /f:c.dot {
+    augment /foo-local:c1 {
+        // create a conflict with /foo-local:c1/l1
+        uses foo-local:g1;
+    }
+    augment /foo-local:c.dot {
         leaf l.dot2 {
             type string;
         }
@@ -272,7 +279,7 @@ def src_yang():
             type string;
         }
     }
-    augment /f:conflict {
+    augment /foo-local:conflict {
         leaf foo {
             type string;
         }
@@ -280,15 +287,15 @@ def src_yang():
             presence "inner presence from bar";
         }
     }
-    augment /f:nested {
-        // conflict with /f:nested/inner
+    augment /foo-local:nested {
+        // conflict with /foo-local:nested/inner
         container inner {
             leaf foo {
                 type string;
             }
         }
     }
-    augment /f:nested/inner/li1 {
+    augment /foo-local:nested/inner/li1 {
         leaf bar {
             type string;
         }
@@ -3505,6 +3512,108 @@ mut def from_json_foo__c2(jd: dict[str, ?value]) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'l1', from_json_foo__c2__l1, child_l1)
     return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
 
+mut def from_json_bar__test_idref__idref(val: list[PartialIdentityref]) -> yang.gdata.LeafList:
+    new_val = []
+    for v in val:
+        nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'bar')
+        if nv is not None:
+            new_val.append(nv)
+        else:
+            raise ValueError('Invalid value for identityref leaf-list idref: {error}')
+    return yang.gdata.LeafList('identityref', new_val)
+
+mut def from_xml_bar__test_idref__idref(val: list[PartialIdentityref]) -> yang.gdata.LeafList:
+    new_val = []
+    for v in val:
+        nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'bar')
+        if nv is not None:
+            new_val.append(nv)
+        else:
+            raise ValueError('Invalid value for identityref leaf-list idref: {error}')
+    return yang.gdata.LeafList('identityref', new_val)
+
+class bar__test_idref(yang.adata.MNode):
+    idref: list[Identityref]
+
+    mut def __init__(self, idref: ?list[Identityref]=None):
+        self._ns = 'http://example.com/bar'
+        self.idref = idref if idref is not None else []
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _idref = self.idref
+        if _idref is not None:
+            _identityref_idref = []
+            for v in _idref:
+                nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'bar')
+                if nv is not None:
+                    _identityref_idref.append(nv)
+                else:
+                    raise ValueError('Invalid value for identityref leaf-list idref: {error}')
+            _idref = _identityref_idref
+            children['idref'] = yang.gdata.LeafList('identityref', _idref)
+        return yang.gdata.Container(children, ns='http://example.com/bar', module='bar')
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> bar__test_idref:
+        if n is not None:
+            return bar__test_idref(idref=n.get_opt_Identityrefs('idref'))
+        return bar__test_idref()
+
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return bar__test_idref.from_gdata(self.to_gdata())
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append('# Top node: /test-idref')
+            res.append('{self_name} = bar__test_idref()')
+        leaves = []
+        _idref = self.idref
+        if len(_idref) != 0:
+            leaves.append('{self_name}.idref = {repr(_idref)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /test-idref'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+    def prsrc_gen3(self, self_name='ad'):
+        # WARNING: this wrapper for the gen3.pradata schema-driven parser compiles the schema on every call!
+        s = yang.compile(src_yang())
+        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose=True, root_path=['bar:test-idref'])
+
+
+mut def from_xml_bar__test_idref(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_idref = yang.gdata.from_xml_opt_Identityrefs(node, 'idref')
+    yang.gdata.maybe_add(children, 'idref', from_xml_bar__test_idref__idref, child_idref)
+    return yang.gdata.Container(children, ns='http://example.com/bar', module='bar')
+
+mut def from_json_path_bar__test_idref(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'idref':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_bar__test_idref(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_bar__test_idref(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_idref = yang.gdata.take_json_opt_Identityrefs(jd, 'idref')
+    yang.gdata.maybe_add(children, 'idref', from_json_bar__test_idref__idref, child_idref)
+    return yang.gdata.Container(children, ns='http://example.com/bar', module='bar')
+
 mut def from_json_bar__conflict__foo(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
@@ -3600,9 +3709,10 @@ class root(yang.adata.MNode):
     state: foo__state
     ll_empty: list[str]
     c2: foo__c2
+    test_idref: bar__test_idref
     bar_conflict: bar__conflict
 
-    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, pc3: ?foo__pc3=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, f_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, li_union: list[foo__li_union_entry]=[], state: ?foo__state=None, ll_empty: ?list[str]=None, c2: ?foo__c2=None, bar_conflict: ?bar__conflict=None):
+    mut def __init__(self, c1: ?foo__c1=None, pc1: ?foo__pc1=None, pc2: ?foo__pc2=None, pc3: ?foo__pc3=None, empty_presence: ?foo__empty_presence=None, c_dot: ?foo__c_dot=None, cc: ?foo__cc=None, f_conflict: ?foo__conflict=None, special: list[foo__special_entry]=[], nested: ?foo__nested=None, li_union: list[foo__li_union_entry]=[], state: ?foo__state=None, ll_empty: ?list[str]=None, c2: ?foo__c2=None, test_idref: ?bar__test_idref=None, bar_conflict: ?bar__conflict=None):
         self._ns = ''
         self.c1 = c1 if c1 is not None else foo__c1()
         self.pc1 = pc1
@@ -3618,6 +3728,7 @@ class root(yang.adata.MNode):
         self.state = state if state is not None else foo__state()
         self.ll_empty = ll_empty if ll_empty is not None else []
         self.c2 = c2 if c2 is not None else foo__c2()
+        self.test_idref = test_idref if test_idref is not None else bar__test_idref()
         self.bar_conflict = bar_conflict if bar_conflict is not None else bar__conflict()
 
     mut def create_pc1(self):
@@ -3684,6 +3795,9 @@ class root(yang.adata.MNode):
         _c2 = self.c2
         if _c2 is not None:
             children['c2'] = _c2.to_gdata()
+        _test_idref = self.test_idref
+        if _test_idref is not None:
+            children['test-idref'] = _test_idref.to_gdata()
         _bar_conflict = self.bar_conflict
         if _bar_conflict is not None:
             children['bar:conflict'] = _bar_conflict.to_gdata()
@@ -3692,7 +3806,7 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n is not None:
-            return root(c1=foo__c1.from_gdata(n.get_opt_cnt('c1')), pc1=foo__pc1.from_gdata(n.get_opt_cnt('pc1')), pc2=foo__pc2.from_gdata(n.get_opt_cnt('pc2')), pc3=foo__pc3.from_gdata(n.get_opt_cnt('pc3')), empty_presence=foo__empty_presence.from_gdata(n.get_opt_cnt('empty-presence')), c_dot=foo__c_dot.from_gdata(n.get_opt_cnt('c.dot')), cc=foo__cc.from_gdata(n.get_opt_cnt('cc')), f_conflict=foo__conflict.from_gdata(n.get_opt_cnt('f:conflict')), special=foo__special.from_gdata(n.get_opt_list('special')), nested=foo__nested.from_gdata(n.get_opt_cnt('nested')), li_union=foo__li_union.from_gdata(n.get_opt_list('li-union')), state=foo__state.from_gdata(n.get_opt_cnt('state')), ll_empty=n.get_opt_strs('ll-empty'), c2=foo__c2.from_gdata(n.get_opt_cnt('c2')), bar_conflict=bar__conflict.from_gdata(n.get_opt_cnt('bar:conflict')))
+            return root(c1=foo__c1.from_gdata(n.get_opt_cnt('c1')), pc1=foo__pc1.from_gdata(n.get_opt_cnt('pc1')), pc2=foo__pc2.from_gdata(n.get_opt_cnt('pc2')), pc3=foo__pc3.from_gdata(n.get_opt_cnt('pc3')), empty_presence=foo__empty_presence.from_gdata(n.get_opt_cnt('empty-presence')), c_dot=foo__c_dot.from_gdata(n.get_opt_cnt('c.dot')), cc=foo__cc.from_gdata(n.get_opt_cnt('cc')), f_conflict=foo__conflict.from_gdata(n.get_opt_cnt('f:conflict')), special=foo__special.from_gdata(n.get_opt_list('special')), nested=foo__nested.from_gdata(n.get_opt_cnt('nested')), li_union=foo__li_union.from_gdata(n.get_opt_list('li-union')), state=foo__state.from_gdata(n.get_opt_cnt('state')), ll_empty=n.get_opt_strs('ll-empty'), c2=foo__c2.from_gdata(n.get_opt_cnt('c2')), test_idref=bar__test_idref.from_gdata(n.get_opt_cnt('test-idref')), bar_conflict=bar__conflict.from_gdata(n.get_opt_cnt('bar:conflict')))
         return root()
 
     def copy(self):
@@ -3767,6 +3881,9 @@ class root(yang.adata.MNode):
         _c2 = self.c2
         if _c2 is not None:
             res.extend(_c2.prsrc('{self_name}.c2', False).splitlines())
+        _test_idref = self.test_idref
+        if _test_idref is not None:
+            res.extend(_test_idref.prsrc('{self_name}.test_idref', False).splitlines())
         _bar_conflict = self.bar_conflict
         if _bar_conflict is not None:
             res.extend(_bar_conflict.prsrc('{self_name}.bar_conflict', False).splitlines())
@@ -3813,6 +3930,8 @@ mut def from_xml(node: xml.Node) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'll-empty', from_xml_foo__ll_empty, child_ll_empty)
     child_c2 = yang.gdata.from_xml_opt_cnt(node, 'c2', 'http://example.com/foo')
     yang.gdata.maybe_add(children, 'c2', from_xml_foo__c2, child_c2)
+    child_test_idref = yang.gdata.from_xml_opt_cnt(node, 'test-idref', 'http://example.com/bar')
+    yang.gdata.maybe_add(children, 'test-idref', from_xml_bar__test_idref, child_test_idref)
     child_bar_conflict = yang.gdata.from_xml_opt_cnt(node, 'conflict', 'http://example.com/bar')
     yang.gdata.maybe_add(children, 'bar:conflict', from_xml_bar__conflict, child_bar_conflict)
     return yang.gdata.Container(children)
@@ -3868,6 +3987,9 @@ mut def from_json_path(jd: value, path: list[str]=[], op: ?str='merge') -> yang.
         if point == 'foo:c2':
             child = {'c2': from_json_path_foo__c2(jd, rest_path, op) }
             return yang.gdata.Container(child)
+        if point == 'bar:test-idref':
+            child = {'test-idref': from_json_path_bar__test_idref(jd, rest_path, op) }
+            return yang.gdata.Container(child)
         if point == 'bar:conflict':
             child = {'bar:conflict': from_json_path_bar__conflict(jd, rest_path, op) }
             return yang.gdata.Container(child)
@@ -3910,6 +4032,8 @@ mut def from_json(jd: dict[str, ?value]) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'll-empty', from_json_foo__ll_empty, child_ll_empty)
     child_c2 = yang.gdata.take_json_opt_cnt(jd, 'c2', 'foo')
     yang.gdata.maybe_add(children, 'c2', from_json_foo__c2, child_c2)
+    child_test_idref = yang.gdata.take_json_opt_cnt(jd, 'test-idref', 'bar')
+    yang.gdata.maybe_add(children, 'test-idref', from_json_bar__test_idref, child_test_idref)
     child_bar_conflict = yang.gdata.take_json_opt_cnt(jd, 'conflict', 'bar')
     yang.gdata.maybe_add(children, 'bar:conflict', from_json_bar__conflict, child_bar_conflict)
     return yang.gdata.Container(children)
@@ -4045,28 +4169,31 @@ def src_schema():
     ])
 ])
     res["bar"] = Module('bar', yang_version=1.1, namespace='http://example.com/bar', prefix='bar', import_=[
-        Import('foo', prefix='f')
+        Import('foo', prefix='foo-local')
     ], augment=[
-        Augment('/f:c1', children=[
-            Uses('f:g1')
+        Augment('/foo-local:c1', children=[
+            Uses('foo-local:g1')
         ]),
-        Augment('/f:c.dot', children=[
+        Augment('/foo-local:c.dot', children=[
             Leaf('l.dot2', type_=Type('string'))
         ]),
-        Augment('/f:conflict', children=[
+        Augment('/foo-local:conflict', children=[
             Leaf('foo', type_=Type('string')),
             Container('inner', presence='inner presence from bar')
         ]),
-        Augment('/f:nested', children=[
+        Augment('/foo-local:nested', children=[
             Container('inner', children=[
                 Leaf('foo', type_=Type('string'))
             ])
         ]),
-        Augment('/f:nested/inner/li1', children=[
+        Augment('/foo-local:nested/inner/li1', children=[
             Leaf('bar', type_=Type('string'))
         ])
     ], children=[
-    Identity('bary', base=['f:basey']),
+    Identity('bary', base=['foo-local:basey']),
+    Container('test-idref', children=[
+        LeafList('idref', type_=Type('identityref', base=['foo-local:basey']))
+    ]),
     Container('conflict', children=[
         Leaf('foo', type_=Type('string'))
     ])
@@ -4193,28 +4320,31 @@ def src_schema_compiled():
     ])
 ])
     res["bar"] = Module('bar', yang_version=1.1, namespace='http://example.com/bar', prefix='bar', import_=[
-        Import('foo', prefix='f')
+        Import('foo', prefix='foo-local')
     ], augment=[
-        Augment('/f:c1', children=[
-            Uses('f:g1')
+        Augment('/foo-local:c1', children=[
+            Uses('foo-local:g1')
         ]),
-        Augment('/f:c.dot', children=[
+        Augment('/foo-local:c.dot', children=[
             Leaf('l.dot2', type_=Type('string'))
         ]),
-        Augment('/f:conflict', children=[
+        Augment('/foo-local:conflict', children=[
             Leaf('foo', type_=Type('string')),
             Container('inner', presence='inner presence from bar')
         ]),
-        Augment('/f:nested', children=[
+        Augment('/foo-local:nested', children=[
             Container('inner', children=[
                 Leaf('foo', type_=Type('string'))
             ])
         ]),
-        Augment('/f:nested/inner/li1', children=[
+        Augment('/foo-local:nested/inner/li1', children=[
             Leaf('bar', type_=Type('string'))
         ])
     ], children=[
     Identity('bary', base=['f:basey']),
+    Container('test-idref', children=[
+        LeafList('idref', type_=Type('identityref', base=['f:basey']))
+    ]),
     Container('conflict', children=[
         Leaf('foo', type_=Type('string'))
     ])

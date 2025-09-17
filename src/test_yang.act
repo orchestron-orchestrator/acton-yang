@@ -2750,6 +2750,49 @@ def _test_is_derived_from():
     testing.assertTrue(yang.identity.is_derived_from(three, [base]), "three should be transitively derived from base through one")
     testing.assertTrue(yang.identity.is_derived_from(three, [one]), "three should be directly derived from one")
 
+def _test_identity_base_resolution_import_prefix():
+    """Test that identity base references using import prefixes are correctly resolved"""
+    # Base module with identity using its own prefix
+    ys_base = r"""module base-module {
+        yang-version "1.1";
+        namespace "http://example.com/base";
+        prefix "base-pfx";
+
+        identity PROTOCOL {
+            description "Base protocol identity";
+        }
+
+        identity TCP {
+            base PROTOCOL;
+            description "TCP protocol";
+        }
+    }"""
+
+    # Another module that imports base with different prefix
+    ys_derived = r"""module derived-module {
+        yang-version "1.1";
+        namespace "http://example.com/derived";
+        prefix "derived";
+
+        import base-module {
+            prefix "bm";  // Different prefix than base-module's actual prefix!
+        }
+
+        identity HTTP {
+            base "bm:TCP";  // Uses import prefix "bm", not actual prefix "base-pfx"
+            description "HTTP protocol over TCP";
+        }
+
+        identity HTTPS {
+            base HTTP;  // Local reference without prefix
+            description "Secure HTTP";
+        }
+    }"""
+
+    root = yang.compile([ys_base, ys_derived])
+    src = root.prdaclass()
+    return src
+
 def _test_fail_identity_missing_imported_base():
     """Test that compilation fails when identity references a missing base from imported module"""
     ys_base = r"""module base {
