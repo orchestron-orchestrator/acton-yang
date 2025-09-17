@@ -1657,6 +1657,100 @@ def _test_compile_submodules1():
     testing.assertEqual(l2.config, True)
     return root.prdaclass()
 
+def _test_compile_submodule_same_module_different_prefix():
+    """Test that submodule imports of same module with different prefix are remapped to parent's prefix"""
+    # Module 'shared' that will be imported by both parent and submodule
+    ys_shared = r"""module shared {
+        yang-version "1.1";
+        namespace "http://example.com/shared";
+        prefix "shared";
+
+        typedef shared-type {
+            type string {
+                length "1..100";
+            }
+        }
+
+        grouping shared-group {
+            leaf shared-leaf {
+                type string;
+                default "from-shared";
+            }
+        }
+    }"""
+
+    # Parent module imports 'shared' with prefix 'sh'
+    ys_parent = r"""module parent {
+        yang-version "1.1";
+        namespace "http://example.com/parent";
+        prefix "parent";
+
+        import shared {
+            prefix "sh";
+        }
+
+        include sub-parent;
+
+        container parent-container {
+            leaf parent-leaf {
+                type sh:shared-type;
+            }
+        }
+    }"""
+
+    # Submodule imports same 'shared' module with different prefix 'shr'
+    ys_sub = r"""submodule sub-parent {
+        yang-version "1.1";
+        belongs-to parent {
+            prefix "p";
+        }
+
+        import shared {
+            prefix "shr";  // Different prefix for same module as parent!
+        }
+
+        container sub-container {
+            leaf sub-leaf {
+                type shr:shared-type;  // Should be remapped to 'sh:shared-type'
+            }
+            uses shr:shared-group;  // Should be remapped to 'sh:shared-group'
+        }
+
+        augment "/p:parent-container" {
+            leaf augmented-leaf {
+                type shr:shared-type;  // Should be remapped to 'sh:shared-type'
+            }
+        }
+    }"""
+
+    # Compile all modules together
+    root = yang.compile([ys_shared, ys_parent, ys_sub])
+
+    # Verify the parent container exists
+    parent_container = root.get("parent-container")
+    testing.assertNotNone(parent_container, "parent-container should exist")
+
+    parent_leaf = parent_container.get("parent-leaf")
+    testing.assertNotNone(parent_leaf, "parent-leaf should exist")
+
+    # Verify the submodule's container exists
+    sub_container = root.get("sub-container")
+    testing.assertNotNone(sub_container, "sub-container should exist")
+
+    sub_leaf = sub_container.get("sub-leaf")
+    testing.assertNotNone(sub_leaf, "sub-leaf should exist")
+
+    # Verify the augmented leaf exists
+    augmented_leaf = parent_container.get("augmented-leaf")
+    testing.assertNotNone(augmented_leaf, "augmented-leaf should exist after augment")
+
+    # Verify uses from the shared import works
+    shared_leaf = sub_container.get("shared-leaf")
+    testing.assertNotNone(shared_leaf, "shared-leaf from uses should exist")
+
+    # Generate and return the Acton data classes to verify it compiles
+    return root.prdaclass()
+
 def _test_compile_submodule_different_prefix():
     """Test that submodules can use different prefixes for their parent module"""
     ys_main = r"""module main-module {
