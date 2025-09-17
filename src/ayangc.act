@@ -1,10 +1,12 @@
 import argparse
 import file
+import fs
+import time
+
 import yang
 import yang.parser
 import yang.schema
 import transform_unions
-import testing
 
 
 proc def cmd_transform(env, file_cap, args):
@@ -55,27 +57,39 @@ proc def cmd_compile(env, file_cap, args):
     This command reads YANG modules from specified files or directories and
     compiles them together using yang.compile(). The compiled schema can be
     output as Acton data classes or printed as a schema tree.
+
+    Files can be excluded using --exclude patterns that use glob syntax.
     """
     infiles = args.get_strlist("infile")
     loose = args.get_bool("loose")
+    exclude_patterns = args.get_strlist("exclude")
 
     if len(infiles) == 0:
         print("Error: no input files or directories specified", err=True)
         env.exit(1)
 
-    fs = file.FS(file_cap)
+    file_fs = file.FS(file_cap)
     rfc = file.ReadFileCap(file_cap)
+
+    def should_exclude(filepath: str) -> bool:
+        for pattern in exclude_patterns:
+            if fs.glob(pattern, filepath):
+                return True
+        return False
 
     # Collect all YANG modules from files and directories
     yang_sources = []
     for infile in infiles:
         try:
-            stat = fs.stat(infile)
+            stat = file_fs.stat(infile)
             if stat.is_dir():
                 # Read all .yang files from the directory
-                for filename in fs.listdir(infile):
+                for filename in file_fs.listdir(infile):
                     if filename.endswith(".yang"):
                         file_path = file.join_path([infile, filename])
+                        if should_exclude(file_path):
+                            print("Excluded {file_path} (matches exclude pattern)", err=True)
+                            continue
                         rf = file.ReadFile(rfc, file_path)
                         yang_content = rf.read().decode()
                         rf.close()
@@ -84,6 +98,9 @@ proc def cmd_compile(env, file_cap, args):
             else:
                 # Read single file
                 if infile.endswith(".yang"):
+                    if should_exclude(infile):
+                        print("Excluded {infile} (matches exclude pattern)", err=True)
+                        continue
                     rf = file.ReadFile(rfc, infile)
                     yang_content = rf.read().decode()
                     rf.close()
@@ -102,7 +119,10 @@ proc def cmd_compile(env, file_cap, args):
     print("Compiling {len(yang_sources)} YANG modules...", err=True)
 
     try:
+        sw = time.Stopwatch()
         root = yang.compile(yang_sources)
+        t1 = sw.elapsed()
+        print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
         print(root.prdaclass(loose=loose))
     except Exception as exc:
         print("Error during compilation: {exc}", err=True)
@@ -140,6 +160,7 @@ actor main(env):
     compile_cmd = p.add_cmd("compile", "compile YANG modules together", _cmd_compile)
     compile_cmd.add_option("infile", "strlist", "+", [], "input YANG file(s) or directory(s)")
     compile_cmd.add_bool("loose", "generate loose validation mode classes", short="l")
+    compile_cmd.add_option("exclude", "strlist", "*", [], "glob pattern(s) to exclude files", short="e")
 
     try:
         args = p.parse(env.argv)
