@@ -89,10 +89,13 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
             except KeyError:
                 raise ValueError("{m.name} - submodule {include.module} not found.")
             else:
-                # Track all prefix remappings needed (including parent module prefix)
+                # Track all prefix remappings needed when merging submodule into parent:
+                # 1. Submodule uses different prefix for parent module (belongs-to)
+                # 2. Same module imported with different prefix in parent vs submodule
+                # 3. Different modules imported with same prefix in parent vs submodule
                 prefix_remaps: dict[str, str] = {}
 
-                # If submodule uses different prefix for parent module, track that remapping
+                # Case 1: Submodule uses different prefix for parent module
                 if submod.belongs_to.prefix != m.prefix:
                     prefix_remaps[submod.belongs_to.prefix] = m.prefix
 
@@ -100,12 +103,21 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
                     try:
                         import_prefix = combined_import_prefixes.get(sub_import.module, sub_import.revision_date)
                     except KeyError:
-                        # New import
-                        combined_import_prefixes.add(sub_import.module, sub_import.revision_date, sub_import.prefix)
+                        # New import - not yet in parent
+                        prefix_to_use = sub_import.prefix
+
+                        # Case 3: Check if this prefix is already used for a different module
+                        for mod_name, (rev, pfx) in combined_import_prefixes:
+                            if pfx == sub_import.prefix and mod_name != sub_import.module:
+                                prefix_to_use = "{sub_import.prefix}-{submod.name}"
+                                prefix_remaps[sub_import.prefix] = prefix_to_use
+                                break
+
+                        combined_import_prefixes.add(sub_import.module, sub_import.revision_date, prefix_to_use)
 
                         new_import = yang.schema.Import(sub_import.module,
                                                         description=sub_import.description,
-                                                        prefix=sub_import.prefix,
+                                                        prefix=prefix_to_use,
                                                         reference=sub_import.reference,
                                                         revision_date=sub_import.revision_date,
                                                         exts=sub_import.exts,
@@ -114,10 +126,11 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
 
                         m.import_.append(new_import)
                     else:
+                        # Case 2: Same module already imported by parent (or another submodule)
                         if sub_import.prefix != import_prefix:
-                            # Track that we need to remap this prefix in the submodule's content
+                            # Remap to use parent's prefix for this module
                             prefix_remaps[sub_import.prefix] = import_prefix
-                        # else: # Duplicate import. We're fine!
+                        # else: # Same module, same prefix. We're fine!
 
                 for c in submod.children:
                     # Set parent attribute for direct children only
