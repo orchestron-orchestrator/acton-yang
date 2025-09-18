@@ -47,6 +47,10 @@ class foo__c1__things_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__things_entry:
         return foo__c1__things_entry(name=n.get_str('name'), id=n.get_opt_str('id'))
 
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return foo__c1__things_entry.from_gdata(self.to_gdata())
+
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
@@ -101,6 +105,16 @@ class foo__c1__things(yang.adata.MNode):
         if n is not None:
             return [foo__c1__things_entry.from_gdata(e) for e in n.elements]
         return []
+
+    def copy(self):
+        """Create a deep copy of this list object"""
+        # Copy each element in the list
+        copied_elements = []
+        for e in self.elements:
+            ce = e.copy()
+            if ce is not None:
+                copied_elements.append(ce)
+        return foo__c1__things(elements=copied_elements)
 
 
 mut def from_xml_foo__c1__things_element(node: xml.Node) -> yang.gdata.Node:
@@ -194,6 +208,10 @@ class foo__c1(yang.adata.MNode):
             return foo__c1(things=foo__c1__things.from_gdata(n.get_opt_list('things')))
         return foo__c1()
 
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return foo__c1.from_gdata(self.to_gdata())
+
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
@@ -268,6 +286,10 @@ class root(yang.adata.MNode):
         if n is not None:
             return root(c1=foo__c1.from_gdata(n.get_opt_cnt('c1')))
         return root()
+
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return root.from_gdata(self.to_gdata())
 
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []

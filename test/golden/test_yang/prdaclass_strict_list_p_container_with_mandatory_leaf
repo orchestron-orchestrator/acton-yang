@@ -30,6 +30,13 @@ class foo__l1__bar(yang.adata.MNode):
             return foo__l1__bar(hi=n.get_str('hi'))
         return None
 
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        ad = foo__l1__bar.from_gdata(self.to_gdata())
+        if ad is not None:
+            return ad
+        raise Exception('Unreachable in foo__l1__bar.copy()')
+
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
@@ -105,6 +112,10 @@ class foo__l1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> foo__l1_entry:
         return foo__l1_entry(name=n.get_str('name'), bar=foo__l1__bar.from_gdata(n.get_opt_cnt('bar')))
 
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return foo__l1_entry.from_gdata(self.to_gdata())
+
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
@@ -162,6 +173,16 @@ class foo__l1(yang.adata.MNode):
         if n is not None:
             return [foo__l1_entry.from_gdata(e) for e in n.elements]
         return []
+
+    def copy(self):
+        """Create a deep copy of this list object"""
+        # Copy each element in the list
+        copied_elements = []
+        for e in self.elements:
+            ce = e.copy()
+            if ce is not None:
+                copied_elements.append(ce)
+        return foo__l1(elements=copied_elements)
 
 
 mut def from_xml_foo__l1_element(node: xml.Node) -> yang.gdata.Node:

@@ -1281,3 +1281,15 @@ def _test_gen3_from_xml_full():
     s = yang.compile(yang_foo.src_yang())
     gd = yang.gen3.from_xml(s, xml.decode(xml_text_full))
     return gd.prsrc()
+
+def _test_copy_full_xml_tree():
+    """Test copying a full XML tree and comparing gdata outputs"""
+    gd = yang_foo.from_xml(xml.decode(xml_text_full))
+    original = yang_foo_root.from_gdata(gd)
+
+    copied = original.copy()
+    original_gdata = original.to_gdata()
+    copied_gdata = copied.to_gdata()
+
+    gdiff = yang.gdata.diff(original_gdata, copied_gdata)
+    testing.assertNone(gdiff)
