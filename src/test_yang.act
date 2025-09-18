@@ -1859,6 +1859,112 @@ def _test_compile_submodule_different_prefix():
     # Generate and return the Acton data classes to verify it works end-to-end
     return root.prdaclass()
 
+def _test_compile_submodule_conflicting_import_prefix():
+    """Test that submodule imports with conflicting prefixes are properly remapped"""
+    # Module 'other' that will be imported by the parent module
+    ys_other = r"""module other {
+        yang-version "1.1";
+        namespace "http://example.com/other";
+        prefix "other";
+
+        typedef other-type {
+            type string {
+                length "1..100";
+            }
+        }
+    }"""
+
+    # Module 'another' that will be imported by the submodule with conflicting prefix
+    ys_another = r"""module another {
+        yang-version "1.1";
+        namespace "http://example.com/another";
+        prefix "another";
+
+        typedef another-type {
+            type string {
+                pattern "[a-z]+";
+            }
+        }
+
+        grouping another-group {
+            leaf another-leaf {
+                type string;
+            }
+        }
+    }"""
+
+    # Parent module imports 'other' with prefix 'ext'
+    ys_parent = r"""module parent {
+        yang-version "1.1";
+        namespace "http://example.com/parent";
+        prefix "parent";
+
+        import other {
+            prefix "ext";
+        }
+
+        include sub-parent;
+
+        container parent-container {
+            leaf parent-leaf {
+                type ext:other-type;
+            }
+        }
+    }"""
+
+    # Submodule imports 'another' with same prefix 'ext' (conflict!)
+    ys_sub = r"""submodule sub-parent {
+        yang-version "1.1";
+        belongs-to parent {
+            prefix "p";
+        }
+
+        import another {
+            prefix "ext";  // Same prefix as parent uses for different module!
+        }
+
+        container sub-container {
+            leaf sub-leaf {
+                type ext:another-type;  // Should reference 'another' module after remapping
+            }
+            uses ext:another-group;  // Should also work after prefix remapping
+        }
+
+        augment "/p:parent-container" {
+            leaf augmented-leaf {
+                type ext:another-type;  // References 'another' via remapped prefix
+            }
+        }
+    }"""
+
+    # Compile all modules together
+    root = yang.compile([ys_other, ys_another, ys_parent, ys_sub])
+
+    # Verify the parent container exists and has correct type
+    parent_container = root.get("parent-container")
+    testing.assertNotNone(parent_container, "parent-container should exist")
+
+    parent_leaf = parent_container.get("parent-leaf")
+    testing.assertNotNone(parent_leaf, "parent-leaf should exist")
+
+    # Verify the submodule's container exists
+    sub_container = root.get("sub-container")
+    testing.assertNotNone(sub_container, "sub-container should exist")
+
+    sub_leaf = sub_container.get("sub-leaf")
+    testing.assertNotNone(sub_leaf, "sub-leaf should exist")
+
+    # Verify the augmented leaf exists
+    augmented_leaf = parent_container.get("augmented-leaf")
+    testing.assertNotNone(augmented_leaf, "augmented-leaf should exist after augment")
+
+    # Verify uses from the remapped import works
+    another_leaf = sub_container.get("another-leaf")
+    testing.assertNotNone(another_leaf, "another-leaf from uses should exist")
+
+    # Generate and return the Acton data classes to verify it compiles
+    return root.prdaclass()
+
 def _test_compile_submodules2():
     ys_foo = r"""module foo {
     yang-version "1.1";
