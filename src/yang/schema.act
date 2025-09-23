@@ -654,6 +654,24 @@ class DNodeInner(DNode):
                 res.append("        raise ValueError('Missing required subtree {pname(self)}')")
         res.append("")
 
+        # .copy() method
+        res.append("    def copy(self):")
+        res.append('        """Create a deep copy of this adata object"""')
+        if isinstance(self, DList):
+            res.append("        return {pname(self)}_entry.from_gdata(self.to_gdata())")
+        else:
+            opt_cnt = True if isinstance(self, DContainer) and self.presence else False
+            # AdataPContainer.from_gdata(n) -> ?AdataPContainer, return type is optional.
+            # But since we're copying an instance, the output of .copy() is non-optional.
+            if opt_cnt:
+                res.append("        ad = {pname(self)}.from_gdata(self.to_gdata())")
+                res.append("        if ad is not None:")
+                res.append("            return ad")
+                res.append("        raise Exception('Unreachable in {pname(self)}.copy()')")
+            else:
+                res.append("        return {pname(self)}.from_gdata(self.to_gdata())")
+        res.append("")
+
         def find_non_optional_subtree(container: DNodeInner, path: list[str], local_prefix="_") -> (list[str], list[str]):
             r"""Discover the non-optional descendants of a container
 
@@ -925,6 +943,18 @@ class DNodeInner(DNode):
             # why? Above code that iterates over n.elements works fine... Error is:
             # ERROR: Error when compiling y_cfs module: Type error
             # mut must be a subclass of pure
+            res.append("")
+
+            # .copy() method for list wrapper
+            res.append("    def copy(self):")
+            res.append('        """Create a deep copy of this list object"""')
+            res.append("        # Copy each element in the list")
+            res.append("        copied_elements = []")
+            res.append("        for e in self.elements:")
+            res.append("            ce = e.copy()")
+            res.append("            if ce is not None:")
+            res.append("                copied_elements.append(ce)")
+            res.append("        return {pname(self)}(elements=copied_elements)")
             res.append("")
         res.append("")
 

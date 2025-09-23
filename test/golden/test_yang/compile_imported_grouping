@@ -36,6 +36,10 @@ class bar__c1__li1_entry(yang.adata.MNode):
     mut def from_gdata(n: yang.gdata.Node) -> bar__c1__li1_entry:
         return bar__c1__li1_entry(l1=n.get_str('l1'))
 
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return bar__c1__li1_entry.from_gdata(self.to_gdata())
+
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
@@ -87,6 +91,16 @@ class bar__c1__li1(yang.adata.MNode):
         if n is not None:
             return [bar__c1__li1_entry.from_gdata(e) for e in n.elements]
         return []
+
+    def copy(self):
+        """Create a deep copy of this list object"""
+        # Copy each element in the list
+        copied_elements = []
+        for e in self.elements:
+            ce = e.copy()
+            if ce is not None:
+                copied_elements.append(ce)
+        return bar__c1__li1(elements=copied_elements)
 
 
 mut def from_xml_bar__c1__li1_element(node: xml.Node) -> yang.gdata.Node:
@@ -174,6 +188,10 @@ class bar__c1(yang.adata.MNode):
             return bar__c1(li1=bar__c1__li1.from_gdata(n.get_opt_list('li1')))
         return bar__c1()
 
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return bar__c1.from_gdata(self.to_gdata())
+
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
         if top:
@@ -248,6 +266,10 @@ class root(yang.adata.MNode):
         if n is not None:
             return root(c1=bar__c1.from_gdata(n.get_opt_cnt('c1')))
         return root()
+
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return root.from_gdata(self.to_gdata())
 
     def prsrc(self, self_name='ad', top=True, list_element=False):
         res = []
