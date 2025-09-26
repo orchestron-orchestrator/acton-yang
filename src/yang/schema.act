@@ -4371,9 +4371,6 @@ class Choice(SchemaNodeInner):
             return
 
         # Remap prefix references
-        self_default = self.default
-        if self_default is not None:
-            self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         self_when = self.when
         if self_when is not None:
@@ -5608,9 +5605,10 @@ class Leaf(SchemaNodeOuter):
             return
 
         # Remap prefix references
-        self_default = self.default
-        if self_default is not None:
-            self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
+        if self.type_.name == 'identityref':
+            self_default = self.default
+            if self_default is not None:
+                self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -5831,7 +5829,8 @@ class LeafList(SchemaNodeOuter):
             return
 
         # Remap prefix references
-        self.default = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.default]
+        if self.type_.name == 'identityref':
+            self.default = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.default]
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -7185,7 +7184,6 @@ class Refine(SchemaNodeOuter):
             return
 
         # Remap prefix references
-        self.default = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.default]
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -8110,9 +8108,10 @@ class Typedef(SchemaNodeOuter):
             return
 
         # Remap prefix references
-        self_default = self.default
-        if self_default is not None:
-            self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
+        if self.type_.name == 'identityref':
+            self_default = self.default
+            if self_default is not None:
+                self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
         self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
 
     def __str__(self):

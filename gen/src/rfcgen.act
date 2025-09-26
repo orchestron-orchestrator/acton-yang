@@ -1352,13 +1352,15 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                     res.append(f"        self.{attr} = [_remap_path_prefix(u, old_pfx, new_pfx) for u in self.{attr}]")
 
                 # Default values that might contain prefixed identities
-                elif substmt.name == "default":
+                elif substmt.name == "default" and stmt.name in {"leaf", "leaf-list", "typedef"}:
                     if substmt.cardinality == "0..1":
-                        res.append(f"        self_{attr} = self.{attr}")
-                        res.append(f"        if self_{attr} is not None:")
-                        res.append(f"            self.{attr} = _remap_path_prefix(self_{attr}, old_pfx, new_pfx)")
+                        res.append(f"        if self.type_.name == 'identityref':")
+                        res.append(f"            self_{attr} = self.{attr}")
+                        res.append(f"            if self_{attr} is not None:")
+                        res.append(f"                self.{attr} = _remap_path_prefix(self_{attr}, old_pfx, new_pfx)")
                     elif substmt.cardinality == "0..n":
-                        res.append(f"        self.{attr} = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.{attr}]")
+                        res.append(f"        if self.type_.name == 'identityref':")
+                        res.append(f"            self.{attr} = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.{attr}]")
 
                 # Base identities
                 elif substmt.name == "base":
