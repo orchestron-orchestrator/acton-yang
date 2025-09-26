@@ -276,16 +276,23 @@ ys_bar = r"""module bar {
     namespace "http://example.com/bar";
     prefix "bar";
     import foo {
-        prefix "f";
+        prefix "foo-local";
     }
     identity bary {
-        base f:basey;
+        base foo-local:basey;
     }
-    augment /f:c1 {
-        // create a conflict with /f:c1/l1
-        uses f:g1;
+    container test-idref {
+        leaf-list idref {
+            type identityref {
+                base foo-local:basey;
+            }
+        }
     }
-    augment /f:c.dot {
+    augment /foo-local:c1 {
+        // create a conflict with /foo-local:c1/l1
+        uses foo-local:g1;
+    }
+    augment /foo-local:c.dot {
         leaf l.dot2 {
             type string;
         }
@@ -295,7 +302,7 @@ ys_bar = r"""module bar {
             type string;
         }
     }
-    augment /f:conflict {
+    augment /foo-local:conflict {
         leaf foo {
             type string;
         }
@@ -303,15 +310,15 @@ ys_bar = r"""module bar {
             presence "inner presence from bar";
         }
     }
-    augment /f:nested {
-        // conflict with /f:nested/inner
+    augment /foo-local:nested {
+        // conflict with /foo-local:nested/inner
         container inner {
             leaf foo {
                 type string;
             }
         }
     }
-    augment /f:nested/inner/li1 {
+    augment /foo-local:nested/inner/li1 {
         leaf bar {
             type string;
         }

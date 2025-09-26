@@ -2420,13 +2420,15 @@ class SchemaNode(object):
 
         return stmt
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         raise NotImplementedError("SchemaNode.update_namespace_qualifiers")
+
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+        raise NotImplementedError("SchemaNode.remap_prefix_references")
 
 
 class SchemaNodeInner(SchemaNode):
@@ -3451,11 +3453,8 @@ class Action(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -3463,13 +3462,16 @@ class Action(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
     def __str__(self):
@@ -3610,21 +3612,18 @@ class Anydata(SchemaNodeOuter):
                       pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -3770,21 +3769,18 @@ class Anyxml(SchemaNodeOuter):
                      pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -3894,11 +3890,8 @@ class Augment(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -3906,13 +3899,16 @@ class Augment(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         self_when = self.when
         if self_when is not None:
@@ -3980,21 +3976,18 @@ class BelongsTo(SchemaNodeOuter):
                         pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "BelongsTo {self.module}"
@@ -4085,21 +4078,18 @@ class Bit(SchemaNodeOuter):
                   pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
     def __str__(self):
@@ -4204,11 +4194,8 @@ class Case(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -4216,13 +4203,16 @@ class Case(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         self_when = self.when
         if self_when is not None:
@@ -4352,11 +4342,8 @@ class Choice(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -4364,16 +4351,16 @@ class Choice(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
-        self_default = self.default
-        if self_default is not None:
-            self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         self_when = self.when
         if self_when is not None:
@@ -4540,11 +4527,8 @@ class Container(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -4552,13 +4536,16 @@ class Container(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -4655,21 +4642,18 @@ class Enum(SchemaNodeOuter):
                    pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
     def __str__(self):
@@ -4754,21 +4738,18 @@ class Extension(SchemaNodeOuter):
                         pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "Extension {self.name}"
@@ -4855,21 +4836,18 @@ class Feature(SchemaNodeOuter):
                       pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
     def __str__(self):
@@ -4963,11 +4941,8 @@ class Grouping(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -4975,13 +4950,16 @@ class Grouping(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
 
     def __str__(self):
         return "Grouping {self.name}"
@@ -5082,21 +5060,18 @@ class Identity(SchemaNodeOuter):
                        pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.base = [_remap_path_prefix(b, old_pfx, new_pfx) for b in self.base]
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
@@ -5182,21 +5157,18 @@ class Import(SchemaNodeOuter):
                      pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "Import {self.module}"
@@ -5276,21 +5248,18 @@ class Include(SchemaNodeOuter):
                       pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "Include {self.module}"
@@ -5393,11 +5362,8 @@ class Input(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -5405,13 +5371,16 @@ class Input(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
 
@@ -5593,28 +5562,27 @@ class Leaf(SchemaNodeOuter):
             exts=self.exts
         )
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
+        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Remap prefix references
-        self_default = self.default
-        if self_default is not None:
-            self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        if self.type_.name == 'identityref':
+            self_default = self.default
+            if self_default is not None:
+                self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
-        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+        self.type_.remap_prefix_references(old_pfx, new_pfx)
         self_when = self.when
         if self_when is not None:
             self.when = _remap_path_prefix(self_when, old_pfx, new_pfx)
@@ -5816,26 +5784,25 @@ class LeafList(SchemaNodeOuter):
             exts=self.exts
         )
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
+        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Remap prefix references
-        self.default = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.default]
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        if self.type_.name == 'identityref':
+            self.default = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.default]
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
-        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+        self.type_.remap_prefix_references(old_pfx, new_pfx)
         self_when = self.when
         if self_when is not None:
             self.when = _remap_path_prefix(self_when, old_pfx, new_pfx)
@@ -5922,21 +5889,18 @@ class Length(SchemaNodeOuter):
                      pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "Length {self.value}"
@@ -6133,11 +6097,8 @@ class List(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -6145,13 +6106,16 @@ class List(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -6413,13 +6377,24 @@ class Module(SchemaNodeInner):
                      exts=self.exts)
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         new.expand_augments(context)
+
+        # Normalize import prefixes at compile time
+        # When a module imports another module with a different prefix than its actual prefix,
+        # we need to normalize all references to use the actual prefix
+        for import_ in self.import_:
+            try:
+                imported_module = context.get_module(import_.module, import_.revision_date)
+            except ValueError as e:
+                # TODO: import a non-existant module? error!
+                print(e.error_message, err=True)
+            else:
+                if import_.prefix != imported_module.prefix:
+                    new.remap_prefix_references(import_.prefix, imported_module.prefix)
+
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -6427,13 +6402,16 @@ class Module(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.deviation = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.deviation]
 
     def __str__(self):
@@ -6528,21 +6506,18 @@ class Must(SchemaNodeOuter):
                    pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "Must {self.condition}"
@@ -6680,11 +6655,8 @@ class Notification(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -6692,13 +6664,16 @@ class Notification(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -6807,11 +6782,8 @@ class Output(SchemaNodeInner):
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -6819,13 +6791,16 @@ class Output(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
 
@@ -6915,21 +6890,18 @@ class Pattern(SchemaNodeOuter):
                       pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "Pattern {self.value}"
@@ -7013,21 +6985,18 @@ class Range(SchemaNodeOuter):
                     pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "Range {self.value}"
@@ -7170,22 +7139,18 @@ class Refine(SchemaNodeOuter):
                      pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
-        self.default = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.default]
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = _remap_path_prefix(must.condition, old_pfx, new_pfx)
@@ -7265,21 +7230,18 @@ class Revision(SchemaNodeOuter):
                        pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
 
     def __str__(self):
         return "Revision {self.date}"
@@ -7473,11 +7435,8 @@ class Rpc(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -7485,13 +7444,16 @@ class Rpc(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
     def __str__(self):
@@ -7711,11 +7673,8 @@ class Submodule(SchemaNodeInner):
         new.expand_augments(context)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
@@ -7723,13 +7682,16 @@ class Submodule(SchemaNodeInner):
 
         # Recursively update children
         for child in self.children:
-            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        for child in self.children:
+            child.remap_prefix_references(old_pfx, new_pfx)
+
         self.deviation = [_remap_path_prefix(d, old_pfx, new_pfx) for d in self.deviation]
 
     def __str__(self):
@@ -7961,28 +7923,27 @@ class Type(SchemaNodeOuter):
                    pfx=new_pfx if new_pfx is not None else self.pfx)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
+        for nested_type in self.type_:
+            nested_type.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.base = [_remap_path_prefix(b, old_pfx, new_pfx) for b in self.base]
         self_path = self.path
         if self_path is not None:
             self.path = _remap_path_prefix(self_path, old_pfx, new_pfx)
         self.name = _remap_path_prefix(self.name, old_pfx, new_pfx)
         for nested_type in self.type_:
-            nested_type.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            nested_type.remap_prefix_references(old_pfx, new_pfx)
 
     def __str__(self):
         return "Type {self.name}"
@@ -8095,25 +8056,24 @@ class Typedef(SchemaNodeOuter):
                       exts=self.exts)
         return new
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
+        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Remap prefix references
-        self_default = self.default
-        if self_default is not None:
-            self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
-        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        if self.type_.name == 'identityref':
+            self_default = self.default
+            if self_default is not None:
+                self.default = _remap_path_prefix(self_default, old_pfx, new_pfx)
+        self.type_.remap_prefix_references(old_pfx, new_pfx)
 
     def __str__(self):
         return "Typedef {self.name}"
@@ -8242,21 +8202,22 @@ class Uses(SchemaNodeOuter):
             target = get_target(target_base, refine.target_node)
             target.apply_refine(refine)
 
-    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:
-        """Update namespace qualifiers and remap prefix references
-
-        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
-        If old_pfx differs from new_pfx, remaps all prefix-qualified references.
+    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
+        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
         """
         self.ns = new_ns
         self.pfx = new_pfx
         self.mod = new_mod
 
-        # Exit early if no prefix remapping is needed
-        if old_pfx == new_pfx:
-            return
+        for refine in self.refine:
+            refine.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
+        for aug in self.augment:
+            aug.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
-        # Remap prefix references
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
         self.if_feature = [_remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         self_when = self.when
         if self_when is not None:
@@ -8264,10 +8225,10 @@ class Uses(SchemaNodeOuter):
         self.name = _remap_path_prefix(self.name, old_pfx, new_pfx)
         for refine in self.refine:
             refine.target_node = _remap_path_prefix(refine.target_node, old_pfx, new_pfx)
-            refine.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            refine.remap_prefix_references(old_pfx, new_pfx)
         for aug in self.augment:
             aug.target_node = _remap_path_prefix(aug.target_node, old_pfx, new_pfx)
-            aug.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)
+            aug.remap_prefix_references(old_pfx, new_pfx)
 
     def __str__(self):
         return "Uses {self.name}"
