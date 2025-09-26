@@ -1302,11 +1302,8 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
 
         # -- update_namespace_qualifiers
         if "update_namespace_qualifiers" not in manual_methods:
-            res.append("    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str, old_pfx: str) -> None:")
-            res.append('        """Update namespace qualifiers and remap prefix references')
-            res.append('')
-            res.append('        Updates the ns (namespace), pfx (prefix), and mod (module) attributes.')
-            res.append('        If old_pfx differs from new_pfx, remaps all prefix-qualified references.')
+            res.append("    def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:")
+            res.append('        """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.')
             res.append('        """')
             res.append("        self.ns = new_ns")
             res.append("        self.pfx = new_pfx")
@@ -1316,14 +1313,40 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
             if have_children:
                 res.append("        # Recursively update children")
                 res.append("        for child in self.children:")
-                res.append("            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+                res.append("            child.update_namespace_qualifiers(new_ns, new_pfx, new_mod)")
                 res.append("")
 
-            res.append("        # Exit early if no prefix remapping is needed")
-            res.append("        if old_pfx == new_pfx:")
-            res.append("            return")
+            if any(filter(lambda substmt: substmt.name == "type" and substmt.cardinality == "1", stmt.substmts.values())):
+                # Type statements in leaf, leaf-list, deviate (unions are handled separately)
+                res.append(f"        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod)")
+
+            # Special handling for specific statement types
+            if stmt_name == "uses":
+                # Handle refine and augment within uses
+                res.append(f"        for refine in self.refine:")
+                res.append(f"            refine.update_namespace_qualifiers(new_ns, new_pfx, new_mod)")
+                res.append(f"        for aug in self.augment:")
+                res.append(f"            aug.update_namespace_qualifiers(new_ns, new_pfx, new_mod)")
+
+            elif stmt_name == "type":
+                # Handle nested types for union
+                res.append(f"        for nested_type in self.type_:")
+                res.append(f"            nested_type.update_namespace_qualifiers(new_ns, new_pfx, new_mod)")
+
             res.append("")
-            res.append("        # Remap prefix references")
+        # ==============================================================
+
+        # -- remap_prefix_references
+        if "remap_prefix_references" not in manual_methods:
+            res.append("    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:")
+            res.append('        """Remaps prefix references (in paths, defaults, ...) to true module prefix.')
+            res.append('        """')
+            res.append("")
+
+            if have_children:
+                res.append("        for child in self.children:")
+                res.append("            child.remap_prefix_references(old_pfx, new_pfx)")
+                res.append("")
 
             for substmt in stmt.substmts.values():
                 attr = _attr_name(substmt.name)
@@ -1369,7 +1392,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 # Type statements in leaf, leaf-list, deviate (unions are handled separately)
                 elif substmt.name == "type":
                     if substmt.cardinality == "1":
-                        res.append(f"        self.{attr}.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+                        res.append(f"        self.{attr}.remap_prefix_references(old_pfx, new_pfx)")
 
                 # Deviation target paths
                 elif substmt.name == "deviation":
@@ -1382,10 +1405,10 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 # Handle refine and augment within uses
                 res.append(f"        for refine in self.refine:")
                 res.append(f"            refine.target_node = _remap_path_prefix(refine.target_node, old_pfx, new_pfx)")
-                res.append(f"            refine.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+                res.append(f"            refine.remap_prefix_references(old_pfx, new_pfx)")
                 res.append(f"        for aug in self.augment:")
                 res.append(f"            aug.target_node = _remap_path_prefix(aug.target_node, old_pfx, new_pfx)")
-                res.append(f"            aug.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+                res.append(f"            aug.remap_prefix_references(old_pfx, new_pfx)")
 
             elif stmt_name == "augment":
                 # Augment target path
@@ -1400,7 +1423,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
                 res.append(f"        self.name = _remap_path_prefix(self.name, old_pfx, new_pfx)")
                 # Handle nested types for union
                 res.append(f"        for nested_type in self.type_:")
-                res.append(f"            nested_type.update_namespace_qualifiers(new_ns, new_pfx, new_mod, old_pfx)")
+                res.append(f"            nested_type.remap_prefix_references(old_pfx, new_pfx)")
 
             res.append("")
 

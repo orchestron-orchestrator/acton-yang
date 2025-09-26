@@ -137,11 +137,11 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
                     c.parent = m
 
                     # Always update namespace qualifiers to parent module's values
-                    c.update_namespace_qualifiers(m.namespace, m.prefix, m.name, m.prefix)
+                    c.update_namespace_qualifiers(m.namespace, m.prefix, m.name)
 
                     # Apply all prefix remappings (parent module and imports)
                     for old_pfx, new_pfx in prefix_remaps.items():
-                        c.update_namespace_qualifiers(m.namespace, new_pfx, m.name, old_pfx)
+                        c.remap_prefix_references(old_pfx, new_pfx)
 
                     m.children.append(c)
 
@@ -151,12 +151,12 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
                     aug.parent = m
 
                     # Update the augment node's namespace qualifiers
-                    aug.update_namespace_qualifiers(m.namespace, m.prefix, m.name, m.prefix)
+                    aug.update_namespace_qualifiers(m.namespace, m.prefix, m.name)
 
                     # Apply all prefix remappings to augment paths and content
                     for old_pfx, new_pfx in prefix_remaps.items():
                         aug.target_node = yang.schema._remap_path_prefix(aug.target_node, old_pfx, new_pfx)
-                        aug.update_namespace_qualifiers(m.namespace, new_pfx, m.name, old_pfx)
+                        aug.remap_prefix_references(old_pfx, new_pfx)
 
                 m.augment.extend(submod.augment)
                 # discard contact
@@ -175,11 +175,11 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
                     ext.parent = m
 
                     # Update namespace qualifiers
-                    ext.update_namespace_qualifiers(m.namespace, m.prefix, m.name, m.prefix)
+                    ext.update_namespace_qualifiers(m.namespace, m.prefix, m.name)
 
                     # Apply all prefix remappings
                     for old_pfx, new_pfx in prefix_remaps.items():
-                        ext.update_namespace_qualifiers(m.namespace, new_pfx, m.name, old_pfx)
+                        ext.remap_prefix_references(old_pfx, new_pfx)
 
                 m.extension_.extend(submod.extension_)
 
@@ -193,11 +193,11 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
                     feat.parent = m
 
                     # Update namespace qualifiers
-                    feat.update_namespace_qualifiers(m.namespace, m.prefix, m.name, m.prefix)
+                    feat.update_namespace_qualifiers(m.namespace, m.prefix, m.name)
 
                     # Apply all prefix remappings
                     for old_pfx, new_pfx in prefix_remaps.items():
-                        feat.update_namespace_qualifiers(m.namespace, new_pfx, m.name, old_pfx)
+                        feat.remap_prefix_references(old_pfx, new_pfx)
 
                 m.feature.extend(submod.feature)
 
