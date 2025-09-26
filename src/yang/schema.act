@@ -6377,6 +6377,20 @@ class Module(SchemaNodeInner):
                      exts=self.exts)
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         new.expand_augments(context)
+
+        # Normalize import prefixes at compile time
+        # When a module imports another module with a different prefix than its actual prefix,
+        # we need to normalize all references to use the actual prefix
+        for import_ in self.import_:
+            try:
+                imported_module = context.get_module(import_.module, import_.revision_date)
+            except ValueError as e:
+                # TODO: import a non-existant module? error!
+                print(e.error_message, err=True)
+            else:
+                if import_.prefix != imported_module.prefix:
+                    new.remap_prefix_references(import_.prefix, imported_module.prefix)
+
         return new
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
