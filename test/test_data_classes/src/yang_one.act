@@ -321,7 +321,7 @@ class foo__li(yang.adata.MNode):
         self.elements = elements
 
     mut def create(self, name, c1):
-        for e in self.elements:
+        for e in self:
             match = True
             if e.name != name:
                 match = False
@@ -335,7 +335,7 @@ class foo__li(yang.adata.MNode):
 
     mut def to_gdata(self):
         elements = []
-        for e in self.elements:
+        for e in self:
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
@@ -351,12 +351,15 @@ class foo__li(yang.adata.MNode):
         """Create a deep copy of this list object"""
         # Copy each element in the list
         copied_elements = []
-        for e in self.elements:
+        for e in self:
             ce = e.copy()
             if ce is not None:
                 copied_elements.append(ce)
         return foo__li(elements=copied_elements)
 
+extension foo__li(Iterable[foo__li_entry]):
+    def __iter__(self) -> Iterator[foo__li_entry]:
+        return self.elements.__iter__()
 
 mut def from_xml_foo__li_element(node: xml.Node) -> yang.gdata.Node:
     children = {}
@@ -469,7 +472,7 @@ class root(yang.adata.MNode):
         if _tc1 is not None:
             res.extend(_tc1.prsrc('{self_name}.tc1', False).splitlines())
         _li = self.li
-        for _element in _li.elements:
+        for _element in _li:
             res.append('')
             res.append("# List /li element: {_element.to_gdata().key_str(['name'])}")
             res.append('element_c1 = foo__li__c1({repr(_element.c1.l1)})')

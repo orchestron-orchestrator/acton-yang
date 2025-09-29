@@ -52,7 +52,7 @@ class foo__l1(yang.adata.MNode):
         self.elements = elements
 
     mut def create(self, name):
-        for e in self.elements:
+        for e in self:
             match = True
             if e.name != name:
                 match = False
@@ -66,7 +66,7 @@ class foo__l1(yang.adata.MNode):
 
     mut def to_gdata(self):
         elements = []
-        for e in self.elements:
+        for e in self:
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
@@ -82,12 +82,15 @@ class foo__l1(yang.adata.MNode):
         """Create a deep copy of this list object"""
         # Copy each element in the list
         copied_elements = []
-        for e in self.elements:
+        for e in self:
             ce = e.copy()
             if ce is not None:
                 copied_elements.append(ce)
         return foo__l1(elements=copied_elements)
 
+extension foo__l1(Iterable[foo__l1_entry]):
+    def __iter__(self) -> Iterator[foo__l1_entry]:
+        return self.elements.__iter__()
 
 mut def from_xml_foo__l1_element(node: xml.Node) -> yang.gdata.Node:
     children = {}

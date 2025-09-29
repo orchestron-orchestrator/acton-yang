@@ -66,7 +66,7 @@ class bar__c1__li1(yang.adata.MNode):
         self.elements = elements
 
     mut def create(self, l1):
-        for e in self.elements:
+        for e in self:
             match = True
             if e.l1 != l1:
                 match = False
@@ -80,7 +80,7 @@ class bar__c1__li1(yang.adata.MNode):
 
     mut def to_gdata(self):
         elements = []
-        for e in self.elements:
+        for e in self:
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
@@ -96,12 +96,15 @@ class bar__c1__li1(yang.adata.MNode):
         """Create a deep copy of this list object"""
         # Copy each element in the list
         copied_elements = []
-        for e in self.elements:
+        for e in self:
             ce = e.copy()
             if ce is not None:
                 copied_elements.append(ce)
         return bar__c1__li1(elements=copied_elements)
 
+extension bar__c1__li1(Iterable[bar__c1__li1_entry]):
+    def __iter__(self) -> Iterator[bar__c1__li1_entry]:
+        return self.elements.__iter__()
 
 mut def from_xml_bar__c1__li1_element(node: xml.Node) -> yang.gdata.Node:
     children = {}
@@ -199,7 +202,7 @@ class bar__c1(yang.adata.MNode):
             res.append('{self_name} = bar__c1()')
         leaves = []
         _li1 = self.li1
-        for _element in _li1.elements:
+        for _element in _li1:
             res.append('')
             res.append("# List /c1/li1 element: {_element.to_gdata().key_str(['l1'])}")
             list_elem = 'li1_element = {self_name}.li1.create({repr(_element.l1)})'

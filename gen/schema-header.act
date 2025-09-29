@@ -808,7 +808,7 @@ class DNodeInner(DNode):
                     res.append("            res.extend(_{usname(child)}.prsrc('{{self_name}}.{usname(child)}', False).splitlines())")
             elif isinstance(child, DList):
                 res.append("        _{usname(child)} = self.{usname(child)}")
-                res.append("        for _element in _{usname(child)}.elements:")
+                res.append("        for _element in _{usname(child)}:")
                 res.append("            res.append('')")
                 res.append('            res.append("# List {get_path(child)} element: {{_element.to_gdata().key_str({child.key})}}")')
 
@@ -888,7 +888,7 @@ class DNodeInner(DNode):
                         list_key_args.append(usname(child))
             list_create_args_str = ", ".join(["self"] + list_key_args)
             res.append("    mut def create({list_create_args_str}):")
-            res.append("        for e in self.elements:")
+            res.append("        for e in self:")
             res.append("            match = True")
             for us_key in us_list_key():
                 # Order-preserving deduplication
@@ -925,7 +925,7 @@ class DNodeInner(DNode):
 
             res.append("    mut def to_gdata(self):")
             res.append("        elements = []")
-            res.append("        for e in self.elements:")
+            res.append("        for e in self:")
             res.append("            e_gdata = e.to_gdata()")
             res.append("            if isinstance(e_gdata, yang.gdata.Container):")
             res.append("                elements.append(e_gdata)")
@@ -954,12 +954,16 @@ class DNodeInner(DNode):
             res.append('        """Create a deep copy of this list object"""')
             res.append("        # Copy each element in the list")
             res.append("        copied_elements = []")
-            res.append("        for e in self.elements:")
+            res.append("        for e in self:")
             res.append("            ce = e.copy()")
             res.append("            if ce is not None:")
             res.append("                copied_elements.append(ce)")
             res.append("        return {pname(self)}(elements=copied_elements)")
             res.append("")
+            # Generate Iterable extension for the list class
+            res.append("extension {pname(self)}(Iterable[{pname(self)}_entry]):")
+            res.append("    def __iter__(self) -> Iterator[{pname(self)}_entry]:")
+            res.append("        return self.elements.__iter__()")
         res.append("")
 
         # == XML serde ================================

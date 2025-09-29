@@ -186,7 +186,7 @@ class main_module__main_container__sub_list(yang.adata.MNode):
         self.elements = elements
 
     mut def create(self, name):
-        for e in self.elements:
+        for e in self:
             match = True
             if e.name != name:
                 match = False
@@ -200,7 +200,7 @@ class main_module__main_container__sub_list(yang.adata.MNode):
 
     mut def to_gdata(self):
         elements = []
-        for e in self.elements:
+        for e in self:
             e_gdata = e.to_gdata()
             if isinstance(e_gdata, yang.gdata.Container):
                 elements.append(e_gdata)
@@ -216,12 +216,15 @@ class main_module__main_container__sub_list(yang.adata.MNode):
         """Create a deep copy of this list object"""
         # Copy each element in the list
         copied_elements = []
-        for e in self.elements:
+        for e in self:
             ce = e.copy()
             if ce is not None:
                 copied_elements.append(ce)
         return main_module__main_container__sub_list(elements=copied_elements)
 
+extension main_module__main_container__sub_list(Iterable[main_module__main_container__sub_list_entry]):
+    def __iter__(self) -> Iterator[main_module__main_container__sub_list_entry]:
+        return self.elements.__iter__()
 
 mut def from_xml_main_module__main_container__sub_list_element(node: xml.Node) -> yang.gdata.Node:
     children = {}
@@ -460,7 +463,7 @@ class main_module__main_container(yang.adata.MNode):
         if _sub_leaf is not None:
             leaves.append('{self_name}.sub_leaf = {repr(_sub_leaf)}')
         _sub_list = self.sub_list
-        for _element in _sub_list.elements:
+        for _element in _sub_list:
             res.append('')
             res.append("# List /main-container/sub-list element: {_element.to_gdata().key_str(['name'])}")
             list_elem = 'sub_list_element = {self_name}.sub_list.create({repr(_element.name)})'
