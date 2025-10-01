@@ -2133,12 +2133,16 @@ class SchemaNode(object):
     def get(self, name: str, ns: ?str=None) -> SchemaNode:
         """Get child node by name
         """
-        # TODO: support looking up qualified by namespace
-        #tns = ns if ns is not None else self.get_namespace()
         if isinstance(self, SchemaNodeInner):
+            # If no namespace specified, use current node's namespace
+            tns = ns if ns is not None else self.get_namespace()
+
             for child in self.children:
-                #child_namespace = child.ns
-                # TODO:
+                # Always check namespace, even for unqualified lookups
+                child_ns = child.get_namespace()
+                if child_ns != tns:
+                    continue
+
                 if isinstance(child, Action) and child.name == name:
                     return child
                 elif isinstance(child, Anydata) and child.name == name:
@@ -2219,9 +2223,8 @@ class SchemaNode(object):
 
                     if prefix is not None:
                         target_ns = self.get_module_by_prefix(prefix, context).get_namespace()
-                        # TODO: resolve using namespace
-                        # current_node = current_node.get(name, ns=target_ns)
-                        current_node = current_node.get(name)
+                        # Use namespace when resolving
+                        current_node = current_node.get(name, ns=target_ns)
                     else:
                         current_node = current_node.get(name)
 
