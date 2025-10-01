@@ -2825,3 +2825,61 @@ def _test_fail_identity_missing_imported_base():
         testing.assertEqual(exc.error_message, "Could not resolve base 'base:network-type' for identity 'derived:ethernet'")
     else:
         testing.error("Expected ValueError for undefined imported base identity")
+
+
+def _test_augment_with_uses_refine():
+    """Test cross-module augment with uses and refine
+
+    This test verifies that refine statements correctly find nodes when:
+    1. Module 'augmenter' augments a node in module 'base'
+    2. The augment uses a grouping with refine statements
+    3. The expanded nodes have 'augmenter' namespace but are added to 'base' tree
+    """
+    ys_base = r"""module base {
+  yang-version 1.1;
+  namespace "http://example.com/base";
+  prefix base;
+
+  container system-capabilities {
+    description "System capabilities";
+
+    list per-node-capabilities {
+      description "Per-node capabilities";
+    }
+  }
+}"""
+
+    ys_augmenter = r"""module augmenter {
+  yang-version 1.1;
+  namespace "http://example.com/augmenter";
+  prefix aug;
+
+  import base {
+    prefix base;
+  }
+
+  grouping subscription-capabilities {
+    container subscription-capabilities {
+      leaf max-nodes {
+        type uint32;
+      }
+      leaf-list supported-excluded-change-type {
+        type string;
+      }
+    }
+  }
+
+  augment "/base:system-capabilities" {
+    uses subscription-capabilities {
+      refine "subscription-capabilities/supported-excluded-change-type" {
+        default "leaf-list default doesn't work right now";
+      }
+      refine "subscription-capabilities/max-nodes" {
+        default 42;
+      }
+    }
+  }
+}"""
+
+    root = yang.compile([ys_base, ys_augmenter])
+    return root.prdaclass()

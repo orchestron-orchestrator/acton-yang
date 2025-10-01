@@ -8202,7 +8202,13 @@ class Uses(SchemaNodeOuter):
                 if prefix is not None:
                     # TODO: or is prefix OK when it is the local prefix?
                     raise ValueError("Relative path in refine under uses cannot have prefixes")
-                current_node = current_node.get(name)
+                # Must use the Uses statement namespace (self.get_namespace()),
+                # not default match with target (current_node).
+                # In cross-module augments (Module A augments Module B), the
+                # groupings expanded children have Module A namespace while the
+                # target has Module B. Without an explicit namespace,
+                # current_node.get() would search Module B namespace and fail.
+                current_node = current_node.get(name, ns=self.get_namespace())
             return current_node
 
         for refine in self.refine:
