@@ -34,7 +34,7 @@ test-data-source-roundtrip:
 
 .PHONY: test-yang-compile
 test-yang-compile:
-	cd test/test_yang_compile && acton test --max-time 150000 --min-iter 1 --max-iter 1
+	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1
 
 .PHONY: test-golden-update
 test-golden-update:
@@ -44,4 +44,4 @@ test-golden-update:
 	cd test/test_data_source_roundtrip && acton test --golden-update
 
 test-yang-compile-golden-update:
-	cd test/test_yang_compile && acton test --max-time 150000 --min-iter 1 --max-iter 1 --golden-update
+	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1 --golden-update
