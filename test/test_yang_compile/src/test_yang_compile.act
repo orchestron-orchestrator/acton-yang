@@ -1,0 +1,113 @@
+import file
+import fs
+import testing
+import time
+
+import yang
+
+
+# Helper functions for YANG compilation tests
+
+def should_exclude(filepath: str, patterns: list[str]) -> bool:
+    """Check if a filepath matches any of the exclude patterns"""
+    for pattern in patterns:
+        if fs.glob(pattern, filepath):
+            return True
+    return False
+
+
+def load_yang_modules(file_fs: file.FS, rfc: file.ReadFileCap, dir_path: str, exclude_patterns: list[str]) -> list[str]:
+    """Load all YANG modules from a directory, applying exclude patterns
+
+    Returns a list of YANG source strings
+    """
+    yang_sources = []
+
+    try:
+        filenames = file_fs.listdir(dir_path)
+        for filename in filenames:
+            if filename.endswith(".yang"):
+                file_path = file.join_path([dir_path, filename])
+                if should_exclude(filename, exclude_patterns):
+                    print("Excluded {filename} (matches exclude pattern)", err=True)
+                    continue
+                rf = file.ReadFile(rfc, file_path)
+                yang_content = rf.read().decode()
+                rf.close()
+                yang_sources.append(yang_content)
+                print("Loaded {filename}", err=True)
+    except OSError as e:
+        print("Error reading directory {dir_path}: {e}", err=True)
+        raise e
+
+    return yang_sources
+
+
+def test_compile_yang_directory(t: testing.EnvT, dir_path: str, exclude_patterns: list[str]):
+    """Generic function to test YANG compilation for a directory
+
+    Args:
+        t: Testing environment
+        dir_path: Path to the directory containing YANG modules
+        exclude_patterns: List of filename patterns to exclude
+    """
+    file_cap = file.FileCap(t.env.cap)
+    file_fs = file.FS(file_cap)
+    rfc = file.ReadFileCap(file_cap)
+
+    print("\nTesting compilation of YANG modules in {dir_path}", err=True)
+
+    try:
+        yang_sources = load_yang_modules(file_fs, rfc, dir_path, exclude_patterns)
+
+        if len(yang_sources) == 0:
+            error_msg = "No YANG files found in {dir_path}"
+            t.failure(Exception(error_msg))
+            return
+
+        print("Compiling {len(yang_sources)} YANG modules...", err=True)
+        sw = time.Stopwatch()
+        root = yang.compile(yang_sources)
+        elapsed = sw.elapsed()
+
+        msg = "Successfully compiled {len(yang_sources)} YANG modules from {dir_path}"
+        print("{msg} in {elapsed.to_float():.2f}s", err=True)
+        t.success(msg)
+    except Exception as exc:
+        error_msg = "Failed to compile YANG modules in {dir_path}: {exc}"
+        print(error_msg, err=True)
+        t.failure(exc)
+
+
+# Test actors for each model directory
+
+actor _test_cisco_xrd_24_1_1(t: testing.EnvT):
+    """Test compilation of Cisco IOS XRd YANG modules"""
+    test_compile_yang_directory(t, "test-yang/cisco-xrd-24_1_1", [])
+
+
+actor _test_juniper_crpd_24_4R1_9(t: testing.EnvT):
+    """Test compilation of Juniper CRPD YANG modules"""
+    # Exclude junos-rpc modules due to missing grouping 'command-forwarding'
+    test_compile_yang_directory(t, "test-yang/juniper-crpd-24_4R1_9", ["junos-rpc-*"])
+
+
+actor _test_nokia_sr_linux_25_3_2(t: testing.EnvT):
+    """Test compilation of Nokia SR Linux YANG modules"""
+    test_compile_yang_directory(t, "test-yang/nokia-sr-linux-25_3_2", [])
+
+
+actor _test_notconf(t: testing.EnvT):
+    """Test compilation of vanilla netopeer2 from notconf directory"""
+    test_compile_yang_directory(t, "test-yang/notconf", [])
+
+
+actor _test_notconf_cisco_xr_2411(t: testing.EnvT):
+    """Test compilation of Cisco XR YANG modules from notconf"""
+    test_compile_yang_directory(t, "test-yang/notconf-cisco-xr-2411", [])
+
+
+actor _test_notconf_juniper_crpd_24_4R1_9_local(t: testing.EnvT):
+    """Test compilation of Juniper CRPD YANG modules from notconf (local)"""
+    test_compile_yang_directory(t, "test-yang/notconf-juniper-crpd-24_4R1_9-local", [])
+
