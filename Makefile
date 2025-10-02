@@ -32,9 +32,16 @@ test-daclass:
 test-data-source-roundtrip:
 	cd test/test_data_source_roundtrip && acton test
 
+.PHONY: test-yang-compile
+test-yang-compile:
+	cd test/test_yang_compile && acton test --max-time 150000 --min-iter 1 --max-iter 1
+
 .PHONY: test-golden-update
 test-golden-update:
 	acton test --golden-update
 	cd test/test_data_classes_gen && acton build && out/bin/gen
 	cd test/test_data_classes && acton test --golden-update
 	cd test/test_data_source_roundtrip && acton test --golden-update
+
+test-yang-compile-golden-update:
+	cd test/test_yang_compile && acton test --max-time 150000 --min-iter 1 --max-iter 1 --golden-update
