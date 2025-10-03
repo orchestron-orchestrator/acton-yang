@@ -1,0 +1,46 @@
+import testing
+
+import yang.schema
+
+mut def remove_empty_refines(node: yang.schema.SchemaNode) -> None:
+    """Remove Refine instances where all attributes have default/empty values.
+
+    This modifies the schema in place, removing any Refine nodes that don't
+    actually refine anything (all attributes are at their default values).
+
+    A Refine is considered empty if all of the following are true:
+    - config is None
+    - default is empty list []
+    - description is None
+    - if_feature is empty list []
+    - mandatory is None
+    - max_elements is None
+    - min_elements is None
+    - must is empty list []
+    - presence is None
+    - reference is None
+    """
+
+    def is_empty(refine: yang.schema.Refine) -> bool:
+        """Check if a Refine instance has all default/empty values."""
+        return (refine.config is None and
+                len(refine.default) == 0 and
+                refine.description is None and
+                len(refine.if_feature) == 0 and
+                refine.mandatory is None and
+                refine.max_elements is None and
+                refine.min_elements is None and
+                len(refine.must) == 0 and
+                refine.presence is None and
+                refine.reference is None)
+
+    # Check if this node is a Uses node with refine statements
+    if isinstance(node, yang.schema.Uses):
+        # Filter out empty refines
+        node.refine = [r for r in node.refine if not is_empty(r)]
+
+    # Recursively process children if this is an inner node
+    if isinstance(node, yang.schema.SchemaNodeInner):
+        for child in node.children:
+            remove_empty_refines(child)
+

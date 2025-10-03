@@ -1,0 +1,73 @@
+from transform_remove_empty_refines import remove_empty_refines
+import testing
+import yang
+import yang.schema
+
+
+test_yang = r"""module test_refines {
+  yang-version "1.1";
+  namespace "http://example.com/test_refines";
+  prefix "test_refines";
+
+  grouping grp1 {
+    container c1 {
+      leaf l1 {
+        type string;
+      }
+      leaf l2 {
+        type int32;
+      }
+    }
+  }
+
+  container main {
+    uses grp1 {
+      // Empty refine - should be removed
+      refine c1 {
+      }
+
+      // Refine with only description - should be kept
+      refine c1/l1 {
+        description "Refined leaf l1";
+      }
+
+      // Refine with multiple attributes - should be kept
+      refine c1/l2 {
+        default "42";
+        mandatory true;
+        description "Refined leaf l2";
+      }
+    }
+  }
+}
+"""
+
+
+def _test_remove_empty_refines():
+    """Test removing empty refine statements"""
+    n = yang.schema_from_src(test_yang)
+
+    # Get the Uses node in main container
+    main_uses = None
+    main_container = n.get("main")
+    if isinstance(main_container, yang.schema.SchemaNodeInner):
+        for child in main_container.children:
+            if isinstance(child, yang.schema.Uses):
+                main_uses = child
+                break
+
+    # Check initial state
+    if main_uses is not None:
+        testing.assertEqual(len(main_uses.refine), 3, "main uses should have 3 refines initially")
+
+    # Apply the transform
+    remove_empty_refines(n)
+
+    # Check after transform
+    if main_uses is not None:
+        testing.assertEqual(len(main_uses.refine), 2, "main uses should have 2 refines after removal")
+        # Check that the remaining refines have the expected target nodes
+        target_nodes = [r.target_node for r in main_uses.refine]
+        testing.assertIn("c1/l1", target_nodes, "c1/l1 refine should remain")
+        testing.assertIn("c1/l2", target_nodes, "c1/l2 refine should remain")
+        testing.assertNotIn("c1", target_nodes, "c1 empty refine should be removed")
