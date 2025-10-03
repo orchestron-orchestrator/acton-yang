@@ -684,6 +684,20 @@ def _test_ns():
     c1 = n.get("c1")
     testing.assertEqual(c1.ns, "http://example.com/foo")
 
+def _test_quote():
+    ys = r"""module foo {
+  yang-version "1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+  leaf l1 {
+    type string {
+      // The "\." sequence is not valid in double-quoted strings, "\" must be escaped like "\\"
+      pattern "foo\.bar";
+    }
+  }
+}"""
+    y = yang.parser.parse(ys, strict_quoting=False)
+    return y.prsrc()
 
 def _test_compile_type1():
     ys = r"""module foo {
