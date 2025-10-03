@@ -1156,6 +1156,64 @@ def _test_compile_augment_implicit_input_output():
     root = yang.compile([ys])
     return root.prdaclass()
 
+def _test_compile_augment_augmented_node():
+    """Test augmenting with grouping, then augmenting nodes added by that grouping
+    """
+    ys_base = r"""module base {
+  yang-version 1.1;
+  namespace "http://example.com/base";
+  prefix base;
+
+  container native {
+  }
+}"""
+
+    ys_voice = r"""module voice {
+  yang-version 1.1;
+  namespace "http://example.com/voice";
+  prefix voice;
+
+  import base {
+    prefix base;
+  }
+
+  grouping voice-config-grouping {
+    container voice {
+      container service {
+        container voip {
+          leaf enabled {
+            type boolean;
+            default false;
+          }
+        }
+      }
+    }
+  }
+
+  // First augment: add voice container using grouping
+  augment "/base:native" {
+    uses voice-config-grouping;
+  }
+
+  // Second augment: augment the voice/service/voip container
+  // that was just added by the first augment+grouping
+  augment "/base:native/voice/service/voip" {
+    container sip {
+      leaf bind {
+        type string;
+      }
+      leaf port {
+        type uint16;
+        default 5060;
+      }
+    }
+  }
+}"""
+
+    root = yang.compile([ys_base, ys_voice])
+    src = root.prdaclass()
+    return src
+
 def _test_compile_refine():
     """Refining a grouping"""
     ys = r"""module foo {
@@ -2145,8 +2203,8 @@ def _test_prdaclass_strict_p_container_with_mandatory_leaf():
   import foo {
     prefix "foo";
   }
-  augment "/foo:foo/bar" {
-    // conflicts with /foo:foo/bar/l1
+  augment "/foo:foo/foo:bar" {
+    // conflicts with /foo:foo/foo:bar/foo:l1
     leaf l1 {
       type string;
       mandatory true;
@@ -2383,7 +2441,7 @@ def _test_prdaclass_augment_inner_list_conflict():
             }
         }
     }
-    augment "/b:c1/l1" {
+    augment "/b:c1/b:l1" {
         leaf k1 {
             type string;
             mandatory true;

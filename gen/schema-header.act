@@ -2227,10 +2227,10 @@ class SchemaNode(object):
 
                     if prefix is not None:
                         target_ns = self.get_module_by_prefix(prefix, context).get_namespace()
-                        # Use namespace when resolving
-                        current_node = current_node.get(name, ns=target_ns)
                     else:
-                        current_node = current_node.get(name)
+                        # Use the augmenting module's namespace for unprefixed segments
+                        target_ns =  self.get_namespace()
+                    current_node = current_node.get(name, ns=target_ns)
 
             else: # augment under uses
                 if not in_uses:
@@ -2241,7 +2241,8 @@ class SchemaNode(object):
                     if prefix is not None:
                         # TODO: or is prefix OK when it is the local prefix?
                         raise ValueError("Relative path in augment under uses cannot have prefixes")
-                    current_node = current_node.get(name)
+                    # Use the augmenting module's namespace for unprefixed segments
+                    current_node = current_node.get(name, ns=self.get_namespace())
 
             return current_node
 
