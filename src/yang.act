@@ -2,6 +2,8 @@
 import yang.parser
 import yang.schema
 import transform_explicit_cases
+import transform_remove_empty_refines
+
 
 def eq_optional[T(Eq)](a: ?T, b: ?T) -> bool:
     return a is not None and b is not None and a == b or a is None and b is None
@@ -73,6 +75,14 @@ def compile_modules(yang_sources: list[str], strict_quoting=True) -> list[yang.s
         yang_module = yang.schema.stmt_to_snode(yang.parser.parse(yang_source, strict_quoting=strict_quoting))
         # Normalize schema: wrap standalone data nodes in "choice" with explicit "case"
         transform_explicit_cases.create_explicit_cases(yang_module)
+        # Remove empty (no statements in block) refinements from the schema tree.
+        # TODO: this pre-compile transform is not required for the generic use
+        # case because applying an empty refinement is a no-op method call. It
+        # does however filter out invalid refinements (non-existant path) in
+        # Cisco IOS XE models ...  Ideally we would let the users apply any
+        # SchemaNode pre-compile transforms by splitting this function into
+        # smaller steps, like we already do with DNode
+        transform_remove_empty_refines.remove_empty_refines(yang_module)
         if isinstance(yang_module, yang.schema.Module):
             modrev = yang_module.get_modrev()
             modules.add(modrev.modname, modrev.rev, yang_module)
