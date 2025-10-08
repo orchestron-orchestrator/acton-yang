@@ -2,11 +2,13 @@ import argparse
 import file
 import fs
 import time
+import testing
 
 import yang
 import yang.parser
 import yang.schema
 import transform_unions
+import transform_explicit_cases
 
 
 proc def cmd_transform(env, file_cap, args):
@@ -42,6 +44,9 @@ proc def cmd_transform(env, file_cap, args):
                 if transform == "unions":
                     print("Applying transform '{transform}' to {infile}", err=True)
                     transform_unions.rewrite_unions(n)
+                elif transform == "explicit-cases":
+                    print("Applying transform '{transform}' to {infile}", err=True)
+                    transform_explicit_cases.create_explicit_cases(n)
                 else:
                     print("Unknown transform: {transform}", err=True)
                     env.exit(1)
@@ -160,7 +165,7 @@ actor main(env):
     # Transform subcommand
     transform_cmd = p.add_cmd("transform", "apply transforms to a YANG module", _cmd_transform)
     transform_cmd.add_arg("infile", "input YANG file", required=True)
-    transform_cmd.add_arg("transform", "transform(s) to apply (e.g., unions)", required=True, nargs="+")
+    transform_cmd.add_arg("transform", "transform(s) to apply (e.g., unions, explicit-cases)", required=True, nargs="+")
 
     # Compile subcommand
     compile_cmd = p.add_cmd("compile", "compile YANG modules together", _cmd_compile)
@@ -233,4 +238,39 @@ test_yang = r"""module test_ayangc {
 def _test_ayangc_transform_unions():
     n = yang.schema_from_src(test_yang)
     transform_unions.rewrite_unions(n)
+    return n.to_statement().pryang()
+
+def _test_ayangc_transform_explicit_cases():
+    """Test the explicit-cases transform"""
+    test_yang_choice = r"""module test_choice {
+  yang-version "1.1";
+  namespace "http://example.com/test_choice";
+  prefix "test";
+
+  container config {
+    choice protocol {
+      // Direct leaf - should be wrapped
+      leaf http {
+        type empty;
+      }
+
+      // Direct container - should be wrapped
+      container https {
+        leaf port {
+          type uint16;
+        }
+      }
+
+      // Explicit case - should remain
+      case ssh {
+        leaf ssh-port {
+          type uint16;
+        }
+      }
+    }
+  }
+}
+"""
+    n = yang.schema_from_src(test_yang_choice)
+    transform_explicit_cases.create_explicit_cases(n)
     return n.to_statement().pryang()
