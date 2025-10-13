@@ -1,0 +1,51 @@
+import yang.schema
+
+
+mut def create_explicit_cases(node: yang.schema.SchemaNode) -> None:
+    """Create explicit Case nodes for all direct data node children of Choice nodes.
+
+    In YANG, a choice statement can have either explicit case statements or
+    direct data definition statements (shorthand case). This transform ensures
+    all choice children are wrapped in explicit Case nodes.
+
+    According to RFC 7950, short-case can be:
+    - container
+    - leaf
+    - leaf-list
+    - list
+    - anydata
+    - anyxml
+
+    This modifies the schema in place, wrapping any direct data nodes under
+    Choice nodes with implicit Case nodes. The implicit Case name will be
+    the same as the wrapped node's name.
+    """
+
+    if isinstance(node, yang.schema.Choice):
+        new_children = []
+        for child in node.children:
+            if not isinstance(child, yang.schema.Case):
+                name = child._get_arg()
+                if name is not None:
+                    implicit_case = yang.schema.Case(
+                        name=name,
+                        children=[child],  # The data node becomes child of the case
+                        parent=node,
+                        mod=child.mod,
+                        ns=child.ns,
+                        pfx=child.pfx
+                    )
+                    # Update the child's parent to be the new Case node
+                    child.parent = implicit_case
+                    new_children.append(implicit_case)
+                else:
+                    raise ValueError("Child {child} name is empty")
+            else:
+                new_children.append(child)
+
+        node.children = new_children
+
+    if isinstance(node, yang.schema.SchemaNodeInner):
+        for child in node.children:
+            create_explicit_cases(child)
+

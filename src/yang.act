@@ -1,6 +1,7 @@
 
 import yang.parser
 import yang.schema
+import transform_explicit_cases
 
 def eq_optional[T(Eq)](a: ?T, b: ?T) -> bool:
     return a is not None and b is not None and a == b or a is None and b is None
@@ -70,6 +71,8 @@ def compile_modules(yang_sources: list[str]) -> list[yang.schema.Module]:
 
     for yang_source in yang_sources:
         yang_module = yang.schema.stmt_to_snode(yang.parser.parse(yang_source))
+        # Normalize schema: wrap standalone data nodes in "choice" with explicit "case"
+        transform_explicit_cases.create_explicit_cases(yang_module)
         if isinstance(yang_module, yang.schema.Module):
             modrev = yang_module.get_modrev()
             modules.add(modrev.modname, modrev.rev, yang_module)

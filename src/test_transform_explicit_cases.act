@@ -1,0 +1,77 @@
+from transform_explicit_cases import create_explicit_cases
+import testing
+import yang
+
+def _test_transform_explicit_cases():
+    test_yang = r"""module test_explicit_cases {
+  yang-version "1.1";
+  namespace "http://example.com/test_explicit_cases";
+  prefix "test";
+
+  container main {
+    choice protocol {
+      // Direct leaf - should be wrapped in implicit case
+      leaf http {
+        type empty;
+        description "HTTP protocol";
+      }
+
+      // Direct container - should be wrapped in implicit case
+      container https {
+        description "HTTPS configuration";
+        leaf port {
+          type uint16;
+          default 443;
+        }
+      }
+
+      // Explicit case - should remain as is
+      case ssh {
+        leaf ssh-port {
+          type uint16;
+          default 22;
+        }
+        leaf ssh-user {
+          type string;
+        }
+      }
+
+      // Direct list - should be wrapped in implicit case
+      list servers {
+        key "name";
+        leaf name {
+          type string;
+        }
+        leaf address {
+          type string;
+        }
+      }
+
+      // Direct leaf-list - should be wrapped
+      leaf-list ports {
+        type uint16;
+      }
+
+      // Nested choice as direct child - should be wrapped
+      choice authentication {
+        leaf none {
+          type empty;
+        }
+        case basic {
+          leaf username {
+            type string;
+          }
+          leaf password {
+            type string;
+          }
+        }
+        anydata config-data;
+        anyxml legacy-data;
+      }
+    }
+  }
+}
+"""
+    n = yang.schema_from_src(test_yang)
+    create_explicit_cases(n)
+    return n.to_statement().pryang()
