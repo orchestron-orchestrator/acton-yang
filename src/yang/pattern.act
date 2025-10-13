@@ -820,6 +820,24 @@ def w3cregex_to_re(pattern: str) -> str:
     builder = _XmlRegexToRe(pattern)
     return builder.translate_match()
 
+# -------------------------------------------------------------------------------
+
+class YangPattern(object):
+    _re: str # TODO: Compiled regex when available in re.act!
+    _inverted: bool
+
+    def __init__(self, yang_regex: str, inverted: bool):
+        self._re = w3cregex_to_re(yang_regex)
+        self._inverted = inverted
+
+    def __str__(self) -> str:
+        return "inverted \"{self._re}\"" if self._inverted else self._re
+
+    def match(self, val: str) -> bool:
+        return bool(re.match(self._re, val) is not None) != self._inverted
+
+# -------------------------------------------------------------------------------
+
 def _test_w3cregex_to_re_match():
     testing.assertEqual(w3cregex_to_re(r"a"), r"^a$")
     testing.assertEqual(w3cregex_to_re(r"a|b"), r"^(a|b)$")
