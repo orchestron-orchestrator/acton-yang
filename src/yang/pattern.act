@@ -1,0 +1,922 @@
+import re
+import testing
+
+BP_NONE: int = 0
+BP_OR: int = 1 # '|'
+BP_AND: int = 2 # sequence of lookahead/atoms
+BP_ATOMIC: int = 5 # Atoms e.g. "()", "[]", single-chars or escapes
+
+BLOCK_PCRE = {
+    "BasicLatin": [r"\x{0000}", "-", r"\x{007F}"],
+    "Latin-1Supplement": [r"\x{0080}", "-", r"\x{00FF}"],
+    "LatinExtended-A": [r"\x{0100}", "-", r"\x{017F}"],
+    "LatinExtended-B": [r"\x{0180}", "-", r"\x{024F}"],
+    "IPAExtensions": [r"\x{0250}", "-", r"\x{02AF}"],
+    "SpacingModifierLetters": [r"\x{02B0}", "-", r"\x{02FF}"],
+    "CombiningDiacriticalMarks": [r"\x{0300}", "-", r"\x{036F}"],
+    "Greek": [r"\x{0370}", "-", r"\x{03FF}"],
+    "Cyrillic": [r"\x{0400}", "-", r"\x{04FF}"],
+    "Armenian": [r"\x{0530}", "-", r"\x{058F}"],
+    "Hebrew": [r"\x{0590}", "-", r"\x{05FF}"],
+    "Arabic": [r"\x{0600}", "-", r"\x{06FF}"],
+    "Syriac": [r"\x{0700}", "-", r"\x{074F}"],
+    "Thaana": [r"\x{0780}", "-", r"\x{07BF}"],
+    "Devanagari": [r"\x{0900}", "-", r"\x{097F}"],
+    "Bengali": [r"\x{0980}", "-", r"\x{09FF}"],
+    "Gurmukhi": [r"\x{0A00}", "-", r"\x{0A7F}"],
+    "Gujarati": [r"\x{0A80}", "-", r"\x{0AFF}"],
+    "Oriya": [r"\x{0B00}", "-", r"\x{0B7F}"],
+    "Tamil": [r"\x{0B80}", "-", r"\x{0BFF}"],
+    "Telugu": [r"\x{0C00}", "-", r"\x{0C7F}"],
+    "Kannada": [r"\x{0C80}", "-", r"\x{0CFF}"],
+    "Malayalam": [r"\x{0D00}", "-", r"\x{0D7F}"],
+    "Sinhala": [r"\x{0D80}", "-", r"\x{0DFF}"],
+    "Thai": [r"\x{0E00}", "-", r"\x{0E7F}"],
+    "Lao": [r"\x{0E80}", "-", r"\x{0EFF}"],
+    "Tibetan": [r"\x{0F00}", "-", r"\x{0FFF}"],
+    "Myanmar": [r"\x{1000}", "-", r"\x{109F}"],
+    "Georgian": [r"\x{10A0}", "-", r"\x{10FF}"],
+    "HangulJamo": [r"\x{1100}", "-", r"\x{11FF}"],
+    "Ethiopic": [r"\x{1200}", "-", r"\x{137F}"],
+    "Cherokee": [r"\x{13A0}", "-", r"\x{13FF}"],
+    "UnifiedCanadianAboriginalSyllabics": [r"\x{1400}", "-", r"\x{167F}"],
+    "Ogham": [r"\x{1680}", "-", r"\x{169F}"],
+    "Runic": [r"\x{16A0}", "-", r"\x{16FF}"],
+    "Khmer": [r"\x{1780}", "-", r"\x{17FF}"],
+    "Mongolian": [r"\x{1800}", "-", r"\x{18AF}"],
+    "LatinExtendedAdditional": [r"\x{1E00}", "-", r"\x{1EFF}"],
+    "GreekExtended": [r"\x{1F00}", "-", r"\x{1FFF}"],
+    "GeneralPunctuation": [r"\x{2000}", "-", r"\x{206F}"],
+    "SuperscriptsandSubscripts": [r"\x{2070}", "-", r"\x{209F}"],
+    "CurrencySymbols": [r"\x{20A0}", "-", r"\x{20CF}"],
+    "CombiningMarksforSymbols": [r"\x{20D0}", "-", r"\x{20FF}"],
+    "LetterlikeSymbols": [r"\x{2100}", "-", r"\x{214F}"],
+    "NumberForms": [r"\x{2150}", "-", r"\x{218F}"],
+    "Arrows": [r"\x{2190}", "-", r"\x{21FF}"],
+    "MathematicalOperators": [r"\x{2200}", "-", r"\x{22FF}"],
+    "MiscellaneousTechnical": [r"\x{2300}", "-", r"\x{23FF}"],
+    "ControlPictures": [r"\x{2400}", "-", r"\x{243F}"],
+    "OpticalCharacterRecognition": [r"\x{2440}", "-", r"\x{245F}"],
+    "EnclosedAlphanumerics": [r"\x{2460}", "-", r"\x{24FF}"],
+    "BoxDrawing": [r"\x{2500}", "-", r"\x{257F}"],
+    "BlockElements": [r"\x{2580}", "-", r"\x{259F}"],
+    "GeometricShapes": [r"\x{25A0}", "-", r"\x{25FF}"],
+    "MiscellaneousSymbols": [r"\x{2600}", "-", r"\x{26FF}"],
+    "Dingbats": [r"\x{2700}", "-", r"\x{27BF}"],
+    "BraillePatterns": [r"\x{2800}", "-", r"\x{28FF}"],
+    "CJKRadicalsSupplement": [r"\x{2E80}", "-", r"\x{2EFF}"],
+    "KangxiRadicals": [r"\x{2F00}", "-", r"\x{2FDF}"],
+    "IdeographicDescriptionCharacters": [r"\x{2FF0}", "-", r"\x{2FFF}"],
+    "CJKSymbolsandPunctuation": [r"\x{3000}", "-", r"\x{303F}"],
+    "Hiragana": [r"\x{3040}", "-", r"\x{309F}"],
+    "Katakana": [r"\x{30A0}", "-", r"\x{30FF}"],
+    "Bopomofo": [r"\x{3100}", "-", r"\x{312F}"],
+    "HangulCompatibilityJamo": [r"\x{3130}", "-", r"\x{318F}"],
+    "Kanbun": [r"\x{3190}", "-", r"\x{319F}"],
+    "BopomofoExtended": [r"\x{31A0}", "-", r"\x{31BF}"],
+    "EnclosedCJKLettersandMonths": [r"\x{3200}", "-", r"\x{32FF}"],
+    "CJKCompatibility": [r"\x{3300}", "-", r"\x{33FF}"],
+    "CJKUnifiedIdeographsExtensionA": [r"\x{3400}", "-", r"\x{4DB5}"],
+    "CJKUnifiedIdeographs": [r"\x{4E00}", "-", r"\x{9FFF}"],
+    "YiSyllables": [r"\x{A000}", "-", r"\x{A48F}"],
+    "YiRadicals": [r"\x{A490}", "-", r"\x{A4CF}"],
+    "HangulSyllables": [r"\x{AC00}", "-", r"\x{D7A3}"],
+    "PrivateUse": [r"\x{E000}", "-", r"\x{F8FF}"],
+    "CJKCompatibilityIdeographs": [r"\x{F900}", "-", r"\x{FAFF}"],
+    "AlphabeticPresentationForms": [r"\x{FB00}", "-", r"\x{FB4F}"],
+    "ArabicPresentationForms-A": [r"\x{FB50}", "-", r"\x{FDFF}"],
+    "CombiningHalfMarks": [r"\x{FE20}", "-", r"\x{FE2F}"],
+    "CJKCompatibilityForms": [r"\x{FE30}", "-", r"\x{FE4F}"],
+    "SmallFormVariants": [r"\x{FE50}", "-", r"\x{FE6F}"],
+    "ArabicPresentationForms-B": [r"\x{FE70}", "-", r"\x{FEFE}"],
+    "HalfwidthandFullwidthForms": [r"\x{FF00}", "-", r"\x{FFEF}"],
+    "Specials": [r"\x{FEFF}", r"\x{FFF0}", "-", r"\x{FFFD}"]
+}
+
+CATEGORY_OR_BLOCK_NAME_RE = \
+    "BasicLatin|" \
+    "Latin-1Supplement|" \
+    "LatinExtended-A|" \
+    "LatinExtended-B|" \
+    "IPAExtensions|" \
+    "SpacingModifierLetters|" \
+    "CombiningDiacriticalMarks|" \
+    "GreekExtended|" \
+    "Greek|" \
+    "Cyrillic|" \
+    "Armenian|" \
+    "Hebrew|" \
+    "ArabicPresentationForms-A|" \
+    "ArabicPresentationForms-B|" \
+    "Arabic|" \
+    "Syriac|" \
+    "Thaana|" \
+    "Devanagari|" \
+    "Bengali|" \
+    "Gurmukhi|" \
+    "Gujarati|" \
+    "Oriya|" \
+    "Tamil|" \
+    "Telugu|" \
+    "Kannada|" \
+    "Malayalam|" \
+    "Sinhala|" \
+    "Thai|" \
+    "Lao|" \
+    "Tibetan|" \
+    "Myanmar|" \
+    "Georgian|" \
+    "HangulJamo|" \
+    "Ethiopic|" \
+    "Cherokee|" \
+    "UnifiedCanadianAboriginalSyllabics|" \
+    "Ogham|" \
+    "Runic|" \
+    "Khmer|" \
+    "Mongolian|" \
+    "LatinExtendedAdditional|" \
+    "GeneralPunctuation|" \
+    "SuperscriptsandSubscripts|" \
+    "CurrencySymbols|" \
+    "CombiningMarksforSymbols|" \
+    "LetterlikeSymbols|" \
+    "NumberForms|" \
+    "Arrows|" \
+    "MathematicalOperators|" \
+    "MiscellaneousTechnical|" \
+    "ControlPictures|" \
+    "OpticalCharacterRecognition|" \
+    "EnclosedAlphanumerics|" \
+    "BoxDrawing|" \
+    "BlockElements|" \
+    "GeometricShapes|" \
+    "MiscellaneousSymbols|" \
+    "Dingbats|" \
+    "BraillePatterns|" \
+    "CJKRadicalsSupplement|" \
+    "KangxiRadicals|" \
+    "IdeographicDescriptionCharacters|" \
+    "CJKSymbolsandPunctuation|" \
+    "Hiragana|" \
+    "Katakana|" \
+    "BopomofoExtended|" \
+    "Bopomofo|" \
+    "HangulCompatibilityJamo|" \
+    "Kanbun|" \
+    "EnclosedCJKLettersandMonths|" \
+    "CJKCompatibilityIdeographs|" \
+    "CJKCompatibilityForms|" \
+    "CJKCompatibility|" \
+    "CJKUnifiedIdeographsExtensionA|" \
+    "CJKUnifiedIdeographs|" \
+    "YiSyllables|" \
+    "YiRadicals|" \
+    "HangulSyllables|" \
+    "PrivateUse|" \
+    "AlphabeticPresentationForms|" \
+    "CombiningHalfMarks|" \
+    "SmallFormVariants|" \
+    "HalfwidthandFullwidthForms|" \
+    "Specials" \
+    "Lu|" \
+    "Ll|" \
+    "Lt|" \
+    "Lm|" \
+    "Lo|" \
+    "L|" \
+    "Mn|" \
+    "Mc|" \
+    "Me|" \
+    "M|" \
+    "Nd|" \
+    "Nl|" \
+    "No|" \
+    "N|" \
+    "Pc|" \
+    "Pd|" \
+    "Ps|" \
+    "Pe|" \
+    "Pi|" \
+    "Pf|" \
+    "Po|" \
+    "P|" \
+    "Zs|" \
+    "Zl|" \
+    "Zp|" \
+    "Z|" \
+    "Sm|" \
+    "Sc|" \
+    "Sk|" \
+    "So|" \
+    "S|" \
+    "Cc|" \
+    "Cf|" \
+    "Co|" \
+    "Cn|" \
+    "C"
+
+STATE_INIT = 0
+STATE_BEGIN = 1
+STATE_NON_RANGE = 2
+STATE_END_RANGE = 3
+STATE_HYPHEN = 4
+
+class _XmlRegexToRe(object):
+    input: str
+    input_len: int
+    i: int
+
+    def __init__(self, pattern):
+        self.input = pattern
+        self.input_len = len(pattern)
+        self.i = 0
+
+    def try_peek_char(self, offset=0) -> ?str:
+        i = self.i + offset
+        if i < self.input_len:
+            c = self.input[i]
+            return c
+        return None
+
+    def try_peek_char_if(self, predicate, offset=0) -> ?str:
+        c = self.try_peek_char(offset)
+        if c is not None and predicate(c):
+            return c
+        return None
+
+    def try_peek_char_in(self, chars, offset=0) -> ?str:
+        return self.try_peek_char_if(lambda c: c in chars, offset)
+
+    def try_get_char(self) -> ?str:
+        if self.i < self.input_len:
+            c = self.input[self.i]
+            self.i += 1
+            return c
+        return None
+
+    def try_get_char_if(self, predicate) -> ?str:
+        if self.i < self.input_len:
+            c = self.input[self.i]
+            if predicate(c):
+                self.i += 1
+                return c
+        return None
+
+    def get_slice_while(self, predicate):
+        begin = self.i
+        end = self.i
+        while end < self.input_len and predicate(self.input[end]):
+            end += 1
+        # return slice(begin, end)
+        return (begin, end)
+
+    def get_substr_while(self, predicate) -> str:
+        # return self.input[self.get_slice_while(predicate)]
+        s = self.get_slice_while(predicate)
+        self.i = s.1
+        return self.input[s.0:s.1]
+
+    def try_get_substr_re(self, pattern) -> ?str:
+        m = re._match(pattern, self.input, self.i)
+        # print("DEBUG81", self.input, self.i)
+        if m is not None:
+            s = self.input[self.i:m.end_pos]
+            self.i = m.end_pos
+            # print("DEBUG82", self.i, "\'{s}\'", self.input[self.i:])
+            return s
+        return None
+
+    def try_get_char_in(self, chars) -> ?str:
+        return self.try_get_char_if(lambda c: c in chars)
+
+    def translate_search(self) -> str:
+        elems, _bp = self.parse_regex()
+        c = self.try_get_char()
+        if c is not None:
+            self.raise_error("Unexpected char {c}")
+        return _concat(elems)
+
+    def translate_match(self) -> str:
+        elems, bp = self.parse_regex()
+        c = self.try_get_char()
+        if c is not None:
+            self.raise_error("Unexpected char {c}")
+        inner = _concat(_atomify(elems, bp, BP_AND))
+        return "^{inner}$"
+
+    def parse_regex(self) -> (list[str], int):
+        elems = []
+        bp = BP_ATOMIC
+        while True:
+            ielems, ibp = self.parse_branch()
+            if not ielems and self.try_get_char_in('|') is None:
+                break
+            if ibp < bp:
+                bp = ibp
+            if elems:
+                elems.append('|')
+            elems.extend(ielems)
+        if len(elems) > 1:
+            if BP_OR < bp:
+                bp = BP_OR
+        return elems, bp
+
+    def parse_branch(self) -> (list[str], int):
+        elems = []
+        bp = BP_ATOMIC
+        while True:
+            # print("DEBUG21", self.i)
+            ielems, ibp = self.parse_atom()
+            if not ielems:
+                break
+            # print("DEBUG22", self.i)
+            qelems = self.parse_quantifier()
+            if qelems:
+                elems.extend(_atomify(ielems, ibp, BP_ATOMIC))
+                elems.extend(qelems)
+            else:
+                elems.extend(ielems)
+                if ibp < bp:
+                    bp = ibp
+            # print("DEBUG23", self.i)
+        return elems, bp
+
+    def parse_quantifier(self) -> list[str]:
+        # print("DEBUG31", self.i)
+        c = self.try_get_char_in("?*+")
+        if c is not None:
+            return [c]
+        if self.try_get_char_in(r'{') is not None:
+            # print("DEBUG32", self.i)
+            elems = [r'{']
+            initial_digits = self.get_substr_while(_is_ascii_dec_digit)
+            if initial_digits:
+                # print("DEBUG33", self.i)
+                elems.append(initial_digits)
+                if self.try_get_char_in(',') is not None:
+                    elems.append(',')
+                    end_range_digits = self.get_substr_while(_is_ascii_dec_digit)
+                    if end_range_digits:
+                        # print("DEBUG34", self.i)
+                        elems.append(end_range_digits)
+                # print("DEBUG35", self.i)
+                if self.try_get_char_in(r'}') is not None:
+                    # print("DEBUG36", self.i)
+                    elems.append(r'}')
+                    return elems
+            self.raise_error("Invalid quantifer range")
+
+        return []
+
+    def parse_atom(self) -> (list[str], int):
+        # print("DEBUG41", self.i)
+        last_i = self.i
+        c = self.try_peek_char()
+        # print("DEBUG42", self.i)
+        if c is not None:
+            # print("DEBUG43", self.i, c)
+            # 'Char' normal and wildcard '.'
+            if c not in r"&\?*+{}()|[]":
+                # print("DEBUG44", self.i)
+                self.i += 1
+                return [c], BP_ATOMIC
+            # 'Char' character reference
+            if c == '&':
+                self.i += 1
+                end = self.i
+                # Hex digits
+                if self.try_get_char_in('#') is not None:
+                    # print("DEBUG45", self.i)
+                    if self.try_get_char_in('x') is not None:
+                        # print("DEBUG46", self.i)
+                        hex_digits = self.get_substr_while(_is_ascii_hex_digit)
+                        if hex_digits:
+                            return [r"\x{", hex_digits, r"}"], BP_ATOMIC
+                    # Decimal digits
+                    else:
+                        # print("DEBUG47", self.i)
+                        dec_digits = self.get_substr_while(_is_ascii_dec_digit)
+                        if dec_digits:
+                            try:
+                                hex_digits = hex(int(dec_digits))[2:]
+                            except Exception:
+                                pass
+                            else:
+                                return [r"\x{", hex_digits, r"}"], BP_ATOMIC
+                self.raise_error("Invalid character reference")
+            # 'charClass' 'charClassEsc'
+            if c == '\\':
+                # print("DEBUG48.1", self.i)
+                self.i += 1
+                c1 = self.try_get_char()
+                if c1 is not None:
+                    # print("DEBUG48.2", self.i, c1)
+                    # PCRE2-compatible 'SingleCharEsc' and 'MultiCharEsc' \s \S \d \D
+                    if c1 in "nrt\\|.-^?*+{{}}()[]sSdD":
+                        return [c, c1], BP_ATOMIC
+                    # MultiCharEsc '\i'
+                    if c1 == 'i':
+                        return [r"[\p{L}_:]"], BP_ATOMIC
+                    # MultiCharEsc '\I'
+                    if c1 == 'I':
+                        return [r"[^\p{L}_:]"], BP_ATOMIC
+                    # MultiCharEsc '\c'
+                    if c1 == 'c':
+                        return [r"[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]"], BP_ATOMIC # https://www.w3.org/TR/2000/WD-xml-2e-20000814#NT-NameChar
+                    # MultiCharEsc '\C'
+                    if c1 == 'C':
+                        return [r"[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]"], BP_ATOMIC # https://www.w3.org/TR/2000/WD-xml-2e-20000814#NT-NameChar
+                    # MultiCharEsc '\w'
+                    if c1 == 'w':
+                        return [r"(?![\p{P}\p{Z}\p{C}])[\x{0000}-\x{10FFFF}]"], BP_ATOMIC
+                    # MultiCharEsc '\\W'
+                    if c1 == 'W':
+                        return [r"[\p{P}\p{Z}\p{C}\x{110000}]"], BP_ATOMIC
+                    # catEsc & complEsc
+                    if c1 in "pP":
+                        # print("DEBUG48.3", self.i, c1)
+                        if self.try_get_char_in(r'{') is not None:
+                            category = self.try_get_unicode_category_or_block()
+                            if category is not None:
+                                # print("DEBUG48.4", self.i, category)
+                                if self.try_get_char_in(r'}') is None:
+                                    self.raise_error("Missing closing brace")
+                                try:
+                                    block_pcre2 = BLOCK_PCRE[category]
+                                except KeyError:
+                                    return ["\\{c1}{{{category}}}"], BP_ATOMIC
+                                else:
+                                    if c1 == 'P':
+                                        elems = ["[^"]
+                                        elems.extend(block_pcre2)
+                                        elems.append("]")
+                                        return elems, BP_ATOMIC
+                                    else:
+                                        elems = ["["]
+                                        elems.extend(block_pcre2)
+                                        elems.append("]")
+                                        return elems, BP_ATOMIC
+                            self.raise_error("Invalid unicode category")
+                self.raise_error("Missing/invalid character after escape \\")
+            if c == '(':
+                self.i += 1
+                begin = self.i
+                ielems, _ibp = self.parse_regex()
+                if self.try_get_char_in(')') is not None:
+                    elems = ['(']
+                    elems.extend(ielems)
+                    elems.append(')')
+                    return elems, BP_ATOMIC
+                self.raise_error("Missing matching parentheses", begin)
+            # 'charClass' 'charClassExpr' [12]
+            # elif c == '[':
+            ielems, ibp = self.parse_char_class_expr()
+            if ielems:
+                return ielems, ibp
+            # Nested 'regExp'
+
+        self.i = last_i
+        return [], BP_NONE
+
+    def parse_char_class_expr(self) -> (list[str], int):
+        if self.try_get_char_in('[') is not None:
+            char_group_elems, char_group_bp = self.parse_char_group()
+            if self.try_get_char_in('-') is not None:
+                subtract_char_group, _sbp = self.parse_char_class_expr()
+                if not subtract_char_group:
+                    self.raise_error("Missing character class subtraction expr")
+                elems = ["(?!"]
+                elems.extend(subtract_char_group)
+                elems.append(")")
+                elems.extend(_atomify(char_group_elems, char_group_bp, BP_ATOMIC))
+                bp = BP_AND
+            else:
+                elems = char_group_elems
+                bp = char_group_bp
+            if self.try_get_char_in(']') is None:
+                self.raise_error("Missing closing bracket")
+            return elems, bp
+        return [], BP_NONE
+
+    def parse_char_group(self) -> (list[str], int):
+        #
+        #     Pseudo-regex form                         <->       Set-form with '|' as union, '&' as intersection, '~' as absolute complement and '\' as relative complement.
+        #         \a and \b are positive items
+        #         \C and \D are the complement of and expanded item
+        #         \w and \x are items expanded to relative complements
+        #         \Y and \Z are the absolute complements of items expanded to relative complements
+
+        ### Positive group with positive items
+        #     [\a\b]                                    <->       a | b       <->
+        #     (\a|\b)
+
+        ### Positive group with only a single complement
+        #     [\C]
+        #     [^\c]                                     <->
+
+        ### Positive group with positive and absolute complement sub-ranges
+        #     [\a\b\C\D]                                <->       a | b | ~c | ~d    <->
+        #     [\a\b] | [^\c] | [^\d]
+
+        ### Range that expands into relative complement
+        #     \w                                        <->       wpos \ wneg
+        #                                               <->       wpos & ~wneg       <->
+        #     (?![{wneg}])[{wpos}]
+
+        ### The complement of a relative complement range
+        #     \Y                                        <->       ~y
+        #                                               <->       ~(ypos & ~yneg)
+        #                                               <->       ~ypos | yneg       <->
+        #     [^{ypos}] | [{yneg}]
+
+        ### Positive group with all of the above range types
+        #     [\a\b\C\D\w\x\Y\Z]                        <->       a | b | ~c | ~d | w | x | ~y | ~z       <->
+        #     [\a\b] | [^\c] | [^\d] | (?![{wneg}])[{wpos}] | (?![{xneg}])[{xpos}] | [^{ypos}] | [{yneg}] | [^{zpos}] | [{zneg}]       <->
+        #     [\a\b{yneg}{zneg}] | [^\c] | [^\d] | (?![{wneg}])[{wpos}] | (?![{xneg}])[{xpos}] | [^{ypos}] | [^{zpos}]
+
+        ### Complement group with all range kinds
+        #     [^\a\b\C\D\w\x\Y\Z]                       <->       ~(a | b | ~c | ~d | w | x | ~y | ~z)
+        #                                               <->       ~a & ~b & c & d & ~w & ~x & y & z
+        #                                               <->       ~a & ~b & c & d & (~wpos | wneg) & (~xpos | xneg) & (ypos & ~yneg) & (zpos & ~zneg)
+        #                                               <->       ~(a | b | yneg | zneg) & c & d & ypos & zpos & (~wpos | wneg) & (~xpos | xneg)       <->
+        #     (?=\c) (?=\d) (?=[{ypos}]) (?=[{zpos}]) (?=[^{wpos}]|[{wneg}]) (?=[^{xpos}]|[{xneg}]) [^\a\b{yneg}{zneg}]
+
+        ### Positive group with relative-complement sub-group
+        #     [\a\b-[\c\d]]                             <->       (a | b) \ (c | d)
+        #                                               <->       (a | b) & ~(c | d)       <->
+        #     (?![\c\d]) [\a\b]
+
+        ### Complement group with relative-complement sub-group
+        #     [^\a\b-[\c\d]]                            <->       ~(a | b) \ (c | d)
+        #                                               <->       ~(a | b) & ~(c | d)      <->
+        #     (?![\c\d]) [^\a\b]
+
+        state = STATE_INIT
+
+        def _update_state_on_single_char(_state):
+            if _state == STATE_HYPHEN:
+                return STATE_END_RANGE
+            else:
+                return STATE_BEGIN
+
+        def _update_state_on_multi_char(_state):
+            if _state == STATE_HYPHEN:
+                self.raise_error("Invalid range bound")
+            else:
+                return STATE_NON_RANGE
+
+        # Why does this not work?
+        # is_negative = self.try_get_char_in('^') is not None
+        # is_negative = bool(self.try_get_char_in('^') is not None)
+        is_negative = self.try_get_char_in('^') != None
+
+        builder: _Builder = _NegBuilder() if is_negative else _PosBuilder()
+
+        while True:
+            c = self.try_peek_char()
+            # print("DEBUG71", self.i, state, c)
+            if c is not None:
+                if c == '-':
+                    if self.try_peek_char_in('[', 1) is not None:
+                        break
+                    elif self.try_peek_char_in(']', 1) is not None or state == STATE_INIT or state == STATE_BEGIN:
+                        self.i += 1
+                        state = STATE_HYPHEN
+                        builder.simple_part(c)
+                    elif state == STATE_HYPHEN:
+                        # The previous hyphen was the first character
+                        self.i += 1
+                        builder.simple_part(c)
+                    elif state == STATE_HYPHEN or state == STATE_END_RANGE or state == STATE_NON_RANGE:
+                        self.raise_error("Unescaped '-' is only permitted as the first or last character in a character group", self.i)
+                    else:
+                        self.raise_error("Internal error: parse_pos_char_group: invalid state", self.i)
+                elif c == '.':
+                    self.i += 1
+                    builder.simple_part(c)
+                    state = _update_state_on_multi_char(state)
+                elif c == '\\':
+                    self.i += 1
+                    c1 = self.try_get_char()
+                    if c1 is not None:
+                        # PCRE2-compatible 'SingleCharEsc'
+                        if c1 in "nrt\\|.-^?*+{{}}()[]":
+                            builder.simple_part("\\{c1}")
+                            state = _update_state_on_single_char(state)
+                        # PCRE2-compatible 'MultiCharEsc' \s \S \d \D
+                        elif c1 in "sSdD":
+                            builder.simple_part("\\{c1}")
+                            state = _update_state_on_multi_char(state)
+                        # MultiCharEsc '\i' expansion
+                        elif c1 == 'i':
+                            builder.expansion([r"\p{L}", "_", ":"])
+                            state = _update_state_on_multi_char(state)
+                        # MultiCharEsc '\I' complement expansion
+                        elif c1 == 'I':
+                            builder.expansion_complement([r"\p{L}", "_", ":"])
+                            state = _update_state_on_multi_char(state)
+                        # MultiCharEsc '\c' expansion
+                        elif c1 == 'c':
+                            builder.expansion([r"\p{Ll}", r"\p{Lu}", r"\p{Lo}", r"\p{Nl}", r"\p{Mc}", r"\p{Me}", r"\p{Mn}", r"\p{Lm}", r"\p{Nd}"])
+                            state = _update_state_on_multi_char(state)
+                        # MultiCharEsc '\C' complement expansion
+                        elif c1 == 'C':
+                            builder.expansion_complement([r"\p{Ll}", r"\p{Lu}", r"\p{Lo}", r"\p{Nl}", r"\p{Mc}", r"\p{Me}", r"\p{Mn}", r"\p{Lm}", r"\p{Nd}"])
+                            state = _update_state_on_multi_char(state)
+                        # MultiCharEsc '\w' expansion
+                        elif c1 == 'w':
+                            builder.rel_complement_expansion([r"\x{0000}", "-", r"\x{10FFFF}"], [r"\p{P}", r"\p{Z}", r"\p{C}"])
+                            state = _update_state_on_multi_char(state)
+                        # MultiCharEsc '\W' complement expansion
+                        elif c1 == 'W':
+                            builder.rel_complement_expansion_complement([r"\x{0000}", "-", r"\x{10FFFF}"], [r"\p{P}", r"\p{Z}", r"\p{C}"])
+                            state = _update_state_on_multi_char(state)
+                        # catEsc & complEsc expansion
+                        elif c1 in "pP":
+                            if self.try_get_char_in(r'{') is not None:
+                                category = self.try_get_unicode_category_or_block()
+                                if category is not None:
+                                    if self.try_get_char_in(r'}') is None:
+                                        self.raise_error("Missing closing brace")
+                                    try:
+                                        block_pcre2 = BLOCK_PCRE[category]
+                                    except KeyError:
+                                        builder.simple_part("\\{c1}{{{category}}}")
+                                    else:
+                                        if c1 == 'P':
+                                            builder.expansion_complement(block_pcre2)
+                                        else:
+                                            builder.expansion(block_pcre2)
+                                    state = _update_state_on_multi_char(state)
+                                else:
+                                    self.raise_error("Invalid unicode category")
+                            else:
+                                self.raise_error("Invalid unicode category syntax")
+                        else:
+                            self.raise_error("Invalid character after escape \\")
+                    else:
+                        self.raise_error("Missing character after escape \\")
+                elif c not in r"[]":
+                    self.i += 1
+                    if state == STATE_INIT and c == ':':
+                        # Escape initial ':' to avoid misinterpretation as PCRE2 POSIX name class
+                        builder.simple_part("\\{c}")
+                    else:
+                        builder.simple_part(c)
+                    state = _update_state_on_single_char(state)
+                else:
+                    break
+            else:
+                break
+        if state == STATE_INIT:
+            self.raise_error("Empty character class expr")
+        elif state == STATE_BEGIN or state == STATE_NON_RANGE or state == STATE_END_RANGE or state == STATE_HYPHEN: # A '-' is allowed at the end
+            return builder.build()
+        else:
+            self.raise_error("Internal error: parse_pos_char_group: invalid state")
+        # Unreachable, but type-inference doesn't take into account that self.raise_error raises and exception
+        # and deduces that the default return None is possible
+        return [], BP_NONE
+
+    def try_get_unicode_category_or_block(self) -> ?str:
+        return self.try_get_substr_re(CATEGORY_OR_BLOCK_NAME_RE)
+
+    def raise_error(self, message: str, index: ?int):
+        i = index if index is not None else self.i - 1
+        raise ValueError("{message} at position {i} in pattern {self.input}")
+
+class _Builder(object):
+    def simple_part(self, p):
+        # Either a single-character match, a range part, or a multi-character match that
+        # can be expanded into a positive char group. E.g. \s -> [\p{L}_:]
+        raise NotImplementedError()
+
+    def expansion(self, p):
+        raise NotImplementedError()
+
+    def expansion_complement(self, n):
+        # E.g. \I that need to be mapped into the absolute complement of muliple positive ranges
+        raise NotImplementedError()
+
+    def rel_complement_expansion(self, p, n):
+        # I.e. \w that is expanded to a relative complement
+        raise NotImplementedError()
+
+    def rel_complement_expansion_complement(self, p, n):
+        # I.e. \W that maps to the absolute complement of the expanded relative complement
+        raise NotImplementedError()
+
+    def build(self) -> (list[str], int):
+        raise NotImplementedError()
+
+class _PosBuilder(_Builder):
+    def __init__(self):
+        self._simple_parts = [] # The simple (i.e. non-complement range parts or compatible multichar)
+        self._outer_groups = [] # The complex (i.e. rel-complement ranges) for top-level disjunction
+        self.bp = BP_ATOMIC
+
+    def simple_part(self, p):
+        self._simple_parts.append(p)
+
+    def expansion(self, p):
+        self._simple_parts.extend(p)
+
+    def expansion_complement(self, n):
+        self._outer_groups.append("[^{_concat(n)}]")
+
+    def rel_complement_expansion(self, p, n):
+        self._outer_groups.append("(?![^{_concat(p)}])[{_concat(n)}]")
+        self.bp = BP_AND
+
+    def rel_complement_expansion_complement(self, p, n):
+        self._simple_parts.extend(n)
+        self._outer_groups.append("[^{_concat(p)}]")
+
+    def build(self) -> (list[str], int):
+        combined = []
+
+        if self._simple_parts:
+            combined.append(_rebuild_pos_group(self._simple_parts))
+
+        for outer_group in self._outer_groups:
+            if combined:
+                combined.append('|')
+            combined.append(outer_group)
+
+        return combined, BP_OR if len(combined) > 1 else self.bp
+
+class _NegBuilder(_Builder):
+    def __init__(self):
+        self._simple_parts = ["^"] # The simple (i.e. non-complement ranges) (whose union is then complemented if is_negative)
+        self._outer_groups = [] # The complex (i.e. complement ranges) for top-level conjunction
+
+    def simple_part(self, p):
+        self._simple_parts.append(p)
+
+    def expansion(self, p):
+        self._simple_parts.extend(p)
+
+    def expansion_complement(self, n):
+        self._outer_groups.append("(?=[{_concat(n)}])")
+
+    def rel_complement_expansion(self, p, n):
+        self._outer_groups.append("(?=[^{_concat(p)}]|[{_concat(n)}])")
+
+    def rel_complement_expansion_complement(self, p, n):
+        self._simple_parts.extend(n)
+        self._outer_groups.append("(?=[{_concat(p)}])")
+
+    def build(self) -> (list[str], int):
+        combined = []
+
+        combined.extend(self._outer_groups)
+
+        if len(self._simple_parts) > 1:
+            combined.append(_rebuild_pos_group(self._simple_parts))
+
+        return combined, BP_AND if len(combined) > 1 else BP_ATOMIC
+
+def _concat(elems: list[str]) -> str:
+    return "".join(elems)
+
+def _rebuild_pos_group(elems: list[str]):
+    if len(elems) == 1:
+        elem = elems[0]
+        if elem == r"\-":
+            return "-"
+        elif elem in r"&?*+{}()|":
+            return "\\{elem}"
+        return elems[0]
+    else:
+        return "[{_concat(elems)}]"
+
+def _join_paren(elems: list[str], delim):
+    if len(elems) == 1:
+        return elems[0]
+    else:
+        joined = delim.join(elems)
+        return "({joined})"
+
+def _atomify(inner_elems, inner_bp, outer_bp) -> list[str]:
+    if inner_bp < outer_bp:
+        elems = ['(']
+        elems.extend(inner_elems)
+        elems.append(')')
+        return elems
+    else:
+        return inner_elems
+
+def _is_ascii_dec_digit(c: str):
+    return c in "0123456789"
+
+def _is_ascii_hex_digit(c: str):
+    return c in "0123456789ABCDEFabcdef"
+
+def w3cregex_to_re_search(pattern: str) -> str:
+    builder = _XmlRegexToRe(pattern)
+    return builder.translate_search()
+
+def w3cregex_to_re(pattern: str) -> str:
+    builder = _XmlRegexToRe(pattern)
+    return builder.translate_match()
+
+def _test_w3cregex_to_re_match():
+    testing.assertEqual(w3cregex_to_re(r"a"), r"^a$")
+    testing.assertEqual(w3cregex_to_re(r"a|b"), r"^(a|b)$")
+
+def _test_w3cregex_to_re_search_basic():
+    testing.assertEqual(w3cregex_to_re_search(r""), r"")
+    testing.assertEqual(w3cregex_to_re_search(r"a"), r"a")
+    testing.assertEqual(w3cregex_to_re_search(r"a|b"), r"a|b")
+    testing.assertEqual(w3cregex_to_re_search(r"a(bc)"), r"a(bc)")
+    testing.assertEqual(w3cregex_to_re_search(r"[a-z]"), r"[a-z]")
+
+def _test_w3cregex_to_re_search_char_ref():
+    testing.assertEqual(w3cregex_to_re_search(r"&#64"), r"\x{40}")
+    testing.assertEqual(w3cregex_to_re_search(r"&#x3D"), r"\x{3D}")
+    testing.assertEqual(w3cregex_to_re_search(r"&#x3d"), r"\x{3d}")
+
+def _test_w3cregex_to_re_search_quantifier():
+    testing.assertEqual(w3cregex_to_re_search(r"a(bc)+"), r"a(bc)+")
+    testing.assertEqual(w3cregex_to_re_search(r"a(bc)?"), r"a(bc)?")
+    testing.assertEqual(w3cregex_to_re_search(r"a(bc){2}"), r"a(bc){2}")
+    testing.assertEqual(w3cregex_to_re_search(r"a(bc){2,}"), r"a(bc){2,}")
+    testing.assertEqual(w3cregex_to_re_search(r"a(bc){2,3}"), r"a(bc){2,3}")
+
+def _test_w3cregex_to_re_search_escape():
+    testing.assertEqual(w3cregex_to_re_search(r"\n\r\t\\\\\|\.\-\^\?\*\+\{\{\}\}\(\)\[\]"), r"\n\r\t\\\\\|\.\-\^\?\*\+\{\{\}\}\(\)\[\]")
+
+def _test_w3cregex_to_re_search_multichar():
+    testing.assertEqual(w3cregex_to_re_search(r"."), r".")
+    testing.assertEqual(w3cregex_to_re_search(r"\s"), r"\s")
+    testing.assertEqual(w3cregex_to_re_search(r"\d"), r"\d")
+    testing.assertEqual(w3cregex_to_re_search(r"\S"), r"\S")
+    testing.assertEqual(w3cregex_to_re_search(r"\D"), r"\D")
+    testing.assertEqual(w3cregex_to_re_search(r"\i"), r"[\p{L}_:]")
+    testing.assertEqual(w3cregex_to_re_search(r"\I"), r"[^\p{L}_:]")
+    testing.assertEqual(w3cregex_to_re_search(r"\c"), r"[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]")
+    testing.assertEqual(w3cregex_to_re_search(r"\C"), r"[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]")
+    testing.assertEqual(w3cregex_to_re_search(r"\w"), r"(?![\p{P}\p{Z}\p{C}])[\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"\W"), r"[\p{P}\p{Z}\p{C}\x{110000}]")
+
+def _test_w3cregex_to_re_search_escape_unicode_category():
+    testing.assertEqual(w3cregex_to_re_search(r"\p{L}"), r"\p{L}")
+    testing.assertEqual(w3cregex_to_re_search(r"\P{L}"), r"\P{L}")
+
+def _test_w3cregex_to_re_search_escape_unicode_block():
+    testing.assertEqual(w3cregex_to_re_search(r"\p{MathematicalOperators}"), r"[\x{2200}-\x{22FF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"\P{MathematicalOperators}"), r"[^\x{2200}-\x{22FF}]")
+
+def _test_w3cregex_to_re_search_group_escape():
+    testing.assertEqual(w3cregex_to_re_search(r"[\n\r\t\\\\\|\.\-\^\?\*\+\{\{\}\}\(\)\[\]]"), r"[\n\r\t\\\\\|\.\-\^\?\*\+\{\{\}\}\(\)\[\]]")
+
+def _test_w3cregex_to_re_search_group_basic_multichar():
+    testing.assertEqual(w3cregex_to_re_search(r"[.\s\d]"), r"[.\s\d]")
+    testing.assertEqual(w3cregex_to_re_search(r"[\S\D]"), r"[\S\D]")
+    testing.assertEqual(w3cregex_to_re_search(r"[\d]"), r"\d")
+    testing.assertEqual(w3cregex_to_re_search(r"[\i]"), r"[\p{L}_:]")
+
+def _test_w3cregex_to_re_search_group_subtraction():
+    testing.assertEqual(w3cregex_to_re_search("[a-z-[c-d]]"), "(?![c-d])[a-z]")
+    testing.assertEqual(w3cregex_to_re_search("[a-z-[c-d]]+"), "((?![c-d])[a-z])+")
+
+def _test_w3cregex_to_re_search_pos_group_with_rel_comp():
+    testing.assertEqual(w3cregex_to_re_search("[ab-z\\i\\C\\w]"), r"[ab-z\p{L}_:]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|(?![^\x{0000}-\x{10FFFF}])[\p{P}\p{Z}\p{C}]")
+    testing.assertEqual(w3cregex_to_re_search("[ab-z\\I\\C\\w]"), r"[ab-z]|[^\p{L}_:]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|(?![^\x{0000}-\x{10FFFF}])[\p{P}\p{Z}\p{C}]")
+
+def _test_w3cregex_to_re_search_pos_group_with_rel_comp_abs_comp():
+    testing.assertEqual(w3cregex_to_re_search("[ab-z\\i\\C\\W]"), r"[ab-z\p{L}_:\p{P}\p{Z}\p{C}]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|[^\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search("[ab-z\\I\\C\\W]"), r"[ab-z\p{P}\p{Z}\p{C}]|[^\p{L}_:]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|[^\x{0000}-\x{10FFFF}]")
+
+def _test_w3cregex_to_re_search_comp_group_with_rel_comp():
+    testing.assertEqual(w3cregex_to_re_search("[^ab-z\\i\\C\\w]"), r"(?=[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}])(?=[^\x{0000}-\x{10FFFF}]|[\p{P}\p{Z}\p{C}])[^ab-z\p{L}_:]")
+
+def _test_w3cregex_to_re_search_comp_group_with_abs_comp_of_rel_comp():
+    testing.assertEqual(w3cregex_to_re_search("[^ab-z\\i\\C\\W]"), r"(?=[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}])(?=[\x{0000}-\x{10FFFF}])[^ab-z\p{L}_:\p{P}\p{Z}\p{C}]")
+
+def _test_w3cregex_to_re_search_group_single_specials():
+    testing.assertEqual(w3cregex_to_re_search(r"[\-]"), r"-")
+
+def _test_w3cregex_to_re_search_group_range_specials():
+    testing.assertEqual(w3cregex_to_re_search(r"[^^-a]"), r"[^^-a]")
+    testing.assertEqual(w3cregex_to_re_search(r"[+--]"), r"[+--]")
+    testing.assertEqual(w3cregex_to_re_search(r"[--0]"), r"[--0]")
+    testing.assertEqual(w3cregex_to_re_search(r"[:a]"), r"[\:a]")
+
+def _test_w3cregex_to_re_search_simple_group_order():
+    testing.assertEqual(w3cregex_to_re_search(r"[\W+--]"), r"[\p{P}\p{Z}\p{C}+--]|[^\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[--0\W]"), r"[--0\p{P}\p{Z}\p{C}]|[^\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[^\W+--]"), r"(?=[\x{0000}-\x{10FFFF}])[^\p{P}\p{Z}\p{C}+--]")
+    testing.assertEqual(w3cregex_to_re_search(r"[^--0\W]"), r"(?=[\x{0000}-\x{10FFFF}])[^--0\p{P}\p{Z}\p{C}]")
+
+def _test_w3cregex_to_re_search_group_escape_unicode_category():
+    testing.assertEqual(w3cregex_to_re_search(r"[\p{L}]"), r"\p{L}")
+    testing.assertEqual(w3cregex_to_re_search(r"[\P{L}]"), r"\P{L}")
+    testing.assertEqual(w3cregex_to_re_search(r"[\p{L}\p{No}]"), r"[\p{L}\p{No}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[\P{L}\P{No}]"), r"[\P{L}\P{No}]")
+
+def _test_w3cregex_to_re_search_group_escape_unicode_block():
+    testing.assertEqual(w3cregex_to_re_search(r"[\p{MathematicalOperators}]"), r"[\x{2200}-\x{22FF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[\P{MathematicalOperators}]"), r"[^\x{2200}-\x{22FF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[\p{MathematicalOperators}\p{MiscellaneousTechnical}]"), r"[\x{2200}-\x{22FF}\x{2300}-\x{23FF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[\P{MathematicalOperators}\P{MiscellaneousTechnical}]"), r"[^\x{2200}-\x{22FF}]|[^\x{2300}-\x{23FF}]")
