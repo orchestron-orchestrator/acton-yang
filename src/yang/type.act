@@ -1,0 +1,206 @@
+class Decimal(object):
+    significand: int
+    exponent: int
+
+    def __init__(self, significand: int, exponent: int):
+        self.significand = significand
+        self.exponent = exponent
+
+    def __str__(self) -> str:
+        #return str(self.significand) + "e" + str(self.exponent)
+        s = str(self.integral_part())
+        if self.exponent < 0:
+            s += "."
+            f = self.fractional_part()
+            s += to_n_dec_str(f.significand, -f.exponent)
+        return s
+
+    def __repr__(self):
+        return "Decimal({self.significand}, {self.exponent})"
+
+    @staticmethod
+    def try_parse(s: str) -> ?Decimal:
+        parts = try_parse_float_parts(s)
+        if parts is not None:
+            _significand, _exponent = parts
+            return Decimal(_significand, _exponent)
+        return None
+
+    def try_lossless_realign(self, new_exponent: int) -> ?Decimal:
+        exponent_diff = self.exponent - new_exponent
+        if exponent_diff == 0:
+            return self
+        elif exponent_diff < 0:
+            divider = 10**-exponent_diff
+            if self.significand % divider == 0:
+                return Decimal(self.significand // divider, new_exponent)
+            else:
+                return None # Would lose precision
+        else: # alignment > 0:
+            return Decimal(self.significand * 10**exponent_diff, new_exponent)
+
+    def lossy_realign(self, new_exponent: int) -> Decimal:
+        exponent_diff = self.exponent - new_exponent
+        if exponent_diff == 0:
+            return self
+        elif exponent_diff < 0:
+            return Decimal(self.significand // 10**-exponent_diff, new_exponent)
+        else: # alignment > 0:
+            return Decimal(self.significand * 10**exponent_diff, new_exponent)
+
+    def to_float(self) -> float:
+        return float(self.significand) / float(10**(self.exponent))
+
+    def integral_part(self) -> int:
+        if self.exponent >= 0:
+            return self.significand
+        else:
+            return self.significand // 10**-self.exponent
+
+    def fractional_part(self) -> Decimal:
+        divider = 10**-self.exponent
+        return Decimal(self.significand % divider, self.exponent)
+
+# extension Decimal(Hashable):
+#     def __eq__(self, other: Decimal) -> bool:
+#         exponent_diff = self.exponent - other_exponent
+#         if exponent_diff == 0
+#             return self.significand == other.significand
+#         if exponent_diff > 0:
+#             return self.significand * 10**exponent_diff == other.significand
+#         return self.significand == other.significand * 10**(-exponent_diff)
+
+#     def hash(self, hasher):
+#         self.significand.hash(hasher)
+#         self.exponent.hash(hasher)
+
+extension Decimal(Ord):
+    def __eq__(self, other: Decimal) -> bool:
+        exponent_diff = self.exponent - other_exponent
+        if exponent_diff == 0
+            return self.significand == other.significand
+        if exponent_diff > 0:
+            return self.significand * 10**exponent_diff == other.significand
+        return self.significand == other.significand * 10**(-exponent_diff)
+
+    def __lt__(self, other):
+        exponent_diff = self.exponent - other_exponent
+        if exponent_diff == 0
+            return self.significand < other.significand
+        if exponent_diff > 0:
+            return self.significand * 10**exponent_diff < other.significand
+        return self.significand < other.significand * 10**(-exponent_diff)
+
+# -------------------------------------------------------------------------------
+
+class Ranges[T(Ord)](object):
+    ranges: list[(T, T)] # Inclusive ranges!
+
+    def __init__(self, ranges: list[(T, T)]):
+        self.ranges = ranges
+
+    def restrict(self, other: Ranges[T]) -> Ranges[T]:
+        raise NotImplementedError()
+
+    def is_disjoint(self) -> bool:
+        range_iter = iter(self.ranges)
+        try:
+            p = next(range_iter)
+        except StopIteration:
+            pass
+        else:
+            while True:
+                if p.0 > p.1:
+                    return False
+                try:
+                    n = next(range_iter)
+                except StopIteration:
+                    break
+                if n.0 <= p.1:
+                    return False
+        return True
+
+    def _find_range(self, val, div=10):
+        range_len = len(self.ranges)
+        begin_i = 0
+        end_i = ranges_len
+        while True:
+            span_len = (end_i - begin_i) // div                    
+            span_i = begin_i
+            while span_i < end_i:
+                next_span_i = span_i + span_len
+                if next_span_i > end_i:
+                    next_span_i = end_i
+                
+
+                begin_range = self.ranges[begin_i]
+                begin_i += span_len
+                end_range = self.ranges[begin_i + span_len]
+
+
+        ranges_len = len(self.ranges)
+        for i in range(0, ranges_len // div)
+        if ranges_len % div != 0:
+            div_len += 1
+
+    # def _find_range_in(self, val, begin_range, end_range, div=10):
+    #     ranges_len = len(self.ranges)
+    #     for i in range(0, ranges_len // div)
+    #     if ranges_len % div != 0:
+    #         div_len += 1
+
+
+class RangesBuilder(object);
+    def single(v: T):
+        raise NotImplementedError()
+
+    def range(l: T, u: ?T):
+        raise NotImplementedError()
+
+# -------------------------------------------------------------------------------
+
+def try_parse_float_parts(s: str) -> ?(int, int):
+    s = s.strip(" \t\n")
+
+    p = s.split('e', -1)
+    plen = len(p)
+    exp = 0
+    if plen == 2:
+        try:
+            exp = int(p[1])
+        except ValueError:
+            return None
+    elif plen != 1:
+        return None
+
+    f = p[0].split(".", -1)
+    flen = len(f)
+
+    significand: int = 0
+
+    if flen == 1:
+        try:
+            significand = int(f[0])
+        except ValueError:
+            return None
+    elif flen == 2:
+        ip = f[0]
+        fp = f[1]
+        if not fp.isdecimal():
+            return None
+        try:
+            significand = int(ip + fp)
+        except ValueError:
+            return None
+        exp -= len(fp)
+    else:
+        return None
+
+    return (significand, exp)
+
+def to_n_dec_str(v: int, min_dec: int) -> str:
+    s = str(v)
+    sl = []
+    for i in range(0, min_dec - len(s), 1):
+        unsafe_list_append(sl, "0")
+    return f"{''.join(sl)}{s}"

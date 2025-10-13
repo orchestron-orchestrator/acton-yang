@@ -1826,6 +1826,89 @@ class DRpc(DNodeInner):
         self.exts = exts
         self.children = children
 
+class DType(DNode):
+    # name: str
+    # base: list[str]
+    # bit: list[Bit]
+    # enum: list[Enum]
+    # fraction_digits: ?int
+    # length: ?Length
+    # path: ?str
+    # pattern: list[Pattern]
+    # range_: ?Range
+    # require_instance: ?bool
+    # type_: list[Type]
+
+    def __init__(self):
+        self.parent = None
+        self.module = module
+        self.namespace = namespace
+        self.prefix = prefix
+        self.name = name
+        self.gname = "Type"
+
+    # def validate_value_or_str(self, val: value) -> bool:
+    #     if isinstance(val, str):
+    #         parsed_val = self.try_parse_str(val)
+    #         if parsed_val is not None:
+    #             return self.validate_value(parsed_val)
+    #     else:
+    #         return self.validate_value(val)
+    #     return False
+
+    def validate_value(val: value) -> bool:
+        pass
+
+    # def try_parse_str(s: str) -> ?value:
+    #     return None
+
+class DTypeBinary(DType):
+    length: Ranges[int] # ????
+
+class DTypeBits(DType):
+    pos_to_name: dict[int, str]
+    name_to_pos: dict[str, int]
+
+class DTypeBoolean(DType):
+    pass # No restrictions
+
+class DTypeDecimal64(DType):
+    fraction_digits: int
+    ranges: Ranges[Decimal64]
+
+class DTypeEmpty(DType):
+    pass # No restrictions
+
+class DTypeEnum(DType):
+    name_to_ordinal: dict[str, int]
+    ordinal_to_name: dict[int, str]
+
+class DTypeIdentityref(DType):
+    pass
+
+class DTypeInstanceIdentifier(DType):
+    require_instance: bool # default: ?
+
+class DTypeInteger(DType):
+    ranges: Ranges[int]
+
+class DTypeLeafref(DType):
+    path: str # TODO: XPath
+    require_instance: bool # default: True
+
+class DTypeString(DType):
+    length: Ranges[int] # ????
+    pattern: str # TODO: Compiled regex
+
+    # def validate_value_or_str(self, val: value) -> bool:
+    #     retrun self.validate_value(val)
+
+    # def try_parse_str(s: str) -> ?value:
+    #     return s
+
+class DTypeUnion(DType):
+    types: list[DType]
+
 # -------------------------------------------------------------------------------
 
 def split_prefix_name(name: str) -> (?str, str):
