@@ -14,7 +14,6 @@ import yang.schema
 from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 
-
 NETCONF_OPS = {"create", "delete", "remove", "replace", "merge"}
 NETCONF_NS = "urn:ietf:params:xml:ns:netconf:base:1.0"
 
@@ -98,25 +97,8 @@ def format_type(dt: yang.schema.Type) -> str:
     return dt.name
 
 
-def parse_range_constraint(range_str: str) -> list[(min_str: str, max_str: str)]:
-    intervals = []
-    parts = range_str.split("|")
-    for part in parts:
-        part = part.strip()
-        if ".." in part:
-            range_parts = part.split("..")
-            if len(range_parts) == 2:
-                min_str = range_parts[0].strip()
-                max_str = range_parts[1].strip()
-                intervals.append((min_str=min_str, max_str=max_str))
-        elif part != "":
-            # Singleton range token, e.g., "5" => [5,5]
-            intervals.append((min_str=part, max_str=part))
-    return intervals
-
-
 def validate_int_range(value: int, range_str: str, type_name: str) -> bool:
-    intervals = parse_range_constraint(range_str)
+    intervals = yang.schema.parse_range_constraint(range_str)
     numeric_value_i: int = value
     for interval in intervals:
         min_str = interval.min_str
@@ -177,7 +159,7 @@ def validate_int_range(value: int, range_str: str, type_name: str) -> bool:
 
 
 def validate_decimal_range(value: float, range_str: str) -> bool:
-    intervals = parse_range_constraint(range_str)
+    intervals = yang.schema.parse_range_constraint(range_str)
     numeric_value_f: float = value
     for interval in intervals:
         min_str = interval.min_str

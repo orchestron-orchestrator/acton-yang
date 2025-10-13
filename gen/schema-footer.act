@@ -1,3 +1,34 @@
+class ResolvedType(Type):
+    resolved_base_typedef: Typedef
+
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None):
+        Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, type_, exts, parent, mod, ns, pfx)
+        self.resolved_base_typedef = base_type
+
+    def resolve_typedef(self, context: Context, recursion_level=0, _top_name: ?str=None):
+        return self
+
+    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        new = ResolvedType(self.name,
+                   base=self.base,
+                   bit=self.bit,
+                   enum=self.enum,
+                   fraction_digits=self.fraction_digits,
+                   length=self.length,
+                   path=self.path,
+                   pattern=self.pattern,
+                   range_=self.range_,
+                   require_instance=self.require_instance,
+                   type_=self.type_,
+                   exts=self.exts,
+                   mod=new_mod if new_mod is not None else self.mod,
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx,
+                   resolved_base_typedef=self.resolved_base_type)
+        return new
+
+    def to_dnode(self) -> DType:
+        return DType.from_resolved_type(self)
 
 
 def _remap_path_prefix(path: str, old_prefix: str, new_prefix: str) -> str:
