@@ -225,6 +225,18 @@ def format_schema_path(path: list[PathElement]) -> str:
 
 
 def try_parse_value(text_value: str, schema_type: yang.schema.Type, path: list[PathElement]) -> (t: str, val: value):
+    """Parse a textual value according to the provided schema type.
+
+    Returns:
+        (t, val): A typed tuple with the concrete type name and native value
+                  (e.g. ("uint8", 42)). For unions, returns the successful
+                  member type and parsed value.
+
+    Errors:
+        Raises YangValidationError with a message including the formatted
+        schema path (from the path parameter) and a textual description of the
+        expected type (including range constraints if present).
+    """
     type_name = schema_type.name
     if type_name == "union":
         for member_type in schema_type.type_:
@@ -661,7 +673,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
 
 
 
-def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[]) -> yang.gdata.Container:
+def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
     """Generic function to convert data to gdata tree based on schema
 
     Args:
@@ -676,6 +688,10 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
                   at some inner node. For example, if root_path=["mod:c1", "c2"],
                   the function will navigate from s through c1 and c2 before starting
                   to parse the actual data.
+        spath: Accumulated schema path as list[PathElement], including list key
+               predicates when descending into list elements. This is passed to
+               YangData.take_* so that any validation errors can render full,
+               human-friendly paths (e.g., /c1/l2[k1='A']/v1).
 
     Returns:
         A yang.gdata.Container containing the parsed data tree
@@ -688,7 +704,7 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return _from_data(child, global_identity, data, loose, set_ns, path + [next], root_path)
+            return _from_data(child, global_identity, data, loose, set_ns, path + [next], root_path, spath + [PathElement(child)])
         raise ValueError("Node on path {path} is not inner")
 
     children: dict[str, yang.gdata.Node] = {}
@@ -713,13 +729,13 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
         if isinstance(child, yang.schema.DContainer):
             val = None
             if isinstance(data, xml.Node) or isinstance(data, dict):
-                val = data.take_container(child, child.name, ns, [])
+                val = data.take_container(child, child.name, ns, spath)
             if val is not None:
                 if isinstance(val, xml.Node):
-                    maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace)
+                    maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                     children[uname(child)] = maybe
                 elif isinstance(val, dict):
-                    maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace)
+                    maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                     children[uname(child)] = maybe
                 else:
                     children[uname(child)] = yang.gdata.Container({})
@@ -733,15 +749,28 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
         elif isinstance(child, yang.schema.DList):
             list_val = []
             if isinstance(data, xml.Node) or isinstance(data, dict):
-                list_val = data.take_list(child, child.name, ns, [])
+                list_val = data.take_list(child, child.name, ns, spath)
             if isinstance(list_val, list):
                 list_elements = []
                 for element_data in list_val:
                     if isinstance(element_data, xml.Node):
-                        element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False)
+                        # Extract key values for better error context
+                        key_values: dict[str, value] = {}
+                        for key_name in child.key:
+                            key_node = yang.gdata.get_xml_opt_child(element_data, key_name, None)
+                            if key_node is not None:
+                                kt = key_node.text
+                                if kt is not None:
+                                    key_values[key_name] = kt
+                        element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                         list_elements.append(element_gdata)
                     elif isinstance(element_data, dict):
-                        element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False)
+                        # Extract key values from JSON element
+                        key_values: dict[str, value] = {}
+                        for key_name in child.key:
+                            if key_name in element_data:
+                                key_values[key_name] = element_data[key_name]
+                        element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                         list_elements.append(element_gdata)
                     else:
                         raise ValueError("Unsupported type for list element: {type(element_data)}")
@@ -750,7 +779,7 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
                     children[uname(child)] = list_gdata
 
         elif isinstance(child, yang.schema.DLeafList):
-            leaflist_val = data.take_leaflist(child, child.name, ns, [])
+            leaflist_val = data.take_leaflist(child, child.name, ns, spath)
             if len(leaflist_val) > 0:
                 if child.type_.name == "identityref":
                     validated_values = []
@@ -782,7 +811,7 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
         elif isinstance(child, yang.schema.DLeaf):
             typed = None
             if isinstance(data, xml.Node) or isinstance(data, dict):
-                typed = data.take_leaf(child, child.name, ns, [])
+                typed = data.take_leaf(child, child.name, ns, spath)
             if typed is not None:
                 # identityref validation
                 if child.type_.name == "identityref":
@@ -1171,6 +1200,60 @@ def _test_root_path():
     gd_nested = from_xml(s, xml.decode(xml_in), root_path=["y1:top", "nested"])
 
     return gd_nested.prsrc()
+
+def _test_error_path_json_list_range():
+    """Error path includes list key predicate for JSON payloads"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 {
+        type uint8 { range "1..10"; }
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+    # v1 is out of range (100)
+    json_in = {"y1:c1": {"l2": [{"k1": "Key 1", "v1": "100"}]}}
+    try:
+        from_json(s, json_in)
+    except ValueError as err:
+        return str(err)
+    raise AssertionError("Expected error not raised")
+
+def _test_error_path_xml_leaf_range():
+    """Error path includes nested container for XML payloads"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container top {
+    container nested {
+      leaf value { type uint8 { range "0..5"; } }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<top xmlns="urn:example:y1">
+  <nested>
+    <value>42</value>
+  </nested>
+</top>
+</data>"""
+
+    s = yang.compile([y1])
+    try:
+        from_xml(s, xml.decode(xml_in))
+    except ValueError as err:
+        return str(err)
+    raise AssertionError("Expected error not raised")
 
 
 def _test_uint64_edge_json_ok_max_keyword():
