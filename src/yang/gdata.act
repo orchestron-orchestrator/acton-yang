@@ -177,6 +177,9 @@ def _ind(n):
     return "  " * n
 
 remove_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')]
+create_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"create"')]
+delete_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"delete"')]
+replace_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"replace"')]
 
 def either(a: ?str, b: ?str):
     if a is not None:
@@ -294,6 +297,19 @@ class Node(value):
                     ",\n".join(child_strs),
                     "{_ind(indent)}}}{args_str})"
                 ])
+        elif isinstance(self, Delete):
+            sname = "Delete"
+            if len(self.children) == 0:
+                return "{sname}({", ".join(base_args)})"
+            else:
+                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                             for nm,child in self.children.items()]
+                args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
+                return "\n".join([
+                    sname + r"({",
+                    ",\n".join(child_strs),
+                    "{_ind(indent)}}}{args_str})"
+                ])
         elif isinstance(self, List):
             keys_arg = [str(self.keys)]
             order_args = ["user_order=True"] if self.user_order else []
@@ -314,6 +330,34 @@ class Node(value):
             sname = "Container"
             presence_args = ["presence=True"] if self.presence else []
             args = presence_args + base_args
+            if len(self.children) == 0:
+                return "{sname}({", ".join(args)})"
+            else:
+                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                             for nm,child in self.children.items()]
+                args_str = ", {", ".join(args)}" if len(args) > 0 else ""
+                return "\n".join([
+                    sname + r"({",
+                    ",\n".join(child_strs),
+                    "{_ind(indent)}}}{args_str})"
+                ])
+        elif isinstance(self, Create):
+            sname = "Create"
+            args = base_args
+            if len(self.children) == 0:
+                return "{sname}({", ".join(args)})"
+            else:
+                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                             for nm,child in self.children.items()]
+                args_str = ", {", ".join(args)}" if len(args) > 0 else ""
+                return "\n".join([
+                    sname + r"({",
+                    ",\n".join(child_strs),
+                    "{_ind(indent)}}}{args_str})"
+                ])
+        elif isinstance(self, Replace):
+            sname = "Replace"
+            args = base_args
             if len(self.children) == 0:
                 return "{sname}({", ".join(args)})"
             else:
@@ -386,7 +430,36 @@ class Node(value):
                 return "\n"
             return ""
 
-        if isinstance(self, Container):
+        if isinstance(self, Create):
+            # Render as element with create op
+            child_indent = indent if name == "top" else indent + 1
+            child_xml = ""
+            for nm, child in self.children.items():
+                child_xml += child.to_xmlstr(nm, pretty, child_indent)
+            if name == "top":
+                return child_xml
+            if child_xml == "":
+                return _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=create_op, end=True) + _nl()
+            xml = _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=create_op) + _nl()
+            xml += child_xml
+            xml += _indent() + fmt_tag(name, close=True) + _nl()
+            return xml
+        elif isinstance(self, Replace):
+            child_indent = indent if name == "top" else indent + 1
+            child_xml = ""
+            for nm, child in self.children.items():
+                child_xml += child.to_xmlstr(nm, pretty, child_indent)
+            if name == "top":
+                return child_xml
+            if child_xml == "":
+                return _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=replace_op, end=True) + _nl()
+            xml = _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=replace_op) + _nl()
+            xml += child_xml
+            xml += _indent() + fmt_tag(name, close=True) + _nl()
+            return xml
+        elif isinstance(self, Delete):
+            return _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=delete_op, end=True) + _nl()
+        elif isinstance(self, Container):
             child_indent = indent if name == "top" else indent + 1
             child_cns = None if name == "top" else either(self.ns, cns)
             child_xml = ""
@@ -409,14 +482,26 @@ class Node(value):
         elif isinstance(self, List):
             xml = ""
             for elem in self.elements if self.user_order else sorted_elements(self.elements, self.keys):
-                remove = isinstance(elem, Absent)
-                xml += _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=remove_op if remove else []) + _nl()
+                # Determine NETCONF operation for list element based on node type
+                attrs = []
+                skip_nonkeys = False
+                if isinstance(elem, Absent):
+                    attrs = remove_op
+                    skip_nonkeys = True
+                elif isinstance(elem, Delete):
+                    attrs = delete_op
+                    skip_nonkeys = True
+                elif isinstance(elem, Create):
+                    attrs = create_op
+                elif isinstance(elem, Replace):
+                    attrs = replace_op
+                xml += _indent() + fmt_tag(name, nsq(either(self.ns, cns)), attrs=attrs) + _nl()
                 # Print key leafs first
                 for key_name, key_leaf in elem.key_children(self.keys).items():
                     v = yang_str(key_leaf.val)
                     xml += _indent(1) + fmt_tag(key_name, nsq(v=key_leaf.val)) + v + fmt_tag(key_name, close=True) + _nl()
                 for nm,child in elem.children.items():
-                    if nm in self.keys or remove:
+                    if nm in self.keys or skip_nonkeys:
                         continue
                     xml += child.to_xmlstr(nm, pretty, indent+1)
                 xml += _indent() + fmt_tag(name, close=True) + _nl()
@@ -455,7 +540,7 @@ class Node(value):
         raise ValueError("Cannot find leaf child in {self} with name: {name}")
 
     def get_opt_leaf(self, name) -> ?Leaf:
-        if isinstance(self, Container) or isinstance(self, Absent):
+        if isinstance(self, Container) or isinstance(self, Absent) or isinstance(self, Create) or isinstance(self, Replace) or isinstance(self, Delete):
             for nm,child in self.children.items():
                 if isinstance(child, Leaf) and nm == name:
                     return child
@@ -833,10 +918,10 @@ class Delete(Node):
 
     Unlike Absent / remove, Delete of a non-existent node is a failure.
     """
-    def __init__(self, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[str, Node]={}, ns: ?str=None, module: ?str=None):
         self.ns = ns
         self.module = module
-        self.children = {}
+        self.children = children
         self.txid = None
 
 class Create(Node):

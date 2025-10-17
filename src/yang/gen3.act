@@ -15,6 +15,9 @@ from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 
 
+NETCONF_OPS = {"create", "delete", "remove", "replace", "merge"}
+NETCONF_NS = "urn:ietf:params:xml:ns:netconf:base:1.0"
+
 # Map of gdata getter method names to actual methods
 GDATA_TAKERS = {
     # Container getters
@@ -222,6 +225,41 @@ def format_schema_path(path: list[PathElement]) -> str:
             path_str = path_str + "[" + predicates + "]"
     return path_str
 
+
+def get_netconf_operation(node: xml.Node) -> str:
+    """Extract NETCONF operation from an XML node
+    """
+    def ns_uri(prefix: ?str) -> ?str:
+        for p, uri in node.nsdefs:
+            # default namespace is stored with prefix == None
+            if (prefix is None and p is None) or (prefix is not None and p is not None and prefix == p):
+                return uri
+        return None
+
+    for attr_key, attr_val in node.attributes:
+        if attr_key == "operation":
+            # Unprefixed operation; must be in default NETCONF namespace
+            if attr_val in NETCONF_OPS and ns_uri(None) == NETCONF_NS:
+                return attr_val
+        elif attr_key.endswith(":operation"):
+            # Prefixed operation; resolve prefix and validate NETCONF namespace
+            prefix = attr_key.split(":", 1)[0]
+            if attr_val in NETCONF_OPS and ns_uri(prefix) == NETCONF_NS:
+                return attr_val
+
+    return "merge"
+
+
+def _test_get_nc_op_def():
+    xml_in = xml.decode('<cfg xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" operation="delete"/>')
+    op = get_netconf_operation(xml_in)
+    testing.assertEqual(op, "delete")
+
+
+def _test_get_nc_op_pref():
+    xml_in = xml.decode('<cfg xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace"/>')
+    op = get_netconf_operation(xml_in)
+    testing.assertEqual(op, "replace")
 
 
 def try_parse_value(text_value: str, schema_type: yang.schema.Type, path: list[PathElement]) -> (t: str, val: value):
@@ -732,8 +770,23 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
                 val = data.take_container(child, child.name, ns, spath)
             if val is not None:
                 if isinstance(val, xml.Node):
-                    maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
-                    children[uname(child)] = maybe
+                    # NETCONF operation on container
+                    cop = get_netconf_operation(val)
+                    cns = child.namespace if set_ns and child.namespace != "" else None
+                    cmod = child.module if set_ns and child.module != "" else None
+                    if cop == "remove":
+                        children[uname(child)] = yang.gdata.Absent(ns=cns, module=cmod)
+                    elif cop == "delete":
+                        children[uname(child)] = yang.gdata.Delete(ns=cns, module=cmod)
+                    elif cop == "create":
+                        inner = _from_data(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        children[uname(child)] = yang.gdata.Create(inner.children, ns=cns, module=cmod)
+                    elif cop == "replace":
+                        inner = _from_data(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        children[uname(child)] = yang.gdata.Replace(inner.children, ns=cns, module=cmod)
+                    else:
+                        maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        children[uname(child)] = maybe
                 elif isinstance(val, dict):
                     maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                     children[uname(child)] = maybe
@@ -762,8 +815,29 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
                                 kt = key_node.text
                                 if kt is not None:
                                     key_values[key_name] = kt
-                        element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
-                        list_elements.append(element_gdata)
+                        # Check NETCONF operation on the element
+                        eop = get_netconf_operation(element_data)
+                        if eop in ["remove", "delete"]:
+                                # Build element to extract proper key leaves, then create Absent/Delete with keys
+                                eg = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                                key_children = {}
+                                for key in child.key:
+                                    kc = eg.children.get(key)
+                                    if kc is not None:
+                                        key_children[key] = kc
+                                if eop == "remove":
+                                    list_elements.append(yang.gdata.Absent(key_children))
+                                else:
+                                    list_elements.append(yang.gdata.Delete(key_children))
+                        elif eop in ["create", "replace"]:
+                            eg = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                            if eop == "create":
+                                list_elements.append(yang.gdata.Create(eg.children))
+                            else:
+                                list_elements.append(yang.gdata.Replace(eg.children))
+                        else:
+                            element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                            list_elements.append(element_gdata)
                     elif isinstance(element_data, dict):
                         # Extract key values from JSON element
                         key_values: dict[str, value] = {}
@@ -811,6 +885,23 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
         elif isinstance(child, yang.schema.DLeaf):
             typed = None
             if isinstance(data, xml.Node) or isinstance(data, dict):
+                # If XML, inspect NETCONF operation first
+                if isinstance(data, xml.Node):
+                    leaf_node = yang.gdata.get_xml_opt_child(data, child.name, ns)
+                    if leaf_node is not None:
+                        lop = get_netconf_operation(leaf_node)
+                        if lop == "remove":
+                            # Represent removal of the leaf
+                            children[uname(child)] = yang.gdata.Absent()
+                            # Skip normal value parsing
+                            typed = None
+                            # Continue to next child
+                            continue
+                        elif lop == "delete":
+                            children[uname(child)] = yang.gdata.Delete()
+                            typed = None
+                            continue
+                        # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
                 typed = data.take_leaf(child, child.name, ns, spath)
             if typed is not None:
                 # identityref validation
@@ -1212,7 +1303,7 @@ def _test_error_path_json_list_range():
       key "k1";
       leaf k1 { type string; }
       leaf v1 {
-        type uint8 { range "1..10"; }
+        type uint8 { range 1..10; }
       }
     }
   }
@@ -1597,6 +1688,293 @@ def _test_json_path_nested_lists():
         }, ns='urn:example:y1', module='y1')
     })
     testing.assertEqual(gd2.prsrc(), expected2.prsrc())
+
+def _test_netconf_remove_container():
+    """NETCONF remove on a container produces Absent"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    presence "p";
+    leaf l1 { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove"/>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_remove_list_element():
+    """NETCONF remove on a list element produces Absent with key children"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove">
+    <k1>Key 1</k1>
+  </l2>
+</c1>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_remove_leaf():
+    """NETCONF remove on a leaf produces Absent"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    leaf l1 { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l1 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove"/>
+</c1>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_replace_leaf_sets_value():
+    """NETCONF replace on a leaf is treated as a normal set"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    leaf l1 { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l1 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">VAL</l1>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_remove_mixed():
+    """Mixed normal and remove elements in the same list"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  list l {
+    key "k";
+    leaf k { type string; }
+    leaf v { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<l xmlns="urn:example:y">
+  <k>A</k>
+  <v>keep</v>
+</l>
+<l xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove">
+  <k>B</k>
+</l>
+</data>
+"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_create_list_element():
+    """NETCONF create on a list element renders operation and content"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="create">
+    <k1>X</k1>
+    <v1>Y</v1>
+  </l2>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_replace_list_element():
+    """NETCONF replace on a list element renders operation and content"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">
+    <k1>Z</k1>
+    <v1>W</v1>
+  </l2>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_delete_list_element():
+    """NETCONF delete on a list element renders operation with keys only"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="delete">
+    <k1>DEL</k1>
+  </l2>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_union_int_json():
+    """Union(int8 range 1..10 | string): textual int within range resolves as int"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type int8 { range 1..10; }
+      type string;
+    }
+  }
+}"""
+    s = yang.compile([y])
+    jd = {"y:u": "7"}
+    gd = from_json(s, jd)
+    return gd.prsrc()
+
+def _test_union_str_json():
+    """Union(int8 range 1..10 | string): textual int out of range resolves as string"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type int8 { range 1..10; }
+      type string;
+    }
+  }
+}"""
+    s = yang.compile([y])
+    jd = {"y:u": "100"}
+    gd = from_json(s, jd)
+    return gd.prsrc()
+
+def _test_union_str_xml():
+    """Union(int8 range 1..10 | string): XML numeric text out of range resolves as string"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type int8 { range 1..10; }
+      type string;
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<u xmlns="urn:example:y">100</u>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_create_container():
+    """NETCONF create on a container produces Create wrapper and serializes op"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 { leaf l1 { type string; } }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="create">
+  <l1>v</l1>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_replace_container():
+    """NETCONF replace on a container produces Replace wrapper and serializes op"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 { leaf l1 { type string; } }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">
+  <l1>nv</l1>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_delete_container():
+    """NETCONF delete on a container produces Delete wrapper and serializes op"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 { leaf l1 { type string; } }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="delete"/>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
 
     # Test remove operation on nested list element
     gd3 = from_json_path(s, {}, ["y1:c1", "outer", "key1", "inner", "key2"], "remove")
