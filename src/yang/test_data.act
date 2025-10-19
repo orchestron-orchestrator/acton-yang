@@ -1,0 +1,84 @@
+import testing
+import xml
+
+import yang
+import yang.gen3
+import yang.gdata
+
+
+def _unwrap_node(n: ?yang.gdata.Node) -> yang.gdata.Node:
+    if n is not None:
+        return n
+    raise ValueError("Expected non-empty node")
+
+
+def _test_remove_list_roundtrip():
+    """Remove (Absent) on list element: A → diff → ops-XML → ops-gdata → patch(A) == B.
+
+    - Parse XML A and B into gdata using the same schema
+    - Compute diff(A,B) which produces an Absent element for the removed key
+    - Serialize diff to NETCONF op-XML and parse it back to gdata; ensure equality
+    - Apply parsed ops to A; ensure patched equals B
+    - Serialize patched to XML and parse back; ensure it equals B as well
+    """
+
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+
+    # XML A: two list elements (A, B)
+    xml_a = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2>
+    <k1>A</k1>
+    <v1>keep</v1>
+  </l2>
+  <l2>
+    <k1>B</k1>
+    <v1>gone</v1>
+  </l2>
+  </c1>
+</data>"""
+
+    # XML B: only element A remains (B is removed)
+    xml_b = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2>
+    <k1>A</k1>
+    <v1>keep</v1>
+  </l2>
+</c1>
+</data>"""
+
+    s = yang.compile([y])
+
+    gd_a = yang.gen3.from_xml(s, xml.decode(xml_a))
+    gd_b = yang.gen3.from_xml(s, xml.decode(xml_b))
+
+    # Compute diff: expect Absent list element for key B
+    d = _unwrap_node(yang.gdata.diff(gd_a, gd_b))
+
+    # Serialize diff to XML (NETCONF ops), then parse back
+    xml_ops = d.to_xmlstr(name="data")
+    gd_ops = yang.gen3.from_xml(s, xml.decode(xml_ops))
+
+    # Check idempotent roundtrip of operations, gdata -> XML -> gdata
+    testing.assertEqual(d.prsrc(deterministic=True), gd_ops.prsrc(deterministic=True))
+
+    # Verify that applying the parsed ops to A yields B
+    patched = yang.gdata.patch(gd_a, gd_ops)
+    pnode = _unwrap_node(patched)
+    testing.assertEqual(pnode.prsrc(deterministic=True), gd_b.prsrc(deterministic=True))
+
+    # Also check that XML serialization of the patched state parses back to B
+    xml_patched = pnode.to_xmlstr(name="data")
+    gd_from_xml_patched = yang.gen3.from_xml(s, xml.decode(xml_patched))
+    testing.assertEqual(gd_from_xml_patched.prsrc(deterministic=True), gd_b.prsrc(deterministic=True))
