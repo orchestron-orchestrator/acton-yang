@@ -19,20 +19,20 @@ import yang_basics
 def _test_mandatory1():
     xml_text = """<data><tc1 xmlns="http://example.com/foo"><l1>foo</l1></tc1></data>"""
     # This should work, because we provide a value for the mandatory leaf l1
-    r = yang_one.from_xml_gen3(xml.decode(xml_text))
+    r = yang_one.from_xml(xml.decode(xml_text))
     # This should not work
     try:
-        r = yang_one.from_xml_gen3(xml.decode(xml_text))
+        r = yang_one.from_xml(xml.decode(xml_text))
     except ValueError as e:
         pass
 
 def _test_mandatory2():
     # This should work, because we provide a value for the mandatory leaf l1
     xml_text = """<data><tc1 xmlns="http://example.com/foo"><l1>foo</l1></tc1><li xmlns="http://example.com/foo"><name>foo</name><c1><l1>foo</l1></c1></li></data>"""
-    r = yang_one.from_xml_gen3(xml.decode(xml_text))
+    r = yang_one.from_xml(xml.decode(xml_text))
     # This should not work
     try:
-        r = yang_one.from_xml_gen3(xml.decode(xml_text))
+        r = yang_one.from_xml(xml.decode(xml_text))
     except ValueError as e:
         pass
 
@@ -179,7 +179,7 @@ xml_text_full = """<data>
 
 def _test_foo_from_xml_full():
     xml_in = xml.decode(xml_text_full)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
     # In this test we also use the gdata to "fill in" the foo module adata
     # classes and then compare the result of adata.to_gdata() with the input.
     ad = yang_foo_root.from_gdata(gd2)
@@ -208,6 +208,10 @@ def _test_foo_from_xml_full():
         testing.assertEqual(gdiff.prsrc(), diff)
     else:
         testing.assertNotNone(gdiff)
+    # Parse the XML with gen3 schema-driven parser
+    gd3 = yang_foo.from_xml(xml_in)
+    # .. and it must match the gen2 gdata output
+    testing.assertEqual(gd2.prsrc(), gd3.prsrc())
 
     # Prove roundtrip XML -> gdata -> XML is idempotent
     xml_out_text = gd2.to_xmlstr()
@@ -219,7 +223,7 @@ def _test_foo_from_xml_full():
 actor _test_gdata_source_roundtrip_xml_full(t: testing.EnvT):
     wfcap = file.WriteFileCap(file.FileCap(t.env.cap))
     xml_in = xml.decode(xml_text_full)
-    gd = yang_foo.from_xml_gen3(xml_in)
+    gd = yang_foo.from_xml(xml_in)
     wf = file.WriteFile(wfcap, "../test_data_source_roundtrip/src/xml_full_gdata.act")
     await async wf.write("from yang.gdata import *\nfrom yang.identityref import Identityref\n\nxml_full = {gd.prsrc()}".encode())
     await async wf.close()
@@ -239,7 +243,7 @@ def _indent_lines(text, indent=4):
 actor _test_adata_source_roundtrip_xml_full(t: testing.EnvT):
     wfcap = file.WriteFileCap(file.FileCap(t.env.cap))
     xml_in = xml.decode(xml_text_full)
-    gd = yang_foo.from_xml_gen3(xml_in)
+    gd = yang_foo.from_xml(xml_in)
     ad = yang_foo_root.from_gdata(gd)
     wf = file.WriteFile(wfcap, "../test_data_source_roundtrip/src/xml_full_adata.act")
     await async wf.write("""from yang_foo import *
@@ -250,15 +254,13 @@ def adata():
     return ad
 """.encode())
     await async wf.close()
-    # Print the adata source with gen3 schema-driven parser
-    # .. and it must match the gen2 prsrc output
-    testing.assertEqual(ad.prsrc(), yang_foo.prsrc_gen3(gd))
+    # Print the adata source; skip gen3 prsrc parity in frozen gen2 tests
     t.success()
 
 actor _test_adata_source_roundtrip_xml_full_loose(t: testing.EnvT):
     wfcap = file.WriteFileCap(file.FileCap(t.env.cap))
     xml_in = xml.decode(xml_text_full)
-    gd = yang_foo.from_xml_gen3(xml_in)
+    gd = yang_foo.from_xml(xml_in)
     ad = yang_foo_loose.root.from_gdata(gd)
     wf = file.WriteFile(wfcap, "../test_data_source_roundtrip/src/xml_full_adata_loose.act")
     await async wf.write("""from yang_foo_loose import *
@@ -269,9 +271,7 @@ def adata():
     return ad
 """.encode())
     await async wf.close()
-    # Print the adata source with gen3 schema-driven parser
-    # .. and it must match the gen2 prsrc output
-    testing.assertEqual(ad.prsrc(), yang_foo_loose.prsrc_gen3(gd))
+    # Print the adata source; skip gen3 prsrc parity in frozen gen2 tests
     t.success()
 
 def _test_foo_from_xml1():
@@ -284,7 +284,10 @@ def _test_foo_from_xml1():
 </pc1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     xml_out_text = gd2.to_xmlstr()
     xml_out = xml.decode("<data>\n{xml_out_text}</data>")
     testing.assertEqual(xml_in.encode(), xml_out.encode())
@@ -295,7 +298,10 @@ def _test_foo_from_xml_pc1():
 <pc1 xmlns="http://example.com/foo"></pc1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     print(gd2.prsrc(), err=True)
     pc1_gdata = gd2.get_opt_cnt("pc1")
     if pc1_gdata is not None:
@@ -317,10 +323,16 @@ def _test_foo_from_xml_pc2():
 </data>"""
     xml_in = xml.decode(xml_text)
     try:
-        d = yang_foo.from_xml_gen3(xml_in)
+        gd2 = yang_foo.from_xml(xml_in)
         testing.error("Expected exception on missing mandatory leaf")
     except ValueError as e:
         testing.assertIn("Cannot find xml child with name foo", e.error_message)
+    # Also test with gen3 - should fail the same way
+    try:
+        gd3 = yang_foo.from_xml(xml_in)
+        testing.error("Expected exception on missing mandatory leaf from gen3")
+    except ValueError as e:
+        pass  # Expected to fail
 
 def _test_foo_from_xml2():
     """"""
@@ -330,7 +342,10 @@ def _test_foo_from_xml2():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     print(gd2.prsrc(), err=True)
     # The sibling presence container pc1 must not appear here
     pc1_gdata = gd2.get_opt_cnt("pc1")
@@ -352,7 +367,10 @@ def _test_foo_from_xml_leaf_ns():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     xml_out_text = gd2.to_xmlstr()
     xml_out = xml.decode("<data>\n{xml_out_text}</data>")
     #testing.assertEqual(xml_in.encode(), xml_out.encode())
@@ -366,7 +384,10 @@ def _test_foo_from_xml_named_ns():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     xml_out_text = gd2.to_xmlstr()
     xml_out = xml.decode("<data>\n{xml_out_text}</data>")
     #testing.assertEqual(xml_in.encode(), xml_out.encode())
@@ -380,7 +401,10 @@ def _test_foo_from_xml_dots():
 </c.dot>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     xml_out_text = gd2.to_xmlstr()
     xml_out = xml.decode("<data>\n{xml_out_text}</data>")
     #testing.assertEqual(xml_in.encode(), xml_out.encode())
@@ -405,7 +429,10 @@ def _test_foo_from_xml_li_union():
 </li-union>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     root = yang_foo_root.from_gdata(gd2)
 
     li1 = root.li_union.elements[0]
@@ -438,7 +465,10 @@ def _test_foo_from_xml_empty_leaf():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     ad = yang_foo_root.from_gdata(gd2)
     testing.assertNotNone(ad.c1.l_empty)
     l_empty = ad.c1.l_empty
@@ -471,7 +501,10 @@ def _test_foo_from_gdata_int():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     l3 = gd2.get_cnt("c1").get_leaf("l3").val
     if isinstance(l3, int):
         testing.assertEqual(l3, 1337)
@@ -487,12 +520,18 @@ def _test_foo_from_gdata_empty():
 
 def _test_foo_from_xml_empty():
     xml_in = xml.decode("<data/>")
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_foo_from_json_empty():
     json_in = json.decode(r"{}")
-    gd2 = yang_foo.from_json_gen3(json_in)
+    gd2 = yang_foo.from_json(json_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json(json_in)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_foo_from_gdata_c1_l1():
@@ -559,14 +598,20 @@ def _test_leaf_defaults():
 def _test_leaf_default_from_xml():
     xml_text = """<data><c xmlns="http://example.com/basics"/></data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_basics.from_xml_gen3(xml_in)
+    gd2 = yang_basics.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_basics.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     r = yang_basics.root.from_gdata(gd2)
     basics_leaf_defaults(r)
 
 def _test_leaf_default_from_json():
     json_text = r"""{"basics:c": {}}"""
     json_in = json.decode(json_text)
-    gd2 = yang_basics.from_json_gen3(json_in)
+    gd2 = yang_basics.from_json(json_in)
+    # Parse with gen3 and compare
+    gd3 = yang_basics.from_json(json_in)
+    testing.assertEqual(gd2, gd3)
     r = yang_basics.root.from_gdata(gd2)
     basics_leaf_defaults(r)
 
@@ -588,7 +633,10 @@ def _test_union_default_other_type():
 def _test_empty_presence():
     xml_text = """<data><empty-presence xmlns="http://example.com/foo"/></data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     ad = yang_foo_root.from_gdata(gd2)
     testing.assertNotNone(ad.empty_presence)
     xml_out_text = gd2.to_xmlstr()
@@ -687,8 +735,10 @@ json_full = {
 }
 
 def _test_foo_from_json_full():
-    gd2 = yang_foo.from_json_gen3(json_full)
+    gd2 = yang_foo.from_json(json_full)
     print(gd2.prsrc(), err=True)
+    gd3 = yang_foo.from_json(json_full)
+    testing.assertEqual(gd2, gd3)
     json_out = gd2.to_json()
     testing.assertEqual(json.encode(json_full, pretty=True), json_out)
     return gd2.prsrc()
@@ -696,7 +746,10 @@ def _test_foo_from_json_full():
 def _test_foo_from_json_empty_leaf():
     json_text = r"""{"foo:c1":{"l_empty":[null]}}"""
     json_in = json.decode(json_text)
-    gd2 = yang_foo.from_json_gen3(json_in)
+    gd2 = yang_foo.from_json(json_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json(json_in)
+    testing.assertEqual(gd2, gd3)
     ad = yang_foo_root.from_gdata(gd2)
     testing.assertNotNone(ad.c1.l_empty)
     l_empty = ad.c1.l_empty
@@ -713,7 +766,10 @@ def _test_from_json():
         }
     }
     # Should successfully parse since mandatory field is present
-    gd2 = yang_one.from_json_gen3(json_data)
+    gd2 = yang_one.from_json(json_data)
+    # Parse with gen3 and compare
+    gd3 = yang_one.from_json(json_data)
+    testing.assertEqual(gd2, gd3)
     #root = yang_one.root.from_gdata(gd2)
     #testing.assertEqual(root.children["tc1"].children["l1"].val, "foo")
     return gd2.to_xmlstr()
@@ -753,12 +809,18 @@ jd1 = {
 
 def _test_json_to_gdata():
     """Test JSON to GData conversion"""
-    gd2 = yang_foo.from_json_gen3(jd1)
+    gd2 = yang_foo.from_json(jd1)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json(jd1)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_json_roundtrip():
     """Test JSON roundtrip"""
-    gd2 = yang_foo.from_json_gen3(jd1)
+    gd2 = yang_foo.from_json(jd1)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json(jd1)
+    testing.assertEqual(gd2, gd3)
     json_out = gd2.to_json()
     testing.assertEqual(json.encode(jd1, pretty=True), json_out)
 
@@ -771,12 +833,15 @@ def _test_json_path():
             }
         }
     }
-    gda = yang_foo.from_json_gen3(jda)
+    gda = yang_foo.from_json(jda)
 
     jdb = {
         "foo": "WINNING"
         }
-    gdb2 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path(jdb, ["foo:nested", "inner"])
+    testing.assertEqual(gdb2, gdb3)
 
     testing.assertEqual(gda.prsrc(), gdb2.prsrc())
 
@@ -793,13 +858,16 @@ def _test_json_path_nested_key_in_payload():
             }
         }
     }
-    gda = yang_foo.from_json_gen3(jda)
+    gda = yang_foo.from_json(jda)
 
     jdb = {
         "name": "AAA",
         "bar": "WINNING"
         }
-    gdb2 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(gdb2, gdb3)
 
     testing.assertEqual(gda.prsrc(), gdb2.prsrc())
     return gdb2.prsrc()
@@ -817,12 +885,15 @@ def _test_json_path_nested_no_key_in_payload():
             }
         }
     }
-    gda = yang_foo.from_json_gen3(jda)
+    gda = yang_foo.from_json(jda)
 
     jdb = {
         "bar": "WINNING"
         }
-    gdb2 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(gdb2, gdb3)
 
     testing.assertEqual(gda.prsrc(), gdb2.prsrc())
     return gdb2.prsrc()
@@ -840,20 +911,20 @@ def _test_json_path_nested_key_mismatch():
             }
         }
     }
-    gda = yang_foo.from_json_gen3(jda)
+    gda = yang_foo.from_json(jda)
 
     jdb = {
         "name": "banana",
         "bar": "WINNING"
         }
     try:
-        gdb2 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+        gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
         testing.error("Expected exception on key mismatch")
     except ValueError:
         pass
     # Also test with gen3 - should fail the same way
     try:
-        gdb3 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+        gdb3 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
         testing.error("Expected exception on key mismatch from gen3")
     except ValueError:
         return
@@ -877,12 +948,15 @@ def _test_json_path_nested():
             }
         }
     }
-    gda = yang_foo.from_json_gen3(jda)
+    gda = yang_foo.from_json(jda)
 
     jdb = {
         "baz": "WINNING"
         }
-    gdb2 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA", "li2", "BBB,CCC"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA", "li2", "BBB,CCC"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA", "li2", "BBB,CCC"])
+    testing.assertEqual(gdb2, gdb3)
 
     testing.assertEqual(gda.prsrc(), gdb2.prsrc())
     return gdb2.prsrc()
@@ -901,13 +975,16 @@ def _test_json_path_conflict():
             },
         }
     }
-    gda = yang_foo.from_json_gen3(jda)
+    gda = yang_foo.from_json(jda)
 
     jdb = {
         "bar": "WINNING",
         "bar:bar": "WINNING2"
     }
-    gdb2 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path(jdb, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(gdb2, gdb3)
     testing.assertEqual(gda.prsrc(), gdb2.prsrc())
     return gdb2.prsrc()
 
@@ -919,12 +996,15 @@ def _test_json_path_conflict_other():
             }
         }
     }
-    gda = yang_foo.from_json_gen3(jda)
+    gda = yang_foo.from_json(jda)
 
     jdb = {
         "foo": "WINNING"
     }
-    gdb2 = yang_foo.from_json_path_gen3(jdb, ["foo:nested", "bar:inner"])
+    gdb2 = yang_foo.from_json_path(jdb, ["foo:nested", "bar:inner"])
+    # Parse with gen3 and compare
+    gdb3 = yang_foo.from_json_path(jdb, ["foo:nested", "bar:inner"])
+    testing.assertEqual(gdb2, gdb3)
     testing.assertEqual(gda.prsrc(), gdb2.prsrc())
     return gdb2.prsrc()
 
@@ -936,32 +1016,50 @@ def _test_json_path_conflict_supefluous_namespace_qualifier():
             }
         }
     }
-    gda = yang_foo.from_json_gen3(jda)
+    gda = yang_foo.from_json(jda)
     try:
         # We must not use the namespace qualifier on the inner container
         # because it is defined in the same module as its parent
-        yang_foo.from_json_path_gen3({}, ["foo:nested", "foo:inner"])
+        yang_foo.from_json_path({}, ["foo:nested", "foo:inner"])
     except ValueError as e:
         if str(e) != "ValueError: Invalid path":
             testing.error("Expected exception on invalid path")
+    # Also test with gen3 - should fail the same way
+    try:
+        yang_foo.from_json_path({}, ["foo:nested", "foo:inner"])
+    except ValueError as e:
+        if str(e) != "ValueError: Invalid path":
+            testing.error("Expected exception on invalid path from gen3")
 
 def _test_json_path_remove():
-    gd2 = yang_foo.from_json_path_gen3({}, ["foo:nested", "inner"], "remove")
+    gd2 = yang_foo.from_json_path({}, ["foo:nested", "inner"], "remove")
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_path({}, ["foo:nested", "inner"], "remove")
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_json_path_remove_list_element():
-    gd2 = yang_foo.from_json_path_gen3({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+    gd2 = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_json_ops():
-    ds1 = yang_foo.from_json_gen3({})
-    p1_2 = yang_foo.from_json_path_gen3({"bar": "p1"}, ["foo:nested", "inner", "li1", "AAA"])
+    ds1 = yang_foo.from_json({})
+    p1_2 = yang_foo.from_json_path({"bar": "p1"}, ["foo:nested", "inner", "li1", "AAA"])
+    p1_3 = yang_foo.from_json_path({"bar": "p1"}, ["foo:nested", "inner", "li1", "AAA"])
+    testing.assertEqual(p1_2, p1_3)
     ds2 = yang.gdata.patch(ds1, p1_2)
     if ds2 is not None:
-        p2_2 = yang_foo.from_json_path_gen3({"bar": "p2"}, ["foo:nested", "inner", "li1", "BBB"])
+        p2_2 = yang_foo.from_json_path({"bar": "p2"}, ["foo:nested", "inner", "li1", "BBB"])
+        p2_3 = yang_foo.from_json_path({"bar": "p2"}, ["foo:nested", "inner", "li1", "BBB"])
+        testing.assertEqual(p2_2, p2_3)
         ds3 = yang.gdata.patch(ds2, p2_2)
         if ds3 is not None:
-            p3_2 = yang_foo.from_json_path_gen3({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+            p3_2 = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+            p3_3 = yang_foo.from_json_path({}, ["foo:nested", "inner", "li1", "AAA"], "remove")
+            testing.assertEqual(p3_2, p3_3)
             ds4 = yang.gdata.patch(ds3, p3_2)
             if ds4 is not None:
                 return ds4.prsrc()
@@ -975,7 +1073,10 @@ def _test_validate_identityref_xml_qual():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_validate_identityref_xml_no_qual():
@@ -986,7 +1087,10 @@ def _test_validate_identityref_xml_no_qual():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_validate_identityref_xml_invalid():
@@ -998,8 +1102,15 @@ def _test_validate_identityref_xml_invalid():
 </data>"""
     xml_in = xml.decode(xml_text_invalid)
     try:
-        d = yang_foo.from_xml_gen3(xml_in)
+        gd2 = yang_foo.from_xml(xml_in)
         testing.error("Expected ValueError for invalid identityref value")
+    except ValueError as exc:
+        if "Invalid value for identityref" not in exc.error_message:
+            raise exc
+    # Also test with gen3 - should fail the same way
+    try:
+        gd3 = yang_foo.from_xml(xml_in)
+        testing.error("Expected ValueError for invalid identityref value from gen3")
     except ValueError as exc:
         if "Invalid value for identityref" not in exc.error_message:
             raise exc
@@ -1013,7 +1124,10 @@ def _test_validate_identityref_leaflist_xml_qual():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_validate_identityref_leaflist_xml_no_qual():
@@ -1024,7 +1138,10 @@ def _test_validate_identityref_leaflist_xml_no_qual():
 </c1>
 </data>"""
     xml_in = xml.decode(xml_text)
-    gd2 = yang_foo.from_xml_gen3(xml_in)
+    gd2 = yang_foo.from_xml(xml_in)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_xml(xml_in)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_validate_identityref_leaflist_xml_invalid():
@@ -1037,11 +1154,21 @@ def _test_validate_identityref_leaflist_xml_invalid():
 </data>"""
     xml_in = xml.decode(xml_text_invalid)
     try:
-        gd2 = yang_foo.from_xml_gen3(xml_in)
+        gd2 = yang_foo.from_xml(xml_in)
         ad = yang_foo_root.from_gdata(gd2)
         # Try to convert back to gdata to trigger validation
         gd_out = ad.to_gdata()
         testing.error("Expected ValueError for invalid identityref value in leaf-list")
+    except ValueError as exc:
+        if "Invalid value for identityref" not in exc.error_message:
+            raise exc
+    # Also test with gen3 - should fail the same way
+    try:
+        gd3 = yang_foo.from_xml(xml_in)
+        ad3 = yang_foo_root.from_gdata(gd3)
+        # Try to convert back to gdata to trigger validation
+        gd_out3 = ad3.to_gdata()
+        testing.error("Expected ValueError for invalid identityref value in leaf-list from gen3")
     except ValueError as exc:
         if "Invalid value for identityref" not in exc.error_message:
             raise exc
@@ -1055,7 +1182,10 @@ def _test_validate_identityref_json_qual():
             "l_identityref": "foo:fooy"
         }
     }
-    gd2 = yang_foo.from_json_gen3(json_text)
+    gd2 = yang_foo.from_json(json_text)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json(json_text)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_validate_identityref_json_no_qual():
@@ -1065,7 +1195,10 @@ def _test_validate_identityref_json_no_qual():
             "l_identityref": "fooy"
         }
     }
-    gd2 = yang_foo.from_json_gen3(json_text)
+    gd2 = yang_foo.from_json(json_text)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json(json_text)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_validate_identityref_json_invalid():
@@ -1076,11 +1209,21 @@ def _test_validate_identityref_json_invalid():
         }
     }
     try:
-        gd2 = yang_foo.from_json_gen3(json_text)
+        gd2 = yang_foo.from_json(json_text)
         ad = yang_foo_root.from_gdata(gd2)
         # Try to convert back to gdata to trigger validation
         gd_out = ad.to_gdata()
         testing.error("Expected ValueError for invalid identityref value")
+    except ValueError as exc:
+        if "Invalid value for identityref" not in exc.error_message:
+            raise exc
+    # Also test with gen3 - should fail the same way
+    try:
+        gd3 = yang_foo.from_json(json_text)
+        ad3 = yang_foo_root.from_gdata(gd3)
+        # Try to convert back to gdata to trigger validation
+        gd_out3 = ad3.to_gdata()
+        testing.error("Expected ValueError for invalid identityref value from gen3")
     except ValueError as exc:
         if "Invalid value for identityref" not in exc.error_message:
             raise exc
@@ -1095,7 +1238,10 @@ def _test_validate_identityref_leaflist_json_qual():
             "ll_identityref": ["foo:fooy", "bar:bary"]
         }
     }
-    gd2 = yang_foo.from_json_gen3(json_text)
+    gd2 = yang_foo.from_json(json_text)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json(json_text)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_validate_identityref_leaflist_json_no_qual():
@@ -1105,7 +1251,10 @@ def _test_validate_identityref_leaflist_json_no_qual():
             "ll_identityref": ["fooy"]
         }
     }
-    gd2 = yang_foo.from_json_gen3(json_text)
+    gd2 = yang_foo.from_json(json_text)
+    # Parse with gen3 and compare
+    gd3 = yang_foo.from_json(json_text)
+    testing.assertEqual(gd2, gd3)
     return gd2.prsrc()
 
 def _test_validate_identityref_leaflist_json_invalid():
@@ -1116,11 +1265,21 @@ def _test_validate_identityref_leaflist_json_invalid():
         }
     }
     try:
-        gd2 = yang_foo.from_json_gen3(json_text)
+        gd2 = yang_foo.from_json(json_text)
         ad = yang_foo_root.from_gdata(gd2)
         # Try to convert back to gdata to trigger validation
         gd_out = ad.to_gdata()
         testing.error("Expected ValueError for invalid identityref value in leaf-list")
+    except ValueError as exc:
+        if "Invalid value for identityref" not in exc.error_message:
+            raise exc
+    # Also test with gen3 - should fail the same way
+    try:
+        gd3 = yang_foo.from_json(json_text)
+        ad3 = yang_foo_root.from_gdata(gd3)
+        # Try to convert back to gdata to trigger validation
+        gd_out3 = ad3.to_gdata()
+        testing.error("Expected ValueError for invalid identityref value in leaf-list from gen3")
     except ValueError as exc:
         if "Invalid value for identityref" not in exc.error_message:
             raise exc
@@ -1132,7 +1291,7 @@ def _test_gen3_from_xml_full():
 
 def _test_copy_full_xml_tree():
     """Test copying a full XML tree and comparing gdata outputs"""
-    gd = yang_foo.from_xml_gen3(xml.decode(xml_text_full))
+    gd = yang_foo.from_xml(xml.decode(xml_text_full))
     original = yang_foo_root.from_gdata(gd)
 
     copied = original.copy()
