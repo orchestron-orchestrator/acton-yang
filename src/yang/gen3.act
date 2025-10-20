@@ -283,7 +283,7 @@ def try_parse_value(text_value: str, schema_type: yang.schema.Type, path: list[P
             except YangValidationError:
                 continue
         raise YangValidationError(path, schema_type, text_value)
-    if type_name == "string":
+    elif type_name == "string":
         return (t=type_name, val=text_value)
     elif type_name == "int8" or type_name == "int16" or type_name == "int32" or type_name == "int64":
         try:
@@ -323,6 +323,16 @@ def try_parse_value(text_value: str, schema_type: yang.schema.Type, path: list[P
         elif text_value == "false":
             return (t=type_name, val=False)
         else:
+            raise YangValidationError(path, schema_type, text_value)
+    elif type_name == "enumeration":
+        for e in schema_type.enum:
+            if text_value == e.name:
+                return (t=type_name, val=text_value)
+        raise YangValidationError(path, schema_type, text_value)
+    elif type_name == "binary":
+        try:
+            return (t=type_name, val=base64.decode(text_value.encode()))
+        except Exception:
             raise YangValidationError(path, schema_type, text_value)
     elif type_name == "empty":
         return (t=type_name, val=True)
@@ -1925,6 +1935,43 @@ def _test_union_str_xml():
 </data>"""
     s = yang.compile([y])
     gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_union_binary_xml():
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type enumeration { enum "unlimited"; }
+      type binary;
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<u xmlns="urn:example:y">aGk=</u>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    print(gd.get_bytes('u'))
+    testing.assertEqual(gd.get_bytes('u'), "hi".encode())
+    return gd.prsrc()
+
+def _test_union_binary_json():
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type enumeration { enum "unlimited"; }
+      type binary;
+    }
+  }
+}"""
+    s = yang.compile([y])
+    jd = {"y:u": "aGk="}
+    gd = from_json(s, jd)
+    testing.assertEqual(gd.get_bytes('u'), "hi".encode())
     return gd.prsrc()
 
 def _test_netconf_create_container():
