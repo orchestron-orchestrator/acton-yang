@@ -631,7 +631,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
             # Base case: no more path elements, process the data
             if op == "merge":
                 # TODO: set_ns??
-                return _from_data(s, global_identity, data, loose=loose, set_ns=set_ns)
+                return from_data(s, global_identity, data, loose=loose, set_ns=set_ns)
             elif op == "remove":
                 return yang.gdata.Absent()
             raise ValueError(f"Invalid operation: {op}")
@@ -671,7 +671,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 else:
                     if str(data_with_keys[key]) != keys.pop(0):
                         raise ValueError("Key value mismatch between path and payload")
-            element_gdata = _from_data(s, global_identity, data_with_keys, loose, set_ns=False)
+            element_gdata = from_data(s, global_identity, data_with_keys, loose, set_ns=False)
             elements = []
             if op == "merge":
                 elements.append(element_gdata)
@@ -721,7 +721,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
 
 
 
-def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
+def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
     """Generic function to convert data to gdata tree based on schema
 
     Args:
@@ -752,7 +752,7 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return _from_data(child, global_identity, data, loose, set_ns, path + [next], root_path, spath + [PathElement(child)])
+            return from_data(child, global_identity, data, loose, set_ns, path + [next], root_path, spath + [PathElement(child)])
         raise ValueError("Node on path {path} is not inner")
 
     children: dict[str, yang.gdata.Node] = {}
@@ -775,9 +775,7 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
             mod = child.module
 
         if isinstance(child, yang.schema.DContainer):
-            val = None
-            if isinstance(data, xml.Node) or isinstance(data, dict):
-                val = data.take_container(child, child.name, ns, spath)
+            val = data.take_container(child, child.name, ns, spath)
             if val is not None:
                 if isinstance(val, xml.Node):
                     # NETCONF operation on container
@@ -789,16 +787,16 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
                     elif cop == "delete":
                         children[uname(child)] = yang.gdata.Delete(ns=cns, module=cmod)
                     elif cop == "create":
-                        inner = _from_data(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        inner = from_data(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                         children[uname(child)] = yang.gdata.Create(inner.children, ns=cns, module=cmod)
                     elif cop == "replace":
-                        inner = _from_data(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        inner = from_data(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                         children[uname(child)] = yang.gdata.Replace(inner.children, ns=cns, module=cmod)
                     else:
-                        maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        maybe = from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                         children[uname(child)] = maybe
                 elif isinstance(val, dict):
-                    maybe = _from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                    maybe = from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                     children[uname(child)] = maybe
                 else:
                     children[uname(child)] = yang.gdata.Container({})
@@ -810,57 +808,54 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
                         raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find xml child with name {child.name}")
 
         elif isinstance(child, yang.schema.DList):
-            list_val = []
-            if isinstance(data, xml.Node) or isinstance(data, dict):
-                list_val = data.take_list(child, child.name, ns, spath)
-            if isinstance(list_val, list):
-                list_elements = []
-                for element_data in list_val:
-                    if isinstance(element_data, xml.Node):
-                        # Extract key values for better error context
-                        key_values: dict[str, value] = {}
-                        for key_name in child.key:
-                            key_node = yang.gdata.get_xml_opt_child(element_data, key_name, None)
-                            if key_node is not None:
-                                kt = key_node.text
-                                if kt is not None:
-                                    key_values[key_name] = kt
-                        # Check NETCONF operation on the element
-                        eop = get_netconf_operation(element_data)
-                        if eop in ["remove", "delete"]:
-                                # Build element to extract proper key leaves, then create Absent/Delete with keys
-                                eg = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
-                                key_children = {}
-                                for key in child.key:
-                                    kc = eg.children.get(key)
-                                    if kc is not None:
-                                        key_children[key] = kc
-                                if eop == "remove":
-                                    list_elements.append(yang.gdata.Absent(key_children))
-                                else:
-                                    list_elements.append(yang.gdata.Delete(key_children))
-                        elif eop in ["create", "replace"]:
-                            eg = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
-                            if eop == "create":
-                                list_elements.append(yang.gdata.Create(eg.children))
+            list_val = data.take_list(child, child.name, ns, spath)
+            list_elements = []
+            for element_data in list_val:
+                if isinstance(element_data, xml.Node):
+                    # Extract key values for better error context
+                    key_values: dict[str, value] = {}
+                    for key_name in child.key:
+                        key_node = yang.gdata.get_xml_opt_child(element_data, key_name, None)
+                        if key_node is not None:
+                            kt = key_node.text
+                            if kt is not None:
+                                key_values[key_name] = kt
+                    # Check NETCONF operation on the element
+                    eop = get_netconf_operation(element_data)
+                    if eop in ["remove", "delete"]:
+                            # Build element to extract proper key leaves, then create Absent/Delete with keys
+                            eg = from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                            key_children = {}
+                            for key in child.key:
+                                kc = eg.children.get(key)
+                                if kc is not None:
+                                    key_children[key] = kc
+                            if eop == "remove":
+                                list_elements.append(yang.gdata.Absent(key_children))
                             else:
-                                list_elements.append(yang.gdata.Replace(eg.children))
+                                list_elements.append(yang.gdata.Delete(key_children))
+                    elif eop in ["create", "replace"]:
+                        eg = from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                        if eop == "create":
+                            list_elements.append(yang.gdata.Create(eg.children))
                         else:
-                            element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
-                            list_elements.append(element_gdata)
-                    elif isinstance(element_data, dict):
-                        # Extract key values from JSON element
-                        key_values: dict[str, value] = {}
-                        for key_name in child.key:
-                            if key_name in element_data:
-                                key_values[key_name] = element_data[key_name]
-                        element_gdata = _from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
-                        list_elements.append(element_gdata)
+                            list_elements.append(yang.gdata.Replace(eg.children))
                     else:
-                        raise ValueError("Unsupported type for list element: {type(element_data)}")
-                if list_elements:
-                    list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
-                    children[uname(child)] = list_gdata
+                        element_gdata = from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                        list_elements.append(element_gdata)
+                elif isinstance(element_data, dict):
+                    # Extract key values from JSON element
+                    key_values: dict[str, value] = {}
+                    for key_name in child.key:
+                        if key_name in element_data:
+                            key_values[key_name] = element_data[key_name]
+                    element_gdata = from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                    list_elements.append(element_gdata)
+                else:
+                    raise ValueError("Unsupported type for list element: {type(element_data)}")
+            if list_elements:
+                list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+                children[uname(child)] = list_gdata
 
         elif isinstance(child, yang.schema.DLeafList):
             leaflist_val = data.take_leaflist(child, child.name, ns, spath)
@@ -894,25 +889,24 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
 
         elif isinstance(child, yang.schema.DLeaf):
             typed = None
-            if isinstance(data, xml.Node) or isinstance(data, dict):
-                # If XML, inspect NETCONF operation first
-                if isinstance(data, xml.Node):
-                    leaf_node = yang.gdata.get_xml_opt_child(data, child.name, ns)
-                    if leaf_node is not None:
-                        lop = get_netconf_operation(leaf_node)
-                        if lop == "remove":
-                            # Represent removal of the leaf
-                            children[uname(child)] = yang.gdata.Absent()
-                            # Skip normal value parsing
-                            typed = None
-                            # Continue to next child
-                            continue
-                        elif lop == "delete":
-                            children[uname(child)] = yang.gdata.Delete()
-                            typed = None
-                            continue
-                        # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
-                typed = data.take_leaf(child, child.name, ns, spath)
+            # If XML, inspect NETCONF operation first
+            if isinstance(data, xml.Node):
+                leaf_node = yang.gdata.get_xml_opt_child(data, child.name, ns)
+                if leaf_node is not None:
+                    lop = get_netconf_operation(leaf_node)
+                    if lop == "remove":
+                        # Represent removal of the leaf
+                        children[uname(child)] = yang.gdata.Absent()
+                        # Skip normal value parsing
+                        typed = None
+                        # Continue to next child
+                        continue
+                    elif lop == "delete":
+                        children[uname(child)] = yang.gdata.Delete()
+                        typed = None
+                        continue
+                    # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
+            typed = data.take_leaf(child, child.name, ns, spath)
             if typed is not None:
                 # identityref validation
                 if child.type_.name == "identityref":
@@ -968,12 +962,12 @@ def _from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yan
 
 def from_xml(root: yang.schema.DRoot, node: xml.Node, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
     """Convert XML node to gdata tree based on schema"""
-    return _from_data(root, root.identities, node, loose, root_path=root_path)
+    return from_data(root, root.identities, node, loose, root_path=root_path)
 
 
 def from_json(root: yang.schema.DRoot, node: dict[str, ?value], loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
     """Convert JSON node to gdata tree based on schema"""
-    return _from_data(root, root.identities, node, loose, root_path=root_path)
+    return from_data(root, root.identities, node, loose, root_path=root_path)
 
 
 def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
