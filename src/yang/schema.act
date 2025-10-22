@@ -155,18 +155,6 @@ class Statement(object):
         self.prefix = prefix
         self.substatements = []
 
-    def get_subarg(self, kw: str) -> ?str:
-        for substatement in self.substatements:
-            if substatement.kw == kw:
-                return substatement.arg
-
-    def get_subarg_bool(self, kw: str) -> ?bool:
-        for substatement in self.substatements:
-            if substatement.kw == kw:
-                arg = substatement.arg
-                if arg is not None:
-                    return bool(arg)
-
     def pryang(self, indent=0):
         """Print YANG source code for this statement and its substatements
         """
@@ -206,6 +194,22 @@ class Statement(object):
             res += "]"
         res += ")\n"
         return res
+
+    def to_dict(self) -> dict[str, ?value]:
+        subs = [ss.to_dict() for ss in self.substatements]
+        return {"kw": self.kw, "arg": self.arg, "prefix": self.prefix, "substatements": subs}
+
+    @staticmethod
+    def from_dict(d: dict[str, ?value]):
+        def maybe_str(k):
+            v = d[k]
+            if isinstance(v, str):
+                return v
+        s = Statement(str(d["kw"]), maybe_str("arg"), maybe_str("prefix"))
+        substatements = d.get("substatements")
+        if isinstance(substatements, list):
+            s.substatements = [Statement.from_dict(ss) for ss in substatements]
+        return s
 
 
 # YANG schema for data / the derived schema
