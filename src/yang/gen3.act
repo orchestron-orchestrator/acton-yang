@@ -805,7 +805,7 @@ def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang
                 # mandatory content, then raise an error in strict mode.
                 if not loose and isinstance(child, yang.schema.DContainer) and not child.presence:
                     if has_mandatory_content(child):
-                        raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find xml child with name {child.name}")
+                        raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find child node with name {child.name}")
 
         elif isinstance(child, yang.schema.DList):
             list_val = data.take_list(child, child.name, ns, spath)
@@ -936,8 +936,7 @@ def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang
             else:
                 # Missing leaf value
                 if not loose and child.mandatory:
-                    # Match legacy error format expected by tests
-                    raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find xml child with name {child.name}")
+                    raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find child node with name {child.name}")
         else:
             raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
 
@@ -1201,7 +1200,7 @@ def _test_mandatory_leaf():
     try:
         from_xml(s, xml.decode('<data><c1 xmlns="urn:example:y1"/></data>'))
     except ValueError as err:
-        if err.error_message != "Error reading /c1/l1: Cannot find xml child with name l1":
+        if err.error_message != "Error reading /c1/l1: Cannot find child node with name l1":
             testing.error("Unexpected error: {err}")
 
 
