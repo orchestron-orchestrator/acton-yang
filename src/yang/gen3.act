@@ -771,7 +771,7 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                 # mandatory content, then raise an error in strict mode.
                 if not loose and isinstance(child, yang.schema.DContainer) and not child.presence:
                     if has_mandatory_content(child):
-                        raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
+                        raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find child node with name {child.name}")
 
         elif isinstance(child, yang.schema.DList):
             list_val = data.take_list(child, child.name, s.namespace != child.namespace, is_unique(child), spath)
@@ -850,7 +850,7 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                     children[uname(child)] = yang.gdata.Leaf(av, ns=ns, module=mod)
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf value
-                raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
+                raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find child node with name {child.name}")
         else:
             raise ValueError(f"Unknown schema node type at {format_schema_path(path_with_child())}: {child}")
 
@@ -1117,7 +1117,7 @@ def _test_mandatory_leaf():
     try:
         from_data(s, xml.decode('<data><c1 xmlns="urn:example:y1"/></data>'))
     except ValueError as err:
-        if err.error_message != "Error reading /c1/l1: Cannot find xml child with name l1":
+        if err.error_message != "Error reading /c1/l1: Cannot find child node with name l1":
             testing.error("Unexpected error: {err}")
 
 
