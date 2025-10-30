@@ -408,9 +408,7 @@ class Node(value):
             return child_dict
         raise ValueError("Unsupported node type in to_dict: {type(self)}")
 
-    def to_xmlstr(self, name="top", pretty=True, indent=0) -> str:
-        # TODO: uh, do not use the name "top" for the root node, since it can
-        # conflict with the name of a child node actually named "top"
+    def to_xmlstr(self, name="", pretty=True, indent=0) -> str:
         def _indent(extra=0):
             if pretty:
                 return "  " * (indent+extra)
@@ -423,11 +421,11 @@ class Node(value):
 
         if isinstance(self, Create):
             # Render as element with create op
-            child_indent = indent if name == "top" else indent + 1
+            child_indent = indent if name == "" else indent + 1
             child_xml = ""
             for nm, child in self.children.items():
                 child_xml += child.to_xmlstr(nm, pretty, child_indent)
-            if name == "top":
+            if name == "":
                 return child_xml
             if child_xml == "":
                 return _indent() + fmt_tag(name, nsq(self.ns), attrs=create_op, end=True) + _nl()
@@ -436,11 +434,11 @@ class Node(value):
             xml += _indent() + fmt_tag(name, close=True) + _nl()
             return xml
         elif isinstance(self, Replace):
-            child_indent = indent if name == "top" else indent + 1
+            child_indent = indent if name == "" else indent + 1
             child_xml = ""
             for nm, child in self.children.items():
                 child_xml += child.to_xmlstr(nm, pretty, child_indent)
-            if name == "top":
+            if name == "":
                 return child_xml
             if child_xml == "":
                 return _indent() + fmt_tag(name, nsq(self.ns), attrs=replace_op, end=True) + _nl()
@@ -451,11 +449,11 @@ class Node(value):
         elif isinstance(self, Delete):
             return _indent() + fmt_tag(name, nsq(self.ns), attrs=delete_op, end=True) + _nl()
         elif isinstance(self, Container):
-            child_indent = indent if name == "top" else indent + 1
+            child_indent = indent if name == "" else indent + 1
             child_xml = ""
             for nm, child in self.children.items():
                 child_xml += child.to_xmlstr(nm, pretty, child_indent)
-            if name == "top":
+            if name == "":
                 return child_xml
 
             if child_xml == "":
