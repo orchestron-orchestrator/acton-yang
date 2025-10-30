@@ -213,16 +213,8 @@ def format_schema_path(path: list[PathElement]) -> str:
         path_str = path_str + "/" + elem.node.name
         keys_dict = elem.keys
         if keys_dict is not None and len(keys_dict) > 0:
-            predicates = ""
-            first = True
-            for key_name in keys_dict:
-                key_val = keys_dict[key_name]
-                key_val_str = str(key_val).replace("'", "\\'")
-                if not first:
-                    predicates = predicates + ","
-                predicates = predicates + key_name + "='" + key_val_str + "'"
-                first = False
-            path_str = path_str + "[" + predicates + "]"
+            predicates = ["{k}={repr(v)}" for k, v in keys_dict.items()]
+            path_str = path_str + "[" + ",".join(predicates) + "]"
     return path_str
 
 
