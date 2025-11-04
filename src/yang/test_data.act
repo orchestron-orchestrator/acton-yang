@@ -67,8 +67,12 @@ def _test_remove_list_roundtrip():
     d = _unwrap_node(yang.gdata.diff(gd_a, gd_b))
 
     # Serialize diff to XML (NETCONF ops), then parse back
-    xml_ops = d.to_xmlstr(name="data")
-    gd_ops = yang.gen3.from_data(s, xml.decode(xml_ops))
+    # We could do d.to_xml() -> list[xml.Node] here and then convert that to
+    # gdata, but by encoding to XML string and then decoding to xml.Node again
+    # we also exercise the NETCONF ops attribute encoding/decoding, so let's
+    # keep it like that ...
+    xml_ops = d.to_xmlstr()
+    gd_ops = yang.gen3.from_data(s, xml.decode("<data>{xml_ops}</data>"))
 
     # Check idempotent roundtrip of operations, gdata -> XML -> gdata
     testing.assertEqual(d.prsrc(deterministic=True), gd_ops.prsrc(deterministic=True))
@@ -79,6 +83,6 @@ def _test_remove_list_roundtrip():
     testing.assertEqual(pnode.prsrc(deterministic=True), gd_b.prsrc(deterministic=True))
 
     # Also check that XML serialization of the patched state parses back to B
-    xml_patched = pnode.to_xmlstr(name="data")
-    gd_from_xml_patched = yang.gen3.from_data(s, xml.decode(xml_patched))
+    xml_patched = pnode.to_xmlstr()
+    gd_from_xml_patched = yang.gen3.from_data(s, xml.decode("<data>{xml_patched}</data>"))
     testing.assertEqual(gd_from_xml_patched.prsrc(deterministic=True), gd_b.prsrc(deterministic=True))
