@@ -408,7 +408,7 @@ class Node(value):
             return child_dict
         raise ValueError("Unsupported node type in to_dict: {type(self)}")
 
-    def to_xmlstr(self, name="top", pretty=True, indent=0) -> str:
+    def to_xmlstr(self, name="top", pretty=True, indent=0, parent_absent=False) -> str:
         # TODO: uh, do not use the name "top" for the root node, since it can
         # conflict with the name of a child node actually named "top"
         def _indent(extra=0):
@@ -419,6 +419,9 @@ class Node(value):
         def _nl():
             if pretty:
                 return "\n"
+            return ""
+
+        if parent_absent and not isinstance(self, List):
             return ""
 
         if isinstance(self, Create):
@@ -475,7 +478,7 @@ class Node(value):
                 # Determine NETCONF operation for list element based on node type
                 attrs = []
                 skip_nonkeys = False
-                if isinstance(elem, Absent):
+                if isinstance(elem, Absent) or parent_absent:
                     attrs = remove_op
                     skip_nonkeys = True
                 elif isinstance(elem, Delete):
@@ -519,7 +522,14 @@ class Node(value):
                 xml += _indent() + fmt_tag(name, nsq(self.ns, val)) + v + fmt_tag(name, close=True) + _nl()
             return xml
         elif isinstance(self, Absent):
-            return _indent() + fmt_tag(name, nsq(self.ns), attrs=remove_op, end=True) + _nl()
+            child_xml = ""
+            for nm, child in self.children.items():
+                child_xml += child.to_xmlstr(nm, pretty, indent, True)
+            if name == "top":
+                return child_xml
+            if child_xml == "":
+                return _indent() + fmt_tag(name, nsq(self.ns), attrs=remove_op, end=True) + _nl()
+            return child_xml
         raise ValueError("Unsupported node type in to_xml: {type(self)}")
 
     # --
@@ -1256,7 +1266,9 @@ def diff(old: ?Node, new: Node) -> ?Node:
                 result[k] = nchild
         for k,ochild in old_children.items():
             if k not in new_children:
-                result[k] = Absent(ns=ochild.ns, module=ochild.module)
+                # Preserve full original subtree under Absent for complete context
+                # during delete operations (e.g., NETCONF XML, CLI stanza removal)
+                result[k] = Absent({k: ochild}, ns=ochild.ns, module=ochild.module)
 
         if len(result) == 0:
             return None
@@ -2460,9 +2472,52 @@ def _test_diff_node_removal():
 
     # c is removed
     exp = Container({
-        "c": Absent()
+        "c": Absent({
+            "c": Leaf("int", 3)
+        })
     }, ns="http://example.com/acme", module="acme")
 
+    testing.assertEqual(d, exp)
+
+def _test_diff_list_removal():
+    """The entire list (all entries) is removed."""
+    old = Container({
+        "l": List(["name"], [
+        Container({
+            "name": Leaf("str", "k1"),
+            "n1": Leaf("int", 1),
+            "n2": Leaf("int", 2),
+        }),
+        Container({
+            "name": Leaf("str", "k4"),
+            "n4": Leaf("int", 4),
+        }),
+    ], ns="http://example.com/acme", module="acme")
+    })
+
+    new = Container()
+
+    d = diff(old, new)
+
+    # Entire list is removed
+    exp = Container({
+        "l": Absent({
+            "l": List(["name"], [
+                Container({
+                    "name": Leaf("str", "k1"),
+                    "n1": Leaf("int", 1),
+                    "n2": Leaf("int", 2),
+                }),
+                Container({
+                    "name": Leaf("str", "k4"),
+                    "n4": Leaf("int", 4),
+                }),
+            ], ns="http://example.com/acme", module="acme")
+        }, ns="http://example.com/acme", module="acme")
+    })
+
+    if d is not None:
+        testing.assertEqual(d.prsrc(), exp.prsrc())
     testing.assertEqual(d, exp)
 
 def _test_diff_elem_removal():
@@ -2561,7 +2616,9 @@ def _test_diff_complex_ordering():
 
     # "b" is absent before "d" is introduced
     exp = Container({
-        "b": Absent(),
+        "b": Absent({
+            "b": Leaf("int", 2)
+        }),
         "d": Leaf("int", 4)
     }, ns="http://example.com/acme", module="acme")
 
@@ -3121,5 +3178,24 @@ def _test_to_xmlstr_identityref():
         "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar")),
         "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
     }, ns="http://example.com/acme", module="acme")
+
+    return y1.to_xmlstr()
+
+def _test_to_xmlstr_list_removal():
+    y1 = Container({
+        "l": Absent({
+            "l": List(["name"], [
+                Container({
+                    "name": Leaf("str", "k1"),
+                    "n1": Leaf("int", 1),
+                    "n2": Leaf("int", 2),
+                }),
+                Container({
+                    "name": Leaf("str", "k4"),
+                    "n4": Leaf("int", 4),
+                }),
+            ], ns="http://example.com/acme", module="acme")
+        }, ns="http://example.com/acme", module="acme")
+    })
 
     return y1.to_xmlstr()
