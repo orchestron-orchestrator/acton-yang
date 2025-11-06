@@ -378,15 +378,14 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
             else:
                 cb(None, err)
 
+        rpc_xml = xml.Node('foo', nsdefs=[(None, 'http://example.com/yangrpc')])
         if inp is not None:
-            xmlstr = '<foo xmlns="http://example.com/yangrpc">{inp.to_gdata().to_xmlstr()}</foo>'
-        else:
-            xmlstr = '<foo xmlns="http://example.com/yangrpc" />'
-        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))
+            rpc_xml.children.extend(inp.to_gdata().to_xml())
+        tp.rpc_xml(cb_wrap, rpc_xml)
 
     def silent(cb: action(?Exception) -> None, gen3: bool=False):
-        xmlstr = '<silent xmlns="http://example.com/yangrpc" />'
-        tp.rpc_xml(lambda _, err: cb(err), xml.decode(xmlstr))
+        rpc_xml = xml.Node('silent', nsdefs=[(None, 'http://example.com/yangrpc')])
+        tp.rpc_xml(lambda _, err: cb(err), rpc_xml)
 
 
 
