@@ -235,7 +235,7 @@ def parse_modules(yang_sources: Iterable[yang.schema.Statement]) -> NameRevMap[y
     return modules
 
 
-def compile_modules(modules: NameRevMap[yang.schema.Module]) -> list[yang.schema.Module]:
+def compile_modules(modules: NameRevMap[yang.schema.Module], skip_type_resolution: bool=False) -> list[yang.schema.Module]:
     """Compile a list of YANG modules
 
     This function compiles the list of input Module nodes. Compiling a module
@@ -247,7 +247,7 @@ def compile_modules(modules: NameRevMap[yang.schema.Module]) -> list[yang.schema
     Typedef, ...) still present.
     """
     # Compile in dependency by import depth-first search
-    ctx = yang.schema.Context()
+    ctx = yang.schema.Context(skip_type_resolution=skip_type_resolution)
     build_stack: list[(yang.schema.Module, list[yang.schema.Import])] = []
     while True:
         if len(build_stack) > 0:

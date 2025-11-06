@@ -2971,6 +2971,13 @@ netinfra_inter_yang = r"""module netinfra-inter {
     reference "ref1";
   }
 
+  typedef mocks {
+    type enumeration {
+        enum cisco-ios-xr;
+        enum juniper-junos;
+    }
+   }
+
   grouping backbone-link {
     leaf left-router {
       type string;
@@ -3014,10 +3021,7 @@ netinfra_inter_yang = r"""module netinfra-inter {
         type string;
       }
       leaf mock {
-        type enumeration {
-          enum cisco-ios-xr;
-          enum juniper-junos;
-        }
+        type mocks;
       }
     }
 
@@ -3074,8 +3078,9 @@ def _test_print_tree_netinfra_inter_dnode():
     return "\n".join(res)
 
 def _test_print_tree_netinfra_inter_schemanode():
-	modules = yang.parse_modules(yang.parse_statements([netinfra_inter_yang]))
+	# Use partial compilation (skip type resolution) for intermediate SchemaNode tree inspection
+	modules = yang.compile_modules(yang.parse_modules(yang.parse_statements([netinfra_inter_yang])), skip_type_resolution=True)
 	res = []
-	for _, (_, m) in modules:
+	for m in modules:
 		res.append(m.print_tree())
 	return "\n".join(res)
