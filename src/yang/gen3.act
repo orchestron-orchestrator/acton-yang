@@ -594,7 +594,7 @@ def from_json_path(root: yang.schema.DRoot, data: dict[str, ?value], path: list[
     operations where the payload is a subtree rooted in the provided query path.
 
     Args:
-        s: Root schema node (must be the actual root, not an inner node)
+        root: Root schema node (must be the actual root, not an inner node)
         data: JSON data to apply at the target path location
         path: List of path elements to navigate from root, e.g. ["mod1:c1", "list1", "key1", "inner"]
               - Container/List names "name" or "module:name"
@@ -625,13 +625,13 @@ def from_json_path(root: yang.schema.DRoot, data: dict[str, ?value], path: list[
         raise ValueError("Internal error: expected Container at root level")
 
 
-def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: dict[str, ?value], path: list[str], op: str, loose: bool, current_path: list[str], top: bool, set_ns: bool) -> yang.gdata.Node:
+def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: dict[str, ?value], path: list[str], op: str, loose: bool, current_path: list[PathElement], top: bool, set_ns: bool) -> yang.gdata.Node:
     if isinstance(s, yang.schema.DRoot) or isinstance(s, yang.schema.DContainer):
         if len(path) == 0:
             # Base case: no more path elements, process the data
             if op == "merge":
                 # TODO: set_ns??
-                return from_data(s, global_identity, data, loose=loose, set_ns=set_ns)
+                return _from_data_recursive(s, global_identity, data, loose=loose, set_ns=set_ns, spath=current_path)
             elif op == "remove":
                 return yang.gdata.Absent()
             raise ValueError(f"Invalid operation: {op}")
@@ -650,7 +650,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
             if isinstance(child, yang.schema.DNodeInner):
                 # Recursively process the child node
                 perhaps = True if (top or set_ns) and s.namespace != "" else False
-                cchild = _from_json_path_recursive(child, global_identity, data, rest_path, op, loose, current_path + [point], False, s.namespace != child.namespace)
+                cchild = _from_json_path_recursive(child, global_identity, data, rest_path, op, loose, current_path + [PathElement(child)], False, s.namespace != child.namespace)
                 # Create a container with just this one child
                 return yang.gdata.Container({uname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
 
@@ -671,7 +671,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 else:
                     if str(data_with_keys[key]) != keys.pop(0):
                         raise ValueError("Key value mismatch between path and payload")
-            element_gdata = from_data(s, global_identity, data_with_keys, loose, set_ns=False)
+            element_gdata = _from_data_recursive(s, global_identity, data_with_keys, loose, set_ns=False, spath=current_path + [PathElement(s, {k: v for k, v in data_with_keys.items() if k in s.key and v is not None})])
             elements = []
             if op == "merge":
                 elements.append(element_gdata)
@@ -688,7 +688,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
 
             # First create this list with a single element with only key children.
             # For nested lists, we always use "merge" for intermediate elements.
-            slist = _from_json_path_recursive(s, global_identity, {}, [point], "merge", loose, current_path + [point], top, set_ns)
+            slist = _from_json_path_recursive(s, global_identity, {}, [point], "merge", loose, current_path, top, set_ns)
 
             # The return type must be a List, we just requested it
             if isinstance(slist, yang.gdata.List):
@@ -705,7 +705,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 lchild = s.get(local_name, module, allow_unqualified=False)
                 if isinstance(lchild, yang.schema.DNodeInner):
                     # Now extract gdata for the rest of the path, from the child point
-                    inner_result = _from_json_path_recursive(lchild, global_identity, data, child_rest_path, op, loose, current_path + [point, child_point], False, False)
+                    inner_result = _from_json_path_recursive(lchild, global_identity, data, child_rest_path, op, loose, current_path + [PathElement(lchild)], False, False)
 
                     # Add it to the structural list element, next to the existing keys
                     slist.elements[0].children[uname(lchild)] = inner_result
@@ -720,9 +720,26 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
     raise ValueError("missing")
 
 
-
-def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
+def from_data[A(YangData)](root: yang.schema.DRoot, data: A, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
     """Generic function to convert data to gdata tree based on schema
+
+    Args:
+        root: Root schema node (must be the actual root, not an inner node)
+        data: Data wrapped in a YangData protocol implementation (XML or JSON)
+        loose: Whether to use loose parsing (allows optional fields to be missing)
+        root_path: Path from s to the actual data location in the input. This enables
+                  partial parsing where the data doesn't start at the schema root but
+                  at some inner node. For example, if root_path=["mod:c1", "c2"],
+                  the function will navigate from s through c1 and c2 before starting
+                  to parse the actual data.
+
+    Returns:
+        A yang.gdata.Container containing the parsed data tree
+    """
+    return _from_data_recursive(root, root.identities, data, loose, root_path=root_path)
+
+def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, path: list[str]=[], root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
+    """Internal function with additional recursion accumulators
 
     Args:
         s: Schema node (container or list) - the root of the schema tree to start parsing from
@@ -752,7 +769,7 @@ def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return from_data(child, global_identity, data, loose, set_ns, path + [next], root_path, spath + [PathElement(child)])
+            return _from_data_recursive(child, global_identity, data, loose, set_ns, path + [next], root_path, spath + [PathElement(child)])
         raise ValueError("Node on path {path} is not inner")
 
     children: dict[str, yang.gdata.Node] = {}
@@ -787,16 +804,16 @@ def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang
                     elif cop == "delete":
                         children[uname(child)] = yang.gdata.Delete(ns=cns, module=cmod)
                     elif cop == "create":
-                        inner = from_data(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        inner = _from_data_recursive(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                         children[uname(child)] = yang.gdata.Create(inner.children, ns=cns, module=cmod)
                     elif cop == "replace":
-                        inner = from_data(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        inner = _from_data_recursive(child, global_identity, val, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                         children[uname(child)] = yang.gdata.Replace(inner.children, ns=cns, module=cmod)
                     else:
-                        maybe = from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                        maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                         children[uname(child)] = maybe
                 elif isinstance(val, dict):
-                    maybe = from_data(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
+                    maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, path=path, root_path=root_path, spath=spath + [PathElement(child)])
                     children[uname(child)] = maybe
                 else:
                     children[uname(child)] = yang.gdata.Container({})
@@ -824,7 +841,7 @@ def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang
                     eop = get_netconf_operation(element_data)
                     if eop in ["remove", "delete"]:
                             # Build element to extract proper key leaves, then create Absent/Delete with keys
-                            eg = from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                            eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                             key_children = {}
                             for key in child.key:
                                 kc = eg.children.get(key)
@@ -835,13 +852,13 @@ def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang
                             else:
                                 list_elements.append(yang.gdata.Delete(key_children))
                     elif eop in ["create", "replace"]:
-                        eg = from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                        eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                         if eop == "create":
                             list_elements.append(yang.gdata.Create(eg.children))
                         else:
                             list_elements.append(yang.gdata.Replace(eg.children))
                     else:
-                        element_gdata = from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                        element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                         list_elements.append(element_gdata)
                 elif isinstance(element_data, dict):
                     # Extract key values from JSON element
@@ -849,7 +866,7 @@ def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang
                     for key_name in child.key:
                         if key_name in element_data:
                             key_values[key_name] = element_data[key_name]
-                    element_gdata = from_data(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                    element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                     list_elements.append(element_gdata)
                 else:
                     raise ValueError("Unsupported type for list element: {type(element_data)}")
@@ -958,16 +975,6 @@ def from_data[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang
         return yang.gdata.Container(children)
     else:
         raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
-
-
-def from_xml(root: yang.schema.DRoot, node: xml.Node, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
-    """Convert XML node to gdata tree based on schema"""
-    return from_data(root, root.identities, node, loose, root_path=root_path)
-
-
-def from_json(root: yang.schema.DRoot, node: dict[str, ?value], loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
-    """Convert JSON node to gdata tree based on schema"""
-    return from_data(root, root.identities, node, loose, root_path=root_path)
 
 
 def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
@@ -1189,7 +1196,7 @@ def _test_y1_xml():
 </data>"""
 
     s = yang.compile([y1])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_mandatory_leaf():
@@ -1206,7 +1213,7 @@ def _test_mandatory_leaf():
     s = yang.compile([y1])
 
     try:
-        from_xml(s, xml.decode('<data><c1 xmlns="urn:example:y1"/></data>'))
+        from_data(s, xml.decode('<data><c1 xmlns="urn:example:y1"/></data>'))
     except ValueError as err:
         if err.error_message != "Error reading /c1/l1: Cannot find xml child with name l1":
             testing.error("Unexpected error: {err}")
@@ -1256,7 +1263,7 @@ def _test_y1_json():
     }
 
     s = yang.compile([y1])
-    gd = from_json(s, json_data)
+    gd = from_data(s, json_data)
     return gd.prsrc()
 
 
@@ -1289,10 +1296,10 @@ def _test_root_path():
     s = yang.compile([y1])
 
     # Test parsing from root (should include top container)
-    gd_root = from_xml(s, xml.decode(xml_in))
+    gd_root = from_data(s, xml.decode(xml_in))
 
     # Test parsing with root_path to navigate directly to nested container
-    gd_nested = from_xml(s, xml.decode(xml_in), root_path=["y1:top", "nested"])
+    gd_nested = from_data(s, xml.decode(xml_in), root_path=["y1:top", "nested"])
 
     return gd_nested.prsrc()
 
@@ -1317,7 +1324,7 @@ def _test_error_path_json_list_range():
     # v1 is out of range (100)
     json_in = {"y1:c1": {"l2": [{"k1": "Key 1", "v1": "100"}]}}
     try:
-        from_json(s, json_in)
+        from_data(s, json_in)
     except ValueError as err:
         return str(err)
     raise AssertionError("Expected error not raised")
@@ -1345,7 +1352,7 @@ def _test_error_path_xml_leaf_range():
 
     s = yang.compile([y1])
     try:
-        from_xml(s, xml.decode(xml_in))
+        from_data(s, xml.decode(xml_in))
     except ValueError as err:
         return str(err)
     raise AssertionError("Expected error not raised")
@@ -1368,7 +1375,7 @@ def _test_uint64_edge_json_ok_max_keyword():
     # Use the maximum uint64 value
     json_in = {"y1:c": {"u": "18446744073709551615"}}
     # Should not raise
-    gd = from_json(s, json_in)
+    gd = from_data(s, json_in)
 
 
 def _test_uint64_edge_json_fail_overflow():
@@ -1388,7 +1395,7 @@ def _test_uint64_edge_json_fail_overflow():
     # One above max
     json_in = {"y1:c": {"u": "18446744073709551616"}}
     try:
-        from_json(s, json_in)
+        from_data(s, json_in)
     except ValueError as err:
         return str(err)
     raise AssertionError("Expected error not raised")
@@ -1709,7 +1716,7 @@ def _test_netconf_remove_container():
 </data>"""
 
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_remove_list_element():
@@ -1735,7 +1742,7 @@ def _test_netconf_remove_list_element():
 </data>"""
 
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_remove_leaf():
@@ -1755,7 +1762,7 @@ def _test_netconf_remove_leaf():
 </data>"""
 
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_replace_leaf_sets_value():
@@ -1774,7 +1781,7 @@ def _test_netconf_replace_leaf_sets_value():
 </c1>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_remove_mixed():
@@ -1801,7 +1808,7 @@ def _test_netconf_remove_mixed():
 """
 
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_create_list_element():
@@ -1826,7 +1833,7 @@ def _test_netconf_create_list_element():
 </c1>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_replace_list_element():
@@ -1851,7 +1858,7 @@ def _test_netconf_replace_list_element():
 </c1>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_delete_list_element():
@@ -1875,7 +1882,7 @@ def _test_netconf_delete_list_element():
 </c1>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_union_int_json():
@@ -1892,7 +1899,7 @@ def _test_union_int_json():
 }"""
     s = yang.compile([y])
     jd = {"y:u": "7"}
-    gd = from_json(s, jd)
+    gd = from_data(s, jd)
     return gd.prsrc()
 
 def _test_union_str_json():
@@ -1909,7 +1916,7 @@ def _test_union_str_json():
 }"""
     s = yang.compile([y])
     jd = {"y:u": "100"}
-    gd = from_json(s, jd)
+    gd = from_data(s, jd)
     return gd.prsrc()
 
 def _test_union_str_xml():
@@ -1928,7 +1935,7 @@ def _test_union_str_xml():
 <u xmlns="urn:example:y">100</u>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_union_binary_xml():
@@ -1946,7 +1953,7 @@ def _test_union_binary_xml():
 <u xmlns="urn:example:y">aGk=</u>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     print(gd.get_bytes('u'))
     testing.assertEqual(gd.get_bytes('u'), "hi".encode())
     return gd.prsrc()
@@ -1964,7 +1971,7 @@ def _test_union_binary_json():
 }"""
     s = yang.compile([y])
     jd = {"y:u": "aGk="}
-    gd = from_json(s, jd)
+    gd = from_data(s, jd)
     testing.assertEqual(gd.get_bytes('u'), "hi".encode())
     return gd.prsrc()
 
@@ -1982,7 +1989,7 @@ def _test_netconf_create_container():
 </c1>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_replace_container():
@@ -1999,7 +2006,7 @@ def _test_netconf_replace_container():
 </c1>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
 def _test_netconf_delete_container():
@@ -2014,7 +2021,7 @@ def _test_netconf_delete_container():
 <c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="delete"/>
 </data>"""
     s = yang.compile([y])
-    gd = from_xml(s, xml.decode(xml_in))
+    gd = from_data(s, xml.decode(xml_in))
     return gd.prsrc()
 
     # Test remove operation on nested list element

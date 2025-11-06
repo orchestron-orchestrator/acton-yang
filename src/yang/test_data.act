@@ -60,15 +60,15 @@ def _test_remove_list_roundtrip():
 
     s = yang.compile([y])
 
-    gd_a = yang.gen3.from_xml(s, xml.decode(xml_a))
-    gd_b = yang.gen3.from_xml(s, xml.decode(xml_b))
+    gd_a = yang.gen3.from_data(s, xml.decode(xml_a))
+    gd_b = yang.gen3.from_data(s, xml.decode(xml_b))
 
     # Compute diff: expect Absent list element for key B
     d = _unwrap_node(yang.gdata.diff(gd_a, gd_b))
 
     # Serialize diff to XML (NETCONF ops), then parse back
     xml_ops = d.to_xmlstr(name="data")
-    gd_ops = yang.gen3.from_xml(s, xml.decode(xml_ops))
+    gd_ops = yang.gen3.from_data(s, xml.decode(xml_ops))
 
     # Check idempotent roundtrip of operations, gdata -> XML -> gdata
     testing.assertEqual(d.prsrc(deterministic=True), gd_ops.prsrc(deterministic=True))
@@ -80,5 +80,5 @@ def _test_remove_list_roundtrip():
 
     # Also check that XML serialization of the patched state parses back to B
     xml_patched = pnode.to_xmlstr(name="data")
-    gd_from_xml_patched = yang.gen3.from_xml(s, xml.decode(xml_patched))
+    gd_from_xml_patched = yang.gen3.from_data(s, xml.decode(xml_patched))
     testing.assertEqual(gd_from_xml_patched.prsrc(deterministic=True), gd_b.prsrc(deterministic=True))
