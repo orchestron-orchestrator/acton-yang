@@ -1944,9 +1944,11 @@ class Context(object):
     """Compilation context
     """
     modules: dict[ModRev, Module]
+    skip_type_resolution: bool
 
-    def __init__(self, modules: list[Module]=[]):
+    def __init__(self, modules: list[Module]=[], skip_type_resolution: bool=False):
         self.modules = {}
+        self.skip_type_resolution = skip_type_resolution
         for thing in modules:
             self.add_module(thing)
 
@@ -5736,15 +5738,21 @@ class Leaf(SchemaNodeOuter):
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        base_typedef = self.type_.resolve_typedef(context)
+        if context.skip_type_resolution:
+            new_type = self.type_
+            new_default = self.default
+            new_units = self.units
+        else:
+            base_typedef = self.type_.resolve_typedef(context)
+            new_type = base_typedef.type_
 
-        new_default = self.default
-        if new_default is None:
-            new_default = base_typedef.default
+            new_default = self.default
+            if new_default is None:
+                new_default = base_typedef.default
 
-        new_units = self.units
-        if new_units is None:
-            new_units = base_typedef.units
+            new_units = self.units
+            if new_units is None:
+                new_units = base_typedef.units
 
         new = Leaf(self.name,
                    config=self.config,
@@ -5755,7 +5763,7 @@ class Leaf(SchemaNodeOuter):
                    must=self.must,
                    reference=self.reference,
                    status=self.status,
-                   type_=base_typedef.type_,
+                   type_=new_type,
                    units=new_units,
                    when=self.when,
                    exts=self.exts,
@@ -5947,11 +5955,16 @@ class LeafList(SchemaNodeOuter):
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        base_typedef = self.type_.resolve_typedef(context)
+        if context.skip_type_resolution:
+            new_type = self.type_
+            new_units = self.units
+        else:
+            base_typedef = self.type_.resolve_typedef(context)
+            new_type = base_typedef.type_
 
-        new_units = self.units
-        if new_units is None:
-            new_units = base_typedef.units
+            new_units = self.units
+            if new_units is None:
+                new_units = base_typedef.units
 
         new = LeafList(self.name,
                        config=self.config,
@@ -5964,7 +5977,7 @@ class LeafList(SchemaNodeOuter):
                        ordered_by=self.ordered_by,
                        reference=self.reference,
                        status=self.status,
-                       type_=base_typedef.type_,
+                       type_=new_type,
                        units=new_units,
                        when=self.when,
                        exts=self.exts,
