@@ -2960,3 +2960,134 @@ def _test_augment_with_uses_refine():
 
     root = yang.compile([ys_base, ys_augmenter])
     return root.prdaclass()
+
+netinfra_inter_yang = r"""module netinfra-inter {
+  yang-version "1.1";
+  namespace "http://example.com/netinfra-inter";
+  prefix "netinfra-inter";
+  description "Network Infrastructure intermediate";
+  revision 2019-01-01 {
+    description "test revision";
+    reference "ref1";
+  }
+
+  typedef mocks {
+    type enumeration {
+        enum cisco-ios-xr;
+        enum juniper-junos;
+    }
+   }
+
+  grouping backbone-link {
+    leaf left-router {
+      type string;
+    }
+    leaf right-router {
+      type string;
+    }
+    uses backbone-link-interface;
+  }
+
+  grouping backbone-link-interface {
+    leaf left-interface {
+      type string;
+    }
+    leaf right-interface {
+      type string;
+    }
+    grouping foo {
+      leaf bar {
+        type string;
+      }
+    }
+    uses foo;
+  }
+
+  container netinfra {
+    description "Network infrastructure";
+    list routers {
+      key name;
+
+      orchestron:transform respnet.inter.Router;
+
+      leaf name {
+        type string;
+      }
+      leaf id {
+        type string;
+        description "router id";
+      }
+      leaf role {
+        type string;
+      }
+      leaf mock {
+        type mocks;
+      }
+    }
+
+    list backbone-link {
+      key "left-router left-interface right-router right-interface";
+
+      orchestron:transform respnet.inter.BBLink;
+
+      uses backbone-link;
+
+      container isis {
+        presence "isis presence";
+        leaf level {
+          type enumeration {
+            enum level-1;
+            enum level-2;
+          }
+          mandatory true;
+        }
+      }
+    }
+    container full-mesh {
+      list router {
+        key name;
+
+        leaf name {
+          type string;
+        }
+      }
+    }
+  }
+}
+"""
+
+def _test_print_tree_simple_dnode():
+    dmodules = yang.compile_to_dmodules(yang.compile_modules(yang.parse_modules(yang.parse_statements([test_yang_simple]))))
+    res = []
+    for dm in dmodules:
+        res.append(dm.print_tree())
+    return "\n".join(res)
+
+def _test_print_tree_simple_schemanode():
+    modules = yang.compile_modules(yang.parse_modules(yang.parse_statements([test_yang_simple])))
+    res = []
+    for m in modules:
+        res.append(m.print_tree())
+	return "\n".join(res)
+
+def _test_print_tree_netinfra_inter_dnode():
+    dmodules = yang.compile_to_dmodules(yang.compile_modules(yang.parse_modules(yang.parse_statements([netinfra_inter_yang]))))
+    res = []
+    for dm in dmodules:
+        res.append(dm.print_tree())
+    return "\n".join(res)
+
+def _test_print_tree_netinfra_inter_schemanode_pre_compile():
+	modules = yang.parse_modules(yang.parse_statements([netinfra_inter_yang]))
+	res = []
+	for _, (_, m) in modules:
+		res.append(m.print_tree(include_grouping=True))
+	return "\n".join(res)
+
+def _test_print_tree_netinfra_inter_schemanode_compile():
+	# Use partial compilation (skip type resolution) for intermediate SchemaNode tree inspection
+	modules = yang.compile_modules(yang.parse_modules(yang.parse_statements([netinfra_inter_yang])), skip_type_resolution=True)
+	res = []
+	for m in modules:
+		res.append(m.print_tree())
+	return "\n".join(res)

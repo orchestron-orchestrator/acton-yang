@@ -60,8 +60,10 @@ proc def cmd_compile(env, file_cap, args):
     """Compile command: Compile YANG modules from files or directories
 
     This command reads YANG modules from specified files or directories and
-    compiles them together using yang.compile(). The compiled schema can be
-    output as Acton data classes or printed as a schema tree.
+    compiles them together. The compiled schema can be output in various formats:
+    - adata: Generate Acton data classes
+    - schema-tree: Print SchemaNode tree (with partial compilation, no type resolution)
+    - dnode-tree: Print DNode tree (fully compiled, data nodes only)
 
     Files can be excluded using --exclude patterns that use glob syntax.
     """
@@ -126,15 +128,34 @@ proc def cmd_compile(env, file_cap, args):
 
     try:
         sw = time.Stopwatch()
-        root = yang.compile(yang_sources)
-        t1 = sw.elapsed()
-        print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
-        if output == "adata":
+
+        if output == "schema-tree":
+            # For schema tree, use partial compilation (skip type resolution)
+            modules = yang.compile_modules(yang.parse_modules(yang.parse_statements(yang_sources)), skip_type_resolution=True)
+            t1 = sw.elapsed()
+            print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
+            for m in modules:
+                print(m.print_tree())
+        elif output == "dnode-tree":
+            # For dnode tree, use full compilation
+            root = yang.compile(yang_sources)
+            t1 = sw.elapsed()
+            print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
+            print(root.print_tree())
+        elif output == "adata":
+            root = yang.compile(yang_sources)
+            t1 = sw.elapsed()
+            print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
             sw.reset()
             adata = root.prdaclass(loose=loose)
             t2 = sw.elapsed()
             print(adata)
             print("Generated adata in {t2.to_float()}s", err=True)
+        else:
+            # Default: just compile without output
+            root = yang.compile(yang_sources)
+            t1 = sw.elapsed()
+            print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
     except Exception as exc:
         print("Error during compilation: {exc}", err=True)
         env.exit(1)
@@ -172,7 +193,7 @@ actor main(env):
     compile_cmd.add_option("infile", "strlist", "+", [], "input YANG file(s) or directory(s)")
     compile_cmd.add_bool("loose", "generate loose validation mode classes", short="l")
     compile_cmd.add_option("exclude", "strlist", "*", [], "glob pattern(s) to exclude files", short="e")
-    compile_cmd.add_option("output", "str", "output format (adata, default none)", "", short="o")
+    compile_cmd.add_option("output", "str", "output format (adata, schema-tree, dnode-tree, default none)", "", short="o")
 
     try:
         args = p.parse(env.argv)

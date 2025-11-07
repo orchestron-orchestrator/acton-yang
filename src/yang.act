@@ -74,15 +74,15 @@ def parse_statements(yang_sources: list[str], strict_quoting: bool=False) -> lis
     return [yang.parser.parse(src, strict_quoting) for src in yang_sources]
 
 
-def compile_modules(yang_sources: Iterable[yang.schema.Statement]) -> list[yang.schema.Module]:
-    """Parse and compile a set of YANG modules and submodules into (derived) DModule objects
+def parse_modules(yang_sources: Iterable[yang.schema.Statement]) -> NameRevMap[yang.schema.Module]:
+    """Parse and merge the YANG Statement trees into Module nodes
 
-    This function returns a list of DModule objects with derived schema
-    (expanded groupings, augments, ...). This is an intermediate step in
-    compiling modules, as what we usually do is then combine those DModule
-    objects into a single DRoot object.
+    This function takes a (iterable of) Statement trees and converts them into a
+    Module or Submodule node. Then it merges the submodule contents into the
+    parent module while remapping prefixes if needed to avoid ambiguities.
+
+    Returns a name-and-revision map of Module nodes.
     """
-    ctx = yang.schema.Context()
     modules: NameRevMap[yang.schema.Module] = NameRevMap()
     submodules: NameRevMap[yang.schema.Submodule] = NameRevMap()
 
@@ -232,8 +232,22 @@ def compile_modules(yang_sources: Iterable[yang.schema.Statement]) -> list[yang.
                 m.exts.extend(submod.exts)
 
         m.include = []
+    return modules
 
+
+def compile_modules(modules: NameRevMap[yang.schema.Module], skip_type_resolution: bool=False) -> list[yang.schema.Module]:
+    """Compile a list of YANG modules
+
+    This function compiles the list of input Module nodes. Compiling a module
+    recursively calls the .compile() method on the node and its children. The
+    result is a new schema tree where we expand groupings, apply augmentations,
+    resolve typedefs, ...
+
+    Returns a list of Module nodes with the non-data nodes (Uses, Grouping,
+    Typedef, ...) still present.
+    """
     # Compile in dependency by import depth-first search
+    ctx = yang.schema.Context(skip_type_resolution=skip_type_resolution)
     build_stack: list[(yang.schema.Module, list[yang.schema.Import])] = []
     while True:
         if len(build_stack) > 0:
@@ -273,6 +287,11 @@ def compile_modules(yang_sources: Iterable[yang.schema.Statement]) -> list[yang.
 
 
 def compile_to_dmodules(modules: list[yang.schema.Module]) -> list[yang.schema.DModule]:
+    """Compile a list of Module to DModule nodes
+
+    This is an intermediate step in compiling the schema, as what we usually do
+    is then combine those DModule objects into a single DRoot object.
+    """
     dmodules: list[yang.schema.DModule] = []
     for m in modules:
         dm = m.to_dnode()
@@ -284,8 +303,8 @@ def compile_to_dmodules(modules: list[yang.schema.Module]) -> list[yang.schema.D
 def compile_to_droot(dmodules: list[yang.schema.DModule]) -> yang.schema.DRoot:
     """Compile a list of DModules into a DRoot object
 
-    This function is the final step in compiling YANG modules. It takes a
-    list of DModules and combines them into a single DRoot object.
+    This function is the final step in compiling the schema. It takes a list of
+    DModules and combines them into a single DRoot object.
     """
     return yang.schema.DRoot(dmodules)
 
@@ -353,11 +372,11 @@ def compile_with_cache(yang_sources: list[str], strict_quoting=True, fc: file.Fi
             _save_statement_to_cache(fc, cache_path, new_stmt)
             statements.append(new_stmt)
 
-    return compile_to_droot(compile_to_dmodules(compile_modules(statements)))
+    return compile_to_droot(compile_to_dmodules(compile_modules(parse_modules(statements))))
 
 
 def compile_from_stmt(yang_statements: list[yang.schema.Statement]):
-    return compile_to_droot(compile_to_dmodules(compile_modules(yang_statements)))
+    return compile_to_droot(compile_to_dmodules(compile_modules(parse_modules(yang_statements))))
 
 
 def compile(yang_sources: list[str], strict_quoting=True) -> yang.schema.DRoot:
@@ -371,7 +390,9 @@ def compile(yang_sources: list[str], strict_quoting=True) -> yang.schema.DRoot:
     return compile_to_droot(
         compile_to_dmodules(
             compile_modules(
-                parse_statements(yang_sources, strict_quoting)
+                parse_modules(
+                    parse_statements(yang_sources, strict_quoting)
+                )
             )
         )
     )
