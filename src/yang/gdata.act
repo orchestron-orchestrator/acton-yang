@@ -1020,9 +1020,32 @@ pure def vals_list_sorted(a: list[value]) -> list[value]:
     else:
         return [min_val] + vals_list_sorted(remaining)
 
-def merge(a: Node, b: Node) -> Node:
+
+
+class _PathElement:
+    def __init__(self, name: ?str=None, keys: ?dict[str, Leaf]=None):
+        self.name = name
+        self.keys = keys
+
+
+def _format_gdata_path(path: list[_PathElement]) -> str:
+    if len(path) == 0:
+        return "/"
+    path_str = ""
+    for elem in path:
+        elem_name = elem.name
+        if elem_name is not None:
+            path_str = path_str + "/" + elem_name
+        elem_keys = elem.keys
+        if elem_keys is not None and len(elem_keys) > 0:
+            predicates = ["{k}={repr(v.val)}" for k, v in elem_keys.items()]
+            path_str = path_str + "[" + ",".join(predicates) + "]"
+    return path_str
+
+
+def _merge_rec(a: Node, b: Node, path: list[_PathElement]) -> Node:
     if type(a) != type(b):
-        raise ValueError("Cannot merge nodes of different types, type(a) = {str(type(a))}, type(b) = {str(type(b))}")
+        raise ValueError("Cannot merge nodes of different types at {_format_gdata_path(path)}: {type(a)} != {type(b)}")
 
     # Helper to merge keyed children
     def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node]) -> dict[str, Node]:
@@ -1038,7 +1061,7 @@ def merge(a: Node, b: Node) -> Node:
             bk = b_keys[j]
             if ak == bk:
                 # Overlapping key
-                merged_child = merge(a_children[ak], b_children[bk])
+                merged_child = _merge_rec(a_children[ak], b_children[bk], path + [_PathElement(ak)])
                 result[ak] = merged_child
                 i += 1
                 j += 1
@@ -1062,7 +1085,7 @@ def merge(a: Node, b: Node) -> Node:
                 else:
                     # Both appear in both sets at different positions, reorder scenario
                     # For simplicity, handle old's node first since we want to keep a's order.
-                    merged_child = merge(a_children[ak], b_children[ak])
+                    merged_child = _merge_rec(a_children[ak], b_children[ak], path + [_PathElement(ak)])
                     result[ak] = merged_child
                     i += 1
                     # We don't advance j here because we haven't handled bk yet.
@@ -1074,7 +1097,7 @@ def merge(a: Node, b: Node) -> Node:
             # If ak also in b but we haven't handled it yet, merge it now.
             # Otherwise just take it from a.
             if ak in b_children:
-                merged_child = merge(a_children[ak], b_children[ak])
+                merged_child = _merge_rec(a_children[ak], b_children[ak], path + [_PathElement(ak)])
                 result[ak] = merged_child
             else:
                 result[ak] = a_children[ak]
@@ -1088,7 +1111,7 @@ def merge(a: Node, b: Node) -> Node:
                 result[bk] = b_children[bk]
             else:
                 # Already handled overlap above, but if we got here, let's be safe:
-                merged_child = merge(a_children[bk], b_children[bk])
+                merged_child = _merge_rec(a_children[bk], b_children[bk], path + [_PathElement(bk)])
                 result[bk] = merged_child
             j += 1
 
@@ -1101,23 +1124,23 @@ def merge(a: Node, b: Node) -> Node:
 
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
         if a.t != b.t:
-            raise ValueError("Cannot merge leaves with different types")
+            raise ValueError("Cannot merge leaves with different types at {_format_gdata_path(path)}: {a.t} != {b.t}")
         aval = a.val
         bval = b.val
         if vals_equal(aval, bval):
             return a
-        raise ValueError("Cannot merge leaves with different values: {str(aval)} != {str(bval)}")
+        raise ValueError("Cannot merge leaves with different values at {_format_gdata_path(path)}: {str(aval)} != {str(bval)}")
 
     elif isinstance(a, LeafList) and isinstance(b, LeafList):
         if vals_list_equal(a.vals, b.vals):
             return a
-        raise ValueError("Cannot merge leaf-lists with different values")
+        raise ValueError("Cannot merge leaf-lists with different values at {_format_gdata_path(path)}")
 
     elif isinstance(a, List) and isinstance(b, List):
         if a.keys != b.keys:
-            raise ValueError("Cannot merge lists with different keys: {str(a.keys)} vs {str(b.keys)}")
+            raise ValueError("Cannot merge lists with different keys at {_format_gdata_path(path)}: {str(a.keys)} != {str(b.keys)}")
         if a.user_order != b.user_order:
-            raise ValueError("Cannot merge lists with different user_order")
+            raise ValueError("Cannot merge lists with different user_order at {_format_gdata_path(path)}")
 
         if a.user_order:
             # user_order = True
@@ -1129,15 +1152,15 @@ def merge(a: Node, b: Node) -> Node:
 
             # Start with elements from a, merge if present in b
             for a_elem in a.elements:
-                k = a_elem.key_str(a.keys)
                 found = False
                 for b_elem in b.elements:
                     if b_elem.key_str(b.keys) == a_elem.key_str(a.keys):
-                        merged_elem = merge(a_elem, b_elem)
+                        key_values = a_elem.key_children(a.keys)
+                        merged_elem = _merge_rec(a_elem, b_elem, path + [_PathElement(keys=key_values)])
                         if isinstance(merged_elem, Container):
                             new_elements.append(merged_elem)
                         else:
-                            raise ValueError("merge did not return a Container where one was expected")
+                            raise ValueError("merge did not return a Container where one was expected at {_format_gdata_path(path)}")
                         found = True
                         break
                 if not found:
@@ -1164,8 +1187,6 @@ def merge(a: Node, b: Node) -> Node:
             # Keep the original merging logic since it sorts by keys, not order
             all_elements: dict[str, list[Node]] = {}
 
-            def escape_keys(key_val):
-                return key_val.replace(",", "\\,")
             for elem in a.elements:
                 key_str = elem.key_str(a.keys)
                 if key_str not in all_elements:
@@ -1185,12 +1206,13 @@ def merge(a: Node, b: Node) -> Node:
                 elems = all_elements[key_str]
                 new_elem = elems[0]
                 if len(elems) > 1:
+                    key_values = new_elem.key_children(a.keys)
                     for elem in elems[1:]:
-                        new_elem = merge(new_elem, elem)
+                        new_elem = _merge_rec(new_elem, elem, path + [_PathElement(keys=key_values)])
                 if isinstance(new_elem, Container):
                     new_elements.append(new_elem)
                 else:
-                    raise ValueError("unreachable, new_elem should always be a Container")
+                    raise ValueError("unreachable, new_elem should always be a Container at {_format_gdata_path(path)}")
 
             return List(a.keys, new_elements, ns=a.ns, module=a.module)
 
@@ -1199,16 +1221,19 @@ def merge(a: Node, b: Node) -> Node:
         return a
 
     else:
-        raise ValueError("Unsupported node type in merge: {str(type(a))}")
+        raise ValueError("Unsupported node type in merge at {_format_gdata_path(path)}: {type(a)}")
 
 
-def diff(old: ?Node, new: Node) -> ?Node:
+def merge(a: Node, b: Node) -> Node:
+    return _merge_rec(a, b, [])
 
+
+def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
     if old is None:
         return new
 
     if type(old) != type(new):
-        raise ValueError("diff called with nodes of different types: {str(type(old))} vs {str(type(new))}")
+        raise ValueError("diff called with nodes of different types at {_format_gdata_path(path)}: {type(old)} != {type(new)}")
 
     # Helper function for diffing Container nodes that have children keyed by strings
     def diff_keyed_children(old_children: dict[str, Node], new_children: dict[str, Node]) -> ?dict[str, Node]:
@@ -1218,7 +1243,7 @@ def diff(old: ?Node, new: Node) -> ?Node:
         for k,nchild in new_children.items():
             if k in old_children:
                 ochild = old_children[k]
-                child_diff = diff(ochild, nchild)
+                child_diff = _diff_rec(ochild, nchild, path + [_PathElement(k)])
                 if child_diff is not None:
                     result[k] = child_diff
             else:
@@ -1235,10 +1260,10 @@ def diff(old: ?Node, new: Node) -> ?Node:
 
     # Helper function for diffing list elements (specialized Container nodes)
     # that *must* always include the key leaf children
-    def diff_list_element(old_element: Node, new_element: Node, keys: list[str]) -> ?Node:
+    def diff_list_element(old_element: Node, new_element: Node, keys: list[str], elem_path: list[_PathElement]) -> ?Node:
         # Diff of element Container nodes will only contain the actual
         # differences, skipping keys which are equal in both
-        entry_diff = diff(old_element, new_element)
+        entry_diff = _diff_rec(old_element, new_element, elem_path)
         if entry_diff is not None:
             # Update the entry to include key leaf children
             for key in keys:
@@ -1249,7 +1274,7 @@ def diff(old: ?Node, new: Node) -> ?Node:
     # Helper function for diffing system-ordered lists (order doesn't matter)
     def diff_system_ordered_list_elements(old_list: List, new_list: List) -> ?list[Node]:
         if old_list.keys != new_list.keys:
-            raise ValueError("List keys differ: {str(old_list.keys)} vs {str(new_list.keys)}")
+            raise ValueError("List keys differ at {_format_gdata_path(path)}: {str(old_list.keys)} != {str(new_list.keys)}")
 
         # Map elements by key for both lists
         old_map = {e.key_str(old_list.keys): e for e in old_list.elements}
@@ -1264,7 +1289,8 @@ def diff(old: ?Node, new: Node) -> ?Node:
         for key in sorted(all_keys):
             if key in old_map and key in new_map:
                 # Element exists in both - check for differences
-                elem_diff = diff_list_element(old_map[key], new_map[key], old_list.keys)
+                key_values = old_map[key].key_children(old_list.keys)
+                elem_diff = diff_list_element(old_map[key], new_map[key], old_list.keys, path + [_PathElement(keys=key_values)])
                 if elem_diff is not None:
                     result.append(elem_diff)
             elif key in old_map:
@@ -1284,7 +1310,7 @@ def diff(old: ?Node, new: Node) -> ?Node:
     def diff_user_ordered_list_elements(old_list: List, new_list: List) -> ?list[Node]:
 
         if old_list.keys != new_list.keys:
-            raise ValueError("List keys differ: {str(old_list.keys)} vs {str(new_list.keys)}")
+            raise ValueError("List keys differ at {_format_gdata_path(path)}: {str(old_list.keys)} != {str(new_list.keys)}")
 
         # Map old elements by key
         old_map = {e.key_str(old_list.keys): e for e in old_list.elements}
@@ -1304,7 +1330,8 @@ def diff(old: ?Node, new: Node) -> ?Node:
 
             if ok == nk:
                 # same element key
-                elem_diff = diff_list_element(old_map[ok], new_map[nk], old_list.keys)
+                key_values = old_map[ok].key_children(old_list.keys)
+                elem_diff = diff_list_element(old_map[ok], new_map[nk], old_list.keys, path + [_PathElement(keys=key_values)])
                 if elem_diff is not None:
                     result.append(elem_diff)
                 i += 1
@@ -1326,7 +1353,7 @@ def diff(old: ?Node, new: Node) -> ?Node:
                     j += 1
                 else:
                     # Complex reordering scenario
-                    raise ValueError("Complex reordering scenario encountered in list elements")
+                    raise ValueError("Complex reordering scenario encountered in list elements at {_format_gdata_path(path)}")
 
         # Remaining old elements are absent
         while i < len(old_key_order):
@@ -1358,7 +1385,7 @@ def diff(old: ?Node, new: Node) -> ?Node:
 
     elif isinstance(old, List) and isinstance(new, List):
         if old.user_order != new.user_order:
-            raise ValueError("Cannot diff lists with different ordering types")
+            raise ValueError("Cannot diff lists with different ordering types at {_format_gdata_path(path)}")
 
         if old.user_order:
             result = diff_user_ordered_list_elements(old, new)
@@ -1370,7 +1397,7 @@ def diff(old: ?Node, new: Node) -> ?Node:
 
     elif isinstance(old, Leaf) and isinstance(new, Leaf):
         if old.t != new.t:
-            raise ValueError("Leaf types differ: {old.t} vs {new.t}")
+            raise ValueError("Leaf types differ at {_format_gdata_path(path)}: {old.t} != {new.t}")
         if vals_equal(old.val, new.val):
             return None
         else:
@@ -1385,15 +1412,19 @@ def diff(old: ?Node, new: Node) -> ?Node:
         diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is not None:
             # TODO: can't call key_str(list_keys) without our parent List node!?
-            raise ValueError("Absent keys differ: {str(old.children)} vs {str(new.children)}")
+            raise ValueError("Absent keys differ at {_format_gdata_path(path)}: {str(old.children)} != {str(new.children)}")
         return None
 
     else:
-        raise ValueError("Unhandled node type in diff: {str(type(old))}")
+        raise ValueError("Unhandled node type in diff at {_format_gdata_path(path)}: {type(old)}")
+
+
+def diff(old: ?Node, new: Node) -> ?Node:
+    return _diff_rec(old, new, [])
 
 
 # TODO: Can we make patch return a Node instead of ?Node?
-def patch(old: Node, p: ?Node) -> ?Node:
+def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
     if p is None:
         return old
 
@@ -1403,7 +1434,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
             # Both absent means node was removed
             if p.children != old.children:
                 # TODO: can't call key_str(list_keys) without our parent List node!?
-                raise ValueError("Absent keys differ in patch: {str(old.children)} vs {str(p.children)}")
+                raise ValueError("Absent keys differ in patch at {_format_gdata_path(path)}: {str(old.children)} != {str(p.children)}")
         return None
 
     elif isinstance(old, Container) and isinstance(p, Container):
@@ -1417,7 +1448,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
             cpatch = p.children[key]
             if key in new_children:
                 # Patch existing child
-                res = patch(new_children[key], cpatch)
+                res = _patch_rec(new_children[key], cpatch, path + [_PathElement(key)])
                 if res is not None:
                     new_children[key] = res
                 else:
@@ -1438,7 +1469,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
     elif isinstance(old, List) and isinstance(p, List):
         if old.keys != p.keys:
-            raise ValueError("List keys differ: {str(old.keys)} vs {str(p.keys)}")
+            raise ValueError("List keys differ at {_format_gdata_path(path)}: {str(old.keys)} != {str(p.keys)}")
 
         old_map = {e.key_str(old.keys): e for e in old.elements}
 
@@ -1455,7 +1486,8 @@ def patch(old: Node, p: ?Node) -> ?Node:
                 k = pelem.key_str(p.keys)
                 if k in old_map:
                     # Patch existing element
-                    res = patch(old_map[k], pelem)
+                    key_values = old_map[k].key_children(old.keys)
+                    res = _patch_rec(old_map[k], pelem, path + [_PathElement(keys=key_values)])
                     if res is not None and isinstance(res, Container):
                         old_map[k] = res
                     else:
@@ -1496,7 +1528,7 @@ def patch(old: Node, p: ?Node) -> ?Node:
     elif isinstance(old, Leaf) and isinstance(p, Leaf):
         # Patch leaf replaces old leaf value
         if old.t != p.t:
-            raise ValueError("Leaf types differ in patch: {old.t} vs {p.t}")
+            raise ValueError("Leaf types differ in patch at {_format_gdata_path(path)}: {old.t} != {p.t}")
         return p
 
     elif isinstance(old, LeafList) and isinstance(p, LeafList):
@@ -1509,7 +1541,11 @@ def patch(old: Node, p: ?Node) -> ?Node:
 
     else:
         if p is not None:
-            raise ValueError("Unhandled node type in patch: {str(type(p))}")
+            raise ValueError("Unhandled node type in patch at {_format_gdata_path(path)}: {type(p)}")
+
+
+def patch(old: Node, p: ?Node) -> ?Node:
+    return _patch_rec(old, p, [])
 
 
 class TreeProvider(object):
@@ -2182,6 +2218,17 @@ def unwrap_list(jd: value) -> list[dict[str, value]]:
     raise ValueError("Expected a list of dicts, got something else")
 
 
+def _test_format_gdata_path():
+    path = [
+        _PathElement("config"),
+        _PathElement("interfaces"),
+        _PathElement(keys={"name": Leaf("str", "eth0"), "vlan": Leaf("int", 100)}),
+        _PathElement("ipv4"),
+        _PathElement(keys={"ip": Leaf("str", "10.0.0.1"), "prefix": Leaf("int", 24)})
+    ]
+    testing.assertEqual("/config/interfaces[name='eth0',vlan=100]/ipv4[ip='10.0.0.1',prefix=24]", _format_gdata_path(path))
+
+
 def _test_merge1():
     y1 = Container({
         "a": Leaf("int", 1),
@@ -2316,6 +2363,20 @@ def _test_merge_list1():
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(exp, merge(y1, y2))
+
+def _test_merge_leaf_conflict():
+    y1 = Container({
+        "a": Leaf("int", 1)
+    })
+    y2 = Container({
+        "a": Leaf("int", 2)
+    })
+
+    try:
+        merge(y1, y2)
+        testing.assertFalse(True, "Expected ValueError but merge succeeded")
+    except ValueError as e:
+        testing.assertEqual("Cannot merge leaves with different values at /a: 1 != 2", e.error_message)
 
 def _test_eq_list():
     l1 = List(["name"], [
