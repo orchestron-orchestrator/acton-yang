@@ -785,6 +785,9 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
         if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
             continue
 
+        def path_with_child(k=None):
+            return spath + [PathElement(child, k)]
+
         # Determine namespace (only include if different from parent)
         ns = None
         mod = None
@@ -823,7 +826,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                 # mandatory content, then raise an error in strict mode.
                 if not loose and isinstance(child, yang.schema.DContainer) and not child.presence:
                     if has_mandatory_content(child):
-                        raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find xml child with name {child.name}")
+                        raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
 
         elif isinstance(child, yang.schema.DList):
             list_val = data.take_list(child, child.name, ns, spath)
@@ -832,7 +835,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
             def unwrap_key[T](name: str, val: ?T) -> T:
                 if val is not None:
                     return val
-                raise ValueError("Missing key value at {format_schema_path(spath + [PathElement(child)])}: {name}")
+                raise ValueError("Missing key value at {format_schema_path(path_with_child())}: {name}")
 
             for element_data in list_val:
                 if isinstance(element_data, xml.Node):
@@ -866,7 +869,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                     element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                     list_elements.append(element_gdata)
                 else:
-                    raise ValueError("Unsupported type for list element: {type(element_data)}")
+                    raise ValueError("Unsupported type for list element at {format_schema_path(path_with_child())}: {type(element_data)}")
             if list_elements:
                 list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
                 children[uname(child)] = list_gdata
@@ -885,9 +888,9 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                             if validated is not None:
                                 validated_values.append(validated)
                             else:
-                                raise ValueError(f"Invalid value for identityref leaf-list {child.name}: {error}")
+                                raise ValueError("Invalid value for identityref leaf-list at {format_schema_path(path_with_child())}: {error}")
                         else:
-                            raise ValueError(f"Expected PartialIdentityref for identityref leaf-list {child.name}, got {type(ival)}")
+                            raise ValueError("Expected PartialIdentityref for identityref leaf-list at {format_schema_path(path_with_child())}, got {type(ival)}")
                     if len(validated_values) > 0:
                         children[uname(child)] = yang.gdata.LeafList("identityref", validated_values, user_order=_user_order(child.ordered_by))
                 else:
@@ -932,9 +935,9 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                         if validated is not None:
                             children[uname(child)] = yang.gdata.Leaf("identityref", validated)
                         else:
-                            raise ValueError(f"Invalid value for identityref {child.name}: {error}")
+                            raise ValueError("Invalid value for identityref at {format_schema_path(path_with_child())}: {error}")
                     else:
-                        raise ValueError(f"Expected PartialIdentityref for identityref leaf {child.name}, got {type(typed.val)}")
+                        raise ValueError("Expected PartialIdentityref for identityref leaf at {format_schema_path(path_with_child())}, got {type(typed.val)}")
                 else:
                     # Determine concrete type
                     leaf_ns = None
@@ -958,9 +961,9 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                 # Missing leaf value
                 if not loose and child.mandatory:
                     # Match legacy error format expected by tests
-                    raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find xml child with name {child.name}")
+                    raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
         else:
-            raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
+            raise ValueError(f"Unknown schema node type at {format_schema_path(path_with_child())}: {child}")
 
     if isinstance(s, yang.schema.DContainer):
         return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns and s.module != "" else None)
