@@ -819,26 +819,25 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
         elif isinstance(child, yang.schema.DList):
             list_val = data.take_list(child, child.name, ns, spath)
             list_elements = []
+
+            def unwrap_key[T](name: str, val: ?T) -> T:
+                if val is not None:
+                    return val
+                raise ValueError("Missing key value at {format_schema_path(spath + [PathElement(child)])}: {name}")
+
             for element_data in list_val:
                 if isinstance(element_data, xml.Node):
-                    # Extract key values for better error context
-                    key_values: dict[str, value] = {}
+                    # Extract key values for better error context directly from the data (XML)
+                    key_values = {}
                     for key_name in child.key:
-                        key_node = yang.gdata.get_xml_opt_child(element_data, key_name, None)
-                        if key_node is not None:
-                            kt = key_node.text
-                            if kt is not None:
-                                key_values[key_name] = kt
+                        key_node = unwrap_key(key_name, yang.gdata.get_xml_opt_child(element_data, key_name))
+                        key_values[key_name] = unwrap_key(key_name, key_node.text)
                     # Check NETCONF operation on the element
                     eop = get_netconf_operation(element_data)
                     if eop in ["remove", "delete"]:
                             # Build element to extract proper key leaves, then create Absent/Delete with keys
                             eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
-                            key_children = {}
-                            for key in child.key:
-                                kc = eg.children.get(key)
-                                if kc is not None:
-                                    key_children[key] = kc
+                            key_children = {key: unwrap_key(key, eg.children.get(key)) for key in child.key}
                             if eop == "remove":
                                 list_elements.append(yang.gdata.Absent(key_children))
                             else:
@@ -853,11 +852,8 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                         element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                         list_elements.append(element_gdata)
                 elif isinstance(element_data, dict):
-                    # Extract key values from JSON element
-                    key_values: dict[str, value] = {}
-                    for key_name in child.key:
-                        if key_name in element_data:
-                            key_values[key_name] = element_data[key_name]
+                    # Extract key values for better error context directly from the data (JSON)
+                    key_values = {k: unwrap_key(k, element_data.get(k)) for k in child.key}
                     element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, path=path, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                     list_elements.append(element_gdata)
                 else:
@@ -1391,6 +1387,66 @@ def _test_uint64_edge_json_fail_overflow():
     except ValueError as err:
         return str(err)
     raise AssertionError("Expected error not raised")
+
+
+def _test_missing_list_key_json():
+    """Test error message when list key is missing in JSON"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l1 {
+      key "k1 k2";
+      leaf k1 { type string; }
+      leaf k2 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+    # Missing k2 key in the list element
+    json_in = {"y1:c1": {"l1": [{"k1": "key1", "v1": "value1"}]}}
+    try:
+        from_data(s, json_in)
+        testing.error("Expected ValueError not raised")
+    except ValueError as err:
+        testing.assertEqual("Missing key value at /c1/l1: k2", err.error_message)
+
+
+def _test_missing_list_key_xml():
+    """Test error message when list key is missing in XML"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l1 {
+      key "k1 k2";
+      leaf k1 { type string; }
+      leaf k2 { type int32; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y1">
+  <l1>
+    <k1>key1</k1>
+    <v1>value1</v1>
+  </l1>
+</c1>
+</data>"""
+
+    s = yang.compile([y1])
+    try:
+        from_data(s, xml.decode(xml_in))
+        testing.error("Expected ValueError not raised")
+    except ValueError as err:
+        expected = "Missing key value at /c1/l1: k2"
+        testing.assertEqual(expected, err.error_message)
 
 
 def _test_format_schema_path_root():
