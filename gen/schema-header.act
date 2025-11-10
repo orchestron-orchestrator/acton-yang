@@ -1298,19 +1298,16 @@ class DNodeInner(DNode):
                     res.append("")
 
                 # Generate RPC XML, add input
+                res.append("        rpc_xml = xml.Node({repr(rpc.name)}, nsdefs=[(None, {repr(rpc.namespace)})])")
                 if input_node is not None:
                     res.append("        if inp is not None:")
-                    res.append("""            xmlstr = '<{rpc.name} xmlns="{rpc.namespace}">{{inp.to_gdata().to_xmlstr()}}</{rpc.name}>'""")
-                    res.append("        else:")
-                    res.append("""            xmlstr = '<{rpc.name} xmlns="{rpc.namespace}" />'""")
-                else:
-                    res.append("""        xmlstr = '<{rpc.name} xmlns="{rpc.namespace}" />'""")
+                    res.append("            rpc_xml.children.extend(inp.to_gdata().to_xml())")
 
                 # Call tp.rpc_xml with appropriate callback
                 if output_node is not None:
-                    res.append("        tp.rpc_xml(cb_wrap, xml.decode(xmlstr))")
+                    res.append("        tp.rpc_xml(cb_wrap, rpc_xml)")
                 else:
-                    res.append("        tp.rpc_xml(lambda _, err: cb(err), xml.decode(xmlstr))")
+                    res.append("        tp.rpc_xml(lambda _, err: cb(err), rpc_xml)")
                 res.append("")
             res.append("")
             res.append("")

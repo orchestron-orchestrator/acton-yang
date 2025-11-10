@@ -176,18 +176,18 @@ tree, and can be used to serialize and deserialize YANG data.
 def _ind(n):
     return "  " * n
 
-remove_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"remove"')]
-create_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"create"')]
-delete_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"delete"')]
-replace_op = [("xmlns:xc", '"urn:ietf:params:xml:ns:netconf:base:1.0"'), ("xc:operation", '"replace"')]
+remove_op = (nsdefs=[("xc", "urn:ietf:params:xml:ns:netconf:base:1.0")], attrs=[("xc:operation", "remove")])
+create_op = (nsdefs=[("xc", "urn:ietf:params:xml:ns:netconf:base:1.0")], attrs=[("xc:operation", "create")])
+delete_op = (nsdefs=[("xc", "urn:ietf:params:xml:ns:netconf:base:1.0")], attrs=[("xc:operation", "delete")])
+replace_op = (nsdefs=[("xc", "urn:ietf:params:xml:ns:netconf:base:1.0")], attrs=[("xc:operation", "replace")])
 
 
-def nsq(node_ns, v: ?value=None):
-    r = {}
+def _nsq(node_ns, v: ?value=None):
+    r = []
     if node_ns is not None:
-        r[""] = node_ns
+        r.append((None, node_ns))
     if isinstance(v, Identityref):
-        r[v.mod] = v.ns
+        r.append((v.mod, v.ns))
     return r
 
 
@@ -201,8 +201,7 @@ def yang_str(v) -> str:
     s = str(v)
     if isinstance(v, bool):
         s = s.lower()
-    # Escape XML special characters for text values
-    return s.replace("&", "&amp;").replace("<", "&lt;")
+    return s
 
 
 def json_val(yang_type: str, v: value) -> ?value:
@@ -220,18 +219,6 @@ def fmt_json_name(name, module=None):
     if module is not None:
         return "{module}:{name_without_prefix}"
     return name_without_prefix
-
-
-def fmt_tag(name, ns: dict[str, str]={}, attrs: list[(str, str)]=[], close=False, end=False):
-    if close:
-        ns_attr = []
-    else:
-        ns_attr = [("xmlns:{name}" if name != "" else "xmlns", '"'+uri+'"') for name, uri in ns.items()]
-    attr_strs = list(map(lambda x: "{x.0}={x.1}", ns_attr + attrs))
-    left = "</" if close else "<"
-    right = "/>" if end else ">"
-    name_without_prefix = name.split(":")[-1]
-    return left + " ".join([name_without_prefix] + attr_strs) + right
 
 
 class Node(value):
@@ -408,129 +395,101 @@ class Node(value):
             return child_dict
         raise ValueError("Unsupported node type in to_dict: {type(self)}")
 
-    def to_xmlstr(self, name="top", pretty=True, indent=0, parent_absent=False) -> str:
-        # TODO: uh, do not use the name "top" for the root node, since it can
-        # conflict with the name of a child node actually named "top"
-        def _indent(extra=0):
-            if pretty:
-                return "  " * (indent+extra)
-            return ""
-
-        def _nl():
-            if pretty:
-                return "\n"
-            return ""
-
-        if parent_absent and not isinstance(self, List):
-            return ""
-
-        if isinstance(self, Create):
-            # Render as element with create op
-            child_indent = indent if name == "top" else indent + 1
-            child_xml = ""
-            for nm, child in self.children.items():
-                child_xml += child.to_xmlstr(nm, pretty, child_indent)
-            if name == "top":
-                return child_xml
-            if child_xml == "":
-                return _indent() + fmt_tag(name, nsq(self.ns), attrs=create_op, end=True) + _nl()
-            xml = _indent() + fmt_tag(name, nsq(self.ns), attrs=create_op) + _nl()
-            xml += child_xml
-            xml += _indent() + fmt_tag(name, close=True) + _nl()
-            return xml
-        elif isinstance(self, Replace):
-            child_indent = indent if name == "top" else indent + 1
-            child_xml = ""
-            for nm, child in self.children.items():
-                child_xml += child.to_xmlstr(nm, pretty, child_indent)
-            if name == "top":
-                return child_xml
-            if child_xml == "":
-                return _indent() + fmt_tag(name, nsq(self.ns), attrs=replace_op, end=True) + _nl()
-            xml = _indent() + fmt_tag(name, nsq(self.ns), attrs=replace_op) + _nl()
-            xml += child_xml
-            xml += _indent() + fmt_tag(name, close=True) + _nl()
-            return xml
-        elif isinstance(self, Delete):
-            return _indent() + fmt_tag(name, nsq(self.ns), attrs=delete_op, end=True) + _nl()
-        elif isinstance(self, Container):
-            child_indent = indent if name == "top" else indent + 1
-            child_xml = ""
-            for nm, child in self.children.items():
-                child_xml += child.to_xmlstr(nm, pretty, child_indent)
-            if name == "top":
-                return child_xml
-
-            if child_xml == "":
-                if self.presence:
-                    return _indent() + fmt_tag(name, nsq(self.ns), end=True) + _nl()
+    def _to_xml_rec(self, key_names: ?list[str]=None, skip_nonkeys: bool=False, parent_absent: bool=False) -> list[xml.Node]:
+        if isinstance(self, Container) or isinstance(self, Absent) or isinstance(self, Create) or isinstance(self, Delete) or isinstance(self, Replace):
+            children = []
+            if key_names is not None:
+                if skip_nonkeys:
+                    iter_children = iter(key_names)
                 else:
-                    return ""
-
-            xml = _indent() + fmt_tag(name, nsq(self.ns)) + _nl()
-            xml += child_xml
-            xml += _indent() + fmt_tag(name, close=True) + _nl()
-            return xml
-
-        elif isinstance(self, List):
-            xml = ""
-            for elem in self.elements if self.user_order else sorted_elements(self.elements, self.keys):
-                # Determine NETCONF operation for list element based on node type
-                attrs = []
-                skip_nonkeys = False
-                if isinstance(elem, Absent) or parent_absent:
-                    attrs = remove_op
-                    skip_nonkeys = True
-                elif isinstance(elem, Delete):
-                    attrs = delete_op
-                    skip_nonkeys = True
-                elif isinstance(elem, Create):
-                    attrs = create_op
-                elif isinstance(elem, Replace):
-                    attrs = replace_op
-                xml += _indent() + fmt_tag(name, nsq(self.ns), attrs=attrs) + _nl()
-                # Print key leafs first
-                for key_name, key_leaf in elem.key_children(self.keys).items():
-                    v = yang_str(key_leaf.val)
-                    xml += _indent(1) + fmt_tag(key_name, nsq(v=key_leaf.val)) + v + fmt_tag(key_name, close=True) + _nl()
-                for nm,child in elem.children.items():
-                    if nm in self.keys or skip_nonkeys:
-                        continue
-                    xml += child.to_xmlstr(nm, pretty, indent+1)
-                xml += _indent() + fmt_tag(name, close=True) + _nl()
-            return xml
-        elif isinstance(self, Leaf):
-            xml = _indent()
-            if self.t == "empty":
-                v = self.val
-                if v is None:
-                    return ""
-                if isinstance(v, bool):
-                    if v == True:
-                        xml += fmt_tag(name, nsq(self.ns), end=True)
-                    else:
-                        xml += fmt_tag(name, nsq(self.ns), attrs=remove_op, end=True)
+                    iter_children = iter(key_names + [nm for nm in self.children.keys() if nm not in key_names])
             else:
-                v = yang_str(self.val)
-                xml += fmt_tag(name, nsq(self.ns, self.val)) + v + fmt_tag(name, close=True)
-            xml += _nl()
-            return xml
-        elif isinstance(self, LeafList):
-            xml = ""
-            for val in self.vals if self.user_order else vals_list_sorted(self.vals):
-                v = yang_str(val)
-                xml += _indent() + fmt_tag(name, nsq(self.ns, val)) + v + fmt_tag(name, close=True) + _nl()
-            return xml
-        elif isinstance(self, Absent):
-            child_xml = ""
-            for nm, child in self.children.items():
-                child_xml += child.to_xmlstr(nm, pretty, indent, True)
-            if name == "top":
-                return child_xml
-            if child_xml == "":
-                return _indent() + fmt_tag(name, nsq(self.ns), attrs=remove_op, end=True) + _nl()
-            return child_xml
+                iter_children = self.children.keys()
+            for name in iter_children:
+                child = self.children[name]
+                if parent_absent and not isinstance(child, List):
+                    continue
+                if ":" in name:
+                    local_name = name.split(":")[-1]
+                else:
+                    local_name = name
+                if isinstance(child, Container):
+                    cchildren = child._to_xml_rec()
+                    if len(cchildren) > 0:
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns), children=cchildren))
+                    elif isinstance(self, Container) and child.presence:
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
+
+                elif isinstance(child, List):
+                    for elem in child.elements if child.user_order else sorted_elements(child.elements, child.keys):
+                        # Determine NETCONF operation for list element based on node type
+                        skip_nonkeys = False
+                        if isinstance(elem, Absent) or parent_absent:
+                            attrs = remove_op
+                            skip_nonkeys = True
+                        elif isinstance(elem, Delete):
+                            attrs = delete_op
+                            skip_nonkeys = True
+                        elif isinstance(elem, Create):
+                            attrs = create_op
+                        elif isinstance(elem, Replace):
+                            attrs = replace_op
+                        else:
+                            attrs = (nsdefs=[], attrs=[])
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + attrs.nsdefs, attributes=attrs.attrs, children=elem._to_xml_rec(child.keys, skip_nonkeys)))
+                elif isinstance(child, Leaf):
+                    if child.t == "empty":
+                        v = child.val
+                        if isinstance(v, bool):
+                            if v == True:
+                                children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
+                            else:
+                                children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
+                    else:
+                        v = yang_str(child.val)
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, child.val), text=v))
+                elif isinstance(child, LeafList):
+                    vals = []
+                    for val in child.vals if child.user_order else vals_list_sorted(child.vals):
+                        v = yang_str(val)
+                        vals.append(xml.Node(local_name, nsdefs=_nsq(child.ns, val), text=v))
+                    children.extend(vals)
+                elif isinstance(child, Create):
+                    # Render as element with create op, include children
+                    children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + create_op.nsdefs, attributes=create_op.attrs, children=child._to_xml_rec()))
+                elif isinstance(child, Replace):
+                    # Render as element with replace op, include children
+                    children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + replace_op.nsdefs, attributes=replace_op.attrs, children=child._to_xml_rec()))
+                elif isinstance(child, Delete):
+                    # Render as element with delete op
+                    children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + delete_op.nsdefs, attributes=delete_op.attrs))
+                elif isinstance(child, Absent):
+                    # Render as element with remove op, unless the children are rendered explicitly (list)
+                    cchildren = child._to_xml_rec(parent_absent=True)
+                    if len(cchildren) > 0:
+                        children.extend(cchildren)
+                    else:
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
+                else:
+                    raise ValueError("Unsupported child ({name}) node type in to_xml: {type(child)}")
+            return children
         raise ValueError("Unsupported node type in to_xml: {type(self)}")
+
+    def to_xml(self) -> list[xml.Node]:
+        """Convert this gdata node to a list of xml.Node
+
+        The top-level node in a valid gdata structure is an unnamed container
+        with named children. But in a valid XML document there must be a single
+        top-level element. Thus we return a list of xml.Node fragments, one for
+        each of the top-level gdata Container children."""
+        return self._to_xml_rec()
+
+    def to_xmlstr(self, pretty=True) -> str:
+        """Convert this gdata node to an XML string
+
+        The result is a joined XML string of all the fragments, one for each of
+        the top-level gdata Container children."""
+        return xml.encode_nodes(self.to_xml(), pretty)
 
     # --
     def get_leaf(self, name) -> Leaf:
