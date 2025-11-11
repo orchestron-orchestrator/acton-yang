@@ -617,7 +617,7 @@ def from_json_path(root: yang.schema.DRoot, data: dict[str, ?value], path: list[
         # Creates: root -> list1[key1] as Absent (for removal)
         from_json_path(schema, {}, ["mod:list1", "key1"], "remove")
     """
-    result = _from_json_path_recursive(root, root.identities, data, path, op, loose, [], True, True)
+    result = _from_json_path_recursive(root, root.identities, data, path, op, loose, [PathElement(root)], True, True)
     # The top-level call always returns a Container because:
     # - If path is empty, from_data returns Container
     # - If path is non-empty, we wrap in Container
@@ -636,7 +636,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 return _from_data_recursive(s, global_identity, data, loose=loose, set_ns=set_ns, spath=current_path)
             elif op == "remove":
                 return yang.gdata.Absent()
-            raise ValueError(f"Invalid operation: {op}")
+            raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
         else:   # len(path) > 0
             # More path to traverse - create a container with just the next child
             unique_namer = yang.schema._UniqueNamer(s)
@@ -657,7 +657,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 return yang.gdata.Container({uname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
 
             # Path tries to go through a leaf - this is an error
-            raise ValueError("Invalid JSON path to non-inner node")
+            raise ValueError("Invalid JSON path to non-inner node at {format_schema_path(current_path + [PathElement(child)])}: {point}")
     elif isinstance(s, yang.schema.DList):
         if len(path) == 1:
             # Base case: keys are the last path element
@@ -672,7 +672,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                     data_with_keys[key] = keys.pop(0)
                 else:
                     if str(data_with_keys[key]) != keys.pop(0):
-                        raise ValueError("Key value mismatch between path and payload")
+                        raise ValueError("Key value mismatch between path and payload at {format_schema_path(current_path)}")
             element_gdata = _from_data_recursive(s, global_identity, data_with_keys, loose, set_ns=False, spath=current_path + [PathElement(s, {k: v for k, v in data_with_keys.items() if k in s.key and v is not None})])
             elements = []
             if op == "merge":
@@ -680,7 +680,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
             elif op == "remove":
                 elements.append(yang.gdata.Absent(element_gdata.key_children(s.key)))
             else:
-                raise ValueError("Invalid operation: {op}")
+                raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
             perhaps = True if (top or set_ns) and s.namespace != "" else False
             return yang.gdata.List(s.key, elements, _user_order(s.ordered_by), ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
         elif len(path) > 1:
@@ -713,13 +713,13 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                     slist.elements[0].children[uname(lchild)] = inner_result
                     return slist
                 else:
-                    raise ValueError("Node {child_point} is not inner")
+                    raise ValueError("Node at {format_schema_path(current_path + [PathElement(lchild)])} is not inner: {type(lchild)}")
 
             raise ValueError("unreachable")
-        raise ValueError("Unable to resolve path, no keys provided")
+        raise ValueError("Unable to resolve path at {format_schema_path(current_path)}: no keys provided")
 
 
-    raise ValueError("missing")
+    raise ValueError("Unknown schema node type at {format_schema_path(current_path)}: {type(s)}")
 
 
 def from_data[A(YangData)](root: yang.schema.DRoot, data: A, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
@@ -974,7 +974,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
     elif isinstance(s, yang.schema.DOutput):
         return yang.gdata.Container(children)
     else:
-        raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
+        raise ValueError("Unknown schema node type at {format_schema_path(spath)}: {type(s)}")
 
 
 def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
