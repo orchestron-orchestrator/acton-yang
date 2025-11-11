@@ -1088,12 +1088,16 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         # Only process data nodes
         if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
             continue
+
+        def path_with_child(k=None):
+            return spath + [PathElement(child, k)]
+
         taker_name = yang.schema.taker_name(child, "gdata", loose)
         taken_nodes = None
         try:
             taken_nodes = GDATA_TAKERS[taker_name](node, uname(child))
         except ValueError as err:
-            raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
+            raise ValueError("Error reading {format_schema_path(path_with_child())}: {err.error_message}")
 
         if taken_nodes is not None:
             if isinstance(child, yang.schema.DNodeLeaf):
@@ -1142,7 +1146,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     # Recursive call to pradata() for the list element
                     res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=spath + [PathElement(child, element.key_children(child.key))]).splitlines())
             else:
-                raise ValueError("Unhandled child type in .pradata(): {type(child)}")
+                raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
 
     # Add the leaves as a single group at the beginning of the section,
     # optionally add container header if we're not printing a list element
