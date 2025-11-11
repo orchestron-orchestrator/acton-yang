@@ -1070,7 +1070,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         return unique_namer.unique_name(n.name, n.prefix)
     res = []
     if top:
-        res.append('# Top node: {yang.schema.get_path(s)}')
+        res.append('# Top node: {format_schema_path(spath)}')
         # Build constructor arguments for non-optional children (same logic as in __init__)
         constructor_args, constructor_containers = _find_non_optional_subtree(s, node, ["self"], local_prefix="")
         if constructor_args:
@@ -1114,7 +1114,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             elif isinstance(child, yang.schema.DContainer) and isinstance(taken_nodes, yang.gdata.Container):
                 if child.presence:
                     res.append("")
-                    res.append("# P-container: {yang.schema.get_path(child)}")
+                    res.append("# P-container: {format_schema_path(path_with_child())}")
                     # Build .pradata() code for this P-container
                     pc_args, pc_var_declarations = _find_non_optional_subtree(child, taken_nodes, [usname(child)])
 
@@ -1131,7 +1131,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             elif isinstance(child, yang.schema.DList) and isinstance(taken_nodes, yang.gdata.List):
                 for element in taken_nodes.elements:
                     res.append("")
-                    res.append("# List {yang.schema.get_path(child)} element: {element.key_str(child.key)}")
+                    res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(child.key)}")
 
                     # Build the list of arguments for create() method
                     list_create_args = []
@@ -1152,7 +1152,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
     # optionally add container header if we're not printing a list element
     if leaves:
         if not list_element:
-            res = ["", "# Container: {yang.schema.get_path(s)}"] + leaves + res
+            res = ["", "# Container: {format_schema_path(spath)}"] + leaves + res
         else:
             res = leaves + res
     return "\n".join(res)
