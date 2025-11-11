@@ -1,4 +1,5 @@
 
+import diff
 import file
 import testing
 import json
@@ -1129,3 +1130,34 @@ def _test_copy_full_xml_tree():
 
     gdiff = yang.gdata.diff(original_gdata, copied_gdata)
     testing.assertNone(gdiff)
+
+def _test_adata_gen2_gen3_diff():
+    """Test diff between gen2 and gen3 .prsrc() output for adata.
+    """
+    xml_in = xml.decode(xml_text_full)
+
+    # Generate gen2 adata source
+    gd_gen2 = yang_foo.from_xml(xml_in)
+    ad_gen2 = yang_foo_root.from_gdata(gd_gen2)
+    adata_gen2 = ad_gen2.prsrc()
+
+    # Generate gen3 adata source
+    gd_gen3 = yang_foo.from_xml_gen3(xml_in)
+    adata_gen3 = yang_foo.prsrc_gen3(gd_gen3)
+
+    return diff.diff(adata_gen2, adata_gen3)
+
+def _test_gdata_gen2_gen3_diff():
+    """Test diff between gen2 and gen3 .prsrc() output for gdata.
+    """
+    xml_in = xml.decode(xml_text_full)
+
+    # Generate gen2 gdata source
+    gd_gen2 = yang_foo.from_xml(xml_in)
+    gdata_gen2 = gd_gen2.prsrc()
+
+    # Generate gen3 gdata source
+    gd_gen3 = yang_foo.from_xml_gen3(xml_in)
+    gdata_gen3 = gd_gen3.prsrc()
+
+    return diff.diff(gdata_gen2, gdata_gen3)
