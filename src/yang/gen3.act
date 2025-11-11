@@ -206,15 +206,25 @@ def validate_decimal_range(value: float, range_str: str) -> bool:
 
 
 def format_schema_path(path: list[PathElement]) -> str:
-    if len(path) == 0:
-        return "/"
     path_str = ""
-    for elem in path:
-        path_str = path_str + "/" + elem.node.name
-        keys_dict = elem.keys
-        if keys_dict is not None and len(keys_dict) > 0:
-            predicates = ["{k}={repr(v)}" for k, v in keys_dict.items()]
-            path_str = path_str + "[" + ",".join(predicates) + "]"
+
+    for i, elem in enumerate(path):
+        if i > 0:
+            prev = path[i-1].node
+            if not isinstance(prev, yang.schema.DRoot):
+                path_str = path_str + "/"
+            if isinstance(prev, yang.schema.DNodeInner):
+                un = yang.schema._UniqueNamer(prev)
+                path_str = path_str + un.unique_name(elem.node.name, elem.node.prefix)
+                keys_dict = elem.keys
+                if keys_dict is not None and len(keys_dict) > 0:
+                    predicates = ["{k}={repr(v)}" for k, v in keys_dict.items()]
+                    path_str = path_str + "[" + ",".join(predicates) + "]"
+        elif isinstance(elem.node, yang.schema.DRoot):
+            path_str = "/"
+        else:
+            # Relative path
+            path_str = elem.node.name
     return path_str
 
 
@@ -728,7 +738,7 @@ def from_data[A(YangData)](root: yang.schema.DRoot, data: A, loose: bool=False, 
     Returns:
         A yang.gdata.Container containing the parsed data tree
     """
-    return _from_data_recursive(root, root.identities, data, loose, root_path=root_path)
+    return _from_data_recursive(root, root.identities, data, loose, root_path=root_path, spath=[PathElement(root)])
 
 def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
     """Internal function with additional recursion accumulators
@@ -754,8 +764,8 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
     """
 
     # Navigate to root path if specified
-    if root_path != [] and len(spath) < len(root_path):
-        next = root_path[len(spath)]
+    if root_path != [] and len(spath) -1 < len(root_path):
+        next = root_path[len(spath) - 1]
 
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
@@ -1112,7 +1122,6 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 else:
                     res.extend(_pradata_recursive(child, taken_nodes, "{self_name}.{usname(child)}", loose, root_path=root_path, path=path).splitlines())
             elif isinstance(child, yang.schema.DList) and isinstance(taken_nodes, yang.gdata.List):
-                child_unique_namer = yang.schema._UniqueNamer(child)
                 for element in taken_nodes.elements:
                     res.append("")
                     res.append("# List {yang.schema.get_path(child)} element: {element.key_str(child.key)}")
@@ -1448,9 +1457,17 @@ def _test_missing_list_key_xml():
         testing.assertEqual(expected, err.error_message)
 
 
+def _test_format_schema_path_empty():
+    """format_schema_path renders empty as ''"""
+    path: list[PathElement] = []
+    out = format_schema_path(path)
+    if out != "":
+        testing.error("Unexpected path: {out}")
+
+
 def _test_format_schema_path_root():
     """format_schema_path renders root as '/'"""
-    path: list[PathElement] = []
+    path: list[PathElement] = [PathElement(yang.schema.DRoot())]
     out = format_schema_path(path)
     if out != "/":
         testing.error("Unexpected path: {out}")
@@ -1477,7 +1494,7 @@ def _test_format_schema_path_list_predicate():
     lnode = cnode.get("l")
     vnode = lnode.get("v")
 
-    path = [PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1"}), PathElement(vnode)]
+    path = [PathElement(s), PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1"}), PathElement(vnode)]
     out = format_schema_path(path)
     expected = "/c/l[k1='Key 1']/v"
     if out != expected:
