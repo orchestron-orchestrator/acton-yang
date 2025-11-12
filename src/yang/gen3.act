@@ -808,16 +808,16 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                     elif cop == "delete":
                         children[uname(child)] = yang.gdata.Delete(ns=cns, module=cmod)
                     elif cop == "create":
-                        inner = _from_data_recursive(child, global_identity, val, loose, set_ns=False, root_path=root_path, spath=spath + [PathElement(child)])
+                        inner = _from_data_recursive(child, global_identity, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
                         children[uname(child)] = yang.gdata.Create(inner.children, ns=cns, module=cmod)
                     elif cop == "replace":
-                        inner = _from_data_recursive(child, global_identity, val, loose, set_ns=False, root_path=root_path, spath=spath + [PathElement(child)])
+                        inner = _from_data_recursive(child, global_identity, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
                         children[uname(child)] = yang.gdata.Replace(inner.children, ns=cns, module=cmod)
                     else:
-                        maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=spath + [PathElement(child)])
+                        maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                         children[uname(child)] = maybe
                 elif isinstance(val, dict):
-                    maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=spath + [PathElement(child)])
+                    maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                     children[uname(child)] = maybe
                 else:
                     children[uname(child)] = yang.gdata.Container({})
@@ -848,25 +848,25 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                     eop = get_netconf_operation(element_data)
                     if eop in ["remove", "delete"]:
                             # Build element to extract proper key leaves, then create Absent/Delete with keys
-                            eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                            eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                             key_children = {key: unwrap_key(key, eg.children.get(key)) for key in child.key}
                             if eop == "remove":
                                 list_elements.append(yang.gdata.Absent(key_children))
                             else:
                                 list_elements.append(yang.gdata.Delete(key_children))
                     elif eop in ["create", "replace"]:
-                        eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                        eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                         if eop == "create":
                             list_elements.append(yang.gdata.Create(eg.children))
                         else:
                             list_elements.append(yang.gdata.Replace(eg.children))
                     else:
-                        element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                        element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                         list_elements.append(element_gdata)
                 elif isinstance(element_data, dict):
                     # Extract key values for better error context directly from the data (JSON)
                     key_values = {k: unwrap_key(k, element_data.get(k)) for k in child.key}
-                    element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=spath + [PathElement(child, key_values)])
+                    element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                     list_elements.append(element_gdata)
                 else:
                     raise ValueError("Unsupported type for list element at {format_schema_path(path_with_child())}: {type(element_data)}")
@@ -1125,9 +1125,9 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     pc_args_str = ", ".join(pc_args)
                     res.append("{child_accessor} = {self_name}.create_{usname(child)}({pc_args_str})")
                     # Recursive call to pradata() for the P-container, to fill in the rest of the optional children
-                    res.extend(_pradata_recursive(child, taken_nodes, usname(child), loose, root_path=root_path, spath=spath + [PathElement(child)]).splitlines())
+                    res.extend(_pradata_recursive(child, taken_nodes, usname(child), loose, root_path=root_path, spath=path_with_child()).splitlines())
                 else:
-                    res.extend(_pradata_recursive(child, taken_nodes, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=spath + [PathElement(child)]).splitlines())
+                    res.extend(_pradata_recursive(child, taken_nodes, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child()).splitlines())
             elif isinstance(child, yang.schema.DList) and isinstance(taken_nodes, yang.gdata.List):
                 for element in taken_nodes.elements:
                     res.append("")
