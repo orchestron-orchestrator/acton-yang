@@ -647,7 +647,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
             rest_path = path[1:]
 
             local_name, module = _parse_qualified_name(point)
-            child = s.get(local_name, module, allow_unqualified=False)
+            child = s.get(local_name, module=module, allow_unqualified=False)
 
             if isinstance(child, yang.schema.DNodeInner):
                 # Recursively process the child node
@@ -704,7 +704,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
 
                 local_name, module = _parse_qualified_name(child_point)
 
-                lchild = s.get(local_name, module, allow_unqualified=False)
+                lchild = s.get(local_name, module=module, allow_unqualified=False)
                 if isinstance(lchild, yang.schema.DNodeInner):
                     # Now extract gdata for the rest of the path, from the child point
                     inner_result = _from_json_path_recursive(lchild, global_identity, data, child_rest_path, op, loose, current_path + [PathElement(lchild)], False, False)
@@ -768,7 +768,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
         next = root_path[len(spath) - 1]
 
         local_name, module = _parse_qualified_name(next)
-        child = s.get(local_name, module, allow_unqualified=False)
+        child = s.get(local_name, module=module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
             return _from_data_recursive(child, global_identity, data, loose, set_ns, root_path, spath + [PathElement(child)])
         raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
@@ -986,7 +986,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
     if root_path != [] and len(spath) - 1 < len(root_path):
         next = root_path[len(spath) - 1]
         local_name, module = _parse_qualified_name(next)
-        child = s.get(local_name, module, allow_unqualified=False)
+        child = s.get(local_name, module=module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
             return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, spath + [PathElement(child)])
         raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
@@ -1272,8 +1272,8 @@ def _test_y1_json():
 
 def _test_root_path():
     """Test root_path argument for navigating to nested containers"""
-    y1 = r"""module y1 {
-  namespace "urn:example:y1";
+    y1 = r"""module acme-y1 {
+  namespace "urn:example:acme-y1";
   prefix y1;
 
   container top {
@@ -1289,20 +1289,15 @@ def _test_root_path():
 }"""
 
     xml_in = r"""<data>
-<top xmlns="urn:example:y1">
   <nested>
     <value>test data</value>
   </nested>
-</top>
 </data>"""
 
     s = yang.compile([y1])
 
-    # Test parsing from root (should include top container)
-    gd_root = from_data(s, xml.decode(xml_in))
-
-    # Test parsing with root_path to navigate directly to nested container
-    gd_nested = from_data(s, xml.decode(xml_in), root_path=["y1:top", "nested"])
+    # Start parsing at the /acme-y1:top container (acme-y1 is the module name, not prefix)
+    gd_nested = from_data(s, xml.decode(xml_in), root_path=["acme-y1:top"])
 
     return gd_nested.prsrc()
 
