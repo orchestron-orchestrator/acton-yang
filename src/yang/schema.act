@@ -918,6 +918,13 @@ class DNodeInner(DNode):
                     res.append("            list_elem = '{usname(child)}_element = {{self_name}}.{usname(child)}.create()'")
                 res.append("            res.append(list_elem)")
                 # Recursive call to prsrc() for the list element
+                # TODO: We calculate the paths at code generation time, so only
+                # using the schema, no data. This means that the path printed in
+                # the comments for children will only include the list name, no
+                # key predicates. We should defer (parts of) path computation to
+                # runtime, passing the key values to the generated function.
+                # The gen3 printer does the right thing though, so maybe just wait
+                # until this code is deprecated?!
                 res.append("            res.extend(_element.prsrc('{usname(child)}_element', False, list_element=True).splitlines())")
             else:
                 raise ValueError("Unhandled child type in .prsrc(): {type(child)}")
