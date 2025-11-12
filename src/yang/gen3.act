@@ -206,15 +206,25 @@ def validate_decimal_range(value: float, range_str: str) -> bool:
 
 
 def format_schema_path(path: list[PathElement]) -> str:
-    if len(path) == 0:
-        return "/"
     path_str = ""
-    for elem in path:
-        path_str = path_str + "/" + elem.node.name
-        keys_dict = elem.keys
-        if keys_dict is not None and len(keys_dict) > 0:
-            predicates = ["{k}={repr(v)}" for k, v in keys_dict.items()]
-            path_str = path_str + "[" + ",".join(predicates) + "]"
+
+    for i, elem in enumerate(path):
+        if i > 0:
+            prev = path[i-1].node
+            if not isinstance(prev, yang.schema.DRoot):
+                path_str = path_str + "/"
+            if isinstance(prev, yang.schema.DNodeInner):
+                un = yang.schema._UniqueNamer(prev)
+                path_str = path_str + un.unique_name(elem.node.name, elem.node.prefix)
+                keys_dict = elem.keys
+                if keys_dict is not None and len(keys_dict) > 0:
+                    predicates = ["{k}={repr(v)}" for k, v in keys_dict.items()]
+                    path_str = path_str + "[" + ",".join(predicates) + "]"
+        elif isinstance(elem.node, yang.schema.DRoot):
+            path_str = "/"
+        else:
+            # Relative path
+            path_str = elem.node.name
     return path_str
 
 
@@ -607,7 +617,7 @@ def from_json_path(root: yang.schema.DRoot, data: dict[str, ?value], path: list[
         # Creates: root -> list1[key1] as Absent (for removal)
         from_json_path(schema, {}, ["mod:list1", "key1"], "remove")
     """
-    result = _from_json_path_recursive(root, root.identities, data, path, op, loose, [], True, True)
+    result = _from_json_path_recursive(root, root.identities, data, path, op, loose, [PathElement(root)], True, True)
     # The top-level call always returns a Container because:
     # - If path is empty, from_data returns Container
     # - If path is non-empty, we wrap in Container
@@ -626,7 +636,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 return _from_data_recursive(s, global_identity, data, loose=loose, set_ns=set_ns, spath=current_path)
             elif op == "remove":
                 return yang.gdata.Absent()
-            raise ValueError(f"Invalid operation: {op}")
+            raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
         else:   # len(path) > 0
             # More path to traverse - create a container with just the next child
             unique_namer = yang.schema._UniqueNamer(s)
@@ -647,7 +657,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 return yang.gdata.Container({uname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
 
             # Path tries to go through a leaf - this is an error
-            raise ValueError("Invalid JSON path to non-inner node")
+            raise ValueError("Invalid JSON path to non-inner node at {format_schema_path(current_path + [PathElement(child)])}: {point}")
     elif isinstance(s, yang.schema.DList):
         if len(path) == 1:
             # Base case: keys are the last path element
@@ -662,7 +672,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                     data_with_keys[key] = keys.pop(0)
                 else:
                     if str(data_with_keys[key]) != keys.pop(0):
-                        raise ValueError("Key value mismatch between path and payload")
+                        raise ValueError("Key value mismatch between path and payload at {format_schema_path(current_path)}")
             element_gdata = _from_data_recursive(s, global_identity, data_with_keys, loose, set_ns=False, spath=current_path + [PathElement(s, {k: v for k, v in data_with_keys.items() if k in s.key and v is not None})])
             elements = []
             if op == "merge":
@@ -670,7 +680,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
             elif op == "remove":
                 elements.append(yang.gdata.Absent(element_gdata.key_children(s.key)))
             else:
-                raise ValueError("Invalid operation: {op}")
+                raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
             perhaps = True if (top or set_ns) and s.namespace != "" else False
             return yang.gdata.List(s.key, elements, _user_order(s.ordered_by), ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
         elif len(path) > 1:
@@ -703,13 +713,13 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                     slist.elements[0].children[uname(lchild)] = inner_result
                     return slist
                 else:
-                    raise ValueError("Node {child_point} is not inner")
+                    raise ValueError("Node at {format_schema_path(current_path + [PathElement(lchild)])} is not inner: {type(lchild)}")
 
             raise ValueError("unreachable")
-        raise ValueError("Unable to resolve path, no keys provided")
+        raise ValueError("Unable to resolve path at {format_schema_path(current_path)}: no keys provided")
 
 
-    raise ValueError("missing")
+    raise ValueError("Unknown schema node type at {format_schema_path(current_path)}: {type(s)}")
 
 
 def from_data[A(YangData)](root: yang.schema.DRoot, data: A, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
@@ -728,7 +738,7 @@ def from_data[A(YangData)](root: yang.schema.DRoot, data: A, loose: bool=False, 
     Returns:
         A yang.gdata.Container containing the parsed data tree
     """
-    return _from_data_recursive(root, root.identities, data, loose, root_path=root_path)
+    return _from_data_recursive(root, root.identities, data, loose, root_path=root_path, spath=[PathElement(root)])
 
 def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
     """Internal function with additional recursion accumulators
@@ -754,8 +764,8 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
     """
 
     # Navigate to root path if specified
-    if root_path != [] and len(spath) < len(root_path):
-        next = root_path[len(spath)]
+    if root_path != [] and len(spath) -1 < len(root_path):
+        next = root_path[len(spath) - 1]
 
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
@@ -774,6 +784,9 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
         # Only process data nodes
         if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
             continue
+
+        def path_with_child(k=None):
+            return spath + [PathElement(child, k)]
 
         # Determine namespace (only include if different from parent)
         ns = None
@@ -813,7 +826,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                 # mandatory content, then raise an error in strict mode.
                 if not loose and isinstance(child, yang.schema.DContainer) and not child.presence:
                     if has_mandatory_content(child):
-                        raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find xml child with name {child.name}")
+                        raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
 
         elif isinstance(child, yang.schema.DList):
             list_val = data.take_list(child, child.name, ns, spath)
@@ -822,7 +835,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
             def unwrap_key[T](name: str, val: ?T) -> T:
                 if val is not None:
                     return val
-                raise ValueError("Missing key value at {format_schema_path(spath + [PathElement(child)])}: {name}")
+                raise ValueError("Missing key value at {format_schema_path(path_with_child())}: {name}")
 
             for element_data in list_val:
                 if isinstance(element_data, xml.Node):
@@ -856,7 +869,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                     element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=spath + [PathElement(child, key_values)])
                     list_elements.append(element_gdata)
                 else:
-                    raise ValueError("Unsupported type for list element: {type(element_data)}")
+                    raise ValueError("Unsupported type for list element at {format_schema_path(path_with_child())}: {type(element_data)}")
             if list_elements:
                 list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
                 children[uname(child)] = list_gdata
@@ -875,9 +888,9 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                             if validated is not None:
                                 validated_values.append(validated)
                             else:
-                                raise ValueError(f"Invalid value for identityref leaf-list {child.name}: {error}")
+                                raise ValueError("Invalid value for identityref leaf-list at {format_schema_path(path_with_child())}: {error}")
                         else:
-                            raise ValueError(f"Expected PartialIdentityref for identityref leaf-list {child.name}, got {type(ival)}")
+                            raise ValueError("Expected PartialIdentityref for identityref leaf-list at {format_schema_path(path_with_child())}, got {type(ival)}")
                     if len(validated_values) > 0:
                         children[uname(child)] = yang.gdata.LeafList("identityref", validated_values, user_order=_user_order(child.ordered_by))
                 else:
@@ -922,9 +935,9 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                         if validated is not None:
                             children[uname(child)] = yang.gdata.Leaf("identityref", validated)
                         else:
-                            raise ValueError(f"Invalid value for identityref {child.name}: {error}")
+                            raise ValueError("Invalid value for identityref at {format_schema_path(path_with_child())}: {error}")
                     else:
-                        raise ValueError(f"Expected PartialIdentityref for identityref leaf {child.name}, got {type(typed.val)}")
+                        raise ValueError("Expected PartialIdentityref for identityref leaf at {format_schema_path(path_with_child())}, got {type(typed.val)}")
                 else:
                     # Determine concrete type
                     leaf_ns = None
@@ -948,9 +961,9 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                 # Missing leaf value
                 if not loose and child.mandatory:
                     # Match legacy error format expected by tests
-                    raise ValueError("Error reading {yang.schema.get_path(child)}: Cannot find xml child with name {child.name}")
+                    raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
         else:
-            raise ValueError(f"Unknown schema node type at {yang.schema.get_path(child)}: {child}")
+            raise ValueError(f"Unknown schema node type at {format_schema_path(path_with_child())}: {child}")
 
     if isinstance(s, yang.schema.DContainer):
         return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns and s.module != "" else None)
@@ -961,22 +974,22 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
     elif isinstance(s, yang.schema.DOutput):
         return yang.gdata.Container(children)
     else:
-        raise ValueError(f"Unknown schema node type: {s.gname} for {s}")
+        raise ValueError("Unknown schema node type at {format_schema_path(spath)}: {type(s)}")
 
 
 def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
-    return _pradata_recursive(root, node, self_name, loose, top=True, root_path=root_path)
+    return _pradata_recursive(root, node, self_name, loose, top=True, root_path=root_path, spath=[PathElement(root)])
 
 
-def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False, root_path: list[str]=[], path: list[str]=[]):
+def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False, root_path: list[str]=[], spath: list[PathElement]=[]):
     # Navigate to root path if specified
-    if root_path != [] and len(path) < len(root_path):
-        next = root_path[len(path)]
+    if root_path != [] and len(spath) - 1 < len(root_path):
+        next = root_path[len(spath) - 1]
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, path + [next])
-        raise ValueError("Node on path {path} is not inner")
+            return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, spath + [PathElement(child)])
+        raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
 
     def pname(n):
         return yang.schema.get_path_name(n)
@@ -1057,7 +1070,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         return unique_namer.unique_name(n.name, n.prefix)
     res = []
     if top:
-        res.append('# Top node: {yang.schema.get_path(s)}')
+        res.append('# Top node: {format_schema_path(spath)}')
         # Build constructor arguments for non-optional children (same logic as in __init__)
         constructor_args, constructor_containers = _find_non_optional_subtree(s, node, ["self"], local_prefix="")
         if constructor_args:
@@ -1075,12 +1088,16 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         # Only process data nodes
         if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
             continue
+
+        def path_with_child(k=None):
+            return spath + [PathElement(child, k)]
+
         taker_name = yang.schema.taker_name(child, "gdata", loose)
         taken_nodes = None
         try:
             taken_nodes = GDATA_TAKERS[taker_name](node, uname(child))
         except ValueError as err:
-            raise ValueError("Error reading {yang.schema.get_path(child)}: {err.error_message}")
+            raise ValueError("Error reading {format_schema_path(path_with_child())}: {err.error_message}")
 
         if taken_nodes is not None:
             if isinstance(child, yang.schema.DNodeLeaf):
@@ -1097,7 +1114,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             elif isinstance(child, yang.schema.DContainer) and isinstance(taken_nodes, yang.gdata.Container):
                 if child.presence:
                     res.append("")
-                    res.append("# P-container: {yang.schema.get_path(child)}")
+                    res.append("# P-container: {format_schema_path(path_with_child())}")
                     # Build .pradata() code for this P-container
                     pc_args, pc_var_declarations = _find_non_optional_subtree(child, taken_nodes, [usname(child)])
 
@@ -1108,14 +1125,13 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     pc_args_str = ", ".join(pc_args)
                     res.append("{child_accessor} = {self_name}.create_{usname(child)}({pc_args_str})")
                     # Recursive call to pradata() for the P-container, to fill in the rest of the optional children
-                    res.extend(_pradata_recursive(child, taken_nodes, usname(child), loose, root_path=root_path, path=path).splitlines())
+                    res.extend(_pradata_recursive(child, taken_nodes, usname(child), loose, root_path=root_path, spath=spath + [PathElement(child)]).splitlines())
                 else:
-                    res.extend(_pradata_recursive(child, taken_nodes, "{self_name}.{usname(child)}", loose, root_path=root_path, path=path).splitlines())
+                    res.extend(_pradata_recursive(child, taken_nodes, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=spath + [PathElement(child)]).splitlines())
             elif isinstance(child, yang.schema.DList) and isinstance(taken_nodes, yang.gdata.List):
-                child_unique_namer = yang.schema._UniqueNamer(child)
                 for element in taken_nodes.elements:
                     res.append("")
-                    res.append("# List {yang.schema.get_path(child)} element: {element.key_str(child.key)}")
+                    res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(child.key)}")
 
                     # Build the list of arguments for create() method
                     list_create_args = []
@@ -1128,15 +1144,15 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     create_args_str = ", ".join(list_create_args)
                     res.append("{usname(child)}_element = {self_name}.{usname(child)}.create({create_args_str})")
                     # Recursive call to pradata() for the list element
-                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, path=path).splitlines())
+                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=spath + [PathElement(child, element.key_children(child.key))]).splitlines())
             else:
-                raise ValueError("Unhandled child type in .pradata(): {type(child)}")
+                raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
 
     # Add the leaves as a single group at the beginning of the section,
     # optionally add container header if we're not printing a list element
     if leaves:
         if not list_element:
-            res = ["", "# Container: {yang.schema.get_path(s)}"] + leaves + res
+            res = ["", "# Container: {format_schema_path(spath)}"] + leaves + res
         else:
             res = leaves + res
     return "\n".join(res)
@@ -1448,9 +1464,17 @@ def _test_missing_list_key_xml():
         testing.assertEqual(expected, err.error_message)
 
 
+def _test_format_schema_path_empty():
+    """format_schema_path renders empty as ''"""
+    path: list[PathElement] = []
+    out = format_schema_path(path)
+    if out != "":
+        testing.error("Unexpected path: {out}")
+
+
 def _test_format_schema_path_root():
     """format_schema_path renders root as '/'"""
-    path: list[PathElement] = []
+    path: list[PathElement] = [PathElement(yang.schema.DRoot())]
     out = format_schema_path(path)
     if out != "/":
         testing.error("Unexpected path: {out}")
@@ -1477,7 +1501,7 @@ def _test_format_schema_path_list_predicate():
     lnode = cnode.get("l")
     vnode = lnode.get("v")
 
-    path = [PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1"}), PathElement(vnode)]
+    path = [PathElement(s), PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1"}), PathElement(vnode)]
     out = format_schema_path(path)
     expected = "/c/l[k1='Key 1']/v"
     if out != expected:

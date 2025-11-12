@@ -3170,17 +3170,23 @@ def _safe_name(name: str, safe_kw=True) -> str:
         new += "_"
     return new
 
+
+pure def _mut_avoider(node: DNodeInner):
+    # Even with "pure" comprehensions, the "mut" effect leaks out of _UniqueNamer.__init__ if this function is inlined?!
+    names = [child.name for child in node.children]
+    def count(n):
+        # TODO: refactor this to use list.count() once implemented in Acton
+        c = 0
+        for e in names:
+            if e == n:
+                c += 1
+        return c
+    return {name for name in names if count(name) > 1}
+
 class _UniqueNamer(object):
-    _name_conflicts: set[str]
 
     def __init__(self, node: DNodeInner):
-        names = set()
-        self._name_conflicts = set()
-        for child in node.children:
-            if child.name in names:
-                self._name_conflicts.add(child.name)
-            else:
-                names.add(child.name)
+        self._name_conflicts = _mut_avoider(node)
 
     def unique_name(self, name, prefix):
         if name not in self._name_conflicts:
