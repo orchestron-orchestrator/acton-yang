@@ -259,6 +259,7 @@ def optional_subtree(node: DNodeInner) -> bool:
 def nest(n):
     return " " * n
 
+
 class DNode(object):
     parent: ?DNodeInner
     gname: str       # The name of the GData class, e.g. "Container" for yang.gdata.Container
@@ -359,10 +360,10 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
-        raise NotImplementedError('DNode pdc: {type(self)} - {get_path(self)}')
+        raise NotImplementedError('DNode pdc: {type(self)} - {get_path(spath)}')
 
     def print_tree(self) -> str:
         r"""Print the tree representation for this schema node
@@ -450,9 +451,12 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
+        def path_with_child(c):
+            return spath + [c]
+
         if self.namespace != "":
             schema_ns.add(self.namespace)
         res = []
@@ -541,7 +545,7 @@ class DNodeInner(DNode):
             return ", user_order=True" if n.ordered_by == "user" else ""
 
         for child in self.children:
-            res.append(child.prdaclass(schema_yang=schema_yang, loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
+            res.append(child._prdaclass_rec(path_with_child(child), schema_yang=schema_yang, loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -839,7 +843,7 @@ class DNodeInner(DNode):
         res.append("    def prsrc(self, self_name='ad', top=True, list_element=False):")
         res.append("        res = []")
         res.append("        if top:")
-        res.append("            res.append('# Top node: {get_path(self)}')")
+        res.append("            res.append('# Top node: {get_path(spath)}')")
         # Build constructor arguments for non-optional children (same logic as in __init__)
         constructor_args, constructor_containers = find_non_optional_subtree(self, ["self"], local_prefix="")
 
@@ -874,7 +878,7 @@ class DNodeInner(DNode):
                 res.append("        if _{usname(child)} is not None:")
                 if child.presence:
                     res.append("            res.append('')")
-                    res.append("            res.append('# P-container: {get_path(child)}')")
+                    res.append("            res.append('# P-container: {get_path(path_with_child(child))}')")
                     # Build .prsrc() code for this P-container
                     pc_args, pc_var_declarations = find_non_optional_subtree(child, [usname(child)])
 
@@ -896,7 +900,7 @@ class DNodeInner(DNode):
                 res.append("        _{usname(child)} = self.{usname(child)}")
                 res.append("        for _element in _{usname(child)}:")
                 res.append("            res.append('')")
-                res.append('            res.append("# List {get_path(child)} element: {{_element.to_gdata().key_str({child.key})}}")')
+                res.append('            res.append("# List {get_path(path_with_child(child))} element: {{_element.to_gdata().key_str({child.key})}}")')
 
                 # Build the list of arguments for create() method
                 child_unique_namer = _UniqueNamer(child)
@@ -921,7 +925,7 @@ class DNodeInner(DNode):
         # optionally add container header if we're not printing a list element
         res.append("        if leaves:")
         res.append("            if not list_element:")
-        res.append("               res = ['', '# Container: {get_path(self)}'] + leaves + res")
+        res.append("               res = ['', '# Container: {get_path(spath)}'] + leaves + res")
         res.append("            else:")
         res.append("                res = leaves + res")
         res.append("        return '\\n'.join(res)")
@@ -932,12 +936,8 @@ class DNodeInner(DNode):
         if isinstance(self, DRoot):
             res.append("        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose={loose})")
         else:
-            # TODO: refactor prdaclass to accumulate the nodes (DNode) it traverses into a path parameter!
-            root_path = get_path(self).split("/")[1:]
-            # TODO: use a common function that takes a list[DNode] and builds a
-            # string path, obeying the rules for mandatory and optional qualifiers
-            root_path[0] = "{self.module}:{root_path[0]}"
-            res.append("        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose={loose}, root_path={repr(root_path)})")
+            root_path = ["{'{node.module}:' if prev.module != node.module else ''}{node.name}" if node is not None else None for prev, node in zip(spath, spath[1:] + [None])]
+            res.append("        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose={loose}, root_path={repr(root_path[:-1])})")
         res.append("")
 
         if isinstance(self, DList):
@@ -1253,7 +1253,7 @@ class DNodeInner(DNode):
                 # - set_ns: from DRpc (=True)
                 # - include_state=True
                 for child in rpc.children:
-                    child_class_src = child.prdaclass(schema_yang=schema_yang, loose=loose, top=False, set_ns=set_ns, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=True)
+                    child_class_src = child._prdaclass_rec(spath + [rpc, child], schema_yang=schema_yang, loose=loose, top=False, set_ns=set_ns, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=True)
                     res.append(child_class_src)
 
             # TODO: unique safe name for RPC function!
@@ -1645,7 +1645,7 @@ class DLeaf(DNodeLeaf):
                     return True
         return False
 
-    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
@@ -1712,7 +1712,7 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
-    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
@@ -1882,6 +1882,20 @@ class DRoot(DNodeInner):
                 raise ValueError(error)
 
         self.identities = [v.identity for v in identity_map.values()]
+
+    def prdaclass(self, schema_yang: ?list[str]=None, loose=False, gen_json=True, gen_xml=True, include_state=False, top=True, root_path: list[str]=[]) -> str:
+        def build_spath(spath: list[DNode]):
+            if len(root_path) == len(spath) - 1:
+                return spath
+
+            next = root_path[len(spath) - 1]
+            module, local_name = split_prefix_name(next)
+            child = spath[-1].get(local_name, module=module, allow_unqualified=False)
+            return build_spath(spath + [child])
+
+        spath = build_spath([self])
+        return spath[-1]._prdaclass_rec(spath, schema_yang, loose, top=top, set_ns=True, schema_ns=set(), gen_json=gen_json, gen_xml=gen_xml, include_state=include_state)
+
 
 class DRpc(DNodeInner):
     if_feature: list[str]
@@ -3252,7 +3266,7 @@ def get_path_name(dnode: DNode) -> str:
 
     return "__".join(reversed(path))
 
-def get_path(dnode: DNode) -> str:
+def get_path(path: list[DNode]) -> str:
     r"""Get the path of a data node
 
     The path is the absolute path in the YANG model, e.g. for the following
@@ -3285,28 +3299,26 @@ def get_path(dnode: DNode) -> str:
     - /foo:bar/foo:baz
     - /foo:bar/m2:baz
     """
-    path = []
-    parent = dnode.parent
-    if parent is None and isinstance(dnode, DNodeInner):
-        top_solo = True if not dnode.children else False
-    else:
-        top_solo = False
-    while True:
-        self_name = dnode.name
-        parent = dnode.parent
-        if parent is not None:
-            unique_namer = _UniqueNamer(parent)
-            self_name = unique_namer.unique_name(dnode.name, dnode.prefix)
-            dnode = parent
-        path.append(self_name)
-        if parent is None or isinstance(parent, DModule):
-            break
+    return "/".join(get_path_unames(path))
 
-    # This never happens, we always get at least our name!
-    if len(path) == 0:
-        raise ValueError("No path for DNode {dnode}")
 
-    return "/" + "/".join(reversed(path))
+def get_path_unames(path: list[DNode]) -> list[str]:
+    if len(path) == 1 and isinstance(path[0], DRoot):
+        return ["/"]
+
+    res = []
+    for i, node in enumerate(path):
+        if i > 0:
+            prev = path[i-1]
+            if isinstance(prev, DNodeInner):
+                un = _UniqueNamer(prev)
+                res.append(un.unique_name(node.name, node.prefix))
+        elif isinstance(node, DRoot):
+            res.append("")
+        else:
+            # Relative path
+            res.append(node.name)
+    return res
 
 # -- end of manually defined schema functions, automatically generated code follows
 
