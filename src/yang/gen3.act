@@ -218,7 +218,7 @@ def format_schema_path(path: list[PathElement]) -> str:
                 path_str = path_str + un.unique_name(elem.node.name, elem.node.prefix)
                 keys_dict = elem.keys
                 if keys_dict is not None and len(keys_dict) > 0:
-                    predicates = ["{k}={repr(v)}" for k, v in keys_dict.items()]
+                    predicates = ["{k}='{(v if isinstance(v, str) else str(v)).replace("'", "\\'")}'" for k, v in keys_dict.items()]
                     path_str = path_str + "[" + ",".join(predicates) + "]"
         elif isinstance(elem.node, yang.schema.DRoot):
             path_str = "/"
@@ -1483,8 +1483,9 @@ def _test_format_schema_path_list_predicate():
 
   container c {
     list l {
-      key "k1";
+      key "k1 k2";
       leaf k1 { type string; }
+      leaf k2 { type int32; }
       leaf v { type string; }
     }
   }
@@ -1496,12 +1497,13 @@ def _test_format_schema_path_list_predicate():
     lnode = cnode.get("l")
     vnode = lnode.get("v")
 
-    path = [PathElement(s), PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1"}), PathElement(vnode)]
+    path = [PathElement(s), PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1", "k2": 1}), PathElement(vnode)]
     out = format_schema_path(path)
-    expected = "/c/l[k1='Key 1']/v"
-    if out != expected:
-        testing.error("Unexpected path: {out}")
+    testing.assertEqual("/c/l[k1='Key 1',k2='1']/v", out)
 
+    path = [PathElement(s), PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1, with extra's", "k2": 1}), PathElement(vnode)]
+    out = format_schema_path(path)
+    testing.assertEqual(r"""/c/l[k1='Key 1, with extra\'s',k2='1']/v""", out)
 
 def _test_json_path_basic():
     """Test basic JSON path navigation"""
@@ -2134,9 +2136,12 @@ def _test_pradata():
           }
         }
         list li1 {
-          key name;
+          key "name extra-key";
           leaf name {
             type string;
+          }
+          leaf extra-key {
+            type int32;
           }
           leaf value {
             type int32;
@@ -2164,13 +2169,15 @@ def _test_pradata():
                 "l1": yang.gdata.Leaf("string", "inner value"),
                 "mandatory-leaf": yang.gdata.Leaf("string", "required value")
             }, presence=True),
-            "li1": yang.gdata.List(["name"], [
+            "li1": yang.gdata.List(["name", "extra-key"], [
                 yang.gdata.Container({
                     "name": yang.gdata.Leaf("string", "item1"),
+                    "extra-key": yang.gdata.Leaf("int32", 1),
                     "value": yang.gdata.Leaf("int32", 100)
                 }),
                 yang.gdata.Container({
                     "name": yang.gdata.Leaf("string", "item2"),
+                    "extra-key": yang.gdata.Leaf("int32", 2),
                     "value": yang.gdata.Leaf("int32", 200),
                     "c3": yang.gdata.Container({
                         "nested-leaf": yang.gdata.Leaf("string", "birb")
