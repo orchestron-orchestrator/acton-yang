@@ -8,6 +8,7 @@ import yang.gen3
 from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 from yang.schema import DIdentity
+from yang.schema import Type, Bit, Enum, Pattern, Range, Length
 
 # == This file is generated ==
 
@@ -25,14 +26,21 @@ foo_id2 = Identityref('id2', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
 mut def from_data_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    new_type = 'string'
+    new_val = val
+    return yang.gdata.Leaf(new_type, new_val)
+
 
 mut def from_data_foo__c1__l1__k2(val: value) -> yang.gdata.Leaf:
-    new_val, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
-    if new_val is not None:
-        return yang.gdata.Leaf('identityref', new_val)
+    new_type = 'identityref'
+    new_val = val
+    identityref, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
+    if identityref is not None:
+        new_val = identityref
     else:
         raise ValueError('Invalid value for identityref leaf k2: {error}')
+    return yang.gdata.Leaf(new_type, new_val)
+
 
 class foo__c1__l1_entry(yang.adata.MNode):
     k1: str
@@ -47,15 +55,17 @@ class foo__c1__l1_entry(yang.adata.MNode):
         children = {}
         _k1 = self.k1
         if _k1 is not None:
-            children['k1'] = yang.gdata.Leaf('string', _k1)
+            _k1_type = 'string'
+            children['k1'] = yang.gdata.Leaf(_k1_type, _k1)
         _k2 = self.k2
         if _k2 is not None:
+            _k2_type = 'identityref'
             _identityref_k2, error = complete_and_validate_identityref(_k2, _identities, ['foo:id1'], 'foo')
             if _identityref_k2 is not None:
                 _k2 = _identityref_k2
             else:
                 raise ValueError('Invalid value for identityref leaf k2: {error}')
-            children['k2'] = yang.gdata.Leaf('identityref', _k2)
+            children['k2'] = yang.gdata.Leaf(_k2_type, _k2)
         return yang.gdata.Container(children)
 
     @staticmethod
