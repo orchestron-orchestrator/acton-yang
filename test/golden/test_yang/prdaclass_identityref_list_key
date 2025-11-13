@@ -8,6 +8,7 @@ import yang.gen3
 from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 from yang.schema import DIdentity
+from yang.schema import Type, Bit, Enum, Pattern, Range, Length
 
 # == This file is generated ==
 
@@ -25,14 +26,16 @@ foo_id2 = Identityref('id2', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
 mut def from_data_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), Type('string'), [])
+    return yang.gdata.Leaf(tv.val)
+
 
 mut def from_data_foo__c1__l1__k2(val: value) -> yang.gdata.Leaf:
-    new_val, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
-    if new_val is not None:
-        return yang.gdata.Leaf('identityref', new_val)
-    else:
-        raise ValueError('Invalid value for identityref leaf k2: {error}')
+    identityref, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
+    if identityref is not None:
+        return yang.gdata.Leaf(identityref)
+    raise ValueError('Invalid value for identityref leaf k2: {error}')
+
 
 class foo__c1__l1_entry(yang.adata.MNode):
     k1: str
@@ -47,15 +50,15 @@ class foo__c1__l1_entry(yang.adata.MNode):
         children = {}
         _k1 = self.k1
         if _k1 is not None:
-            children['k1'] = yang.gdata.Leaf('string', _k1)
+            tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_k1), Type('string'), [])
+            children['k1'] = yang.gdata.Leaf(tv.val)
         _k2 = self.k2
         if _k2 is not None:
             _identityref_k2, error = complete_and_validate_identityref(_k2, _identities, ['foo:id1'], 'foo')
             if _identityref_k2 is not None:
-                _k2 = _identityref_k2
+                children['k2'] = yang.gdata.Leaf(_identityref_k2)
             else:
                 raise ValueError('Invalid value for identityref leaf k2: {error}')
-            children['k2'] = yang.gdata.Leaf('identityref', _k2)
         return yang.gdata.Container(children)
 
     @staticmethod

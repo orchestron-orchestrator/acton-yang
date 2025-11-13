@@ -475,6 +475,8 @@ class DNodeInner(DNode):
             res.append("from yang.identity import complete_and_validate_identityref")
             res.append("from yang.identityref import Identityref, PartialIdentityref")
             res.append("from yang.schema import DIdentity")
+            # Type class and others are needed to print Type classes in adata for resolving union base types
+            res.append("from yang.schema import Type, Bit, Enum, Pattern, Range, Length")
             res.append("")
             res.append("# == This file is generated ==")
             res.append("")
@@ -691,23 +693,31 @@ class DNodeInner(DNode):
                 if child.type_.name == "identityref":
                     res.append("            _identityref_{usname(child)}, error = complete_and_validate_identityref(_{usname(child)}, _identities, {repr(child.type_.base)}, {repr(child.module)})")
                     res.append("            if _identityref_{usname(child)} is not None:")
-                    res.append("                _{usname(child)} = _identityref_{usname(child)}")
+                    res.append("                children['{uname(child)}'] = yang.gdata.Leaf(_identityref_{usname(child)}{child_ns})")
                     res.append("            else:")
                     res.append("                raise ValueError('Invalid value for identityref leaf {child.name}: {{error}}')")
-                res.append("            children['{uname(child)}'] = yang.gdata.Leaf('{child.type_.name}', _{usname(child)}{child_ns})")
+                elif child.type_.name == "empty":
+                    # Can an empty type appear in the union?!
+                    res.append("            children['{uname(child)}'] = yang.gdata.Leaf(_{usname(child)}{child_ns})")
+                else:
+                    res.append("            tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_{usname(child)}), {child.type_.prsrc()}, [])")
+                    res.append("            children['{uname(child)}'] = yang.gdata.Leaf(tv.val{child_ns})")
             elif isinstance(child, DLeafList):
                 # None check for leaf-list is redundant (always defaults to []),
                 # but this makes the generator more readable
+                res.append("            _ll_{usname(child)} = []")
                 if child.type_.name == "identityref":
-                    res.append("            _identityref_{usname(child)} = []")
                     res.append("            for v in _{usname(child)}:")
                     res.append("                nv, error = complete_and_validate_identityref(v, _identities, {repr(child.type_.base)}, {repr(child.module)})")
                     res.append("                if nv is not None:")
-                    res.append("                    _identityref_{usname(child)}.append(nv)")
+                    res.append("                    _ll_{usname(child)}.append(nv)")
                     res.append("                else:")
                     res.append("                    raise ValueError('Invalid value for identityref leaf-list {child.name}: {{error}}')")
-                    res.append("            _{usname(child)} = _identityref_{usname(child)}")
-                res.append("            children['{uname(child)}'] = yang.gdata.LeafList('{child.type_.name}', _{usname(child)}{maybe_user_order_ll(child)}{child_ns})")
+                else:
+                    res.append("            for v in _{usname(child)}:")
+                    res.append("                tv = yang.gen3.try_parse_value(yang.gdata.yang_str(v), {child.type_.prsrc()}, [])")
+                    res.append("                _ll_{usname(child)}.append(tv.val)")
+                res.append("            children['{uname(child)}'] = yang.gdata.LeafList(_ll_{usname(child)}{maybe_user_order_ll(child)}{child_ns})")
             elif isinstance(child, DContainer):
                 res.append("            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
             elif isinstance(child, DList):
@@ -1675,13 +1685,15 @@ class DLeaf(DNodeLeaf):
         if gen_json or gen_xml:
             res.append("mut def from_data_{pname(self)}(val: value) -> yang.gdata.Leaf:")
             if self.type_.name == "identityref":
-                res.append("    new_val, error = complete_and_validate_identityref(val, _identities, {repr(self.type_.base)}, {repr(self.module)})")
-                res.append("    if new_val is not None:")
-                res.append("        return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
-                res.append("    else:")
-                res.append("        raise ValueError('Invalid value for identityref leaf {self.name}: {{error}}')")
+                res.append("    identityref, error = complete_and_validate_identityref(val, _identities, {repr(self.type_.base)}, {repr(self.module)})")
+                res.append("    if identityref is not None:")
+                res.append("        return yang.gdata.Leaf(identityref{gdata_nsq})")
+                res.append("    raise ValueError('Invalid value for identityref leaf {self.name}: {{error}}')")
             else:
-                res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
+                # TODO: what if the union includes identityref? Then try_parse_value should resolve identities ...
+                res.append("    tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), {self.type_.prsrc()}, [])")
+                res.append("    return yang.gdata.Leaf(tv.val{gdata_nsq})")
+            res.append("")
             res.append("")
         return "\n".join(res)
 
@@ -1723,23 +1735,30 @@ class DLeafList(DNodeLeaf):
         def pname(n):
             return get_path_name(n)
         maybe_user_order = ", user_order=True" if self.ordered_by == "user" else ""
-        # Include namespace qualifier(s) iff our namespace is different than our
-        # parent
+        # Include namespace qualifier(s) iff our namespace is different than our parent
         gdata_nsq = ", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
         if gen_json or gen_xml:
+            # val: list[value] contains values of the same type, guaranteed in from_XXX_YYYs() -> list[YYY]
             res.append("mut def from_data_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-            if self.type_.name == "identityref":
+            if self.type_.name in {"union", "identityref"}:
                 res.append("    new_val = []")
-                res.append("    for v in val:")
-                res.append("        nv, error = complete_and_validate_identityref(v, _identities, {repr(self.type_.base)}, {repr(self.module)})")
-                res.append("        if nv is not None:")
-                res.append("            new_val.append(nv)")
-                res.append("        else:")
-                res.append("            raise ValueError('Invalid value for identityref leaf-list {self.name}: {{error}}')")
-                res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
+                if self.type_.name == "union":
+                    res.append("    for v in val:")
+                    if self.type_.name == "union":
+                        res.append("        tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), {self.type_.prsrc()}, [])")
+                        res.append("        new_val.append(tv.val)")
+                else:
+                    res.append("    new_type = '{self.type_.name}'")
+                    res.append("    for v in val:")
+                    res.append("        nv, error = complete_and_validate_identityref(v, _identities, {repr(self.type_.base)}, {repr(self.module)})")
+                    res.append("        if nv is not None:")
+                    res.append("            new_val.append(nv)")
+                    res.append("        else:")
+                    res.append("            raise ValueError('Invalid value for identityref leaf-list {self.name}: {{error}}')")
+                res.append("    return yang.gdata.LeafList(new_val{maybe_user_order}{gdata_nsq})")
             else:
-                res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
+                res.append("    return yang.gdata.LeafList(val{maybe_user_order}{gdata_nsq})")
             res.append("")
         return "\n".join(res)
 

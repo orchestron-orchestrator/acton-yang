@@ -8,12 +8,18 @@ import yang.gen3
 from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 from yang.schema import DIdentity
+from yang.schema import Type, Bit, Enum, Pattern, Range, Length
 
 # == This file is generated ==
 
 
 mut def from_data_foo__l1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('union', val, ns='http://example.com/foo', module='foo')
+    tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), Type('union', type_=[
+        Type('string'),
+        Type('int32')
+    ]), [])
+    return yang.gdata.Leaf(tv.val, ns='http://example.com/foo', module='foo')
+
 
 class root(yang.adata.MNode):
     l1: value
@@ -26,7 +32,11 @@ class root(yang.adata.MNode):
         children = {}
         _l1 = self.l1
         if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('union', _l1, ns='http://example.com/foo', module='foo')
+            tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_l1), Type('union', type_=[
+        Type('string'),
+        Type('int32')
+    ]), [])
+            children['l1'] = yang.gdata.Leaf(tv.val, ns='http://example.com/foo', module='foo')
         return yang.gdata.Container(children)
 
     @staticmethod

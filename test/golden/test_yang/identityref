@@ -8,6 +8,7 @@ import yang.gen3
 from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 from yang.schema import DIdentity
+from yang.schema import Type, Bit, Enum, Pattern, Range, Length
 
 # == This file is generated ==
 
@@ -31,11 +32,11 @@ foo_udp = Identityref('udp', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
 mut def from_data_base__config__active_protocol(val: value) -> yang.gdata.Leaf:
-    new_val, error = complete_and_validate_identityref(val, _identities, ['base:protocol-type'], 'base')
-    if new_val is not None:
-        return yang.gdata.Leaf('identityref', new_val)
-    else:
-        raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
+    identityref, error = complete_and_validate_identityref(val, _identities, ['base:protocol-type'], 'base')
+    if identityref is not None:
+        return yang.gdata.Leaf(identityref)
+    raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
+
 
 class base__config(yang.adata.MNode):
     active_protocol: ?Identityref
@@ -50,10 +51,9 @@ class base__config(yang.adata.MNode):
         if _active_protocol is not None:
             _identityref_active_protocol, error = complete_and_validate_identityref(_active_protocol, _identities, ['base:protocol-type'], 'base')
             if _identityref_active_protocol is not None:
-                _active_protocol = _identityref_active_protocol
+                children['active-protocol'] = yang.gdata.Leaf(_identityref_active_protocol)
             else:
                 raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
-            children['active-protocol'] = yang.gdata.Leaf('identityref', _active_protocol)
         return yang.gdata.Container(children, ns='http://example.com/base', module='base')
 
     @staticmethod
