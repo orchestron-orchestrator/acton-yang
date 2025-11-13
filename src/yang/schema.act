@@ -1071,7 +1071,10 @@ class DNodeInner(DNode):
                 # TODO: no need for local variables when we switch from the
                 # gdata.Container.key attribute to key_str() method
                 res.append("    child_{usname(child)} = yang.gdata.{taker_name(child, 'xml', loose=loose)}(node, '{child.name}'{maybe_ns})")
-                res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_xml_{pname(child)}, child_{usname(child)})")
+                if isinstance(child, DNodeLeaf):
+                    res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_data_{pname(child)}, child_{usname(child)})")
+                else:
+                    res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_xml_{pname(child)}, child_{usname(child)})")
 
             if isinstance(self, DList):
                 # List element is a Container, but it needs no namespace qualifiers
@@ -1130,9 +1133,9 @@ class DNodeInner(DNode):
                         idx = self.key.index(child.name)
                         if isinstance(child, DLeaf) and child.type_.name == "identityref":
                             # Key child is of course always DLeaf, but the compiler doesn't know that ...
-                            res += ["        children['{uname(child)}'] = from_json_{pname(child)}(Identityref.from_json(keys[{idx}]))"]
+                            res += ["        children['{uname(child)}'] = from_data_{pname(child)}(Identityref.from_json(keys[{idx}]))"]
                         else:
-                            res += ["        children['{uname(child)}'] = from_json_{pname(child)}(keys[{idx}])"]
+                            res += ["        children['{uname(child)}'] = from_data_{pname(child)}(keys[{idx}])"]
                     except KeyError:
                         if child.namespace != self.namespace:
                             res += ["        if point == '{child.module}:{child.name}':"]
@@ -1217,7 +1220,10 @@ class DNodeInner(DNode):
                 # TODO: no need for local variables when we switch from the
                 # gdata.Container.key attribute to key_str() method
                 res.append("    child_{usname(child)} = yang.gdata.{taker_name(child, 'json', loose=loose)}(jd, '{child.name}'{maybe_module})")
-                res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_json_{pname(child)}, child_{usname(child)})")
+                if isinstance(child, DNodeLeaf):
+                    res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_data_{pname(child)}, child_{usname(child)})")
+                else:
+                    res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_json_{pname(child)}, child_{usname(child)})")
 
             if isinstance(self, DList):
                 # List element is a Container, but it needs no namespace qualifiers
@@ -1645,39 +1651,25 @@ class DLeaf(DNodeLeaf):
                     return True
         return False
 
-    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json: bool=True, gen_xml: bool=True, include_state=False) -> str:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
             return ""
         def pname(n):
             return get_path_name(n)
-        # Include namespace qualifier(s) iff our namespace is different than our
-        # parent
+        # Include namespace qualifier(s) iff our namespace is different than our parent
         gdata_nsq = ", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
-        if gen_json:
+        if gen_json or gen_xml:
+            res.append("mut def from_data_{pname(self)}(val: value) -> yang.gdata.Leaf:")
             if self.type_.name == "identityref":
-                res.append("mut def from_json_{pname(self)}(val: PartialIdentityref) -> yang.gdata.Leaf:")
                 res.append("    new_val, error = complete_and_validate_identityref(val, _identities, {repr(self.type_.base)}, {repr(self.module)})")
                 res.append("    if new_val is not None:")
                 res.append("        return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
                 res.append("    else:")
                 res.append("        raise ValueError('Invalid value for identityref leaf {self.name}: {{error}}')")
             else:
-                res.append("mut def from_json_{pname(self)}(val: value) -> yang.gdata.Leaf:")
-                res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
-            res.append("")
-        if gen_xml:
-            if self.type_.name == "identityref":
-                res.append("mut def from_xml_{pname(self)}(val: PartialIdentityref) -> yang.gdata.Leaf:")
-                res.append("    new_val, error = complete_and_validate_identityref(val, _identities, {repr(self.type_.base)}, {repr(self.module)})")
-                res.append("    if new_val is not None:")
-                res.append("        return yang.gdata.Leaf('{self.type_.name}', new_val{gdata_nsq})")
-                res.append("    else:")
-                res.append("        raise ValueError('Invalid value for identityref leaf {self.name}: {{error}}')")
-            else:
-                res.append("mut def from_xml_{pname(self)}(val: value) -> yang.gdata.Leaf:")
                 res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
         return "\n".join(res)
@@ -1712,7 +1704,7 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
-    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json: bool=True, gen_xml: bool=True, include_state=False) -> str:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
@@ -1724,9 +1716,9 @@ class DLeafList(DNodeLeaf):
         # parent
         gdata_nsq = ", ns='{self.namespace}', module='{self.module}'" if set_ns else ""
         res = []
-        if gen_json:
+        if gen_json or gen_xml:
+            res.append("mut def from_data_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
             if self.type_.name == "identityref":
-                res.append("mut def from_json_{pname(self)}(val: list[PartialIdentityref]) -> yang.gdata.LeafList:")
                 res.append("    new_val = []")
                 res.append("    for v in val:")
                 res.append("        nv, error = complete_and_validate_identityref(v, _identities, {repr(self.type_.base)}, {repr(self.module)})")
@@ -1736,22 +1728,6 @@ class DLeafList(DNodeLeaf):
                 res.append("            raise ValueError('Invalid value for identityref leaf-list {self.name}: {{error}}')")
                 res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
             else:
-                res.append("mut def from_json_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
-                res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
-            res.append("")
-        if gen_xml:
-            if self.type_.name == "identityref":
-                res.append("mut def from_xml_{pname(self)}(val: list[PartialIdentityref]) -> yang.gdata.LeafList:")
-                res.append("    new_val = []")
-                res.append("    for v in val:")
-                res.append("        nv, error = complete_and_validate_identityref(v, _identities, {repr(self.type_.base)}, {repr(self.module)})")
-                res.append("        if nv is not None:")
-                res.append("            new_val.append(nv)")
-                res.append("        else:")
-                res.append("            raise ValueError('Invalid value for identityref leaf-list {self.name}: {{error}}')")
-                res.append("    return yang.gdata.LeafList('{self.type_.name}', new_val{maybe_user_order}{gdata_nsq})")
-            else:
-                res.append("mut def from_xml_{pname(self)}(val: list[value]) -> yang.gdata.LeafList:")
                 res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
         return "\n".join(res)

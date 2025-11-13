@@ -24,20 +24,10 @@ foo_id1 = Identityref('id1', ns='http://example.com/foo', mod='foo', pfx='foo')
 foo_id2 = Identityref('id2', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
-mut def from_json_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
+mut def from_data_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
-mut def from_xml_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
-
-mut def from_json_foo__c1__l1__k2(val: PartialIdentityref) -> yang.gdata.Leaf:
-    new_val, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
-    if new_val is not None:
-        return yang.gdata.Leaf('identityref', new_val)
-    else:
-        raise ValueError('Invalid value for identityref leaf k2: {error}')
-
-mut def from_xml_foo__c1__l1__k2(val: PartialIdentityref) -> yang.gdata.Leaf:
+mut def from_data_foo__c1__l1__k2(val: value) -> yang.gdata.Leaf:
     new_val, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
     if new_val is not None:
         return yang.gdata.Leaf('identityref', new_val)
@@ -148,9 +138,9 @@ extension foo__c1__l1(Iterable[foo__c1__l1_entry]):
 mut def from_xml_foo__c1__l1_element(node: xml.Node) -> yang.gdata.Node:
     children = {}
     child_k1 = yang.gdata.from_xml_str(node, 'k1')
-    yang.gdata.maybe_add(children, 'k1', from_xml_foo__c1__l1__k1, child_k1)
+    yang.gdata.maybe_add(children, 'k1', from_data_foo__c1__l1__k1, child_k1)
     child_k2 = yang.gdata.from_xml_Identityref(node, 'k2')
-    yang.gdata.maybe_add(children, 'k2', from_xml_foo__c1__l1__k2, child_k2)
+    yang.gdata.maybe_add(children, 'k2', from_data_foo__c1__l1__k2, child_k2)
     return yang.gdata.Container(children)
 
 mut def from_xml_foo__c1__l1(nodes: list[xml.Node]) -> yang.gdata.List:
@@ -173,8 +163,8 @@ mut def from_json_path_foo__c1__l1_element(jd: value, path: list[str]=[], op: ?s
         point = path[1]
         rest_path = path[2:]
         children: dict[str, yang.gdata.Node] = {}
-        children['k1'] = from_json_foo__c1__l1__k1(keys[0])
-        children['k2'] = from_json_foo__c1__l1__k2(Identityref.from_json(keys[1]))
+        children['k1'] = from_data_foo__c1__l1__k1(keys[0])
+        children['k2'] = from_data_foo__c1__l1__k2(Identityref.from_json(keys[1]))
         return yang.gdata.Container(children)
     raise ValueError("unreachable - no keys to list element")
 
@@ -206,9 +196,9 @@ mut def from_json_path_foo__c1__l1(jd: value, path: list[str]=[], op: ?str='merg
 mut def from_json_foo__c1__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     children = {}
     child_k1 = yang.gdata.take_json_str(jd, 'k1')
-    yang.gdata.maybe_add(children, 'k1', from_json_foo__c1__l1__k1, child_k1)
+    yang.gdata.maybe_add(children, 'k1', from_data_foo__c1__l1__k1, child_k1)
     child_k2 = yang.gdata.take_json_Identityref(jd, 'k2')
-    yang.gdata.maybe_add(children, 'k2', from_json_foo__c1__l1__k2, child_k2)
+    yang.gdata.maybe_add(children, 'k2', from_data_foo__c1__l1__k2, child_k2)
     return yang.gdata.Container(children)
 
 mut def from_json_foo__c1__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
