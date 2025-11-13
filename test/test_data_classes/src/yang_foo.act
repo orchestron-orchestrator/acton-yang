@@ -223,6 +223,17 @@ def src_yang():
         leaf k3 {
             type binary;
         }
+        leaf checker {
+            type union {
+                type uint32 {
+                    range "1514..1514";
+                }
+                type uint8 {
+                    range "47..47";
+                }
+                type string;
+            }
+        }
     }
     container state {
         config false;
@@ -3166,16 +3177,27 @@ mut def from_data_foo__li_union__k3(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf(tv.val)
 
 
+mut def from_data_foo__li_union__checker(val: value) -> yang.gdata.Leaf:
+    tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), Type('union', type_=[
+        Type('uint32', range_=Range('1514..1514')),
+        Type('uint8', range_=Range('47..47')),
+        Type('string')
+    ]), [])
+    return yang.gdata.Leaf(tv.val)
+
+
 class foo__li_union_entry(yang.adata.MNode):
     k1: str
     k2: value
     k3: bytes
+    checker: ?value
 
-    mut def __init__(self, k1: str, k2: value, k3: bytes):
+    mut def __init__(self, k1: str, k2: value, k3: bytes, checker: ?value):
         self._ns = 'http://example.com/foo'
         self.k1 = k1
         self.k2 = k2
         self.k3 = k3
+        self.checker = checker
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
@@ -3197,11 +3219,19 @@ class foo__li_union_entry(yang.adata.MNode):
         if _k3 is not None:
             tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_k3), Type('binary'), [])
             children['k3'] = yang.gdata.Leaf(tv.val)
+        _checker = self.checker
+        if _checker is not None:
+            tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_checker), Type('union', type_=[
+        Type('uint32', range_=Range('1514..1514')),
+        Type('uint8', range_=Range('47..47')),
+        Type('string')
+    ]), [])
+            children['checker'] = yang.gdata.Leaf(tv.val)
         return yang.gdata.Container(children)
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_union_entry:
-        return foo__li_union_entry(k1=n.get_str('k1'), k2=n.get_value('k2'), k3=n.get_bytes('k3'))
+        return foo__li_union_entry(k1=n.get_str('k1'), k2=n.get_value('k2'), k3=n.get_bytes('k3'), checker=n.get_opt_value('checker'))
 
     def copy(self):
         """Create a deep copy of this adata object"""
@@ -3213,6 +3243,9 @@ class foo__li_union_entry(yang.adata.MNode):
             res.append('# Top node: /li-union')
             res.append('{self_name} = foo__li_union({repr(self.k1)}, {repr(self.k2)}, {repr(self.k3)})')
         leaves = []
+        _checker = self.checker
+        if _checker is not None:
+            leaves.append('{self_name}.checker = {repr(_checker)}')
         if leaves:
             if not list_element:
                res = ['', '# Container: /li-union'] + leaves + res
@@ -3299,6 +3332,8 @@ mut def from_xml_foo__li_union_element(node: xml.Node) -> yang.gdata.Node:
     yang.gdata.maybe_add(children, 'k2', from_data_foo__li_union__k2, child_k2)
     child_k3 = yang.gdata.from_xml_bytes(node, 'k3')
     yang.gdata.maybe_add(children, 'k3', from_data_foo__li_union__k3, child_k3)
+    child_checker = yang.gdata.from_xml_opt_value(node, 'checker')
+    yang.gdata.maybe_add(children, 'checker', from_data_foo__li_union__checker, child_checker)
     return yang.gdata.Container(children)
 
 mut def from_xml_foo__li_union(nodes: list[xml.Node]) -> yang.gdata.List:
@@ -3324,6 +3359,8 @@ mut def from_json_path_foo__li_union_element(jd: value, path: list[str]=[], op: 
         children['k1'] = from_data_foo__li_union__k1(keys[0])
         children['k2'] = from_data_foo__li_union__k2(keys[1])
         children['k3'] = from_data_foo__li_union__k3(keys[2])
+        if point == 'checker':
+            raise ValueError("Invalid json path to non-inner node")
         return yang.gdata.Container(children)
     raise ValueError("unreachable - no keys to list element")
 
@@ -3360,6 +3397,8 @@ mut def from_json_foo__li_union_element(jd: dict[str, ?value]) -> yang.gdata.Nod
     yang.gdata.maybe_add(children, 'k2', from_data_foo__li_union__k2, child_k2)
     child_k3 = yang.gdata.take_json_bytes(jd, 'k3')
     yang.gdata.maybe_add(children, 'k3', from_data_foo__li_union__k3, child_k3)
+    child_checker = yang.gdata.take_json_opt_value(jd, 'checker')
+    yang.gdata.maybe_add(children, 'checker', from_data_foo__li_union__checker, child_checker)
     return yang.gdata.Container(children)
 
 mut def from_json_foo__li_union(jd: list[dict[str, ?value]]) -> yang.gdata.List:
@@ -4274,7 +4313,12 @@ def src_schema():
             ]),
         Type('binary')
     ])),
-        Leaf('k3', type_=Type('binary'))
+        Leaf('k3', type_=Type('binary')),
+        Leaf('checker', type_=Type('union', type_=[
+        Type('uint32', range_=Range('1514..1514')),
+        Type('uint8', range_=Range('47..47')),
+        Type('string')
+    ]))
     ]),
     Container('state', config=False, children=[
         Container('c1', children=[
@@ -4433,7 +4477,12 @@ def src_schema_compiled():
             ]),
         Type('binary')
     ])),
-        Leaf('k3', type_=Type('binary'))
+        Leaf('k3', type_=Type('binary')),
+        Leaf('checker', type_=Type('union', type_=[
+        Type('uint32', range_=Range('1514..1514')),
+        Type('uint8', range_=Range('47..47')),
+        Type('string')
+    ]))
     ]),
     Container('state', config=False, children=[
         Container('c1', children=[
