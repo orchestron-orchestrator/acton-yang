@@ -30,14 +30,7 @@ foo_tcp = Identityref('tcp', ns='http://example.com/foo', mod='foo', pfx='foo')
 foo_udp = Identityref('udp', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
-mut def from_json_base__config__active_protocol(val: PartialIdentityref) -> yang.gdata.Leaf:
-    new_val, error = complete_and_validate_identityref(val, _identities, ['base:protocol-type'], 'base')
-    if new_val is not None:
-        return yang.gdata.Leaf('identityref', new_val)
-    else:
-        raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
-
-mut def from_xml_base__config__active_protocol(val: PartialIdentityref) -> yang.gdata.Leaf:
+mut def from_data_base__config__active_protocol(val: value) -> yang.gdata.Leaf:
     new_val, error = complete_and_validate_identityref(val, _identities, ['base:protocol-type'], 'base')
     if new_val is not None:
         return yang.gdata.Leaf('identityref', new_val)
@@ -98,7 +91,7 @@ class base__config(yang.adata.MNode):
 mut def from_xml_base__config(node: xml.Node) -> yang.gdata.Container:
     children = {}
     child_active_protocol = yang.gdata.from_xml_opt_Identityref(node, 'active-protocol')
-    yang.gdata.maybe_add(children, 'active-protocol', from_xml_base__config__active_protocol, child_active_protocol)
+    yang.gdata.maybe_add(children, 'active-protocol', from_data_base__config__active_protocol, child_active_protocol)
     return yang.gdata.Container(children, ns='http://example.com/base', module='base')
 
 mut def from_json_path_base__config(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
@@ -120,7 +113,7 @@ mut def from_json_path_base__config(jd: value, path: list[str]=[], op: ?str='mer
 mut def from_json_base__config(jd: dict[str, ?value]) -> yang.gdata.Container:
     children = {}
     child_active_protocol = yang.gdata.take_json_opt_Identityref(jd, 'active-protocol')
-    yang.gdata.maybe_add(children, 'active-protocol', from_json_base__config__active_protocol, child_active_protocol)
+    yang.gdata.maybe_add(children, 'active-protocol', from_data_base__config__active_protocol, child_active_protocol)
     return yang.gdata.Container(children, ns='http://example.com/base', module='base')
 
 class root(yang.adata.MNode):
