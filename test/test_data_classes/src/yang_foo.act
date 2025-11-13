@@ -224,6 +224,17 @@ def src_yang():
         leaf k3 {
             type binary;
         }
+        leaf checker {
+            type union {
+                type uint32 {
+                    range "1514..1514";
+                }
+                type uint8 {
+                    range "47..47";
+                }
+                type string;
+            }
+        }
     }
     container state {
         config false;
@@ -1379,12 +1390,14 @@ class foo__li_union_entry(yang.adata.MNode):
     k1: str
     k2: value
     k3: bytes
+    checker: ?value
 
-    mut def __init__(self, k1: str, k2: value, k3: bytes):
+    mut def __init__(self, k1: str, k2: value, k3: bytes, checker: ?value):
         self._ns = 'http://example.com/foo'
         self.k1 = k1
         self.k2 = k2
         self.k3 = k3
+        self.checker = checker
 
     def _get_attr(self, name: str) -> ?value:
         if name == 'k1':
@@ -1393,6 +1406,8 @@ class foo__li_union_entry(yang.adata.MNode):
             return self.k2
         if name == 'k3':
             return self.k3
+        if name == 'checker':
+            return self.checker
         raise ValueError('Attribute {name} not found in foo__li_union')
 
     mut def to_gdata(self) -> yang.gdata.Node:
@@ -1402,7 +1417,7 @@ class foo__li_union_entry(yang.adata.MNode):
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_union_entry:
-        return foo__li_union_entry(k1=n.get_str('k1'), k2=n.get_value('k2'), k3=n.get_bytes('k3'))
+        return foo__li_union_entry(k1=n.get_str('k1'), k2=n.get_value('k2'), k3=n.get_bytes('k3'), checker=n.get_opt_value('checker'))
 
     def copy(self):
         """Create a deep copy of this adata object"""
@@ -1858,7 +1873,12 @@ def src_dnode():
             ]),
         Type('binary')
     ])),
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='k3', config=True, mandatory=False, type_=Type('binary'))
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='k3', config=True, mandatory=False, type_=Type('binary')),
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='checker', config=True, mandatory=False, type_=Type('union', type_=[
+        Type('uint32', range_=Range('1514..1514')),
+        Type('uint8', range_=Range('47..47')),
+        Type('string')
+    ]))
     ]),
     DContainer(module='foo', namespace='http://example.com/foo', prefix='f', name='state', config=False, presence=False, children=[
         DContainer(module='foo', namespace='http://example.com/foo', prefix='f', name='c1', config=False, presence=False, children=[
@@ -1990,7 +2010,12 @@ def src_schema():
             ]),
         Type('binary')
     ])),
-        Leaf('k3', type_=Type('binary'))
+        Leaf('k3', type_=Type('binary')),
+        Leaf('checker', type_=Type('union', type_=[
+        Type('uint32', range_=Range('1514..1514')),
+        Type('uint8', range_=Range('47..47')),
+        Type('string')
+    ]))
     ]),
     Container('state', config=False, children=[
         Container('c1', children=[
@@ -2149,7 +2174,12 @@ def src_schema_compiled():
             ]),
         Type('binary')
     ])),
-        Leaf('k3', type_=Type('binary'))
+        Leaf('k3', type_=Type('binary')),
+        Leaf('checker', type_=Type('union', type_=[
+        Type('uint32', range_=Range('1514..1514')),
+        Type('uint8', range_=Range('47..47')),
+        Type('string')
+    ]))
     ]),
     Container('state', config=False, children=[
         Container('c1', children=[
