@@ -64,6 +64,11 @@ def src_yang():
             leaf val {
                 type string;
             }
+            container c4 {
+                leaf l5 {
+                    type string;
+                }
+            }
         }
         leaf-list ll_uint64 {
             type uint64;
@@ -319,14 +324,93 @@ mut def from_data_foo__c1__li__name(val: value) -> yang.gdata.Leaf:
 mut def from_data_foo__c1__li__val(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
+mut def from_data_foo__c1__li__c4__l5(val: value) -> yang.gdata.Leaf:
+    return yang.gdata.Leaf('string', val)
+
+class foo__c1__li__c4(yang.adata.MNode):
+    l5: ?str
+
+    mut def __init__(self, l5: ?str):
+        self._ns = 'http://example.com/foo'
+        self.l5 = l5
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        children = {}
+        _l5 = self.l5
+        if _l5 is not None:
+            children['l5'] = yang.gdata.Leaf('string', _l5)
+        return yang.gdata.Container(children)
+
+    @staticmethod
+    mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1__li__c4:
+        if n is not None:
+            return foo__c1__li__c4(l5=n.get_opt_str('l5'))
+        return foo__c1__li__c4()
+
+    def copy(self):
+        """Create a deep copy of this adata object"""
+        return foo__c1__li__c4.from_gdata(self.to_gdata())
+
+    def prsrc(self, self_name='ad', top=True, list_element=False):
+        res = []
+        if top:
+            res.append('# Top node: /c1/li/c4')
+            res.append('{self_name} = foo__c1__li__c4()')
+        leaves = []
+        _l5 = self.l5
+        if _l5 is not None:
+            leaves.append('{self_name}.l5 = {repr(_l5)}')
+        if leaves:
+            if not list_element:
+               res = ['', '# Container: /c1/li/c4'] + leaves + res
+            else:
+                res = leaves + res
+        return '\n'.join(res)
+
+    def prsrc_gen3(self, self_name='ad'):
+        # WARNING: this wrapper for the gen3.pradata schema-driven parser compiles the schema on every call!
+        s = yang.compile(src_yang())
+        return yang.gen3.pradata(s, self.to_gdata(), self_name, loose=True, root_path=['foo:c1', 'li', 'c4'])
+
+
+mut def from_xml_foo__c1__li__c4(node: xml.Node) -> yang.gdata.Container:
+    children = {}
+    child_l5 = yang.gdata.from_xml_opt_str(node, 'l5')
+    yang.gdata.maybe_add(children, 'l5', from_data_foo__c1__li__c4__l5, child_l5)
+    return yang.gdata.Container(children)
+
+mut def from_json_path_foo__c1__li__c4(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    # path handling
+    if len(path) > 0:
+        point = path[0]
+        rest_path = path[1:]
+        if point == 'l5':
+            raise ValueError("Invalid json path to non-inner node")
+        raise ValueError("Invalid path")
+    elif len(path) == 0:
+        if op == "merge":
+            return from_json_foo__c1__li__c4(yang.gdata.unwrap_dict(jd))
+        elif op == "remove":
+            return yang.gdata.Absent()
+        raise ValueError("Invalid operation")
+    raise ValueError("Unable to resolve path")
+
+mut def from_json_foo__c1__li__c4(jd: dict[str, ?value]) -> yang.gdata.Container:
+    children = {}
+    child_l5 = yang.gdata.take_json_opt_str(jd, 'l5')
+    yang.gdata.maybe_add(children, 'l5', from_data_foo__c1__li__c4__l5, child_l5)
+    return yang.gdata.Container(children)
+
 class foo__c1__li_entry(yang.adata.MNode):
     name: str
     val: ?str
+    c4: foo__c1__li__c4
 
-    mut def __init__(self, name: str, val: ?str):
+    mut def __init__(self, name: str, val: ?str, c4: ?foo__c1__li__c4=None):
         self._ns = 'http://example.com/foo'
         self.name = name
         self.val = val
+        self.c4 = c4 if c4 is not None else foo__c1__li__c4()
 
     mut def to_gdata(self) -> yang.gdata.Node:
         children = {}
@@ -336,11 +420,14 @@ class foo__c1__li_entry(yang.adata.MNode):
         _val = self.val
         if _val is not None:
             children['val'] = yang.gdata.Leaf('string', _val)
+        _c4 = self.c4
+        if _c4 is not None:
+            children['c4'] = _c4.to_gdata()
         return yang.gdata.Container(children)
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__li_entry:
-        return foo__c1__li_entry(name=n.get_str('name'), val=n.get_opt_str('val'))
+        return foo__c1__li_entry(name=n.get_str('name'), val=n.get_opt_str('val'), c4=foo__c1__li__c4.from_gdata(n.get_opt_cnt('c4')))
 
     def copy(self):
         """Create a deep copy of this adata object"""
@@ -355,6 +442,9 @@ class foo__c1__li_entry(yang.adata.MNode):
         _val = self.val
         if _val is not None:
             leaves.append('{self_name}.val = {repr(_val)}')
+        _c4 = self.c4
+        if _c4 is not None:
+            res.extend(_c4.prsrc('{self_name}.c4', False).splitlines())
         if leaves:
             if not list_element:
                res = ['', '# Container: /c1/li'] + leaves + res
@@ -421,6 +511,8 @@ mut def from_xml_foo__c1__li_element(node: xml.Node) -> yang.gdata.Node:
     yang.gdata.maybe_add(children, 'name', from_data_foo__c1__li__name, child_name)
     child_val = yang.gdata.from_xml_opt_str(node, 'val')
     yang.gdata.maybe_add(children, 'val', from_data_foo__c1__li__val, child_val)
+    child_c4 = yang.gdata.from_xml_opt_cnt(node, 'c4')
+    yang.gdata.maybe_add(children, 'c4', from_xml_foo__c1__li__c4, child_c4)
     return yang.gdata.Container(children)
 
 mut def from_xml_foo__c1__li(nodes: list[xml.Node]) -> yang.gdata.List:
@@ -446,6 +538,8 @@ mut def from_json_path_foo__c1__li_element(jd: value, path: list[str]=[], op: ?s
         children['name'] = from_data_foo__c1__li__name(keys[0])
         if point == 'val':
             raise ValueError("Invalid json path to non-inner node")
+        if point == 'c4':
+            children['c4'] = from_json_path_foo__c1__li__c4(jd, rest_path, op)
         return yang.gdata.Container(children)
     raise ValueError("unreachable - no keys to list element")
 
@@ -480,6 +574,8 @@ mut def from_json_foo__c1__li_element(jd: dict[str, ?value]) -> yang.gdata.Node:
     yang.gdata.maybe_add(children, 'name', from_data_foo__c1__li__name, child_name)
     child_val = yang.gdata.take_json_opt_str(jd, 'val')
     yang.gdata.maybe_add(children, 'val', from_data_foo__c1__li__val, child_val)
+    child_c4 = yang.gdata.take_json_opt_cnt(jd, 'c4')
+    yang.gdata.maybe_add(children, 'c4', from_json_foo__c1__li__c4, child_c4)
     return yang.gdata.Container(children)
 
 mut def from_json_foo__c1__li(jd: list[dict[str, ?value]]) -> yang.gdata.List:
@@ -3958,7 +4054,10 @@ def src_schema():
         Leaf('l_empty', type_=Type('empty')),
         List('li', key='name', ordered_by='user', children=[
             Leaf('name', type_=Type('string')),
-            Leaf('val', type_=Type('string'))
+            Leaf('val', type_=Type('string')),
+            Container('c4', children=[
+                Leaf('l5', type_=Type('string'))
+            ])
         ]),
         LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
@@ -4104,7 +4203,10 @@ def src_schema_compiled():
         Leaf('l_empty', type_=Type('empty')),
         List('li', key='name', ordered_by='user', children=[
             Leaf('name', type_=Type('string')),
-            Leaf('val', type_=Type('string'))
+            Leaf('val', type_=Type('string')),
+            Container('c4', children=[
+                Leaf('l5', type_=Type('string'))
+            ])
         ]),
         LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
