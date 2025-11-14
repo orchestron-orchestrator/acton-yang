@@ -933,30 +933,18 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                             ival, global_identity, child.type_.base, child.module
                         )
                         if validated is not None:
-                            children[uname(child)] = yang.gdata.Leaf("identityref", validated)
+                            children[uname(child)] = yang.gdata.Leaf("identityref", validated, ns=ns, module=mod)
                         else:
                             raise ValueError("Invalid value for identityref at {format_schema_path(path_with_child())}: {error}")
                     else:
                         raise ValueError("Expected PartialIdentityref for identityref leaf at {format_schema_path(path_with_child())}, got {type(typed.val)}")
                 else:
                     # Determine concrete type
-                    leaf_ns = None
-                    leaf_module = None
-                    if ns is not None:
-                        leaf_ns = child.namespace
-                        leaf_module = child.module
                     concrete_type = typed.t
                     av = typed.val
-                    if child.type_.name == "union":
-                        if av is not None:
-                            # For XML, keep the original textual representation; for JSON, preserve actual type
-                            if source_is_xml and not isinstance(av, bytes):
-                                children[uname(child)] = yang.gdata.Leaf("union", str(av), ns=leaf_ns, module=leaf_module)
-                            else:
-                                children[uname(child)] = yang.gdata.Leaf("union", av, ns=leaf_ns, module=leaf_module)
-                    else:
-                        if av is not None:
-                            children[uname(child)] = yang.gdata.Leaf(concrete_type, av, ns=leaf_ns, module=leaf_module)
+                    # TODO: NETCONF ops
+                    if av is not None:
+                        children[uname(child)] = yang.gdata.Leaf(concrete_type, av, ns=ns, module=mod)
             else:
                 # Missing leaf value
                 if not loose and child.mandatory:
