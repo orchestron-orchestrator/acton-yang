@@ -256,12 +256,11 @@ class Node(value):
         base_args = ns_args + module_args
 
         if isinstance(self, Leaf):
-            val = "'{self.val}'" if isinstance(self.val, str) else str(self.val)
-            args = ["'{str(self.t)}'", val] + base_args
+            args = ["'{str(self.t)}'", repr(self.val)] + base_args
             return "Leaf({", ".join(args)})"
         elif isinstance(self, LeafList):
             # Only sort if deterministic=True and not user_order
-            vals_str = str(self.vals if (self.user_order or not deterministic) else vals_list_sorted(self.vals))
+            vals_str = repr(self.vals if (self.user_order or not deterministic) else vals_list_sorted(self.vals))
             order_args = ["user_order=True"] if self.user_order else []
             args = ["'{str(self.t)}'", vals_str] + base_args + order_args
             return "LeafList({", ".join(args)})"
