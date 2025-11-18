@@ -13,7 +13,7 @@ import yang.adata
 import yang.gdata
 import yang.schema
 from yang.identityref import Identityref, PartialIdentityref
-from yang.gdata import repr_yang
+from yang.gdata import repr_adata
 from yang.type import Decimal, Ranges
 
 
@@ -195,7 +195,7 @@ def try_parse_xml_value(text_value: ?str, schema_node: yang.schema.DNodeLeaf, sc
     elif isinstance(schema_type, yang.schema.DTypeEmpty):
         if text_value is not None and len(text_value) != 0:
             raise YangValidationError(path, schema_type, text_value)
-        return (t=type_name, val=True)
+        return (t=type_name, val=yang.gdata.Present())
 
     if text_value is not None:
         val: ?value = None
@@ -330,9 +330,7 @@ def try_parse_json_value(leaf_value: ?value, schema_node: yang.schema.DNodeLeaf,
     elif isinstance(schema_type, yang.schema.DTypeEmpty):
         # Empty leaf JSON encoding: [null]
         if isinstance(leaf_value, list) and len(leaf_value) == 1 and leaf_value[0] is None:
-            return (t=type_name, val=True)
-        elif leaf_value is not None and schema_type.validate_value(leaf_value):
-            return (t=type_name, val=True)
+            return (t=type_name, val=yang.gdata.Present())
         raise YangValidationError(path, schema_type, leaf_value)
 
     if leaf_value is not None:
@@ -457,6 +455,10 @@ def try_validate_mnode_value(val: value, schema_type: yang.schema.DType) -> ?(t:
                 return tv
     else:
         if schema_type.validate_value(val):
+            # In adata the present type is modeled as bool. If validate_value is
+            # successful val is bool anyway, but the compiler can't know that ...
+            if isinstance(schema_type, yang.schema.DTypeEmpty) and isinstance(val, bool):
+                return (t=schema_type.builtin_type, val=yang.gdata.Present(val))
             return (t=schema_type.builtin_type, val=val)
     return None
 
@@ -904,7 +906,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 # come first in the correct order.
                 if not yang.schema.is_optional_arg_yang_leaf(cchild, yang.schema.list_keys(container), loose):
                     leaf = node.get_leaf(unique_namer.unique_name(cchild.name, cchild.prefix))
-                    non_optional_args.append("{repr_yang(leaf.val)}")
+                    non_optional_args.append("{repr_adata(leaf.val)}")
             elif isinstance(cchild, yang.schema.DContainer):
                 if not (cchild.presence or loose or yang.schema.optional_subtree(cchild)):
                     cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
@@ -965,12 +967,12 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     # they are implicitly set with .create*()
                     continue
                 # DLeaf values are copied verbatim
-                leaves.append("{self_name}.{usname(child)} = {repr_yang(leaf.val)}")
+                leaves.append("{self_name}.{usname(child)} = {repr_adata(leaf.val)}")
         elif isinstance(child, yang.schema.DLeafList):
             leaflist = node.get_opt_leaflist(uname(child))
             if leaflist is not None:
                 # DLeafList values are copied verbatim
-                leaves.append("{self_name}.{usname(child)} = {repr_yang(leaflist.vals)}")
+                leaves.append("{self_name}.{usname(child)} = {repr_adata(leaflist.vals)}")
         elif isinstance(child, yang.schema.DContainer):
             container = node.get_opt_cnt(uname(child))
             if container is not None:

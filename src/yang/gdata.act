@@ -233,14 +233,20 @@ def fmt_json_name(name, module=None):
     return name_without_prefix
 
 
-def repr_yang(v) -> str:
+def repr_gdata(v) -> str:
     # All numeric gdata values are bigint, so include an explicit cast because
     # these printed values are assigned to the "value" type when compiled
     if isinstance(v, bigint):
         return "bigint({v})"
     elif isinstance(v, list):
-        return "[" + ", ".join([repr_yang(e) for e in v]) + "]"
+        return "[" + ", ".join([repr_gdata(e) for e in v]) + "]"
     return repr(v)
+
+
+def repr_adata(v) -> str:
+    if isinstance(v, Present):
+        return str(v.present)
+    return repr_gdata(v)
 
 
 class Node(value):
@@ -287,11 +293,11 @@ class Node(value):
             self_children = self.children
 
         if isinstance(self, Leaf):
-            args = ["'{str(self.t)}'", repr_yang(self.val)] + base_args
+            args = ["'{str(self.t)}'", repr_gdata(self.val)] + base_args
             return "Leaf({", ".join(args)})"
         elif isinstance(self, LeafList):
             # Only sort if deterministic=True and not user_order
-            vals_str = repr_yang(self.vals if (self.user_order or not deterministic) else vals_list_sorted(self.vals))
+            vals_str = repr_gdata(self.vals if (self.user_order or not deterministic) else vals_list_sorted(self.vals))
             order_args = ["user_order=True"] if self.user_order else []
             args = ["'{str(self.t)}'", vals_str] + base_args + order_args
             return "LeafList({", ".join(args)})"
@@ -410,14 +416,13 @@ class Node(value):
                 if isinstance(child, Container):
                     child_dict[fmt_json_name(nm, child.module)] = child.to_dict(pretty, deterministic)
                 elif isinstance(child, Leaf):
+                    v = child.val
                     # "empty" type is encoded as an array with a null element "[null]"
-                    if child.t == "empty":
-                        v = child.val
-                        if isinstance(v, bool):
-                            if v == True:
-                                child_dict[fmt_json_name(nm, child.module)] = [None]
-                    else:
-                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val)
+                    if isinstance(v, Present):
+                        if v.present:
+                            child_dict[fmt_json_name(nm, child.module)] = [None]
+                    elif v is not None:
+                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, v)
                 elif isinstance(child, LeafList):
                     vals = []
                     if child.user_order or not deterministic:
@@ -493,16 +498,16 @@ class Node(value):
                             attrs = (nsdefs=[], attrs=[])
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + attrs.nsdefs, attributes=attrs.attrs, children=elem._to_xml_rec(child.keys, skip_nonkeys, deterministic=deterministic)))
                 elif isinstance(child, Leaf):
-                    if child.t == "empty":
-                        v = child.val
-                        if isinstance(v, bool):
-                            if v == True:
-                                children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
-                            else:
-                                children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
+                    v = child.val
+                    if isinstance(v, Present):
+                        if v.present:
+                            children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
+                        else:
+                            children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
+                    elif v is not None:
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, child.val), text=yang_str(v)))
                     else:
-                        v = yang_str(child.val)
-                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, child.val), text=v))
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
                 elif isinstance(child, LeafList):
                     vals = []
                     for val in child.vals if child.user_order or not deterministic else vals_list_sorted(child.vals):
@@ -620,7 +625,11 @@ class Node(value):
                 return childval
 
     def get_opt_empty(self, name) -> ?bool:
-        return self.get_opt_bool(name)
+        child = self.get_opt_leaf(name)
+        if child is not None:
+            childval = child.val
+            if isinstance(childval, Present):
+                return childval.present
 
     def get_Decimal(self, name) -> Decimal:
         child = self.get_leaf(name)
@@ -930,6 +939,25 @@ class LeafList(Node):
         self.txid = txid
         self.children = {}
 
+class Present:
+    """Named type for empty leaf value
+
+    This type is used for the empty leaf value, so that we can do an
+    isinstance(v, Present) check to detect whether the leaf is present. When
+    Acton supports pattern matching we can switch to the () identity.
+
+    This is the first step towards reducing reliance on the gdata.Node.type
+    attribute for comparisons, and instead just comparing the Acton types. In
+    the final form, the present boolean argument will also be removed, which
+    will make it possible to first make the value optional (?Present) and
+    ultimately replace with () identity once Acton supports pattern matching.
+    """
+    def __init__(self, present: bool=True):
+        self.present = present
+
+    def __repr__(self):
+        return "yang.gdata.Present({'' if self.present else 'False'})"
+
 class Absent(Node):
     """Declarative definition of the absence of a node
 
@@ -1017,6 +1045,8 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a == b
+    if isinstance(a, Present) and isinstance(b, Present):
+        return a.present == b.present
     if type(a) != type(b):
         # It is valid to compare values of different type, which happens if
         # leaves are of type union and value a and b happen to be of different
@@ -1067,6 +1097,8 @@ def vals_less_than(a: value, b: value) -> bool:
         return a < b
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a < b
+    if isinstance(a, Present) and isinstance(b, Present):
+        return not a.present
     raise ValueError("Unsupported value type or mismatch in lt comparison: {type(a)}, {type(b)}")
 
 pure def vals_list_sorted(a: list[value]) -> list[value]:
@@ -2502,8 +2534,8 @@ def _test_to_json():
 
 def _test_to_json_empty_leaf():
     y1 = Container({
-        "e1": Leaf("empty", True),
-        "e2": Leaf("empty", False)
+        "e1": Leaf("empty", Present()),
+        "e2": Leaf("empty", Present(False))
     })
 
     return y1.to_json(pretty=True)
@@ -2634,8 +2666,8 @@ def _test_to_xmlstr_presence_childless():
 
 def _test_to_xmlstr_empty_leaf():
     y1 = Container({
-        "e1": Leaf("empty", True),
-        "e2": Leaf("empty", False)
+        "e1": Leaf("empty", Present()),
+        "e2": Leaf("empty", Present(False))
     })
 
     return y1.to_xmlstr()
