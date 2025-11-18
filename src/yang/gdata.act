@@ -204,10 +204,13 @@ def yang_str(v) -> str:
     return s
 
 
-def json_val(yang_type: str, v: value) -> ?value:
+def json_val(v: value) -> ?value:
     if isinstance(v, bytes):
         return base64.encode(v).decode()
-    if yang_type == "int64" or yang_type == "uint64":
+    if isinstance(v, i64) or isinstance(v, u64):
+        return str(v)
+    # TODO: remove once we're using fixed-size ints for all gdata values
+    if isinstance(v, int) and (v > 2147483647 or v < -2147483648):
         return str(v)
     if isinstance(v, Identityref):
         return "{v.mod}:{v.val}"
@@ -259,13 +262,13 @@ class Node(value):
         base_args = ns_args + module_args
 
         if isinstance(self, Leaf):
-            args = ["'{str(self.t)}'", repr(self.val)] + base_args
+            args = [repr(self.val)] + base_args
             return "Leaf({", ".join(args)})"
         elif isinstance(self, LeafList):
             # Only sort if deterministic=True and not user_order
             vals_str = repr(self.vals if (self.user_order or not deterministic) else vals_list_sorted(self.vals))
             order_args = ["user_order=True"] if self.user_order else []
-            args = ["'{str(self.t)}'", vals_str] + base_args + order_args
+            args = [vals_str] + base_args + order_args
             return "LeafList({", ".join(args)})"
         elif isinstance(self, Absent):
             sname = "Absent"
@@ -375,11 +378,11 @@ class Node(value):
                         if v.present:
                             child_dict[fmt_json_name(nm, child.module)] = [None]
                     elif v is not None:
-                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, v)
+                        child_dict[fmt_json_name(nm, child.module)] = json_val(v)
                 elif isinstance(child, LeafList):
                     vals = []
                     for v in child.vals if child.user_order else vals_list_sorted(child.vals):
-                        vals.append(json_val(child.t, v))
+                        vals.append(json_val(v))
                     child_dict[fmt_json_name(nm, child.module)] = vals
                 elif isinstance(child, List):
                     elems = []
@@ -837,11 +840,9 @@ class Container(Node):
         self.txid = txid
 
 class Leaf(Node):
-    t: str
     val: value
 
-    def __init__(self, t: str, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
-        self.t = t
+    def __init__(self, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.val = val
         self.ns = ns
         self.module = module
@@ -849,12 +850,10 @@ class Leaf(Node):
         self.children = {}
 
 class LeafList(Node):
-    t: str
     vals: list[value]
     user_order: bool
 
-    def __init__(self, t:str, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
-        self.t = t
+    def __init__(self, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.vals = vals
@@ -1151,8 +1150,8 @@ def _merge_rec(a: Node, b: Node, path: list[_PathElement]) -> Node:
         return Container(children=new_children, presence=a.presence, ns=a.ns, module=a.module)
 
     elif isinstance(a, Leaf) and isinstance(b, Leaf):
-        if a.t != b.t:
-            raise ValueError("Cannot merge leaves with different types at {_format_gdata_path(path)}: {a.t} != {b.t}")
+        if type(a.val) != type(b.val):
+            raise ValueError("Cannot merge leaves with different types at {_format_gdata_path(path)}: {type(a.val)} != {type(b.val)}")
         aval = a.val
         bval = b.val
         if vals_equal(aval, bval):
@@ -1424,8 +1423,8 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
         return List(new.keys, elements=result, user_order=new.user_order, ns=new.ns, module=new.module)
 
     elif isinstance(old, Leaf) and isinstance(new, Leaf):
-        if old.t != new.t:
-            raise ValueError("Leaf types differ at {_format_gdata_path(path)}: {old.t} != {new.t}")
+        if type(old.val) != type(new.val):
+            raise ValueError("Leaf types differ at {_format_gdata_path(path)}: {type(old.val)} != {type(new.val)}")
         if vals_equal(old.val, new.val):
             return None
         else:
@@ -1555,8 +1554,8 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
 
     elif isinstance(old, Leaf) and isinstance(p, Leaf):
         # Patch leaf replaces old leaf value
-        if old.t != p.t:
-            raise ValueError("Leaf types differ in patch at {_format_gdata_path(path)}: {old.t} != {p.t}")
+        if type(old.val) != type(p.val):
+            raise ValueError("Leaf types differ in patch at {_format_gdata_path(path)}: {type(old.val)} != {type(p.val)}")
         return p
 
     elif isinstance(old, LeafList) and isinstance(p, LeafList):
@@ -2247,65 +2246,65 @@ def _test_format_gdata_path():
     path = [
         _PathElement("config"),
         _PathElement("interfaces"),
-        _PathElement(keys={"name": Leaf("str", "eth0"), "vlan": Leaf("int", 100)}),
+        _PathElement(keys={"name": Leaf("eth0"), "vlan": Leaf(100)}),
         _PathElement("ipv4"),
-        _PathElement(keys={"ip": Leaf("str", "10.0.0.1"), "prefix": Leaf("int", 24)})
+        _PathElement(keys={"ip": Leaf("10.0.0.1"), "prefix": Leaf(24)})
     ]
     testing.assertEqual("/config/interfaces[name='eth0',vlan=100]/ipv4[ip='10.0.0.1',prefix=24]", _format_gdata_path(path))
 
 
 def _test_merge1():
     y1 = Container({
-        "a": Leaf("int", 1),
+        "a": Leaf(1),
         "l1": List(["name"], [
             Container({
-                "name": Leaf("str", "k1"),
-                "n1": Leaf("int", 1),
-                "n2": Leaf("int", 2)
+                "name": Leaf("k1"),
+                "n1": Leaf(1),
+                "n2": Leaf(2)
             }),
             Container({
-                "name": Leaf("str", "k4"),
-                "n4": Leaf("int", 4),
+                "name": Leaf("k4"),
+                "n4": Leaf(4),
             }),
         ])
     }, ns="http://example.com/acme", module="acme")
 
     y2 = Container({
-        "b": Leaf("int", 2),
-        "c": Leaf("int", 3),
+        "b": Leaf(2),
+        "c": Leaf(3),
         "l1": List(["name"], [
             Container({
-                "name": Leaf("str", "k2"),
-                "n1": Leaf("int", 1),
-                "n3": Leaf("int", 3)
+                "name": Leaf("k2"),
+                "n1": Leaf(1),
+                "n3": Leaf(3)
             }),
         ]),
-        "d": LeafList("str", ["a", "b", "c"])
+        "d": LeafList(["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
 
     res = merge(y1, y2)
 
     exp = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
-        "c": Leaf("int", 3),
+        "a": Leaf(1),
+        "b": Leaf(2),
+        "c": Leaf(3),
         "l1": List(["name"], [
             Container({
-                "name": Leaf("str", "k1"),
-                "n1": Leaf("int", 1),
-                "n2": Leaf("int", 2)
+                "name": Leaf("k1"),
+                "n1": Leaf(1),
+                "n2": Leaf(2)
             }),
             Container({
-                "name": Leaf("str", "k2"),
-                "n1": Leaf("int", 1),
-                "n3": Leaf("int", 3)
+                "name": Leaf("k2"),
+                "n1": Leaf(1),
+                "n3": Leaf(3)
             }),
             Container({
-                "name": Leaf("str", "k4"),
-                "n4": Leaf("int", 4),
+                "name": Leaf("k4"),
+                "n4": Leaf(4),
             }),
         ]),
-        "d": LeafList("str", ["a", "b", "c"])
+        "d": LeafList(["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
@@ -2313,77 +2312,77 @@ def _test_merge1():
 def _test_merge_list1():
     y1 = List(["name"], [
         Container({
-            "name": Leaf("str", "first"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("first"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "breaker"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("breaker"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "fourth"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("fourth"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "common"),
-            "n2": Leaf("int", 2)
+            "name": Leaf("common"),
+            "n2": Leaf(2)
         }),
         Container({
-            "name": Leaf("str", "last"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("last"),
+            "n1": Leaf(1)
         }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
     y2 = List(["name"], [
         Container({
-            "name": Leaf("str", "breaker")
+            "name": Leaf("breaker")
         }),
         Container({
-            "name": Leaf("str", "second"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("second"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "third"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("third"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "common"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("common"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "last")
+            "name": Leaf("last")
         })
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
     exp = List(["name"], [
         Container({
-            "name": Leaf("str", "first"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("first"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "breaker"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("breaker"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "fourth"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("fourth"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "common"),
-            "n2": Leaf("int", 2),
-            "n1": Leaf("int", 1)
+            "name": Leaf("common"),
+            "n2": Leaf(2),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "last"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("last"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "second"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("second"),
+            "n1": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "third"),
-            "n1": Leaf("int", 1)
+            "name": Leaf("third"),
+            "n1": Leaf(1)
         }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
@@ -2391,10 +2390,10 @@ def _test_merge_list1():
 
 def _test_merge_leaf_conflict():
     y1 = Container({
-        "a": Leaf("int", 1)
+        "a": Leaf(1)
     })
     y2 = Container({
-        "a": Leaf("int", 2)
+        "a": Leaf(2)
     })
 
     try:
@@ -2406,22 +2405,22 @@ def _test_merge_leaf_conflict():
 def _test_eq_list():
     l1 = List(["name"], [
         Container({
-            "name": Leaf("str", "a"),
-            "x": Leaf("int", 1)
+            "name": Leaf("a"),
+            "x": Leaf(1)
         }),
         Container({
-            "name": Leaf("str", "b"),
-            "x": Leaf("int", 2)
+            "name": Leaf("b"),
+            "x": Leaf(2)
         })
     ])
     l2 = List(["name"], [
         Container({
-            "name": Leaf("str", "b"),
-            "x": Leaf("int", 2)
+            "name": Leaf("b"),
+            "x": Leaf(2)
         }),
         Container({
-            "name": Leaf("str", "a"),
-            "x": Leaf("int", 1)
+            "name": Leaf("a"),
+            "x": Leaf(1)
         })
     ])
     testing.assertEqual(l1, l1)
@@ -2430,32 +2429,32 @@ def _test_eq_list():
 def _test_eq_list_user_order():
     l1 = List(["name"], user_order=True, elements=[
         Container({
-            "x": Leaf("int", 1)
+            "x": Leaf(1)
         }),
         Container({
-            "x": Leaf("int", 2)
+            "x": Leaf(2)
         })
     ])
     l2 = List(["name"], user_order=True, elements=[
         Container({
-            "x": Leaf("int", 2)
+            "x": Leaf(2)
         }),
         Container({
-            "x": Leaf("int", 1)
+            "x": Leaf(1)
         })
     ])
     testing.assertEqual(l1, l1)
     testing.assertNotEqual(l1, l2)
 
 def _test_vals_list_sorted():
-    l1 = LeafList("str", ["a", "b", "c"])
-    l2 = LeafList("str", ["c", "b", "a"])
+    l1 = LeafList(["a", "b", "c"])
+    l2 = LeafList(["c", "b", "a"])
     testing.assertEqual(l1.prsrc(deterministic=True), l1.prsrc(deterministic=True))
     testing.assertEqual(l1.prsrc(deterministic=True), l2.prsrc(deterministic=True))
 
 def _test_eq_leaf_list_user_order():
-    l1 = LeafList("str", ["a", "b", "c"], user_order=True)
-    l2 = LeafList("str", ["c", "b", "a"], user_order=True)
+    l1 = LeafList(["a", "b", "c"], user_order=True)
+    l2 = LeafList(["c", "b", "a"], user_order=True)
     testing.assertEqual(l1, l1)
     testing.assertNotEqual(l1, l2)
 
@@ -2464,13 +2463,13 @@ def _test_diff_no_change():
     since there are no differences.
     """
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2)
+        "a": Leaf(1),
+        "b": Leaf(2)
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2)
+        "a": Leaf(1),
+        "b": Leaf(2)
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
@@ -2481,19 +2480,19 @@ def _test_diff_leaf_change():
     with just that leaf changed.
     """
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2)
+        "a": Leaf(1),
+        "b": Leaf(2)
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 42), # Changed from 1 to 42
-        "b": Leaf("int", 2)
+        "a": Leaf(42), # Changed from 1 to 42
+        "b": Leaf(2)
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     exp = Container({
-        "a": Leaf("int", 42)
+        "a": Leaf(42)
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2503,14 +2502,14 @@ def _test_diff_node_removal():
     diff at the place where c was.
     """
     old = Container({
-        "a": Leaf("int", 1),
-        "c": Leaf("int", 3),
-        "d": Leaf("int", 4)
+        "a": Leaf(1),
+        "c": Leaf(3),
+        "d": Leaf(4)
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 1),
-        "d": Leaf("int", 4)
+        "a": Leaf(1),
+        "d": Leaf(4)
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
@@ -2518,7 +2517,7 @@ def _test_diff_node_removal():
     # c is removed
     exp = Container({
         "c": Absent({
-            "c": Leaf("int", 3)
+            "c": Leaf(3)
         })
     }, ns="http://example.com/acme", module="acme")
 
@@ -2529,13 +2528,13 @@ def _test_diff_list_removal():
     old = Container({
         "l": List(["name"], [
         Container({
-            "name": Leaf("str", "k1"),
-            "n1": Leaf("int", 1),
-            "n2": Leaf("int", 2),
+            "name": Leaf("k1"),
+            "n1": Leaf(1),
+            "n2": Leaf(2),
         }),
         Container({
-            "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "name": Leaf("k4"),
+            "n4": Leaf(4),
         }),
     ], ns="http://example.com/acme", module="acme")
     })
@@ -2549,13 +2548,13 @@ def _test_diff_list_removal():
         "l": Absent({
             "l": List(["name"], [
                 Container({
-                    "name": Leaf("str", "k1"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2),
+                    "name": Leaf("k1"),
+                    "n1": Leaf(1),
+                    "n2": Leaf(2),
                 }),
                 Container({
-                    "name": Leaf("str", "k4"),
-                    "n4": Leaf("int", 4),
+                    "name": Leaf("k4"),
+                    "n4": Leaf(4),
                 }),
             ], ns="http://example.com/acme", module="acme")
         }, ns="http://example.com/acme", module="acme")
@@ -2571,20 +2570,20 @@ def _test_diff_elem_removal():
     """
     old = List(["name"], [
         Container({
-            "name": Leaf("str", "k1"),
-            "n1": Leaf("int", 1),
-            "n2": Leaf("int", 2),
+            "name": Leaf("k1"),
+            "n1": Leaf(1),
+            "n2": Leaf(2),
         }),
         Container({
-            "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "name": Leaf("k4"),
+            "n4": Leaf(4),
         }),
     ], ns="http://example.com/acme", module="acme")
 
     new = List(["name"], [
         Container({
-            "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "name": Leaf("k4"),
+            "n4": Leaf(4),
         }),
     ], ns="http://example.com/acme", module="acme")
 
@@ -2593,7 +2592,7 @@ def _test_diff_elem_removal():
     # k1 is removed
     exp = List(["name"], [
         Absent({
-            "name": Leaf("str", "k1")
+            "name": Leaf("k1")
         })
     ], ns="http://example.com/acme", module="acme")
 
@@ -2603,19 +2602,19 @@ def _test_diff_node_addition():
     """A new node e is added in new. We expect the diff to have that new node.
     """
     old = Container({
-        "a": Leaf("int", 1)
+        "a": Leaf(1)
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 1),
-        "e": Leaf("int", 5)
+        "a": Leaf(1),
+        "e": Leaf(5)
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # e is new
     exp = Container({
-        "e": Leaf("int", 5)
+        "e": Leaf(5)
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2625,17 +2624,17 @@ def _test_diff_leaflist():
     added.
     """
     old = Container({
-        "l": LeafList("str", ["a", "b", "c"])
+        "l": LeafList(["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "l": LeafList("str", ["a", "x", "c", "d"]) # "b" changed to "x" and "d" added
+        "l": LeafList(["a", "x", "c", "d"]) # "b" changed to "x" and "d" added
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     exp = Container({
-        "l": LeafList("str", ["a", "x", "c", "d"])
+        "l": LeafList(["a", "x", "c", "d"])
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2646,15 +2645,15 @@ def _test_diff_complex_ordering():
     before the new node d in the diff.
     """
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
-        "c": Leaf("int", 3)
+        "a": Leaf(1),
+        "b": Leaf(2),
+        "c": Leaf(3)
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 1),
-        "c": Leaf("int", 3),
-        "d": Leaf("int", 4)
+        "a": Leaf(1),
+        "c": Leaf(3),
+        "d": Leaf(4)
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
@@ -2662,17 +2661,17 @@ def _test_diff_complex_ordering():
     # "b" is absent before "d" is introduced
     exp = Container({
         "b": Absent({
-            "b": Leaf("int", 2)
+            "b": Leaf(2)
         }),
-        "d": Leaf("int", 4)
+        "d": Leaf(4)
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
 def _test_patch_no_change():
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
+        "a": Leaf(1),
+        "b": Leaf(2),
     }, ns="http://example.com/acme", module="acme")
 
     # diff is None means no changes
@@ -2683,28 +2682,28 @@ def _test_patch_no_change():
 
 def _test_patch_leaf_change():
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
+        "a": Leaf(1),
+        "b": Leaf(2),
     }, ns="http://example.com/acme", module="acme")
 
     # Suppose we want to change leaf 'a' from 1 to 42
     # diff would look like this:
     p = Container({
-        "a": Leaf("int", 42),
+        "a": Leaf(42),
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf("int", 42),
-        "b": Leaf("int", 2),
+        "a": Leaf(42),
+        "b": Leaf(2),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
 def _test_patch_node_removal():
     old = Container({
-        "a": Leaf("int", 1),
-        "c": Leaf("int", 3),
+        "a": Leaf(1),
+        "c": Leaf(3),
     }, ns="http://example.com/acme", module="acme")
 
     # Suppose we remove 'c'
@@ -2715,7 +2714,7 @@ def _test_patch_node_removal():
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf("int", 1),
+        "a": Leaf(1),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
@@ -2723,13 +2722,13 @@ def _test_patch_node_removal():
 def _test_patch_elem_removal():
     old = List(["name"], [
         Container({
-            "name": Leaf("str", "k1"),
-            "n1": Leaf("int", 1),
-            "n2": Leaf("int", 2)
+            "name": Leaf("k1"),
+            "n1": Leaf(1),
+            "n2": Leaf(2)
         }),
         Container({
-            "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "name": Leaf("k4"),
+            "n4": Leaf(4),
         }),
     ], ns="http://example.com/acme", module="acme")
 
@@ -2737,15 +2736,15 @@ def _test_patch_elem_removal():
     # patch would be:
     p = List(["name"], [
         Absent({
-            "name": Leaf("str", "k1")
+            "name": Leaf("k1")
         })
     ], ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = List(["name"], [
         Container({
-            "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "name": Leaf("k4"),
+            "n4": Leaf(4),
         }),
     ], ns="http://example.com/acme", module="acme")
 
@@ -2753,12 +2752,12 @@ def _test_patch_elem_removal():
 
 def _test_patch_elem_removal2():
     old = Container({
-        "n1": Leaf("int", 1),
-        "n2": Leaf("int", 2)
+        "n1": Leaf(1),
+        "n2": Leaf(2)
     })
 
     p = Absent({
-        "name": Leaf("str", "k1")
+        "name": Leaf("k1")
     })
 
     res = patch(old, p)
@@ -2767,18 +2766,18 @@ def _test_patch_elem_removal2():
 
 def _test_patch_node_addition():
     old = Container({
-        "a": Leaf("int", 1),
+        "a": Leaf(1),
     }, ns="http://example.com/acme", module="acme")
 
     # Add a new leaf 'e':
     p = Container({
-        "e": Leaf("int", 5)
+        "e": Leaf(5)
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf("int", 1),
-        "e": Leaf("int", 5),
+        "a": Leaf(1),
+        "e": Leaf(5),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
@@ -2786,41 +2785,41 @@ def _test_patch_node_addition():
 def _test_patch_complex_ordering():
     # old: a, b, c
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
-        "c": Leaf("int", 3),
+        "a": Leaf(1),
+        "b": Leaf(2),
+        "c": Leaf(3),
     }, ns="http://example.com/acme", module="acme")
 
     # new: a, c, d
     # diff: remove b, add d
     p = Container({
         "b": Absent(),
-        "d": Leaf("int", 4)
+        "d": Leaf(4)
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf("int", 1),
-        "c": Leaf("int", 3),
-        "d": Leaf("int", 4),
+        "a": Leaf(1),
+        "c": Leaf(3),
+        "d": Leaf(4),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
 def _test_patch_leaflist():
     old = Container({
-        "l": LeafList("str", ["a", "b", "c"])
+        "l": LeafList(["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
 
     # new: l = [a, x, c, d]
     # diff would be a leaflist replace:
     p = Container({
-        "l": LeafList("str", ["a", "x", "c", "d"])
+        "l": LeafList(["a", "x", "c", "d"])
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "l": LeafList("str", ["a", "x", "c", "d"])
+        "l": LeafList(["a", "x", "c", "d"])
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
@@ -2834,16 +2833,16 @@ def _test_diff_system_ordered_list_no_diff():
     with the same elements in different order.
     """
     elem1 = Container({
-        "id": Leaf("string", "1"),
-        "name": Leaf("string", "first")
+        "id": Leaf("1"),
+        "name": Leaf("first")
     })
     elem2 = Container({
-        "id": Leaf("string", "2"),
-        "name": Leaf("string", "second")
+        "id": Leaf("2"),
+        "name": Leaf("second")
     })
     elem3 = Container({
-        "id": Leaf("string", "3"),
-        "name": Leaf("string", "third")
+        "id": Leaf("3"),
+        "name": Leaf("third")
     })
 
     old_list = List(
@@ -2867,19 +2866,19 @@ def _test_diff_and_patch_large_tree():
         "mod1": Container(children={
             "conf": Container(children={
                 "settings": Container({
-                    "hostname": Leaf("str", "old-router"),
-                    "motd": Leaf("str", "Welcome!")
+                    "hostname": Leaf("old-router"),
+                    "motd": Leaf("Welcome!")
                 }),
                 "interfaces": List(["name"], elements=[
                     Container({
-                        "name": Leaf("str", "eth0"),
-                        "desc": Leaf("str", "Uplink interface"),
-                        "enabled": Leaf("bool", True)
+                        "name": Leaf("eth0"),
+                        "desc": Leaf("Uplink interface"),
+                        "enabled": Leaf(True)
                     }),
                     Container({
-                        "name": Leaf("str", "eth1"),
-                        "desc": Leaf("str", "Internal interface"),
-                        "enabled": Leaf("bool", True)
+                        "name": Leaf("eth1"),
+                        "desc": Leaf("Internal interface"),
+                        "enabled": Leaf(True)
                     }),
                 ])
             }, ns="http://example.com/yang/mod1", module="mod1")
@@ -2888,16 +2887,16 @@ def _test_diff_and_patch_large_tree():
             "acl": Container(children={
                 "rules": List(["id"], elements=[
                     Container({
-                        "id": Leaf("int", 10),
-                        "action": Leaf("str", "permit"),
-                        "src": Leaf("str", "10.0.0.0/24"),
-                        "dst": Leaf("str", "10.0.1.0/24"),
+                        "id": Leaf(10),
+                        "action": Leaf("permit"),
+                        "src": Leaf("10.0.0.0/24"),
+                        "dst": Leaf("10.0.1.0/24"),
                     }),
                     Container({
-                        "id": Leaf("int", 20),
-                        "action": Leaf("str", "deny"),
-                        "src": Leaf("str", "any"),
-                        "dst": Leaf("str", "any"),
+                        "id": Leaf(20),
+                        "action": Leaf("deny"),
+                        "src": Leaf("any"),
+                        "dst": Leaf("any"),
                     }),
                 ])
             }, ns="http://example.com/yang/mod2", module="mod2")
@@ -2917,21 +2916,21 @@ def _test_diff_and_patch_large_tree():
         "mod1": Container(children={
             "conf": Container(children={
                 "settings": Container(children={
-                    "hostname": Leaf("str", "new-router"),
+                    "hostname": Leaf("new-router"),
                     # motd removed
-                    "ntp-servers": LeafList("str", ["192.168.100.1", "192.168.100.2"])
+                    "ntp-servers": LeafList(["192.168.100.1", "192.168.100.2"])
                 }),
                 "interfaces": List(["name"], elements=[
                     Container({
-                        "name": Leaf("str", "eth0"),
-                        "desc": Leaf("str", "Uplink interface"),
-                        "enabled": Leaf("bool", True)
+                        "name": Leaf("eth0"),
+                        "desc": Leaf("Uplink interface"),
+                        "enabled": Leaf(True)
                     }),
                     # eth1 removed
                     Container({
-                        "name": Leaf("str", "eth2"),
-                        "desc": Leaf("str", "DMZ interface"),
-                        "enabled": Leaf("bool", False)
+                        "name": Leaf("eth2"),
+                        "desc": Leaf("DMZ interface"),
+                        "enabled": Leaf(False)
                     }),
                 ])
             }, ns="http://example.com/yang/mod1", module="mod1")
@@ -2940,22 +2939,22 @@ def _test_diff_and_patch_large_tree():
             "acl": Container(children={
                 "rules": List(["id"], elements=[
                     Container({
-                        "id": Leaf("int", 10),
-                        "action": Leaf("str", "permit"),
-                        "src": Leaf("str", "10.0.0.0/24"),
-                        "dst": Leaf("str", "10.0.1.0/24"),
+                        "id": Leaf(10),
+                        "action": Leaf("permit"),
+                        "src": Leaf("10.0.0.0/24"),
+                        "dst": Leaf("10.0.1.0/24"),
                     }),
                     Container({
-                        "id": Leaf("int", 20),
-                        "action": Leaf("str", "drop"),  # changed from deny
-                        "src": Leaf("str", "any"),
-                        "dst": Leaf("str", "any"),
+                        "id": Leaf(20),
+                        "action": Leaf("drop"),  # changed from deny
+                        "src": Leaf("any"),
+                        "dst": Leaf("any"),
                     }),
                     Container({
-                        "id": Leaf("int", 30),
-                        "action": Leaf("str", "permit"),
-                        "src": Leaf("str", "192.0.2.0/24"),
-                        "dst": Leaf("str", "198.51.100.0/24"),
+                        "id": Leaf(30),
+                        "action": Leaf("permit"),
+                        "src": Leaf("192.0.2.0/24"),
+                        "dst": Leaf("198.51.100.0/24"),
                     }),
                 ])
             }, ns="http://example.com/yang/mod2", module="mod2")
@@ -2984,16 +2983,16 @@ def _test_diff_and_patch_large_tree():
 def _test_prsrc():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf(1),
             "l1": List(["name"], [
                 Container({
-                    "name": Leaf("str", "k1"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2)
+                    "name": Leaf("k1"),
+                    "n1": Leaf(1),
+                    "n2": Leaf(2)
                 }),
                 Container({
-                    "name": Leaf("str", "k4"),
-                    "n4": Leaf("int", 4),
+                    "name": Leaf("k4"),
+                    "n4": Leaf(4),
                 }),
             ])
         }, ns="http://example.com/acme", module="acme")
@@ -3007,11 +3006,11 @@ def _test_prsrc_absent():
             "a": Absent(),
             "l1": List(["name"], [
                 Absent({
-                    "name": Leaf("str", "k1")
+                    "name": Leaf("k1")
                 }),
                 Container({
-                    "name": Leaf("str", "k4"),
-                    "n4": Leaf("int", 4),
+                    "name": Leaf("k4"),
+                    "n4": Leaf(4),
                 }),
             ])
         }, ns="http://example.com/acme", module="acme")
@@ -3022,8 +3021,8 @@ def _test_prsrc_absent():
 def _test_prsrc_root():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
-            "b": LeafList("str", ["a", "b", "c"]),
+            "a": Leaf(1),
+            "b": LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3032,8 +3031,8 @@ def _test_prsrc_root():
 def _test_prsrc_leaf_ns():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1, ns="http://example.com/foo", module="foo"),
-            "b": Leaf("int", 2)
+            "a": Leaf(1, ns="http://example.com/foo", module="foo"),
+            "b": Leaf(2)
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3041,9 +3040,9 @@ def _test_prsrc_leaf_ns():
 
 def _test_prsrc_identityref():
     y1 = Container({
-        "identity-local": Leaf("identityref", Identityref("foo", "http://example.com/acme", "acme", "acme")),
-        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar")),
-        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+        "identity-local": Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        "identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        "augmented-identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
     }, ns="http://example.com/acme", module="acme")
 
     return y1.prsrc()
@@ -3051,27 +3050,27 @@ def _test_prsrc_identityref():
 def _test_to_json():
     y1 = Container({
         "acme:foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf(1),
             "l1": List(["name", "name_two"], [
                 Container({
-                    "name": Leaf("str", "k1"),
-                    "name_two": Leaf("str", "k1a"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2)
+                    "name": Leaf("k1"),
+                    "name_two": Leaf("k1a"),
+                    "n1": Leaf(1),
+                    "n2": Leaf(2)
                 }),
                 Container({
-                    "name": Leaf("str", "k4"),
-                    "name_two": Leaf("str", "k4a"),
-                    "n4": Leaf("int", 4),
+                    "name": Leaf("k4"),
+                    "name_two": Leaf("k4a"),
+                    "n4": Leaf(4),
                 }),
             ]),
-            "b": Leaf("bool", False),
-            "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
-            "llb": LeafList("binary", [b"Hello Acton \xf0\x9f\xab\xa1"]),
-            "c": Leaf("uint64", 18446744073709551615),
+            "b": Leaf(False),
+            "lb": Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
+            "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"]),
+            "c": Leaf(18446744073709551615),
         }, ns="http://example.com/acme", module="acme"),
         "beep:foo": Container({
-            "a": Leaf("int", 1)
+            "a": Leaf(1)
         }, ns="http://example.com/beep", module="beep")
     })
 
@@ -3079,17 +3078,17 @@ def _test_to_json():
 
 def _test_to_json_empty_leaf():
     y1 = Container({
-        "e1": Leaf("empty", Present()),
-        "e2": Leaf("empty", Present(False))
+        "e1": Leaf(Present()),
+        "e2": Leaf(Present(False))
     })
 
     return y1.to_json(pretty=True)
 
 def _test_to_json_identityref():
     y1 = Container({
-        "identity-local": Leaf("identityref", Identityref("foo", "http://example.com/acme", "acme", "acme")),
-        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar")),
-        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+        "identity-local": Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        "identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        "augmented-identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
     }, ns="http://example.com/acme", module="acme")
 
     return y1.to_json(pretty=True)
@@ -3097,27 +3096,27 @@ def _test_to_json_identityref():
 def _test_to_xmlstr():
     y1 = Container({
         "acme:foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf(1),
             "l1": List(["name", "name_two"], [
                 Container({
-                    "name": Leaf("str", "k1"),
-                    "name_two": Leaf("str", "k1a"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2)
+                    "name": Leaf("k1"),
+                    "name_two": Leaf("k1a"),
+                    "n1": Leaf(1),
+                    "n2": Leaf(2)
                 }),
                 Container({
-                    "name": Leaf("str", "k4"),
-                    "name_two": Leaf("str", "k4a"),
-                    "n4": Leaf("int", 4),
+                    "name": Leaf("k4"),
+                    "name_two": Leaf("k4a"),
+                    "n4": Leaf(4),
                 }),
             ]),
-            "b": Leaf("bool", False),
-            "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
-            "llb": LeafList("binary", [b"Hello Acton \xf0\x9f\xab\xa1"]),
-            "c": Leaf("uint64", 18446744073709551615),
+            "b": Leaf(False),
+            "lb": Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
+            "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"]),
+            "c": Leaf(18446744073709551615),
         }, ns="http://example.com/acme", module="acme"),
         "beep:foo": Container({
-            "a": Leaf("int", 1)
+            "a": Leaf(1)
         }, ns="http://example.com/beep", module="beep")
     })
 
@@ -3126,8 +3125,8 @@ def _test_to_xmlstr():
 def _test_to_xmlstr_root():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
-            "b": LeafList("binary", ["a", "b", "c"]),
+            "a": Leaf(1),
+            "b": LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3136,8 +3135,8 @@ def _test_to_xmlstr_root():
 def _test_to_xmlstr_module():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
-            "b": LeafList("str", ["a", "b", "c"]),
+            "a": Leaf(1),
+            "b": LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3146,8 +3145,8 @@ def _test_to_xmlstr_module():
 def _test_to_xmlstr_leaf_ns():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1, ns="http://example.com/foo", module="foo"),
-            "b": Leaf("int", 2)
+            "a": Leaf(1, ns="http://example.com/foo", module="foo"),
+            "b": Leaf(2)
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3157,18 +3156,18 @@ def _test_to_xmlstr_mixed():
     y1 = Container({
         "device": List(["name"], [
             Container({
-                "name": Leaf("str", "dev1"),
+                "name": Leaf("dev1"),
                 "config": Container({
                     "hostname": Container({
-                        "system-network-name": Leaf("str", "dev1")
+                        "system-network-name": Leaf("dev1")
                     }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
                 }),
             }),
             Container({
-                "name": Leaf("str", "dev2"),
+                "name": Leaf("dev2"),
                 "config": Container({
                     "hostname": Container({
-                        "system-network-name": Leaf("str", "dev2")
+                        "system-network-name": Leaf("dev2")
                     }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
                 }),
             }),
@@ -3180,13 +3179,13 @@ def _test_to_xmlstr_mixed():
 def _test_to_xmlstr_root_merge():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
-            "b": LeafList("str", ["a", "b", "c"]),
+            "a": Leaf(1),
+            "b": LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
     y2 = Container({
         "bar": Container({
-            "b": Leaf("int", 42),
+            "b": Leaf(42),
         }, ns="http://example.com/bar", module="bar")
     })
     ym = merge(y1, y2)
@@ -3196,7 +3195,7 @@ def _test_to_xmlstr_root_merge():
 def _test_to_xmlstr_presence():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1)
+            "a": Leaf(1)
         }, presence=True, ns="http://example.com/acme", module="acme")
     })
 
@@ -3211,17 +3210,17 @@ def _test_to_xmlstr_presence_childless():
 
 def _test_to_xmlstr_empty_leaf():
     y1 = Container({
-        "e1": Leaf("empty", Present()),
-        "e2": Leaf("empty", Present(False))
+        "e1": Leaf(Present()),
+        "e2": Leaf(Present(False))
     })
 
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_identityref():
     y1 = Container({
-        "identity-local": Leaf("identityref", Identityref("foo", "http://example.com/acme", "acme", "acme")),
-        "identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar")),
-        "augmented-identity-other": Leaf("identityref", Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+        "identity-local": Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        "identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        "augmented-identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
     }, ns="http://example.com/acme", module="acme")
 
     return y1.to_xmlstr()
@@ -3231,13 +3230,13 @@ def _test_to_xmlstr_list_removal():
         "l": Absent({
             "l": List(["name"], [
                 Container({
-                    "name": Leaf("str", "k1"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2),
+                    "name": Leaf("k1"),
+                    "n1": Leaf(1),
+                    "n2": Leaf(2),
                 }),
                 Container({
-                    "name": Leaf("str", "k4"),
-                    "n4": Leaf("int", 4),
+                    "name": Leaf("k4"),
+                    "n4": Leaf(4),
                 }),
             ], ns="http://example.com/acme", module="acme")
         }, ns="http://example.com/acme", module="acme")
