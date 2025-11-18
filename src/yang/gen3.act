@@ -800,9 +800,8 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                     iv = item.val
                     if iv is not None:
                         unwrapped_values.append(iv)
-                leaflist_type = "union" if child.type_.builtin_type == "union" else (leaflist_val[0].t)
                 if len(unwrapped_values) > 0:
-                    children[uname(child)] = yang.gdata.LeafList(leaflist_type, unwrapped_values, user_order=_user_order(child.ordered_by))
+                    children[uname(child)] = yang.gdata.LeafList(unwrapped_values, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf-list value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
@@ -817,16 +816,9 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                     children[uname(child)] = yang.gdata.Delete()
                     continue
                 # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
-                # Determine concrete type
-                leaf_ns = None
-                leaf_module = None
-                if ns is not None:
-                    leaf_ns = child.namespace
-                    leaf_module = child.module
-                concrete_type = typed.t
                 av = typed.val
                 if av is not None:
-                    children[uname(child)] = yang.gdata.Leaf(concrete_type, av, ns=leaf_ns, module=leaf_module)
+                    children[uname(child)] = yang.gdata.Leaf(av, ns=ns, module=mod)
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
@@ -1398,7 +1390,7 @@ def _test_json_path_basic():
     expected = yang.gdata.Container({
         "c1": yang.gdata.Container({
             "c2": yang.gdata.Container({
-                "l2": yang.gdata.Leaf("string", "test value")
+                "l2": yang.gdata.Leaf("test value")
             })
         }, ns='urn:example:y1', module='y1')
     })
@@ -1436,7 +1428,7 @@ def _test_json_path_qualified_names():
     gd = from_json_path(s, {"mod2:l2": "augmented value"}, ["mod1:c1"])
     expected = yang.gdata.Container({
         "c1": yang.gdata.Container({
-            "l2": yang.gdata.Leaf("string", "augmented value", ns="urn:example:mod2", module="mod2")
+            "l2": yang.gdata.Leaf("augmented value", ns="urn:example:mod2", module="mod2")
         }, ns="urn:example:mod1", module="mod1")
     })
     testing.assertEqual(gd.prsrc(), expected.prsrc())
@@ -1475,8 +1467,8 @@ def _test_json_path_list():
       'c1': yang.gdata.Container({
         'l1': yang.gdata.List(['name'], elements=[
           yang.gdata.Container({
-            'name': yang.gdata.Leaf('string', 'test'),
-            'value': yang.gdata.Leaf('string', 'data')
+            'name': yang.gdata.Leaf('test'),
+            'value': yang.gdata.Leaf('data')
           })
         ])
       }, ns='urn:example:y1', module='y1')
@@ -1512,7 +1504,7 @@ def _test_json_path_remove():
       'c1': yang.gdata.Container({
         'l1': yang.gdata.List(['name'], elements=[
           yang.gdata.Absent({
-            'name': yang.gdata.Leaf('string', 'test')
+            'name': yang.gdata.Leaf('test')
           })
         ])
       }, ns='urn:example:y1', module='y1')
@@ -1599,11 +1591,11 @@ def _test_json_path_nested_lists():
         'c1': yang.gdata.Container({
             'outer': yang.gdata.List(['outer-key'], elements=[
                 yang.gdata.Container({
-                    'outer-key': yang.gdata.Leaf('string', 'key1'),
+                    'outer-key': yang.gdata.Leaf('key1'),
                     'inner': yang.gdata.List(['inner-key'], elements=[
                         yang.gdata.Container({
-                            'inner-key': yang.gdata.Leaf('string', 'key2'),
-                            'value': yang.gdata.Leaf('string', 'test-value')
+                            'inner-key': yang.gdata.Leaf('key2'),
+                            'value': yang.gdata.Leaf('test-value')
                         })
                     ])
                 })
@@ -1618,14 +1610,14 @@ def _test_json_path_nested_lists():
         'c1': yang.gdata.Container({
             'outer': yang.gdata.List(['outer-key'], elements=[
                 yang.gdata.Container({
-                    'outer-key': yang.gdata.Leaf('string', 'key1'),
+                    'outer-key': yang.gdata.Leaf('key1'),
                     'inner': yang.gdata.List(['inner-key'], elements=[
                         yang.gdata.Container({
-                            'inner-key': yang.gdata.Leaf('string', 'key2'),
+                            'inner-key': yang.gdata.Leaf('key2'),
                             'deep': yang.gdata.List(['deep-key'], elements=[
                                 yang.gdata.Container({
-                                    'deep-key': yang.gdata.Leaf('string', 'key3'),
-                                    'data': yang.gdata.Leaf('int32', bigint(42))
+                                    'deep-key': yang.gdata.Leaf('key3'),
+                                    'data': yang.gdata.Leaf(bigint(42))
                                 })
                             ])
                         })
@@ -1966,10 +1958,10 @@ def _test_netconf_delete_container():
         'c1': yang.gdata.Container({
             'outer': yang.gdata.List(['outer-key'], elements=[
                 yang.gdata.Container({
-                    'outer-key': yang.gdata.Leaf('string', 'key1'),
+                    'outer-key': yang.gdata.Leaf('key1'),
                     'inner': yang.gdata.List(['inner-key'], elements=[
                         yang.gdata.Absent({
-                            'inner-key': yang.gdata.Leaf('string', 'key2')
+                            'inner-key': yang.gdata.Leaf('key2')
                         })
                     ])
                 })
@@ -2030,25 +2022,25 @@ def _test_pradata():
     s = yang.compile([schema_str])
 
     gdata_tree = yang.gdata.Container({
-        "top-level-leaf": yang.gdata.Leaf("string", "root value"),
+        "top-level-leaf": yang.gdata.Leaf("root value"),
         "c1": yang.gdata.Container({
-            "optional-leaf": yang.gdata.Leaf("int32", bigint(42)),
+            "optional-leaf": yang.gdata.Leaf(bigint(42)),
             "c2": yang.gdata.Container({
-                "l1": yang.gdata.Leaf("string", "inner value"),
-                "mandatory-leaf": yang.gdata.Leaf("string", "required value")
+                "l1": yang.gdata.Leaf("inner value"),
+                "mandatory-leaf": yang.gdata.Leaf("required value")
             }, presence=True),
             "li1": yang.gdata.List(["name", "extra-key"], [
                 yang.gdata.Container({
-                    "name": yang.gdata.Leaf("string", "item1"),
-                    "extra-key": yang.gdata.Leaf("int32", bigint(1)),
-                    "value": yang.gdata.Leaf("int32", bigint(100))
+                    "name": yang.gdata.Leaf("item1"),
+                    "extra-key": yang.gdata.Leaf(bigint(1)),
+                    "value": yang.gdata.Leaf(bigint(100))
                 }),
                 yang.gdata.Container({
-                    "name": yang.gdata.Leaf("string", "item2"),
-                    "extra-key": yang.gdata.Leaf("int32", bigint(2)),
-                    "value": yang.gdata.Leaf("int32", bigint(200)),
+                    "name": yang.gdata.Leaf("item2"),
+                    "extra-key": yang.gdata.Leaf(bigint(2)),
+                    "value": yang.gdata.Leaf(bigint(200)),
                     "c3": yang.gdata.Container({
-                        "nested-leaf": yang.gdata.Leaf("string", "birb")
+                        "nested-leaf": yang.gdata.Leaf("birb")
                     })
                 })
             ])
@@ -2083,9 +2075,9 @@ def _test_pradata_root_path():
     gdata_tree = yang.gdata.Container({
         "outer": yang.gdata.Container({
             "middle": yang.gdata.Container({
-                "value1": yang.gdata.Leaf("string", "test value"),
+                "value1": yang.gdata.Leaf("test value"),
                 "inner": yang.gdata.Container({
-                    "value2": yang.gdata.Leaf("int32", bigint(42))
+                    "value2": yang.gdata.Leaf(bigint(42))
                 })
             })
         })
@@ -2129,10 +2121,10 @@ def _test_json_path_container_list_container():
         'top': yang.gdata.Container({
             'middle': yang.gdata.List(['name'], elements=[
                 yang.gdata.Container({
-                    'name': yang.gdata.Leaf('string', 'item1'),
+                    'name': yang.gdata.Leaf('item1'),
                     'bottom': yang.gdata.Container({
-                        'data': yang.gdata.Leaf('string', 'test'),
-                        'value': yang.gdata.Leaf('int32', bigint(42))
+                        'data': yang.gdata.Leaf('test'),
+                        'value': yang.gdata.Leaf(bigint(42))
                     })
                 })
             ])
@@ -2146,7 +2138,7 @@ def _test_json_path_container_list_container():
         'top': yang.gdata.Container({
             'middle': yang.gdata.List(['name'], elements=[
                 yang.gdata.Container({
-                    'name': yang.gdata.Leaf('string', 'item1'),
+                    'name': yang.gdata.Leaf('item1'),
                     'bottom': yang.gdata.Absent()
                 })
             ])
