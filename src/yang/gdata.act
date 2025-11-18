@@ -369,14 +369,13 @@ class Node(value):
                 if isinstance(child, Container):
                     child_dict[fmt_json_name(nm, child.module)] = child.to_dict(pretty)
                 elif isinstance(child, Leaf):
+                    v = child.val
                     # "empty" type is encoded as an array with a null element "[null]"
-                    if child.t == "empty":
-                        v = child.val
-                        if isinstance(v, bool):
-                            if v == True:
-                                child_dict[fmt_json_name(nm, child.module)] = [None]
-                    else:
-                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val)
+                    if isinstance(v, Present):
+                        if v.present:
+                            child_dict[fmt_json_name(nm, child.module)] = [None]
+                    elif v is not None:
+                        child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, v)
                 elif isinstance(child, LeafList):
                     vals = []
                     for v in child.vals if child.user_order else vals_list_sorted(child.vals):
@@ -440,16 +439,16 @@ class Node(value):
                             attrs = (nsdefs=[], attrs=[])
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + attrs.nsdefs, attributes=attrs.attrs, children=elem._to_xml_rec(child.keys, skip_nonkeys)))
                 elif isinstance(child, Leaf):
-                    if child.t == "empty":
-                        v = child.val
-                        if isinstance(v, bool):
-                            if v == True:
-                                children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
-                            else:
-                                children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
+                    v = child.val
+                    if isinstance(v, Present):
+                        if v.present:
+                            children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
+                        else:
+                            children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
+                    elif v is not None:
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, child.val), text=yang_str(v)))
                     else:
-                        v = yang_str(child.val)
-                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, child.val), text=v))
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
                 elif isinstance(child, LeafList):
                     vals = []
                     for val in child.vals if child.user_order else vals_list_sorted(child.vals):
@@ -548,8 +547,12 @@ class Node(value):
             if isinstance(childval, bool):
                 return childval
 
-    def get_opt_empty(self, name) -> ?bool:
-        return self.get_opt_bool(name)
+    def get_opt_empty(self, name) -> ?Present:
+        child = self.get_opt_leaf(name)
+        if child is not None:
+            childval = child.val
+            if isinstance(childval, Present):
+                return childval
 
     def get_float(self, name) -> float:
         child = self.get_leaf(name)
@@ -859,6 +862,25 @@ class LeafList(Node):
         self.txid = txid
         self.children = {}
 
+class Present:
+    """Named type for empty leaf value
+
+    This type is used for the empty leaf value, so that we can do an
+    isinstance(v, Present) check to detect whether the leaf is present. When
+    Acton supports pattern matching we can switch to the () identity.
+
+    This is the first step towards reducing reliance on the gdata.Node.type
+    attribute for comparisons, and instead just comparing the Acton types. In
+    the final form, the present boolean argument will also be removed, which
+    will make it possible to first make the value optional (?Present) and
+    ultimately replace with () identity once Acton supports pattern matching.
+    """
+    def __init__(self, present: bool=True):
+        self.present = present
+
+    def __repr__(self):
+        return "yang.gdata.Present({'' if self.present else 'False'})"
+
 class Absent(Node):
     """Declarative definition of the absence of a node
 
@@ -944,6 +966,8 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a == b
+    if isinstance(a, Present) and isinstance(b, Present):
+        return a.present == b.present
     if type(a) != type(b):
         # It is valid to compare values of different type, which happens if
         # leaves are of type union and value a and b happen to be of different
@@ -992,6 +1016,8 @@ def vals_less_than(a: value, b: value) -> bool:
         return a < b
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a < b
+    if isinstance(a, Present) and isinstance(b, Present):
+        return not a.present
     raise ValueError("Unsupported value type or mismatch in lt comparison: {type(a)}, {type(b)}")
 
 pure def vals_list_sorted(a: list[value]) -> list[value]:
@@ -1639,17 +1665,14 @@ def from_xml_bool(n: xml.Node, name: str, ns: ?str) -> bool:
         return r
     raise ValueError("Cannot find xml child with name {name}")
 
-def from_xml_opt_empty(n: xml.Node, name: str, ns: ?str) -> ?bool:
+def from_xml_opt_empty(n: xml.Node, name: str, ns: ?str) -> ?Present:
     try:
         text = get_xml_child(n, name, ns).text
     except ValueError:
         return None
     else:
-        # The xml.Node text attribute is None when empty, we check empty string
-        # for backwards compatibility with older Acton stdlib.
-        # TODO: remove this 2025-12
-        if text is None or text == "":
-            return True
+        if text is None:
+            return Present()
         raise ValueError("Expected no text for empty leaf {name}, got {str(text)}")
 
 def from_xml_float(n: xml.Node, name: str, ns: ?str) -> float:
@@ -2046,13 +2069,13 @@ def take_json_bool(jd: dict[str, ?value], name: str, module: ?str=None) -> bool:
         return val
     raise ValueError("Cannot find json child with name {name}")
 
-def take_json_opt_empty(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bool:
+def take_json_opt_empty(jd: dict[str, ?value], name: str, module: ?str=None) -> ?Present:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, list) and len(child) == 1:
             v = child[0]
             if v is None:
-                return True
+                return Present()
         raise ValueError("Expected a [null] for empty leaf {name}")
     return None
 
@@ -3056,8 +3079,8 @@ def _test_to_json():
 
 def _test_to_json_empty_leaf():
     y1 = Container({
-        "e1": Leaf("empty", True),
-        "e2": Leaf("empty", False)
+        "e1": Leaf("empty", Present()),
+        "e2": Leaf("empty", Present(False))
     })
 
     return y1.to_json(pretty=True)
@@ -3188,8 +3211,8 @@ def _test_to_xmlstr_presence_childless():
 
 def _test_to_xmlstr_empty_leaf():
     y1 = Container({
-        "e1": Leaf("empty", True),
-        "e2": Leaf("empty", False)
+        "e1": Leaf("empty", Present()),
+        "e2": Leaf("empty", Present(False))
     })
 
     return y1.to_xmlstr()
