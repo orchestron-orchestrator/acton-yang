@@ -1,5 +1,7 @@
 mut def from_data_foo__l1__name(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), Type('string'), [])
+    return yang.gdata.Leaf(tv.val)
+
 
 class foo__l1_entry(yang.adata.MNode):
     name: str
@@ -12,7 +14,8 @@ class foo__l1_entry(yang.adata.MNode):
         children = {}
         _name = self.name
         if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
+            tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_name), Type('string'), [])
+            children['name'] = yang.gdata.Leaf(tv.val)
         return yang.gdata.Container(children)
 
     @staticmethod

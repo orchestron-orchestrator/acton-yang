@@ -8,12 +8,15 @@ import yang.gen3
 from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 from yang.schema import DIdentity
+from yang.schema import Type, Bit, Enum, Pattern, Range, Length
 
 # == This file is generated ==
 
 
 mut def from_data_foo__li1__l1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), Type('string'), [])
+    return yang.gdata.Leaf(tv.val)
+
 
 class foo__li1_entry(yang.adata.MNode):
     l1: str
@@ -26,7 +29,8 @@ class foo__li1_entry(yang.adata.MNode):
         children = {}
         _l1 = self.l1
         if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('string', _l1)
+            tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_l1), Type('string'), [])
+            children['l1'] = yang.gdata.Leaf(tv.val)
         return yang.gdata.Container(children)
 
     @staticmethod
@@ -169,7 +173,7 @@ mut def from_json_foo__li1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     return yang.gdata.List(keys=['l1'], elements=elements, ns='http://example.com/foo', module='foo')
 
 mut def from_data_foo__ll1(val: list[value]) -> yang.gdata.LeafList:
-    return yang.gdata.LeafList('string', val, ns='http://example.com/foo', module='foo')
+    return yang.gdata.LeafList(val, ns='http://example.com/foo', module='foo')
 
 class root(yang.adata.MNode):
     li1: foo__li1
@@ -187,7 +191,11 @@ class root(yang.adata.MNode):
             children['li1'] = _li1.to_gdata()
         _ll1 = self.ll1
         if _ll1 is not None:
-            children['ll1'] = yang.gdata.LeafList('string', _ll1, ns='http://example.com/foo', module='foo')
+            _ll_ll1 = []
+            for v in _ll1:
+                tv = yang.gen3.try_parse_value(yang.gdata.yang_str(v), Type('string'), [])
+                _ll_ll1.append(tv.val)
+            children['ll1'] = yang.gdata.LeafList(_ll_ll1, ns='http://example.com/foo', module='foo')
         return yang.gdata.Container(children)
 
     @staticmethod

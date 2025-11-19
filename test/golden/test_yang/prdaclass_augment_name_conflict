@@ -1,8 +1,12 @@
 mut def from_data_base__c1__bar_foo(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val, ns='http://example.com/bar', module='bar')
+    tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), Type('string'), [])
+    return yang.gdata.Leaf(tv.val, ns='http://example.com/bar', module='bar')
+
 
 mut def from_data_base__c1__foo_foo(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val, ns='http://example.com/foo', module='foo')
+    tv = yang.gen3.try_parse_value(yang.gdata.yang_str(val), Type('string'), [])
+    return yang.gdata.Leaf(tv.val, ns='http://example.com/foo', module='foo')
+
 
 class base__c1(yang.adata.MNode):
     bar_foo: ?str
@@ -17,10 +21,12 @@ class base__c1(yang.adata.MNode):
         children = {}
         _bar_foo = self.bar_foo
         if _bar_foo is not None:
-            children['bar:foo'] = yang.gdata.Leaf('string', _bar_foo, ns='http://example.com/bar', module='bar')
+            tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_bar_foo), Type('string'), [])
+            children['bar:foo'] = yang.gdata.Leaf(tv.val, ns='http://example.com/bar', module='bar')
         _foo_foo = self.foo_foo
         if _foo_foo is not None:
-            children['foo:foo'] = yang.gdata.Leaf('string', _foo_foo, ns='http://example.com/foo', module='foo')
+            tv = yang.gen3.try_parse_value(yang.gdata.yang_str(_foo_foo), Type('string'), [])
+            children['foo:foo'] = yang.gdata.Leaf(tv.val, ns='http://example.com/foo', module='foo')
         return yang.gdata.Container(children, ns='http://example.com/base', module='base')
 
     @staticmethod
