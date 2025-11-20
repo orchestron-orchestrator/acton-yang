@@ -25,8 +25,9 @@ class base__system_capabilities__per_node_capabilities_entry(yang.adata.MNode):
         pass
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:system-capabilities', 'per-node-capabilities'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> base__system_capabilities__per_node_capabilities_entry:
@@ -55,14 +56,6 @@ class base__system_capabilities__per_node_capabilities(yang.adata.MNode):
         res = base__system_capabilities__per_node_capabilities_entry()
         self.elements.append(res)
         return res
-
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List([], elements)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[base__system_capabilities__per_node_capabilities_entry]:
@@ -93,15 +86,17 @@ class base__system_capabilities__subscription_capabilities(yang.adata.MNode):
         self.max_nodes = max_nodes if max_nodes is not None else bigint(42)
         self.supported_excluded_change_type = supported_excluded_change_type if supported_excluded_change_type is not None else []
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'max_nodes':
+            return self.max_nodes
+        if name == 'supported_excluded_change_type':
+            return self.supported_excluded_change_type
+        raise ValueError('Attribute {name} not found in base__system_capabilities__subscription_capabilities')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _max_nodes = self.max_nodes
-        if _max_nodes is not None:
-            children['max-nodes'] = yang.gdata.Leaf('uint32', _max_nodes)
-        _supported_excluded_change_type = self.supported_excluded_change_type
-        if _supported_excluded_change_type is not None:
-            children['supported-excluded-change-type'] = yang.gdata.LeafList('string', _supported_excluded_change_type)
-        return yang.gdata.Container(children, ns='http://example.com/augmenter', module='augmenter')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:system-capabilities', 'augmenter:subscription-capabilities'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> base__system_capabilities__subscription_capabilities:
@@ -126,15 +121,17 @@ class base__system_capabilities(yang.adata.MNode):
         self.per_node_capabilities = base__system_capabilities__per_node_capabilities(elements=per_node_capabilities)
         self.subscription_capabilities = subscription_capabilities if subscription_capabilities is not None else base__system_capabilities__subscription_capabilities()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'per_node_capabilities':
+            return iter(self.per_node_capabilities)
+        if name == 'subscription_capabilities':
+            return self.subscription_capabilities
+        raise ValueError('Attribute {name} not found in base__system_capabilities')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _per_node_capabilities = self.per_node_capabilities
-        if _per_node_capabilities is not None:
-            children['per-node-capabilities'] = _per_node_capabilities.to_gdata()
-        _subscription_capabilities = self.subscription_capabilities
-        if _subscription_capabilities is not None:
-            children['subscription-capabilities'] = _subscription_capabilities.to_gdata()
-        return yang.gdata.Container(children, ns='http://example.com/base', module='base')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:system-capabilities'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> base__system_capabilities:
@@ -157,12 +154,15 @@ class root(yang.adata.MNode):
         self._ns = ''
         self.system_capabilities = system_capabilities if system_capabilities is not None else base__system_capabilities()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'system_capabilities':
+            return self.system_capabilities
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _system_capabilities = self.system_capabilities
-        if _system_capabilities is not None:
-            children['system-capabilities'] = _system_capabilities.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

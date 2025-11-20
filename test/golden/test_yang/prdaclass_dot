@@ -25,12 +25,15 @@ class foo__ieee_802_3(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.ieee_802_3 = ieee_802_3
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'ieee_802_3':
+            return self.ieee_802_3
+        raise ValueError('Attribute {name} not found in foo__ieee_802_3')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _ieee_802_3 = self.ieee_802_3
-        if _ieee_802_3 is not None:
-            children['ieee-802.3'] = yang.gdata.Leaf('string', _ieee_802_3)
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:ieee-802.3'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__ieee_802_3:
@@ -53,12 +56,15 @@ class root(yang.adata.MNode):
         self._ns = ''
         self.ieee_802_3 = ieee_802_3 if ieee_802_3 is not None else foo__ieee_802_3()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'ieee_802_3':
+            return self.ieee_802_3
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _ieee_802_3 = self.ieee_802_3
-        if _ieee_802_3 is not None:
-            children['ieee-802.3'] = _ieee_802_3.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

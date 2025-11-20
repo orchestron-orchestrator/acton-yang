@@ -27,15 +27,17 @@ class parent__parent_container(yang.adata.MNode):
         self.parent_leaf = parent_leaf
         self.augmented_leaf = augmented_leaf
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'parent_leaf':
+            return self.parent_leaf
+        if name == 'augmented_leaf':
+            return self.augmented_leaf
+        raise ValueError('Attribute {name} not found in parent__parent_container')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _parent_leaf = self.parent_leaf
-        if _parent_leaf is not None:
-            children['parent-leaf'] = yang.gdata.Leaf('string', _parent_leaf)
-        _augmented_leaf = self.augmented_leaf
-        if _augmented_leaf is not None:
-            children['augmented-leaf'] = yang.gdata.Leaf('string', _augmented_leaf)
-        return yang.gdata.Container(children, ns='http://example.com/parent', module='parent')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['parent:parent-container'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> parent__parent_container:
@@ -60,15 +62,17 @@ class parent__sub_container(yang.adata.MNode):
         self.sub_leaf = sub_leaf
         self.another_leaf = another_leaf
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'sub_leaf':
+            return self.sub_leaf
+        if name == 'another_leaf':
+            return self.another_leaf
+        raise ValueError('Attribute {name} not found in parent__sub_container')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _sub_leaf = self.sub_leaf
-        if _sub_leaf is not None:
-            children['sub-leaf'] = yang.gdata.Leaf('string', _sub_leaf)
-        _another_leaf = self.another_leaf
-        if _another_leaf is not None:
-            children['another-leaf'] = yang.gdata.Leaf('string', _another_leaf)
-        return yang.gdata.Container(children, ns='http://example.com/parent', module='parent')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['parent:sub-container'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> parent__sub_container:
@@ -93,15 +97,17 @@ class root(yang.adata.MNode):
         self.parent_container = parent_container if parent_container is not None else parent__parent_container()
         self.sub_container = sub_container if sub_container is not None else parent__sub_container()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'parent_container':
+            return self.parent_container
+        if name == 'sub_container':
+            return self.sub_container
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _parent_container = self.parent_container
-        if _parent_container is not None:
-            children['parent-container'] = _parent_container.to_gdata()
-        _sub_container = self.sub_container
-        if _sub_container is not None:
-            children['sub-container'] = _sub_container.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

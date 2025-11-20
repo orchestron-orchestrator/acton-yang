@@ -318,12 +318,15 @@ class foo__c1__li__c4(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.l5 = l5
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l5':
+            return self.l5
+        raise ValueError('Attribute {name} not found in foo__c1__li__c4')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l5 = self.l5
-        if _l5 is not None:
-            children['l5'] = yang.gdata.Leaf('string', _l5)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:c1', 'li', 'c4'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1__li__c4:
@@ -350,18 +353,19 @@ class foo__c1__li_entry(yang.adata.MNode):
         self.val = val
         self.c4 = c4 if c4 is not None else foo__c1__li__c4()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'name':
+            return self.name
+        if name == 'val':
+            return self.val
+        if name == 'c4':
+            return self.c4
+        raise ValueError('Attribute {name} not found in foo__c1__li')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _name = self.name
-        if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
-        _val = self.val
-        if _val is not None:
-            children['val'] = yang.gdata.Leaf('string', _val)
-        _c4 = self.c4
-        if _c4 is not None:
-            children['c4'] = _c4.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:c1', 'li'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__li_entry:
@@ -393,14 +397,6 @@ class foo__c1__li(yang.adata.MNode):
         res = foo__c1__li_entry(name)
         self.elements.append(res)
         return res
-
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements, user_order=True)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__c1__li_entry]:
@@ -449,55 +445,35 @@ class foo__c1(yang.adata.MNode):
         self.bar_l1 = bar_l1
         self.l2 = l2
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'f_l1':
+            return self.f_l1
+        if name == 'l3':
+            return self.l3
+        if name == 'l_empty':
+            return self.l_empty
+        if name == 'li':
+            return iter(self.li)
+        if name == 'll_uint64':
+            return self.ll_uint64
+        if name == 'll_str':
+            return self.ll_str
+        if name == 'l_identityref':
+            return self.l_identityref
+        if name == 'll_identityref':
+            return self.ll_identityref
+        if name == 'l4':
+            return self.l4
+        if name == 'bar_l1':
+            return self.bar_l1
+        if name == 'l2':
+            return self.l2
+        raise ValueError('Attribute {name} not found in foo__c1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _f_l1 = self.f_l1
-        if _f_l1 is not None:
-            children['f:l1'] = yang.gdata.Leaf('string', _f_l1)
-        _l3 = self.l3
-        if _l3 is not None:
-            children['l3'] = yang.gdata.Leaf('uint64', _l3)
-        _l_empty = self.l_empty
-        if _l_empty is not None:
-            children['l_empty'] = yang.gdata.Leaf('empty', _l_empty)
-        _li = self.li
-        if _li is not None:
-            children['li'] = _li.to_gdata()
-        _ll_uint64 = self.ll_uint64
-        if _ll_uint64 is not None:
-            children['ll_uint64'] = yang.gdata.LeafList('uint64', _ll_uint64)
-        _ll_str = self.ll_str
-        if _ll_str is not None:
-            children['ll_str'] = yang.gdata.LeafList('string', _ll_str)
-        _l_identityref = self.l_identityref
-        if _l_identityref is not None:
-            _identityref_l_identityref, error = complete_and_validate_identityref(_l_identityref, _identities, ['f:basey'], 'foo')
-            if _identityref_l_identityref is not None:
-                _l_identityref = _identityref_l_identityref
-            else:
-                raise ValueError('Invalid value for identityref leaf l_identityref: {error}')
-            children['l_identityref'] = yang.gdata.Leaf('identityref', _l_identityref)
-        _ll_identityref = self.ll_identityref
-        if _ll_identityref is not None:
-            _identityref_ll_identityref = []
-            for v in _ll_identityref:
-                nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'foo')
-                if nv is not None:
-                    _identityref_ll_identityref.append(nv)
-                else:
-                    raise ValueError('Invalid value for identityref leaf-list ll_identityref: {error}')
-            _ll_identityref = _identityref_ll_identityref
-            children['ll_identityref'] = yang.gdata.LeafList('identityref', _ll_identityref)
-        _l4 = self.l4
-        if _l4 is not None:
-            children['l4'] = yang.gdata.Leaf('string', _l4)
-        _bar_l1 = self.bar_l1
-        if _bar_l1 is not None:
-            children['bar:l1'] = yang.gdata.Leaf('string', _bar_l1, ns='http://example.com/bar', module='bar')
-        _l2 = self.l2
-        if _l2 is not None:
-            children['l2'] = yang.gdata.Leaf('string', _l2, ns='http://example.com/bar', module='bar')
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:c1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
@@ -520,12 +496,15 @@ class foo__pc1__foo(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.l1 = l1 if l1 is not None else []
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l1':
+            return self.l1
+        raise ValueError('Attribute {name} not found in foo__pc1__foo')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.LeafList('binary', _l1)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:pc1', 'foo'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc1__foo:
@@ -548,12 +527,15 @@ class foo__pc1(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.foo = foo if foo is not None else foo__pc1__foo()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'foo':
+            return self.foo
+        raise ValueError('Attribute {name} not found in foo__pc1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _foo = self.foo
-        if _foo is not None:
-            children['foo'] = _foo.to_gdata()
-        return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:pc1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__pc1:
@@ -579,12 +561,15 @@ class foo__pc2__foo(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.l_mandatory = l_mandatory
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l_mandatory':
+            return self.l_mandatory
+        raise ValueError('Attribute {name} not found in foo__pc2__foo')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l_mandatory = self.l_mandatory
-        if _l_mandatory is not None:
-            children['l_mandatory'] = yang.gdata.Leaf('string', _l_mandatory)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:pc2', 'foo'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc2__foo:
@@ -607,12 +592,15 @@ class foo__pc2(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.foo = foo if foo is not None else foo__pc2__foo()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'foo':
+            return self.foo
+        raise ValueError('Attribute {name} not found in foo__pc2')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _foo = self.foo
-        if _foo is not None:
-            children['foo'] = _foo.to_gdata()
-        return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:pc2'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__pc2:
@@ -640,15 +628,17 @@ class foo__pc3__level1__level2__level3(yang.adata.MNode):
         self.l3 = l3
         self.l3_optional = l3_optional
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l3':
+            return self.l3
+        if name == 'l3_optional':
+            return self.l3_optional
+        raise ValueError('Attribute {name} not found in foo__pc3__level1__level2__level3')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l3 = self.l3
-        if _l3 is not None:
-            children['l3'] = yang.gdata.Leaf('string', _l3)
-        _l3_optional = self.l3_optional
-        if _l3_optional is not None:
-            children['l3-optional'] = yang.gdata.Leaf('string', _l3_optional)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:pc3', 'level1', 'level2', 'level3'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc3__level1__level2__level3:
@@ -675,18 +665,19 @@ class foo__pc3__level1__level2(yang.adata.MNode):
         self.l2_optional = l2_optional
         self.level3 = level3 if level3 is not None else foo__pc3__level1__level2__level3()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l2':
+            return self.l2
+        if name == 'l2_optional':
+            return self.l2_optional
+        if name == 'level3':
+            return self.level3
+        raise ValueError('Attribute {name} not found in foo__pc3__level1__level2')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l2 = self.l2
-        if _l2 is not None:
-            children['l2'] = yang.gdata.Leaf('string', _l2)
-        _l2_optional = self.l2_optional
-        if _l2_optional is not None:
-            children['l2-optional'] = yang.gdata.Leaf('string', _l2_optional)
-        _level3 = self.level3
-        if _level3 is not None:
-            children['level3'] = _level3.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:pc3', 'level1', 'level2'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc3__level1__level2:
@@ -713,18 +704,19 @@ class foo__pc3__level1(yang.adata.MNode):
         self.l1_optional = l1_optional
         self.level2 = level2 if level2 is not None else foo__pc3__level1__level2()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l1':
+            return self.l1
+        if name == 'l1_optional':
+            return self.l1_optional
+        if name == 'level2':
+            return self.level2
+        raise ValueError('Attribute {name} not found in foo__pc3__level1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('string', _l1)
-        _l1_optional = self.l1_optional
-        if _l1_optional is not None:
-            children['l1-optional'] = yang.gdata.Leaf('string', _l1_optional)
-        _level2 = self.level2
-        if _level2 is not None:
-            children['level2'] = _level2.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:pc3', 'level1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__pc3__level1:
@@ -747,12 +739,15 @@ class foo__pc3(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.level1 = level1 if level1 is not None else foo__pc3__level1()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'level1':
+            return self.level1
+        raise ValueError('Attribute {name} not found in foo__pc3')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _level1 = self.level1
-        if _level1 is not None:
-            children['level1'] = _level1.to_gdata()
-        return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:pc3'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__pc3:
@@ -778,8 +773,9 @@ class foo__empty_presence(yang.adata.MNode):
         pass
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        return yang.gdata.Container(children, presence=True, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:empty-presence'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__empty_presence:
@@ -807,15 +803,17 @@ class foo__c_dot(yang.adata.MNode):
         self.l_dot1 = l_dot1
         self.l_dot2 = l_dot2
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l_dot1':
+            return self.l_dot1
+        if name == 'l_dot2':
+            return self.l_dot2
+        raise ValueError('Attribute {name} not found in foo__c_dot')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l_dot1 = self.l_dot1
-        if _l_dot1 is not None:
-            children['l.dot1'] = yang.gdata.Leaf('string', _l_dot1)
-        _l_dot2 = self.l_dot2
-        if _l_dot2 is not None:
-            children['l.dot2'] = yang.gdata.Leaf('string', _l_dot2, ns='http://example.com/bar', module='bar')
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:c.dot'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c_dot:
@@ -838,12 +836,15 @@ class foo__cc__death_entry(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.name = name
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'name':
+            return self.name
+        raise ValueError('Attribute {name} not found in foo__cc__death')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _name = self.name
-        if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:cc', 'death'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__cc__death_entry:
@@ -876,14 +877,6 @@ class foo__cc__death(yang.adata.MNode):
         self.elements.append(res)
         return res
 
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements)
-
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__cc__death_entry]:
         if n is not None:
@@ -913,15 +906,17 @@ class foo__cc(yang.adata.MNode):
         self.cake = cake
         self.death = foo__cc__death(elements=death)
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'cake':
+            return self.cake
+        if name == 'death':
+            return iter(self.death)
+        raise ValueError('Attribute {name} not found in foo__cc')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _cake = self.cake
-        if _cake is not None:
-            children['cake'] = yang.gdata.Leaf('string', _cake)
-        _death = self.death
-        if _death is not None:
-            children['death'] = _death.to_gdata()
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:cc'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__cc:
@@ -944,8 +939,9 @@ class foo__f_conflict__f_inner(yang.adata.MNode):
         pass
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        return yang.gdata.Container(children, presence=True)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:conflict', 'inner'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__f_conflict__f_inner:
@@ -971,8 +967,9 @@ class foo__f_conflict__bar_inner(yang.adata.MNode):
         pass
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        return yang.gdata.Container(children, presence=True, ns='http://example.com/bar', module='bar')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:conflict', 'bar:inner'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> ?foo__f_conflict__bar_inner:
@@ -1020,21 +1017,21 @@ class foo__f_conflict(yang.adata.MNode):
         self.bar_inner = res
         return res
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'f_foo':
+            return self.f_foo
+        if name == 'f_inner':
+            return self.f_inner
+        if name == 'bar_foo':
+            return self.bar_foo
+        if name == 'bar_inner':
+            return self.bar_inner
+        raise ValueError('Attribute {name} not found in foo__f_conflict')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _f_foo = self.f_foo
-        if _f_foo is not None:
-            children['f:foo'] = yang.gdata.Leaf('string', _f_foo)
-        _f_inner = self.f_inner
-        if _f_inner is not None:
-            children['f:inner'] = _f_inner.to_gdata()
-        _bar_foo = self.bar_foo
-        if _bar_foo is not None:
-            children['bar:foo'] = yang.gdata.Leaf('string', _bar_foo, ns='http://example.com/bar', module='bar')
-        _bar_inner = self.bar_inner
-        if _bar_inner is not None:
-            children['bar:inner'] = _bar_inner.to_gdata()
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:conflict'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__f_conflict:
@@ -1057,12 +1054,15 @@ class foo__special_entry(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.yes = yes
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'yes':
+            return self.yes
+        raise ValueError('Attribute {name} not found in foo__special')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _yes = self.yes
-        if _yes is not None:
-            children['yes'] = yang.gdata.Leaf('boolean', _yes)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:special'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__special_entry:
@@ -1095,14 +1095,6 @@ class foo__special(yang.adata.MNode):
         self.elements.append(res)
         return res
 
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['yes'], elements, ns='http://example.com/foo', module='foo')
-
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__special_entry]:
         if n is not None:
@@ -1134,18 +1126,19 @@ class foo__nested__f_inner__li1__li2_entry(yang.adata.MNode):
         self.key2 = key2
         self.baz = baz
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'key1':
+            return self.key1
+        if name == 'key2':
+            return self.key2
+        if name == 'baz':
+            return self.baz
+        raise ValueError('Attribute {name} not found in foo__nested__f_inner__li1__li2')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _key1 = self.key1
-        if _key1 is not None:
-            children['key1'] = yang.gdata.Leaf('string', _key1)
-        _key2 = self.key2
-        if _key2 is not None:
-            children['key2'] = yang.gdata.Leaf('string', _key2)
-        _baz = self.baz
-        if _baz is not None:
-            children['baz'] = yang.gdata.Leaf('string', _baz)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:nested', 'inner', 'li1', 'li2'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__nested__f_inner__li1__li2_entry:
@@ -1181,14 +1174,6 @@ class foo__nested__f_inner__li1__li2(yang.adata.MNode):
         self.elements.append(res)
         return res
 
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['key1', 'key2'], elements)
-
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__nested__f_inner__li1__li2_entry]:
         if n is not None:
@@ -1222,21 +1207,21 @@ class foo__nested__f_inner__li1_entry(yang.adata.MNode):
         self.li2 = foo__nested__f_inner__li1__li2(elements=li2)
         self.bar_bar = bar_bar
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'name':
+            return self.name
+        if name == 'f_bar':
+            return self.f_bar
+        if name == 'li2':
+            return iter(self.li2)
+        if name == 'bar_bar':
+            return self.bar_bar
+        raise ValueError('Attribute {name} not found in foo__nested__f_inner__li1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _name = self.name
-        if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
-        _f_bar = self.f_bar
-        if _f_bar is not None:
-            children['f:bar'] = yang.gdata.Leaf('string', _f_bar)
-        _li2 = self.li2
-        if _li2 is not None:
-            children['li2'] = _li2.to_gdata()
-        _bar_bar = self.bar_bar
-        if _bar_bar is not None:
-            children['bar:bar'] = yang.gdata.Leaf('string', _bar_bar, ns='http://example.com/bar', module='bar')
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:nested', 'inner', 'li1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__nested__f_inner__li1_entry:
@@ -1269,14 +1254,6 @@ class foo__nested__f_inner__li1(yang.adata.MNode):
         self.elements.append(res)
         return res
 
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements)
-
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__nested__f_inner__li1_entry]:
         if n is not None:
@@ -1306,15 +1283,17 @@ class foo__nested__f_inner(yang.adata.MNode):
         self.foo = foo
         self.li1 = foo__nested__f_inner__li1(elements=li1)
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'foo':
+            return self.foo
+        if name == 'li1':
+            return iter(self.li1)
+        raise ValueError('Attribute {name} not found in foo__nested__f_inner')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _foo = self.foo
-        if _foo is not None:
-            children['foo'] = yang.gdata.Leaf('string', _foo)
-        _li1 = self.li1
-        if _li1 is not None:
-            children['li1'] = _li1.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:nested', 'inner'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__nested__f_inner:
@@ -1337,12 +1316,15 @@ class foo__nested__bar_inner(yang.adata.MNode):
         self._ns = 'http://example.com/bar'
         self.foo = foo
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'foo':
+            return self.foo
+        raise ValueError('Attribute {name} not found in foo__nested__bar_inner')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _foo = self.foo
-        if _foo is not None:
-            children['foo'] = yang.gdata.Leaf('string', _foo)
-        return yang.gdata.Container(children, ns='http://example.com/bar', module='bar')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:nested', 'bar:inner'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__nested__bar_inner:
@@ -1367,15 +1349,17 @@ class foo__nested(yang.adata.MNode):
         self.f_inner = f_inner if f_inner is not None else foo__nested__f_inner()
         self.bar_inner = bar_inner if bar_inner is not None else foo__nested__bar_inner()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'f_inner':
+            return self.f_inner
+        if name == 'bar_inner':
+            return self.bar_inner
+        raise ValueError('Attribute {name} not found in foo__nested')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _f_inner = self.f_inner
-        if _f_inner is not None:
-            children['f:inner'] = _f_inner.to_gdata()
-        _bar_inner = self.bar_inner
-        if _bar_inner is not None:
-            children['bar:inner'] = _bar_inner.to_gdata()
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:nested'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__nested:
@@ -1402,18 +1386,19 @@ class foo__li_union_entry(yang.adata.MNode):
         self.k2 = k2
         self.k3 = k3
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'k1':
+            return self.k1
+        if name == 'k2':
+            return self.k2
+        if name == 'k3':
+            return self.k3
+        raise ValueError('Attribute {name} not found in foo__li_union')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _k1 = self.k1
-        if _k1 is not None:
-            children['k1'] = yang.gdata.Leaf('string', _k1)
-        _k2 = self.k2
-        if _k2 is not None:
-            children['k2'] = yang.gdata.Leaf('union', _k2)
-        _k3 = self.k3
-        if _k3 is not None:
-            children['k3'] = yang.gdata.Leaf('binary', _k3)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:li-union'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_union_entry:
@@ -1464,14 +1449,6 @@ class foo__li_union(yang.adata.MNode):
         self.elements.append(res)
         return res
 
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['k1', 'k2', 'k3'], elements, ns='http://example.com/foo', module='foo')
-
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__li_union_entry]:
         if n is not None:
@@ -1501,15 +1478,17 @@ class foo__state__c1(yang.adata.MNode):
         self.l1 = l1
         self.l2 = l2
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l1':
+            return self.l1
+        if name == 'l2':
+            return self.l2
+        raise ValueError('Attribute {name} not found in foo__state__c1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('string', _l1)
-        _l2 = self.l2
-        if _l2 is not None:
-            children['l2'] = yang.gdata.Leaf('string', _l2)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:state', 'c1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__state__c1:
@@ -1532,12 +1511,15 @@ class foo__state(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.c1 = c1 if c1 is not None else foo__state__c1()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'c1':
+            return self.c1
+        raise ValueError('Attribute {name} not found in foo__state')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _c1 = self.c1
-        if _c1 is not None:
-            children['c1'] = _c1.to_gdata()
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:state'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__state:
@@ -1560,12 +1542,15 @@ class foo__c2(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.l1 = l1
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l1':
+            return self.l1
+        raise ValueError('Attribute {name} not found in foo__c2')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('string', _l1)
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:c2'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c2:
@@ -1588,20 +1573,15 @@ class bar__test_idref(yang.adata.MNode):
         self._ns = 'http://example.com/bar'
         self.idref = idref if idref is not None else []
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'idref':
+            return self.idref
+        raise ValueError('Attribute {name} not found in bar__test_idref')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _idref = self.idref
-        if _idref is not None:
-            _identityref_idref = []
-            for v in _idref:
-                nv, error = complete_and_validate_identityref(v, _identities, ['f:basey'], 'bar')
-                if nv is not None:
-                    _identityref_idref.append(nv)
-                else:
-                    raise ValueError('Invalid value for identityref leaf-list idref: {error}')
-            _idref = _identityref_idref
-            children['idref'] = yang.gdata.LeafList('identityref', _idref)
-        return yang.gdata.Container(children, ns='http://example.com/bar', module='bar')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['bar:test-idref'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> bar__test_idref:
@@ -1624,12 +1604,15 @@ class bar__bar_conflict(yang.adata.MNode):
         self._ns = 'http://example.com/bar'
         self.foo = foo
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'foo':
+            return self.foo
+        raise ValueError('Attribute {name} not found in bar__bar_conflict')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _foo = self.foo
-        if _foo is not None:
-            children['foo'] = yang.gdata.Leaf('string', _foo)
-        return yang.gdata.Container(children, ns='http://example.com/bar', module='bar')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['bar:conflict'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> bar__bar_conflict:
@@ -1714,57 +1697,45 @@ class root(yang.adata.MNode):
         self.empty_presence = res
         return res
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'c1':
+            return self.c1
+        if name == 'pc1':
+            return self.pc1
+        if name == 'pc2':
+            return self.pc2
+        if name == 'pc3':
+            return self.pc3
+        if name == 'empty_presence':
+            return self.empty_presence
+        if name == 'c_dot':
+            return self.c_dot
+        if name == 'cc':
+            return self.cc
+        if name == 'f_conflict':
+            return self.f_conflict
+        if name == 'special':
+            return iter(self.special)
+        if name == 'nested':
+            return self.nested
+        if name == 'li_union':
+            return iter(self.li_union)
+        if name == 'state':
+            return self.state
+        if name == 'll_empty':
+            return self.ll_empty
+        if name == 'c2':
+            return self.c2
+        if name == 'test_idref':
+            return self.test_idref
+        if name == 'bar_conflict':
+            return self.bar_conflict
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _c1 = self.c1
-        if _c1 is not None:
-            children['c1'] = _c1.to_gdata()
-        _pc1 = self.pc1
-        if _pc1 is not None:
-            children['pc1'] = _pc1.to_gdata()
-        _pc2 = self.pc2
-        if _pc2 is not None:
-            children['pc2'] = _pc2.to_gdata()
-        _pc3 = self.pc3
-        if _pc3 is not None:
-            children['pc3'] = _pc3.to_gdata()
-        _empty_presence = self.empty_presence
-        if _empty_presence is not None:
-            children['empty-presence'] = _empty_presence.to_gdata()
-        _c_dot = self.c_dot
-        if _c_dot is not None:
-            children['c.dot'] = _c_dot.to_gdata()
-        _cc = self.cc
-        if _cc is not None:
-            children['cc'] = _cc.to_gdata()
-        _f_conflict = self.f_conflict
-        if _f_conflict is not None:
-            children['f:conflict'] = _f_conflict.to_gdata()
-        _special = self.special
-        if _special is not None:
-            children['special'] = _special.to_gdata()
-        _nested = self.nested
-        if _nested is not None:
-            children['nested'] = _nested.to_gdata()
-        _li_union = self.li_union
-        if _li_union is not None:
-            children['li-union'] = _li_union.to_gdata()
-        _state = self.state
-        if _state is not None:
-            children['state'] = _state.to_gdata()
-        _ll_empty = self.ll_empty
-        if _ll_empty is not None:
-            children['ll-empty'] = yang.gdata.LeafList('string', _ll_empty, ns='http://example.com/foo', module='foo')
-        _c2 = self.c2
-        if _c2 is not None:
-            children['c2'] = _c2.to_gdata()
-        _test_idref = self.test_idref
-        if _test_idref is not None:
-            children['test-idref'] = _test_idref.to_gdata()
-        _bar_conflict = self.bar_conflict
-        if _bar_conflict is not None:
-            children['bar:conflict'] = _bar_conflict.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=True)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

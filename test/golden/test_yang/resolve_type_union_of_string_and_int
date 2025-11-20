@@ -25,12 +25,15 @@ class root(yang.adata.MNode):
         self._ns = ''
         self.l1 = l1 if l1 is not None else 42
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l1':
+            return self.l1
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('union', _l1, ns='http://example.com/foo', module='foo')
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

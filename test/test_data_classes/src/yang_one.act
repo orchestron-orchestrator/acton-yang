@@ -75,15 +75,17 @@ class foo__tc1(yang.adata.MNode):
         self.l1 = l1
         self.l2 = l2
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l1':
+            return self.l1
+        if name == 'l2':
+            return self.l2
+        raise ValueError('Attribute {name} not found in foo__tc1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('string', _l1)
-        _l2 = self.l2
-        if _l2 is not None:
-            children['l2'] = yang.gdata.Leaf('string', _l2)
-        return yang.gdata.Container(children, ns='http://example.com/foo', module='foo')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:tc1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__tc1:
@@ -108,15 +110,17 @@ class foo__li__c1(yang.adata.MNode):
         self.l1 = l1
         self.l2 = l2
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l1':
+            return self.l1
+        if name == 'l2':
+            return self.l2
+        raise ValueError('Attribute {name} not found in foo__li__c1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('string', _l1)
-        _l2 = self.l2
-        if _l2 is not None:
-            children['l2'] = yang.gdata.Leaf('string', _l2)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:li', 'c1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__li__c1:
@@ -141,15 +145,17 @@ class foo__li_entry(yang.adata.MNode):
         self.name = name
         self.c1 = c1
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'name':
+            return self.name
+        if name == 'c1':
+            return self.c1
+        raise ValueError('Attribute {name} not found in foo__li')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _name = self.name
-        if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
-        _c1 = self.c1
-        if _c1 is not None:
-            children['c1'] = _c1.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:li'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__li_entry:
@@ -182,14 +188,6 @@ class foo__li(yang.adata.MNode):
         self.elements.append(res)
         return res
 
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', module='foo')
-
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__li_entry]:
         if n is not None:
@@ -219,15 +217,17 @@ class root(yang.adata.MNode):
         self.tc1 = tc1
         self.li = foo__li(elements=li)
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'tc1':
+            return self.tc1
+        if name == 'li':
+            return iter(self.li)
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _tc1 = self.tc1
-        if _tc1 is not None:
-            children['tc1'] = _tc1.to_gdata()
-        _li = self.li
-        if _li is not None:
-            children['li'] = _li.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

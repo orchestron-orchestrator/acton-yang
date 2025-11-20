@@ -662,59 +662,26 @@ class DNodeInner(DNode):
                 res.append("        return res")
                 res.append("")
 
-        # Include namespace qualifier(s) iff our namespace is different than our
-        # parent, unless we're the top containing node with no namespace
-        # TODO: is DRoot the only top containing node with no namespace?!
-        gdata_nsq = ", ns='{self.namespace}', module='{self.module}'" if set_ns and self.namespace != "" else ""
+        if len(self.children) > 0:
+            res.append("    def _get_attr(self, name: str) -> ?value:")
+            for child in self.children:
+                res.append("        if name == '{usname(child)}':")
+                if isinstance(child, DList):
+                    res.append("            return iter(self.{usname(child)})")
+                else:
+                    res.append("            return self.{usname(child)}")
+            res.append("        raise ValueError('Attribute {{name}} not found in {pname()}')")
+            res.append("")
 
         # .to_gdata()
         res.append("    mut def to_gdata(self) -> yang.gdata.Node:")
-        res.append("        children = {{}}")
-
-        for child in self.children:
-            if child.namespace != self.namespace:
-                child_ns = ", ns='{child.namespace}', module='{child.module}'"
-            else:
-                child_ns = ""
-            res.append("        _{usname(child)} = self.{usname(child)}")
-            res.append("        if _{usname(child)} is not None:")
-            if isinstance(child, DLeaf):
-                if child.type_.name == "identityref":
-                    res.append("            _identityref_{usname(child)}, error = complete_and_validate_identityref(_{usname(child)}, _identities, {repr(child.type_.base)}, {repr(child.module)})")
-                    res.append("            if _identityref_{usname(child)} is not None:")
-                    res.append("                _{usname(child)} = _identityref_{usname(child)}")
-                    res.append("            else:")
-                    res.append("                raise ValueError('Invalid value for identityref leaf {child.name}: {{error}}')")
-                res.append("            children['{uname(child)}'] = yang.gdata.Leaf('{child.type_.name}', _{usname(child)}{child_ns})")
-            elif isinstance(child, DLeafList):
-                # None check for leaf-list is redundant (always defaults to []),
-                # but this makes the generator more readable
-                if child.type_.name == "identityref":
-                    res.append("            _identityref_{usname(child)} = []")
-                    res.append("            for v in _{usname(child)}:")
-                    res.append("                nv, error = complete_and_validate_identityref(v, _identities, {repr(child.type_.base)}, {repr(child.module)})")
-                    res.append("                if nv is not None:")
-                    res.append("                    _identityref_{usname(child)}.append(nv)")
-                    res.append("                else:")
-                    res.append("                    raise ValueError('Invalid value for identityref leaf-list {child.name}: {{error}}')")
-                    res.append("            _{usname(child)} = _identityref_{usname(child)}")
-                res.append("            children['{uname(child)}'] = yang.gdata.LeafList('{child.type_.name}', _{usname(child)}{maybe_user_order_ll(child)}{child_ns})")
-            elif isinstance(child, DContainer):
-                res.append("            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
-            elif isinstance(child, DList):
-                res.append("            children['{uname(child)}'] = _{usname(child)}.to_gdata()")
-
-        if isinstance(self, DList):
-            # List element is a Container, but it needs no namespace qualifiers
-            # because it must belong to the same module as the list
-            res.append("        return yang.gdata.Container(children)")
-        elif isinstance(self, DRoot):
-            # No namespace qualifiers for the artifical root node
-            res.append("        return yang.gdata.{self.gname}(children)")
-        elif isinstance(self, DContainer) and self.presence:
-            res.append("        return yang.gdata.{self.gname}(children, presence=True{gdata_nsq})")
+        res.append("        if isinstance(self, yang.adata.MNode):")
+        if isinstance(self, DRoot):
+            res.append("            return yang.gen3.from_data(src_dnode(), self, loose={loose})")
         else:
-            res.append("        return yang.gdata.{self.gname}(children{gdata_nsq})")
+            root_path = ["{'{node.module}:' if prev.module != node.module else ''}{node.name}" if node is not None else None for prev, node in zip(spath, spath[1:] + [None])]
+            res.append("            return yang.gen3.from_data(src_dnode(), self, loose={loose}, root_path={repr(root_path[:-1])})")
+        res.append("        raise ValueError('unreachable')")
         res.append("")
 
         # .from_gdata()
@@ -836,18 +803,6 @@ class DNodeInner(DNode):
             res.append("        res = {pname()}_entry({list_key_args_str})")
             res.append("        self.elements.append(res)")
             res.append("        return res")
-            res.append("")
-
-            res.append("    mut def to_gdata(self):")
-            res.append("        elements = []")
-            res.append("        for e in self:")
-            res.append("            e_gdata = e.to_gdata()")
-            res.append("            if isinstance(e_gdata, yang.gdata.Container):")
-            res.append("                elements.append(e_gdata)")
-            if set_ns:
-                res.append("        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)}, ns='{self.namespace}', module='{self.module}')")
-            else:
-                res.append("        return yang.gdata.List({repr(self.key)}, elements{maybe_user_order(self)})")
             res.append("")
 
 #            # .from_gdata()
@@ -3031,6 +2986,10 @@ class _UniqueNamer(object):
     def unique_safe_name(self, name, prefix, safe_kw=True):
         unique_name = self.unique_name(name, prefix)
         return _safe_name(unique_name, safe_kw).replace(":", "_")
+
+    def is_unique(self, name):
+        return name not in self._name_conflicts
+
 
 def get_path_name(path: list[DNode]) -> str:
     r"""Build the adata path name for a data node
