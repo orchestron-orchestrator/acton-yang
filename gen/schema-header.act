@@ -368,6 +368,35 @@ class DNode(object):
         """
         raise NotImplementedError('DNode pdc: {type(self)} - {get_path(spath)}')
 
+    def _get_attrs(self) -> list[(str, ?value)]:
+        raise NotImplementedError('DNode._get_attrs: {type(self)}')
+
+    def _get_class_name(self):
+        return type(self).split(".")[-1]
+
+    def prsrc(self, indent=0):
+        """Print Acton source code for this compiled schema node and its subnodes
+        """
+        res = []
+        args = []
+        attrs_text = _prsrc_attrs(indent, self._get_attrs())
+        if len(attrs_text) > 0:
+            args.append(attrs_text)
+        have_children = True if isinstance(self, DNodeInner) and len(self.children) > 0 else False
+        if have_children:
+            args.append("children=[")
+        args_text = ", ".join(args)
+        text_line = "{_ind(indent)}{self._get_class_name()}({args_text}"
+        if not have_children:
+            text_line += ')'
+        res.append(text_line)
+        if isinstance(self, DNodeInner) and have_children:
+            child_res = [child.prsrc(indent+1) for child in self.children]
+            res.append(",\n".join(child_res))
+            res.append(_ind(indent) + "])")
+        return "\n".join(res)
+        return ""
+
     def print_tree(self) -> str:
         r"""Print the tree representation for this schema node
 
@@ -1298,6 +1327,20 @@ class DAction(DNodeInner):
         self.exts = exts
         self.children = children
 
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("config", self.config),
+            ("description", self.description),
+            ("if_feature", self.if_feature),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("exts", self.exts),
+        ]
+
 class DAnydata(DNode):
     if_feature: list[str]
     mandatory: ?bool
@@ -1320,6 +1363,23 @@ class DAnydata(DNode):
         self.status = status
         self.when = when
         self.exts = exts
+
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("config", self.config),
+            ("description", self.description),
+            ("if_feature", self.if_feature),
+            ("mandatory", self.mandatory),
+            ("must", self.must),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("when", self.when),
+            ("exts", self.exts),
+        ]
 
 class DAnyxml(DNode):
     if_feature: list[str]
@@ -1344,6 +1404,23 @@ class DAnyxml(DNode):
         self.when = when
         self.exts = exts
 
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("config", self.config),
+            ("description", self.description),
+            ("if_feature", self.if_feature),
+            ("mandatory", self.mandatory),
+            ("must", self.must),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("when", self.when),
+            ("exts", self.exts),
+        ]
+
 class DContainer(DNodeInner):
     if_feature: list[str]
     must: list[Must]
@@ -1367,6 +1444,23 @@ class DContainer(DNodeInner):
         self.exts = exts
         self.children = children
 
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("config", self.config),
+            ("description", self.description),
+            ("if_feature", self.if_feature),
+            ("must", self.must),
+            ("presence", self.presence),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("when", self.when),
+            ("exts", self.exts),
+        ]
+
 class DIdentity(DNode):
     base: list[DIdentity]
 
@@ -1381,6 +1475,16 @@ class DIdentity(DNode):
         self.reference = None
         self.exts = []
         self.base = base
+
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("exts", self.exts),
+            ("base", self.base),
+        ]
 
     def __repr__(self):
         base_reprs = [repr(b) for b in self.base]
@@ -1483,6 +1587,17 @@ class DInput(DNodeInner):
         self.exts = exts
         self.children = children
 
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("description", self.description),
+            ("reference", self.reference),
+            ("must", self.must),
+            ("exts", self.exts),
+        ]
+
 class DModule(DNodeInner):
     augment: list[Augment]
     contact: ?str
@@ -1524,6 +1639,28 @@ class DModule(DNodeInner):
         self.exts = exts
         self.children = children
 
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("yang_version", self.yang_version),
+            ("description", self.description),
+            ("augment", self.augment),
+            ("contact", self.contact),
+            ("deviation", self.deviation),
+            ("extension_", self.extension_),
+            ("feature", self.feature),
+            ("identity", self.identity),
+            ("import_", self.import_),
+            ("include", self.include),
+            ("organization", self.organization),
+            ("reference", self.reference),
+            ("revision", self.revision),
+            ("exts", self.exts),
+        ]
+
 class DList(DNodeInner):
     if_feature: list[str]
     key: list[str]
@@ -1535,7 +1672,7 @@ class DList(DNodeInner):
     unique: list[str]
     when: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, key: list[str], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, key: list[str]=[], config: bool, description: ?str=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, unique=[], when=None, exts=[], children=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1555,6 +1692,27 @@ class DList(DNodeInner):
         self.when = when
         self.exts = exts
         self.children = children
+
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("key", self.key),
+            ("config", self.config),
+            ("description", self.description),
+            ("if_feature", self.if_feature),
+            ("max_elements", self.max_elements),
+            ("min_elements", self.min_elements),
+            ("must", self.must),
+            ("ordered_by", self.ordered_by),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("unique", self.unique),
+            ("when", self.when),
+            ("exts", self.exts),
+        ]
 
 class DLeaf(DNodeLeaf):
     default: ?str
@@ -1588,6 +1746,26 @@ class DLeaf(DNodeLeaf):
             if self.name in parent.key:
                 return True
         return False
+
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("config", self.config),
+            ("description", self.description),
+            ("default", self.default),
+            ("if_feature", self.if_feature),
+            ("mandatory", self.mandatory),
+            ("must", self.must),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("type_", self.type_),
+            ("units", self.units),
+            ("when", self.when),
+            ("exts", self.exts),
+        ]
 
     def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns=set(), gen_json: bool=True, gen_xml: bool=True, include_state=False) -> list[str]:
         if self.namespace != "":
@@ -1641,6 +1819,28 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("config", self.config),
+            ("description", self.description),
+            ("default", self.default),
+            ("if_feature", self.if_feature),
+            ("max_elements", self.max_elements),
+            ("min_elements", self.min_elements),
+            ("must", self.must),
+            ("ordered_by", self.ordered_by),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("type_", self.type_),
+            ("units", self.units),
+            ("when", self.when),
+            ("exts", self.exts),
+        ]
+
     def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns=set(), gen_json: bool=True, gen_xml: bool=True, include_state=False) -> list[str]:
         if self.namespace != "":
             schema_ns.add(self.namespace)
@@ -1690,6 +1890,21 @@ class DNotification(DNodeInner):
         self.exts = exts
         self.children = children
 
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("config", self.config),
+            ("description", self.description),
+            ("if_feature", self.if_feature),
+            ("must", self.must),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("exts", self.exts),
+        ]
+
 class DOutput(DNodeInner):
     must: list[Must]
 
@@ -1706,8 +1921,22 @@ class DOutput(DNodeInner):
         self.exts = exts
         self.children = children
 
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("description", self.description),
+            ("reference", self.reference),
+            ("must", self.must),
+            ("exts", self.exts),
+        ]
+
 class DRoot(DNodeInner):
-    def __init__(self, modules: list[DNode]=[]):
+    identities: list[DIdentity]
+    rpcs: list[DRpc]
+
+    def __init__(self, children=[], identities=[], rpcs=[]):
         self.module = ""
         self.namespace = ""
         self.prefix = ""
@@ -1717,18 +1946,22 @@ class DRoot(DNodeInner):
         self.description = None
         self.reference = None
         self.exts = []
-        self.children = []
-        self.rpcs = []
-        self.identities = []
+        self.children = children + rpcs
+        self.identities = identities
+        self.rpcs = rpcs
 
+    @staticmethod
+    def from_modules(modules: list[DNode]=[]):
         # Build a global identity map from all modules
+        children = []
+        rpcs = []
         identity_map = {}  # Map from "prefix:name" to DIdentity instance
         for module in modules:
             if isinstance(module, DModule):
                 for child in module.children:
                     if isinstance(child, DRpc):
-                        self.rpcs.append(child)
-                    self.children.append(child)
+                        rpcs.append(child)
+                    children.append(child)
 
                 # Add identities to global map
                 for identity in module.identity:
@@ -1791,7 +2024,15 @@ class DRoot(DNodeInner):
             if error is not None:
                 raise ValueError(error)
 
-        self.identities = [v.identity for v in identity_map.values()]
+        identities = [v.identity for v in identity_map.values()]
+
+        return DRoot(children, identities, rpcs)
+
+    def _get_attrs(self):
+        return [
+            ("rpcs", self.rpcs),
+            ("identities", self.identities),
+        ]
 
     def prdaclass(self, schema_yang: ?list[str]=None, loose=False, gen_json=True, gen_xml=True, include_state=False, top=True, root_path: list[str]=[]) -> str:
         def build_spath(spath: list[DNode]):
@@ -1896,6 +2137,21 @@ class DRpc(DNodeInner):
         self.status = status
         self.exts = exts
         self.children = children
+
+    def _get_attrs(self):
+        return [
+            ("module", self.module),
+            ("namespace", self.namespace),
+            ("prefix", self.prefix),
+            ("name", self.name),
+            ("description", self.description),
+            ("if_feature", self.if_feature),
+            ("input", self.input),
+            ("output", self.output),
+            ("reference", self.reference),
+            ("status", self.status),
+            ("exts", self.exts),
+        ]
 
 # -------------------------------------------------------------------------------
 
@@ -2860,6 +3116,8 @@ def _prsrc_attrs(indent, attrs):
                     for e in value:
                         if isinstance(e, SchemaNode):
                             list_val.append(e.prsrc(indent+2))
+                        elif isinstance(e, DNode):
+                            list_val.append(e.prsrc(indent+2))
                         else:
                             list_val.append(repr(e))
                     list_val_str = "[]"
@@ -2869,6 +3127,8 @@ def _prsrc_attrs(indent, attrs):
                         list_val_str = "[\n{',\n'.join(list_val)}\n{_ind(indent + 1)}]"
                     res.append("{name}={list_val_str}")
             elif isinstance(value, SchemaNode):
+                res.append("{name}={value.prsrc(0)}")
+            elif isinstance(value, DNode):
                 res.append("{name}={value.prsrc(0)}")
             else:
                 res.append("{name}={repr(value)}")
