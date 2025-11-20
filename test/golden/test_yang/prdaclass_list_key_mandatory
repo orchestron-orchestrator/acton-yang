@@ -1,3 +1,20 @@
+import base64
+import json
+import xml
+import yang
+import yang.adata
+import yang.gdata
+import yang.gen3
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref, PartialIdentityref
+from yang.schema import DIdentity
+
+# == This file is generated ==
+
+
+_identities: list[DIdentity] = []
+
+
 mut def from_data_foo__l1__name(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
@@ -153,3 +170,26 @@ mut def from_json_foo__l1_element(jd: dict[str, ?value]) -> yang.gdata.Node:
 mut def from_json_foo__l1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = [from_json_foo__l1_element(e) for e in jd if isinstance(e, dict)]
     return yang.gdata.List(keys=['name'], elements=elements, ns='http://example.com/foo', module='foo')
+
+def from_xml_gen3(node: xml.Node, root_path: list[str]=[]) -> yang.gdata.Container:
+    # WARNING: this wrapper for the gen3.from_xml schema-driven parser compiles the schema on every call!
+    s = yang.compile(src_yang())
+    return yang.gen3.from_data(s, node, loose=False, root_path=root_path)
+
+def from_json_gen3(jd: dict[str, ?value], root_path: list[str]=[]) -> yang.gdata.Container:
+    # WARNING: this wrapper for the gen3.from_json schema-driven parser compiles the schema on every call!
+    s = yang.compile(src_yang())
+    return yang.gen3.from_data(s, jd, loose=False, root_path=root_path)
+
+def from_json_path_gen3(jd: dict[str, ?value], path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
+    s = yang.compile(src_yang())
+    return yang.gen3.from_json_path(s, jd, path, op, loose=False)
+
+def prsrc_gen3(data, self_name='ad'):
+    # WARNING: this wrapper for the gen3.prsrc schema-driven parser compiles the schema on every call!
+    s = yang.compile(src_yang())
+    return yang.gen3.pradata(s, data, self_name, loose=False)
+
+schema_namespaces: set[str] = {
+    'http://example.com/foo',
+}

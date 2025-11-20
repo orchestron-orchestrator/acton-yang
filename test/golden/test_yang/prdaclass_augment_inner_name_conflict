@@ -1,3 +1,20 @@
+import base64
+import json
+import xml
+import yang
+import yang.adata
+import yang.gdata
+import yang.gen3
+from yang.identity import complete_and_validate_identityref
+from yang.identityref import Identityref, PartialIdentityref
+from yang.schema import DIdentity
+
+# == This file is generated ==
+
+
+_identities: list[DIdentity] = []
+
+
 mut def from_data_base__c1__base_c2__foo(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('string', val)
 
@@ -294,11 +311,6 @@ mut def from_xml_root(node: xml.Node) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'c1', from_xml_base__c1, child_c1)
     return yang.gdata.Container(children)
 
-def from_xml_gen3(node: xml.Node, root_path: list[str]=[]) -> yang.gdata.Container:
-    # WARNING: this wrapper for the gen3.from_xml schema-driven parser compiles the schema on every call!
-    s = yang.compile(src_yang())
-    return yang.gen3.from_data(s, node, loose=False, root_path=root_path)
-
 mut def from_json_path_root(jd: value, path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     # path handling
     if len(path) > 0:
@@ -322,6 +334,11 @@ mut def from_json_root(jd: dict[str, ?value]) -> yang.gdata.Container:
     yang.gdata.maybe_add(children, 'c1', from_json_base__c1, child_c1)
     return yang.gdata.Container(children)
 
+def from_xml_gen3(node: xml.Node, root_path: list[str]=[]) -> yang.gdata.Container:
+    # WARNING: this wrapper for the gen3.from_xml schema-driven parser compiles the schema on every call!
+    s = yang.compile(src_yang())
+    return yang.gen3.from_data(s, node, loose=False, root_path=root_path)
+
 def from_json_gen3(jd: dict[str, ?value], root_path: list[str]=[]) -> yang.gdata.Container:
     # WARNING: this wrapper for the gen3.from_json schema-driven parser compiles the schema on every call!
     s = yang.compile(src_yang())
@@ -330,3 +347,13 @@ def from_json_gen3(jd: dict[str, ?value], root_path: list[str]=[]) -> yang.gdata
 def from_json_path_gen3(jd: dict[str, ?value], path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:
     s = yang.compile(src_yang())
     return yang.gen3.from_json_path(s, jd, path, op, loose=False)
+
+def prsrc_gen3(data, self_name='ad'):
+    # WARNING: this wrapper for the gen3.prsrc schema-driven parser compiles the schema on every call!
+    s = yang.compile(src_yang())
+    return yang.gen3.pradata(s, data, self_name, loose=False)
+
+schema_namespaces: set[str] = {
+    'http://example.com/base',
+    'http://example.com/foo',
+}
