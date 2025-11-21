@@ -3014,7 +3014,7 @@ def yang_typename_to_acton_type(type_name: str) -> str:
     elif type_name == "instance-identifier":
         return "str"
     elif type_name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
-        return "int"
+        return "bigint"
     elif type_name == "leafref":
         return "str"
     elif type_name == "string":
@@ -3071,12 +3071,12 @@ def yang_type_to_acton_type(t: ?Type) -> str:
                 max_size = max(list(map(lambda x: int(x[3:]), unique_base_types)))
                 # TODO: once we have integer subtyping, return largest necessary iXX type
                 #return "i{max_size}"
-                return "int"
+                return "bigint"
             elif all(map(lambda x: x in {"uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
                 max_size = max(list(map(lambda x: int(x[4:]), unique_base_types)))
                 # TODO: once we have integer subtyping, return largest necessary uXX type
                 #return "u{max_size}"
-                return "int"
+                return "bigint"
             elif all(map(lambda x: x in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
                 # We have a union of a mix of signed and unsigned integers, so let's find the largest
                 int_sizes = filter(lambda x: x in {"int8", "int16", "int32", "int64"}, unique_base_types)
@@ -3092,10 +3092,10 @@ def yang_type_to_acton_type(t: ?Type) -> str:
                 max_size = max([max_int_size, max_int_mapped_uint_size])
                 if max_size > 64:
                     # Need to use our int (a.k.a. "bigint")
-                    return "int"
+                    return "bigint"
                 # TODO: once we have integer subtyping, return largest necessary iXX type
                 #return "i{max_size}"
-                return "int"
+                return "bigint"
 
             # TODO: use atom when union consists of types that we represent with Acton built-in types
             # TODO: use Acton union
