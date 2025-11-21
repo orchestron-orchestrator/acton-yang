@@ -6,22 +6,26 @@ import yang.adata
 import yang.gdata
 import yang.gen3
 from yang.gdata import repr_yang
-from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
+from yang.pattern import YangPattern
 from yang.schema import *
+from yang.type import Decimal, Ranges
 
 # == This file is generated ==
 
 
 
 
+_base_basics_id1 = DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id1', base=[])
 _identities = [
-    DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id1', base=[]),
+    _base_basics_id1,
+    DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id2', base=[_base_basics_id1]),
 ]
 
 
 # Identityref constants
 basics_id1 = Identityref('id1', ns='http://example.com/basics', mod='basics', pfx='b')
+basics_id2 = Identityref('id2', ns='http://example.com/basics', mod='basics', pfx='b')
 
 
 def src_yang():
@@ -31,6 +35,9 @@ def src_yang():
     namespace "http://example.com/basics";
     prefix "b";
     identity id1;
+    identity id2 {
+        base id1;
+    }
     container c {
         leaf l_str_def {
             type string;
@@ -61,7 +68,9 @@ def src_yang():
         leaf l_union_def_float {
             type union {
                 type string;
-                type decimal64;
+                type decimal64 {
+                    fraction-digits 2;
+                }
             }
             default 1.23;
         }
@@ -89,7 +98,7 @@ def src_yang():
             type identityref {
                 base id1;
             }
-            default id1;
+            default id2;
         }
     }
 }""")
@@ -119,7 +128,7 @@ class basics__c(yang.adata.MNode):
         self.l_union_def_bool = l_union_def_bool if l_union_def_bool is not None else False
         self.l_union_def_enumeration = l_union_def_enumeration if l_union_def_enumeration is not None else "unlimited"
         self.l_binary_def = l_binary_def if l_binary_def is not None else base64.decode('SGVsbG8gQWN0b24g8J+roQ=='.encode())
-        _default_l_identityref_def, error = complete_and_validate_identityref(Identityref.from_adata('id1'), _identities, ['b:id1'], 'basics')
+        _default_l_identityref_def, error = complete_and_validate_identityref(Identityref.from_adata('id2'), _identities, [_base_basics_id1], 'basics')
         if _default_l_identityref_def is not None:
             self.l_identityref_def = l_identityref_def if l_identityref_def is not None else _default_l_identityref_def
         else:
@@ -194,36 +203,22 @@ class root(yang.adata.MNode):
 
 def src_dnode():
     return DRoot(identities=[
-        DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id1')
+        DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id1'),
+        DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id2', base=[
+                DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id1')
+            ])
     ], children=[
     DContainer(module='basics', namespace='http://example.com/basics', prefix='b', name='c', config=True, presence=False, children=[
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_str_def', config=True, default='foo', mandatory=False, type_=Type('string')),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_str_def_quoted', config=True, default='"foo"', mandatory=False, type_=Type('string')),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_uint64_def', config=True, default='1234567890', mandatory=False, type_=Type('uint64')),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_str', config=True, default='foo', mandatory=False, type_=Type('union', type_=[
-        Type('string'),
-        Type('uint64')
-    ])),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_int', config=True, default='1234567890', mandatory=False, type_=Type('union', type_=[
-        Type('string'),
-        Type('uint64')
-    ])),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_float', config=True, default='1.23', mandatory=False, type_=Type('union', type_=[
-        Type('string'),
-        Type('decimal64')
-    ])),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_bool', config=True, default='false', mandatory=False, type_=Type('union', type_=[
-        Type('string'),
-        Type('boolean')
-    ])),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_enumeration', config=True, default='unlimited', mandatory=False, type_=Type('union', type_=[
-        Type('enumeration', enum=[
-                Enum('unlimited')
-            ]),
-        Type('uint16')
-    ])),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_binary_def', config=True, default='SGVsbG8gQWN0b24g8J+roQ==', mandatory=False, type_=Type('binary')),
-        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_identityref_def', config=True, default='id1', mandatory=False, type_=Type('identityref', base=['b:id1']))
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_str_def', config=True, default='foo', mandatory=False, type_=DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_str_def_quoted', config=True, default='"foo"', mandatory=False, type_=DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_uint64_def', config=True, default='1234567890', mandatory=False, type_=DTypeInteger(module='basics', namespace='basics', prefix='b', name='uint64', description=None, reference=None, exts=[], builtin_type='uint64', default=None, ranges=Ranges([(bigint("0"), bigint("18446744073709551615"))]))),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_str', config=True, default='foo', mandatory=False, type_=DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeInteger(module='basics', namespace='basics', prefix='b', name='uint64', description=None, reference=None, exts=[], builtin_type='uint64', default=None, ranges=Ranges([(bigint("0"), bigint("18446744073709551615"))]))])),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_int', config=True, default='1234567890', mandatory=False, type_=DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeInteger(module='basics', namespace='basics', prefix='b', name='uint64', description=None, reference=None, exts=[], builtin_type='uint64', default=None, ranges=Ranges([(bigint("0"), bigint("18446744073709551615"))]))])),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_float', config=True, default='1.23', mandatory=False, type_=DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeDecimal64(module='basics', namespace='basics', prefix='b', name='decimal64', description=None, reference=None, exts=[], builtin_type='decimal64', default=None, fraction_digits=2, ranges=Ranges([(Decimal(bigint("-9223372036854775808"), bigint("-2")), Decimal(bigint("9223372036854775807"), bigint("-2")))]))])),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_bool', config=True, default='false', mandatory=False, type_=DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeBoolean(module='basics', namespace='basics', prefix='b', name='boolean', description=None, reference=None, exts=[], builtin_type='boolean', default=None)])),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_union_def_enumeration', config=True, default='unlimited', mandatory=False, type_=DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeEnum(module='basics', namespace='basics', prefix='b', name='enumeration', description=None, reference=None, exts=[], builtin_type='enumeration', default=None, name_to_val={'unlimited':0}), DTypeInteger(module='basics', namespace='basics', prefix='b', name='uint16', description=None, reference=None, exts=[], builtin_type='uint16', default=None, ranges=Ranges([(bigint("0"), bigint("65535"))]))])),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_binary_def', config=True, default='SGVsbG8gQWN0b24g8J+roQ==', mandatory=False, type_=DTypeBinary(module='basics', namespace='basics', prefix='b', name='binary', description=None, reference=None, exts=[], builtin_type='binary', default=None, length=None)),
+        DLeaf(module='basics', namespace='http://example.com/basics', prefix='b', name='l_identityref_def', config=True, default='id2', mandatory=False, type_=DTypeIdentityref(module='basics', namespace='basics', prefix='b', name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_basics_id1], identities=_identities))
     ])
 ])
 
@@ -234,6 +229,7 @@ def src_schema():
     res = {}
     res["basics"] = Module('basics', yang_version=1.1, namespace='http://example.com/basics', prefix='b', children=[
     Identity('id1'),
+    Identity('id2', base=['id1']),
     Container('c', children=[
         Leaf('l_str_def', type_=Type('string'), default='foo'),
         Leaf('l_str_def_quoted', type_=Type('string'), default='"foo"'),
@@ -248,7 +244,7 @@ def src_schema():
     ]), default='1234567890'),
         Leaf('l_union_def_float', type_=Type('union', type_=[
         Type('string'),
-        Type('decimal64')
+        Type('decimal64', fraction_digits=2)
     ]), default='1.23'),
         Leaf('l_union_def_bool', type_=Type('union', type_=[
         Type('string'),
@@ -261,7 +257,7 @@ def src_schema():
         Type('uint16')
     ]), default='unlimited'),
         Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ=='),
-        Leaf('l_identityref_def', type_=Type('identityref', base=['id1']), default='id1')
+        Leaf('l_identityref_def', type_=Type('identityref', base=['id1']), default='id2')
     ])
 ])
     return res
@@ -270,6 +266,7 @@ def src_schema_compiled():
     res = {}
     res["basics"] = Module('basics', yang_version=1.1, namespace='http://example.com/basics', prefix='b', children=[
     Identity('id1'),
+    Identity('id2', base=['b:id1']),
     Container('c', children=[
         Leaf('l_str_def', type_=Type('string'), default='foo'),
         Leaf('l_str_def_quoted', type_=Type('string'), default='"foo"'),
@@ -284,7 +281,7 @@ def src_schema_compiled():
     ]), default='1234567890'),
         Leaf('l_union_def_float', type_=Type('union', type_=[
         Type('string'),
-        Type('decimal64')
+        Type('decimal64', fraction_digits=2)
     ]), default='1.23'),
         Leaf('l_union_def_bool', type_=Type('union', type_=[
         Type('string'),
@@ -297,7 +294,7 @@ def src_schema_compiled():
         Type('uint16')
     ]), default='unlimited'),
         Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ=='),
-        Leaf('l_identityref_def', type_=Type('identityref', base=['b:id1']), default='id1')
+        Leaf('l_identityref_def', type_=Type('identityref', base=['b:id1']), default='id2')
     ])
 ])
     return res

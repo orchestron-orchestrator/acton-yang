@@ -1,6 +1,5 @@
 import testing
 
-import yang.identity
 import yang.parser
 import yang.schema
 import yang
@@ -704,6 +703,15 @@ def _test_quote():
     y = yang.parser.parse(ys, strict_quoting=False)
     return y.prsrc()
 
+def get_builtin_type(type_: yang.schema.Type) -> yang.schema.ResolvedType:
+    if isinstance(type_, yang.schema.ResolvedType):
+        resolved_base_typedef = type_.resolved_base_typedef
+        if resolved_base_typedef is not None:
+            return get_builtin_type(resolved_base_typedef.type_)
+        return type_
+    else:
+        return testing.error("Expected ResolvedType instance")
+
 def _test_compile_type1():
     ys = r"""module foo {
   yang-version "1.1";
@@ -729,21 +737,13 @@ def _test_compile_type1():
 
     l1 = nc.get("c1").get("l1")
     if isinstance(l1, yang.schema.Leaf):
-        l1_type = l1.type_
-        if isinstance(l1_type, yang.schema.Type):
-            testing.assertEqual(l1_type.name, "string")
-        else:
-            testing.error("Expected Type instance")
+        testing.assertEqual(get_builtin_type(l1.type_).name, "string")
     else:
         testing.error("Expected Leaf instance")
 
     ll1 = nc.get("c1").get("ll1")
     if isinstance(ll1, yang.schema.LeafList):
-        ll1_type = ll1.type_
-        if isinstance(ll1_type, yang.schema.Type):
-            testing.assertEqual(ll1_type.name, "string")
-        else:
-            testing.error("Expected Type instance")
+        testing.assertEqual(get_builtin_type(ll1.type_).name, "string")
     else:
         testing.error("Expected LeafList instance")
 
@@ -777,21 +777,13 @@ def _test_compile_type2():
 
     l1 = nc.get("c1").get("l1")
     if isinstance(l1, yang.schema.Leaf):
-        l1_type = l1.type_
-        if isinstance(l1_type, yang.schema.Type):
-            testing.assertEqual(l1_type.name, "string")
-        else:
-            testing.error("Expected Type instance")
+        testing.assertEqual(get_builtin_type(l1.type_).name, "string")
     else:
         testing.error("Expected Leaf instance")
 
     ll1 = nc.get("c1").get("ll1")
     if isinstance(ll1, yang.schema.LeafList):
-        ll1_type = ll1.type_
-        if isinstance(ll1_type, yang.schema.Type):
-            testing.assertEqual(ll1_type.name, "string")
-        else:
-            testing.error("Expected Type instance")
+        testing.assertEqual(get_builtin_type(ll1.type_).name, "string")
     else:
         testing.error("Expected LeafList instance")
 
@@ -825,14 +817,11 @@ def _test_compile_type3():
 
     l1 = nc.get("c1").get("l1")
     if isinstance(l1, yang.schema.Leaf):
-        l1_type = l1.type_
-        if isinstance(l1_type, yang.schema.Type):
-            testing.assertEqual(l1_type.name, "union")
-            testing.assertEqual(len(l1_type.type_), 2)
-            testing.assertEqual(l1_type.type_[0].name, "string")
-            testing.assertEqual(l1_type.type_[1].name, "string")
-        else:
-            testing.error("Expected Type instance")
+        l1_type = get_builtin_type(l1.type_)
+        testing.assertEqual(l1_type.name, "union")
+        testing.assertEqual(len(l1_type.type_), 2)
+        testing.assertEqual(get_builtin_type(l1_type.type_[0]).name, "string")
+        testing.assertEqual(get_builtin_type(l1_type.type_[1]).name, "string")
     else:
         testing.error("Expected Leaf instance")
 
@@ -867,11 +856,7 @@ def _test_compile_type_in_imported_module():
 
     l1 = nc_bar.get("c1").get("l1")
     if isinstance(l1, yang.schema.Leaf):
-        l1_type = l1.type_
-        if isinstance(l1_type, yang.schema.Type):
-            testing.assertEqual(l1_type.name, "string")
-        else:
-            testing.error("Expected Type instance")
+        testing.assertEqual(get_builtin_type(l1.type_).name, "string")
     else:
         testing.error("Expected Leaf instance")
 
@@ -906,13 +891,25 @@ def _test_compile_imported_grouping():
   yang-version "1.1";
   namespace "http://example.com/foo";
   prefix "foo";
+  typedef string2 {
+    type string;
+  }
+  identity id1;
+  identity id2 {
+    base id1;
+  }
   grouping g1 {
     container c1 {
       list li1 {
         key l1;
         leaf l1 {
-          type string;
+          type string2;
           description "leaf 1";
+        }
+        leaf l2 {
+          type identityref {
+            base id1;
+          }
         }
       }
     }
@@ -1313,10 +1310,24 @@ def _test_resolve_type_union_of_string():
   prefix "foo";
 
   typedef ipv4-address {
-    type string;
+    type string {
+      pattern
+        '(([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.){3}'
+      +  '([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])'
+      + '(%[\p{N}\p{L}]+)?';
+    }
   }
   typedef ipv6-address {
-    type string;
+    type string {
+      pattern '((:|[0-9a-fA-F]{0,4}):)([0-9a-fA-F]{0,4}:){0,5}'
+            + '((([0-9a-fA-F]{0,4}:)?(:|[0-9a-fA-F]{0,4}))|'
+            + '(((25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\.){3}'
+            + '(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])))'
+            + '(%[\p{N}\p{L}]+)?';
+      pattern '(([^:]+:){6}(([^:]+:[^:]+)|(.*\..*)))|'
+            + '((([^:]+:)*[^:]+)?::(([^:]+:)*[^:]+)?)'
+            + '(%.+)?';
+    }
   }
   typedef domain-name {
     type string;
@@ -2493,6 +2504,9 @@ def _test_leaf_defaults():
     namespace "http://example.com/foo";
     prefix "foo";
     identity id1;
+    identity id2 {
+      base id1;
+    }
     container c {
         leaf l_str_def {
             type string;
@@ -2506,7 +2520,7 @@ def _test_leaf_defaults():
             type identityref {
                 base id1;
             }
-            default id1;
+            default id2;
         }
     }
 }"""
@@ -2526,7 +2540,7 @@ def _test_leaf_defaults():
 
     l_identityref_def = root.get("c").get("l_identityref_def")
     if isinstance(l_identityref_def, yang.schema.DLeaf):
-        testing.assertEqual(l_identityref_def.default, "id1")
+        testing.assertEqual(l_identityref_def.default, "id2")
     else:
         testing.error("Expected Leaf instance for l_identityref_def")
 
@@ -2711,11 +2725,7 @@ def _test_identityref():
 
     # Verify the leaf has the correct type
     if isinstance(active_protocol, yang.schema.DLeaf):
-        leaf_type = active_protocol.type_
-        if isinstance(leaf_type, yang.schema.Type):
-            testing.assertEqual(leaf_type.name, "identityref")
-        else:
-            testing.error("Expected Type instance")
+        testing.assertEqual(active_protocol.type_.builtin_type, "identityref")
     else:
         testing.error("Expected DLeaf instance")
 
@@ -2798,24 +2808,24 @@ def _test_is_derived_from():
     unrelated = yang.schema.DIdentity("example-three", "uri:example:three", "example-three", "unrelated", base=[])
 
     # Test direct base identity
-    testing.assertTrue(yang.identity.is_derived_from(base, [base]), "base should be derived from itself")
+    testing.assertTrue(yang.schema.is_derived_from(base, [base]), "base should be derived from itself")
 
     # Test derived identity
-    testing.assertTrue(yang.identity.is_derived_from(one, [base]), "one should be derived from base")
+    testing.assertTrue(yang.schema.is_derived_from(one, [base]), "one should be derived from base")
 
     # Test multi-base derived identity
-    testing.assertTrue(yang.identity.is_derived_from(two, [base]), "two should be derived from base")
-    testing.assertTrue(yang.identity.is_derived_from(two, [base_two]), "two should be derived from base_two")
-    testing.assertTrue(yang.identity.is_derived_from(two, [base, base_two]), "two should be derived from base or base_two")
+    testing.assertTrue(yang.schema.is_derived_from(two, [base]), "two should be derived from base")
+    testing.assertTrue(yang.schema.is_derived_from(two, [base_two]), "two should be derived from base_two")
+    testing.assertTrue(yang.schema.is_derived_from(two, [base, base_two]), "two should be derived from base or base_two")
 
     # Test unrelated identity
-    testing.assertFalse(yang.identity.is_derived_from(unrelated, [base]), "unrelated should not be derived from base")
-    testing.assertFalse(yang.identity.is_derived_from(unrelated, [base_two]), "unrelated should not be derived from base_two")
+    testing.assertFalse(yang.schema.is_derived_from(unrelated, [base]), "unrelated should not be derived from base")
+    testing.assertFalse(yang.schema.is_derived_from(unrelated, [base_two]), "unrelated should not be derived from base_two")
 
     # Test transitive derivation
     three = yang.schema.DIdentity("example-one", "uri:example:one", "example-one", "three", base=[one])
-    testing.assertTrue(yang.identity.is_derived_from(three, [base]), "three should be transitively derived from base through one")
-    testing.assertTrue(yang.identity.is_derived_from(three, [one]), "three should be directly derived from one")
+    testing.assertTrue(yang.schema.is_derived_from(three, [base]), "three should be transitively derived from base through one")
+    testing.assertTrue(yang.schema.is_derived_from(three, [one]), "three should be directly derived from one")
 
 def _test_identity_base_resolution_import_prefix():
     """Test that identity base references using import prefixes are correctly resolved"""
@@ -3076,7 +3086,7 @@ def _test_print_tree_netinfra_inter_schemanode_pre_compile():
 
 def _test_print_tree_netinfra_inter_schemanode_compile():
 	# Use partial compilation (skip type resolution) for intermediate SchemaNode tree inspection
-	modules = yang.compile_modules(yang.parse_modules(yang.parse_statements([netinfra_inter_yang])), skip_type_resolution=True)
+	modules = yang.compile_modules(yang.parse_modules(yang.parse_statements([netinfra_inter_yang])))
 	res = []
 	for m in modules:
 		res.append(m.print_tree())

@@ -641,44 +641,42 @@ snode_methods = {
         # TODO: keep track of constraints in the derived type(s) that we resolve
         # TODO: look up identity from context, set Identityref as default?!
         "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        if context.skip_type_resolution:
-            new_type = self.type_
-            new_default = self.default
-            new_units = self.units
-        else:
-            base_typedef = self.type_.resolve_typedef(context)
-            new_type = base_typedef.type_
-
-            new_default = self.default
-            if new_default is None:
-                new_default = base_typedef.default
-
-            new_units = self.units
-            if new_units is None:
-                new_units = base_typedef.units
+        resolved_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
 
         new = Leaf(self.name,
                    config=self.config,
-                   default=new_default,
+                   default=self.default,
                    description=self.description,
                    if_feature=self.if_feature,
                    mandatory=self.mandatory,
                    must=self.must,
                    reference=self.reference,
                    status=self.status,
-                   type_=new_type,
-                   units=new_units,
+                   type_=resolved_type,
+                   units=self.units,
                    when=self.when,
                    exts=self.exts,
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx)
 
+        resolved_type.parent = new
+
         return new
 
 """,
         "to_dnode": """    def to_dnode(self) -> DLeaf:
-        return DLeaf(
+        dtype = self.type_.to_dtype()
+
+        new_default = self.default
+        if new_default is None:
+            new_default = dtype.default
+
+        new_units = self.units
+        if new_units is None:
+            new_units = dtype.units
+
+        new_dnode = DLeaf(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
@@ -691,27 +689,20 @@ snode_methods = {
             must=self.must,
             reference=self.reference,
             status=self.status,
-            type_=self.type_,
+            type_=dtype,
             units=self.units,
             when=self.when,
             exts=self.exts
         )
+        dtype.parent = new_dnode
+        return new_dnode
 
 """
     },
     "leaf-list": {
         # TODO: keep track of constraints in the derived type(s) that we resolve
         "compile": """    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        if context.skip_type_resolution:
-            new_type = self.type_
-            new_units = self.units
-        else:
-            base_typedef = self.type_.resolve_typedef(context)
-            new_type = base_typedef.type_
-
-            new_units = self.units
-            if new_units is None:
-                new_units = base_typedef.units
+        resolved_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
 
         new = LeafList(self.name,
                        config=self.config,
@@ -724,13 +715,16 @@ snode_methods = {
                        ordered_by=self.ordered_by,
                        reference=self.reference,
                        status=self.status,
-                       type_=new_type,
-                       units=new_units,
+                       type_=resolved_type,
+                       units=self.units,
                        when=self.when,
                        exts=self.exts,
                        mod=new_mod if new_mod is not None else self.mod,
                        ns=new_ns if new_ns is not None else self.ns,
                        pfx=new_pfx if new_pfx is not None else self.pfx)
+
+        resolved_type.parent = new
+
         return new
 
 """,
@@ -749,7 +743,13 @@ snode_methods = {
 
 """,
         "to_dnode": """    def to_dnode(self) -> DLeafList:
-        return DLeafList(
+        dtype = self.type_.to_dtype()
+
+        new_units = self.units
+        if new_units is None:
+            new_units = dtype.units
+
+        new_dnode = DLeafList(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
@@ -764,11 +764,13 @@ snode_methods = {
             ordered_by=self.ordered_by,
             reference=self.reference,
             status=self.status,
-            type_=self.type_,
+            type_=dtype,
             units=self.units,
             when=self.when,
             exts=self.exts
         )
+        dtype.parent = new_dnode
+        return new_dnode
 
 """
     },
@@ -888,40 +890,43 @@ snode_methods = {
 """,
     },
     "type": {
-        "resolve_union_types": r"""    def resolve_union_types(self, context: Context) -> Type:
-        if self.name == "union":
-            # Resolve union types
-            resolved_union_types = [ut.resolve_typedef(context).type_ for ut in self.type_]
-            new = Type(self.name,
-                       base=self.base,
-                       bit=self.bit,
-                       enum=self.enum,
-                       fraction_digits=self.fraction_digits,
-                       length=self.length,
-                       path=self.path,
-                       pattern=self.pattern,
-                       range_=self.range_,
-                       require_instance=self.require_instance,
-                       type_=resolved_union_types)
-            return new
-        else:
-            return self
+        "resolve_type": r"""    def resolve_type(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
+        top_name = _top_name if _top_name is not None else self.name
+        if recursion_level >= RECURSION_LIMIT:
+            raise ValueError("Recursion limit reached for typedef {top_name}")
 
-""",
-        "resolve_identities": r"""    def resolve_identities(self, context: Context) -> Type:
-        if self.name == "identityref":
-            # Normalize identity base to always include the module prefix. In doing
-            # so we make it easier to later look up bases in DIdentity.
-            fq_base = []
-            for base in self.base:
-                if ":" not in base:
+        if self.name in _builtin_types:
+            if self.name == "identityref":
+                # Normalize identity base to always include the origin module prefix. In doing
+                # so we make it easier to later look up bases in DIdentity.
+                fq_base = []
+                for base in self.base:
                     base_identity = self.get_identity(base, context)
                     fq_base.append("{base_identity.pfx}:{base_identity.name}")
-                else:
-                    fq_base.append(base)
 
-            new = Type(self.name,
-                    base=fq_base,
+                return ResolvedType(
+                        self.name,
+                        base=fq_base,
+                        require_instance=self.require_instance,
+                        exts=self.exts,
+                        mod=self.mod,
+                        ns=self.ns,
+                        pfx=self.pfx)
+
+            elif self.name == "union":
+                # Resolve union types
+                resolved_union_types = [ut.resolve_type(context, new_mod, new_ns, new_pfx, recursion_level + 1, top_name) for ut in self.type_]
+                return ResolvedType(self.name,
+                        base=self.base,
+                        type_=resolved_union_types,
+                        mod=self.mod,
+                        ns=self.ns,
+                        pfx=self.pfx)
+
+            # Remaining builtin types
+            return ResolvedType(
+                    self.name,
+                    base=self.base,
                     bit=self.bit,
                     enum=self.enum,
                     fraction_digits=self.fraction_digits,
@@ -935,48 +940,70 @@ snode_methods = {
                     mod=self.mod,
                     ns=self.ns,
                     pfx=self.pfx)
-            return new
-        else:
-            return self
+
+        new_name = self.name
+        orig_prefix = self.get_prefix()
+        if new_pfx is not None and new_pfx != orig_prefix:
+            # Add explicit prefix when part of grouping expanded into other module
+            prefix, name = split_prefix_name(self.name)
+            if prefix is None:
+                new_name = "{orig_prefix}:{name}"
+
+        found_typedef = self.get_typedef(new_name, context)
+        resolved_typedef = found_typedef.resolve_typedef(context, new_mod, new_ns, new_pfx, recursion_level + 1, top_name)
+
+        return ResolvedType(
+                new_name,
+                base=self.base,
+                bit=self.bit,
+                enum=self.enum,
+                fraction_digits=self.fraction_digits,
+                length=self.length,
+                path=self.path,
+                pattern=self.pattern,
+                range_=self.range_,
+                require_instance=self.require_instance,
+                type_=self.type_,
+                exts=self.exts,
+                mod=self.mod,
+                ns=self.ns,
+                pfx=self.pfx,
+                resolved_base_typedef=resolved_typedef)
 
 """,
-        "resolve_typedef": r"""    def resolve_typedef(self, context: Context) -> Typedef:
-        if self.name in _builtin_types:
-            return Typedef(self.name, type_=self.resolve_union_types(context).resolve_identities(context))
-        td = self.get_typedef(self.name, context)
-        for i in range(RECURSION_LIMIT+1):
-            if td.type_.name in _builtin_types:
-                new_t = td.type_.resolve_union_types(context).resolve_identities(context)
-                td.type_ = new_t
-                return td
-            td = td.type_.resolve_typedef(context)
-            if i == RECURSION_LIMIT:
-                raise ValueError("Recursion limit reached for typedef {self.name}")
-        raise ValueError("Unable to resolve typedef {self.name}")
+        "compile": r"""    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        return self.resolve_type(context, new_mod, new_ns, new_pfx)
+
+""",
+        "to_dtype": r"""    def to_dtype(self) -> DType:
+        raise NotImplementedError("Type.to_dtype: expect call to ResolvedType instead")
 
 """,
     },
     "typedef": {
-        "compile": r"""    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        base_typedef = self.type_.resolve_typedef(context)
+        "resolve_typedef": r"""    def resolve_typedef(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
+        top_name = _top_name if _top_name is not None else self.name
+        if recursion_level >= RECURSION_LIMIT:
+            raise ValueError("Recursion limit reached for typedef {top_name}")
 
-        new_default = self.default
-        if new_default is None:
-            new_default = base_typedef.default
-
-        new_units = self.units
-        if new_units is None:
-            new_units = base_typedef.units
+        resolved_base_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
 
         new = Typedef(self.name,
-                      default=new_default,
+                      default=self.default,
                       description=self.description,
                       reference=self.reference,
                       status=self.status,
-                      type_=base_typedef.type_,
-                      units=new_units,
+                      type_=resolved_base_type,
+                      units=self.units,
                       exts=self.exts)
+
+        resolved_base_type.parent = new
+
         return new
+
+""",
+        "compile": r"""    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        return self.resolve_typedef(context)
 
 """,
     },

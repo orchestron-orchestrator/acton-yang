@@ -1,5 +1,117 @@
 
 
+class ResolvedType(Type):
+    resolved_base_typedef: ?Typedef
+
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None):
+        Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, require_instance, type_, exts, parent, mod, ns, pfx)
+        self.resolved_base_typedef = resolved_base_typedef
+
+    def resolve_type(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
+        new_name = self.name
+
+        if self.name not in _builtin_types:
+            orig_prefix = self.get_prefix()
+            if new_pfx is not None and new_pfx != orig_prefix:
+                # Add explicit prefix when part of grouping expanded into other module
+                prefix, name = split_prefix_name(self.name)
+                if prefix is None:
+                    new_name = "{orig_prefix}:{name}"
+
+        new = ResolvedType(new_name,
+                   base=self.base,
+                   bit=self.bit,
+                   enum=self.enum,
+                   fraction_digits=self.fraction_digits,
+                   length=self.length,
+                   path=self.path,
+                   pattern=self.pattern,
+                   range_=self.range_,
+                   require_instance=self.require_instance,
+                   type_=self.type_,
+                   exts=self.exts,
+                   mod=new_mod if new_mod is not None else self.mod,
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx,
+                   resolved_base_typedef=self.resolved_base_typedef)
+        return new
+
+    def to_dtype(self) -> DType:
+        return DType.from_resolved_type(self)
+
+
+def find_identity_by_ref(identities: list[DIdentity], name: str, namespace: ?str=None, module: ?str=None, prefix: ?str=None) -> ?DIdentity:
+    """Find an identity by name and optionally namespace or module"""
+    for identity in identities:
+        if identity.name == name:
+            if namespace is not None and identity.namespace == namespace:
+                return identity
+            elif module is not None and identity.module == module:
+                return identity
+            elif prefix is not None and identity.prefix == prefix:
+                return identity
+    return None
+
+
+def complete_identityref(partial: value, identities: list[DIdentity], current_module: str) -> (?Identityref, ?DIdentity, ?str):
+    """Complete an Identityref by filling in missing namespace or module, if only one is set"""
+    if isinstance(partial, Identityref):
+        identity = find_identity_by_ref(identities, partial.val, namespace=partial.ns, module=partial.mod, prefix=partial.pfx)
+        if identity is not None:
+            return partial, identity, None
+        else:
+            return None, None, "Identityref {partial.val} not found in namespace={partial.ns} module={partial.mod} prefix={partial.pfx}"
+    elif isinstance(partial, PartialIdentityref):
+        partial_ns = partial.ns
+        partial_mod = partial.mod
+        partial_pfx = partial.pfx
+        if partial_ns is None and partial_mod is None and partial_pfx is None:
+            identity = find_identity_by_ref(identities, partial.val, module=current_module)
+            if identity is not None:
+                complete = Identityref(partial.val, identity.namespace, identity.module, identity.prefix)
+                return complete, identity, None
+            else:
+                return None, None, "Identityref {partial.val} not found in current module {current_module}"
+        else:
+            # Have namespace or module (also both, but that doesn't happen when we parse XML / JSON)
+            identity = find_identity_by_ref(identities, partial.val, namespace=partial_ns, module=partial_mod, prefix=partial_pfx)
+            if identity is not None:
+                complete = Identityref(partial.val, identity.namespace, identity.module, identity.prefix)
+                return complete, identity, None
+            else:
+                return None, None, "Identityref {partial.val} not found in namespace={partial.ns} module={partial.mod} prefix={partial.pfx}"
+    else:
+        raise ValueError('"partial" argument type is a union of Identityref, PartialIdentityref')
+
+
+def is_derived_from(identity: DIdentity, bases: list[DIdentity]) -> bool:
+    """Check if an identity is derived from any of the given base identities"""
+    for b in bases:
+        if b.module == identity.module and b.name == identity.name:
+            return True
+
+    for base in identity.base:
+        # Check direct match
+        for b in bases:
+            if b.module == base.module and b.name == base.name:
+                return True
+        # Check recursive derivation
+        if is_derived_from(base, bases):
+            return True
+    return False
+
+
+# partial is a union of Identityref, PartialIdentityref
+def complete_and_validate_identityref(partial: value, identities: list[DIdentity], bases: list[DIdentity], current_module: str) -> (?Identityref, ?str):
+    identityref, identity, error = complete_identityref(partial, identities, current_module)
+    if identity is not None:
+        if is_derived_from(identity, bases):
+            return identityref, None
+        else:
+            return None, "Identityref {identityref} not derived from any of the valid bases: {bases}"
+    return None, error
+
+
 def list_keys(node: DNodeInner) -> ?list[str]:
     if isinstance(node, DList):
         return node.key
@@ -39,3 +151,36 @@ def stmt_to_smodule(stmt):
     if isinstance(m, Module):
         return m
     raise ValueError("Expected a module, got {type(m)}")
+
+
+def escape_as_fstr(s: str) -> str:
+    parts = []
+    s_len = len(s)
+    b = 0
+
+    def copy_until(b, i):
+        if i > b:
+           parts.append(s[b:i])
+        return i
+
+    def replace(b, i, p, skip=1):
+        new_b = copy_until(b, i)
+        parts.append(p)
+        return new_b + skip
+
+    for i in range(0, s_len):
+        c = s[i]
+        if c == '\\':
+            b = replace(b, i, "\\\\")
+        elif c == '{{':
+            b = replace(b, i, "{{{{")
+        elif c == '}}':
+            b = replace(b, i, "}}}}")
+        elif c == '\'':
+            b = replace(b, i, "\\\'")
+        elif c == '%':
+            b = replace(b, i, "\\x25") # Workaround ...
+
+    copy_until(b, s_len)
+
+    return "".join(parts)

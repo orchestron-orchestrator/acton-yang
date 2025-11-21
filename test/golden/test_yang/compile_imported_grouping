@@ -6,28 +6,42 @@ import yang.adata
 import yang.gdata
 import yang.gen3
 from yang.gdata import repr_yang
-from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
+from yang.pattern import YangPattern
 from yang.schema import *
+from yang.type import Decimal, Ranges
 
 # == This file is generated ==
 
 
 
 
-_identities: list[DIdentity] = []
+_base_foo_id1 = DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1', base=[])
+_identities = [
+    _base_foo_id1,
+    DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id2', base=[_base_foo_id1]),
+]
+
+
+# Identityref constants
+foo_id1 = Identityref('id1', ns='http://example.com/foo', mod='foo', pfx='foo')
+foo_id2 = Identityref('id2', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
 class bar__c1__li1_entry(yang.adata.MNode):
     l1: str
+    l2: ?Identityref
 
-    mut def __init__(self, l1: str):
+    mut def __init__(self, l1: str, l2: ?Identityref):
         self._ns = 'http://example.com/bar'
         self.l1 = l1
+        self.l2 = l2
 
     def _get_attr(self, name: str) -> ?value:
         if name == 'l1':
             return self.l1
+        if name == 'l2':
+            return self.l2
         raise ValueError('Attribute {name} not found in bar__c1__li1')
 
     mut def to_gdata(self) -> yang.gdata.Node:
@@ -37,7 +51,7 @@ class bar__c1__li1_entry(yang.adata.MNode):
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> bar__c1__li1_entry:
-        return bar__c1__li1_entry(l1=n.get_str('l1'))
+        return bar__c1__li1_entry(l1=n.get_str('l1'), l2=n.get_opt_Identityref('l2'))
 
     def copy(self):
         """Create a deep copy of this adata object"""
@@ -140,10 +154,16 @@ class root(yang.adata.MNode):
 
 
 def src_dnode():
-    return DRoot(children=[
+    return DRoot(identities=[
+        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1'),
+        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id2', base=[
+                DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1')
+            ])
+    ], children=[
     DContainer(module='bar', namespace='http://example.com/bar', prefix='bar', name='c1', config=True, presence=False, children=[
         DList(module='bar', namespace='http://example.com/bar', prefix='bar', name='li1', key=['l1'], config=True, min_elements=0, ordered_by='system', children=[
-            DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l1', config=True, description='leaf 1', mandatory=False, type_=Type('string'))
+            DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l1', config=True, description='leaf 1', mandatory=False, type_=DTypeString(module='bar', namespace='bar', prefix='bar', name='foo:string2', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+            DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l2', config=True, mandatory=False, type_=DTypeIdentityref(module='bar', namespace='bar', prefix='bar', name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_foo_id1], identities=_identities))
         ])
     ])
 ])
