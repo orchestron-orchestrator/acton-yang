@@ -29,8 +29,8 @@ GDATA_TAKERS = {
     # Leaf getters
     "get_str": yang.gdata.Node.get_str,
     "get_opt_str": yang.gdata.Node.get_opt_str,
-    "get_int": yang.gdata.Node.get_int,
-    "get_opt_int": yang.gdata.Node.get_opt_int,
+    "get_bigint": yang.gdata.Node.get_bigint,
+    "get_opt_bigint": yang.gdata.Node.get_opt_bigint,
     "get_float": yang.gdata.Node.get_float,
     "get_opt_float": yang.gdata.Node.get_opt_float,
     "get_bool": yang.gdata.Node.get_bool,
@@ -45,8 +45,8 @@ GDATA_TAKERS = {
     # LeafList getters
     "get_strs": yang.gdata.Node.get_strs,
     "get_opt_strs": yang.gdata.Node.get_opt_strs,
-    "get_ints": yang.gdata.Node.get_ints,
-    "get_opt_ints": yang.gdata.Node.get_opt_ints,
+    "get_bigints": yang.gdata.Node.get_bigints,
+    "get_opt_bigints": yang.gdata.Node.get_opt_bigints,
     "get_floats": yang.gdata.Node.get_floats,
     "get_opt_floats": yang.gdata.Node.get_opt_floats,
     "get_bools": yang.gdata.Node.get_bools,
@@ -115,15 +115,15 @@ def parse_range_constraint(range_str: str) -> list[(min_str: str, max_str: str)]
     return intervals
 
 
-def validate_int_range(value: int, range_str: str, type_name: str) -> bool:
+def validate_int_range(value: bigint, range_str: str, type_name: str) -> bool:
     intervals = parse_range_constraint(range_str)
-    numeric_value_i: int = value
+    numeric_value_i: bigint = value
     for interval in intervals:
         min_str = interval.min_str
         max_str = interval.max_str
 
         # Compute integer bounds
-        min_val_i: int = 0
+        min_val_i: bigint = 0   # bigint because even the start of range may exceed i64_max
         if min_str == "min":
             if type_name == "int8":
                 min_val_i = -128
@@ -139,12 +139,12 @@ def validate_int_range(value: int, range_str: str, type_name: str) -> bool:
                 min_val_i = -9223372036854775808
         else:
             try:
-                min_val_i = int(min_str)
+                min_val_i = bigint(min_str)
             except ValueError:
                 # Malformed bound for integer type, skip this interval
                 continue
 
-        max_val_i: int = 0
+        max_val_i: bigint = 0
         if max_str == "max":
             if type_name == "int8":
                 max_val_i = 127
@@ -166,7 +166,7 @@ def validate_int_range(value: int, range_str: str, type_name: str) -> bool:
                 max_val_i = 9223372036854775807
         else:
             try:
-                max_val_i = int(max_str)
+                max_val_i = bigint(max_str)
             except ValueError:
                 # Malformed bound for integer type, skip this interval
                 continue
@@ -289,7 +289,7 @@ def try_parse_value(text_value: str, schema_type: yang.schema.Type, path: list[P
         return (t=type_name, val=text_value)
     elif type_name == "int8" or type_name == "int16" or type_name == "int32" or type_name == "int64":
         try:
-            int_val = int(text_value)
+            int_val = bigint(text_value)
             range_obj = schema_type.range_
             if range_obj is not None:
                 if not validate_int_range(int_val, range_obj.value, type_name):
@@ -299,7 +299,7 @@ def try_parse_value(text_value: str, schema_type: yang.schema.Type, path: list[P
             raise YangValidationError(path, schema_type, text_value)
     elif type_name == "uint8" or type_name == "uint16" or type_name == "uint32" or type_name == "uint64":
         try:
-            int_val = int(text_value)
+            int_val = bigint(text_value)
             if int_val < 0:
                 raise YangValidationError(path, schema_type, text_value)
             range_obj = schema_type.range_
@@ -470,11 +470,12 @@ extension dict[A(Hashable), B] (YangData):
                             if isinstance(leaf_value, bool) and member_name == "boolean":
                                 concrete_type = "boolean"
                                 break
-                            elif isinstance(leaf_value, int) and not isinstance(leaf_value, bool):
+                            elif isinstance(leaf_value, int) or isinstance(leaf_value, bigint):
+                                bigint_leaf_value = bigint(leaf_value)
                                 if member_name in ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]:
                                     range_obj = member_type.range_
                                     if range_obj is not None:
-                                        if validate_int_range(leaf_value, range_obj.value, member_name):
+                                        if validate_int_range(bigint_leaf_value, range_obj.value, member_name):
                                             concrete_type = member_name
                                             break
                                     else:
@@ -485,12 +486,15 @@ extension dict[A(Hashable), B] (YangData):
                                 break
                     range_obj = schema.type_.range_
                     if range_obj is not None:
-                        if isinstance(leaf_value, int) and not isinstance(leaf_value, bool):
-                            if not validate_int_range(leaf_value, range_obj.value, concrete_type):
+                        if isinstance(leaf_value, int) or isinstance(leaf_value, bigint):
+                            bigint_leaf_value = bigint(leaf_value)
+                            if not validate_int_range(bigint_leaf_value, range_obj.value, concrete_type):
                                 raise YangValidationError(new_path, schema.type_, str(leaf_value))
                         elif isinstance(leaf_value, float):
                             if not validate_decimal_range(leaf_value, range_obj.value):
                                 raise YangValidationError(new_path, schema.type_, str(leaf_value))
+                    if isinstance(leaf_value, int):
+                        return (t=concrete_type, val=bigint(leaf_value))
                     return (t=concrete_type, val=leaf_value)
             else:
                 return None
@@ -533,7 +537,7 @@ extension dict[A(Hashable), B] (YangData):
                                 if isinstance(item, bool) and member_name == "boolean":
                                     concrete_type = "boolean"
                                     break
-                                elif isinstance(item, int) and not isinstance(item, bool):
+                                elif isinstance(item, bigint) and not isinstance(item, bool):
                                     if member_name in ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]:
                                         range_obj = member_type.range_
                                         if range_obj is not None:
@@ -548,7 +552,7 @@ extension dict[A(Hashable), B] (YangData):
                                     break
                         range_obj = schema.type_.range_
                         if range_obj is not None:
-                            if isinstance(item, int) and not isinstance(item, bool):
+                            if isinstance(item, bigint) and not isinstance(item, bool):
                                 if not validate_int_range(item, range_obj.value, concrete_type):
                                     raise YangValidationError(new_path, schema.type_, str(item))
                             elif isinstance(item, float):
@@ -1757,7 +1761,7 @@ def _test_json_path_nested_lists():
                             'deep': yang.gdata.List(['deep-key'], elements=[
                                 yang.gdata.Container({
                                     'deep-key': yang.gdata.Leaf('string', 'key3'),
-                                    'data': yang.gdata.Leaf('int32', 42)
+                                    'data': yang.gdata.Leaf('int32', bigint(42))
                                 })
                             ])
                         })
@@ -2164,7 +2168,7 @@ def _test_pradata():
     gdata_tree = yang.gdata.Container({
         "top-level-leaf": yang.gdata.Leaf("string", "root value"),
         "c1": yang.gdata.Container({
-            "optional-leaf": yang.gdata.Leaf("int32", 42),
+            "optional-leaf": yang.gdata.Leaf("int32", bigint(42)),
             "c2": yang.gdata.Container({
                 "l1": yang.gdata.Leaf("string", "inner value"),
                 "mandatory-leaf": yang.gdata.Leaf("string", "required value")
@@ -2172,13 +2176,13 @@ def _test_pradata():
             "li1": yang.gdata.List(["name", "extra-key"], [
                 yang.gdata.Container({
                     "name": yang.gdata.Leaf("string", "item1"),
-                    "extra-key": yang.gdata.Leaf("int32", 1),
-                    "value": yang.gdata.Leaf("int32", 100)
+                    "extra-key": yang.gdata.Leaf("int32", bigint(1)),
+                    "value": yang.gdata.Leaf("int32", bigint(100))
                 }),
                 yang.gdata.Container({
                     "name": yang.gdata.Leaf("string", "item2"),
-                    "extra-key": yang.gdata.Leaf("int32", 2),
-                    "value": yang.gdata.Leaf("int32", 200),
+                    "extra-key": yang.gdata.Leaf("int32", bigint(2)),
+                    "value": yang.gdata.Leaf("int32", bigint(200)),
                     "c3": yang.gdata.Container({
                         "nested-leaf": yang.gdata.Leaf("string", "birb")
                     })
@@ -2217,7 +2221,7 @@ def _test_pradata_root_path():
             "middle": yang.gdata.Container({
                 "value1": yang.gdata.Leaf("string", "test value"),
                 "inner": yang.gdata.Container({
-                    "value2": yang.gdata.Leaf("int32", 42)
+                    "value2": yang.gdata.Leaf("int32", bigint(42))
                 })
             })
         })
@@ -2264,7 +2268,7 @@ def _test_json_path_container_list_container():
                     'name': yang.gdata.Leaf('string', 'item1'),
                     'bottom': yang.gdata.Container({
                         'data': yang.gdata.Leaf('string', 'test'),
-                        'value': yang.gdata.Leaf('int32', 42)
+                        'value': yang.gdata.Leaf('int32', bigint(42))
                     })
                 })
             ])
