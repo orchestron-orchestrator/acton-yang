@@ -15,8 +15,13 @@ from yang.schema import DIdentity
 _identities: list[DIdentity] = []
 
 
+foo__l1__0type = DTypeUnion(module='foo', namespace='foo', prefix='foo', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, [DTypeString(module='foo', namespace='foo', prefix='foo', name='ipv4-address', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeInteger(module='foo', namespace='foo', prefix='foo', name='int32', description=None, reference=None, exts=[], builtin_type='int32', default=None, ranges=Ranges([(-2147483648, 2147483647)]))])
+
 mut def from_data_foo__l1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('union', val, ns='http://example.com/foo', module='foo')
+    if foo__l1__0type.validate_value(val):
+        return yang.gdata.Leaf('union', val, ns='http://example.com/foo', module='foo')
+    else:
+        raise ValueError('Invalid value {val} leaf l1 - expected union with types: [ipv4-address string OR int32 with range -2147483648..2147483647]')
 
 class root(yang.adata.MNode):
     l1: value
@@ -29,6 +34,8 @@ class root(yang.adata.MNode):
         children = {}
         _l1 = self.l1
         if _l1 is not None:
+            if not foo__l1__0type.validate_value(_l1):
+                raise ValueError('Invalid value {_l1} for leaf l1 - expected union with types: [ipv4-address string OR int32 with range -2147483648..2147483647]')
             children['l1'] = yang.gdata.Leaf('union', _l1, ns='http://example.com/foo', module='foo')
         return yang.gdata.Container(children)
 

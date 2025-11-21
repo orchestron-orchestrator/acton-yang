@@ -24,15 +24,22 @@ foo_id1 = Identityref('id1', ns='http://example.com/foo', mod='foo', pfx='foo')
 foo_id2 = Identityref('id2', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
+foo__c1__l1__k1__0type = DTypeString(module='foo', namespace='foo', prefix='foo', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])
+
 mut def from_data_foo__c1__l1__k1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    if foo__c1__l1__k1__0type.validate_value(val):
+        return yang.gdata.Leaf('string', val)
+    else:
+        raise ValueError('Invalid value {val} leaf k1 - expected string')
+
+foo__c1__l1__k2__0type = DTypeIdentityref(module='foo', namespace='foo', prefix='foo', name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, [_base_foo_id1], _identities)
 
 mut def from_data_foo__c1__l1__k2(val: value) -> yang.gdata.Leaf:
-    new_val, error = complete_and_validate_identityref(val, _identities, ['foo:id1'], 'foo')
+    new_val, error = complete_and_validate_identityref(val, _identities, [_base_foo_id1], 'foo')
     if new_val is not None:
         return yang.gdata.Leaf('identityref', new_val)
     else:
-        raise ValueError('Invalid value for identityref leaf k2: {error}')
+        raise ValueError('Invalid value {new_val} for leaf k2: {error} - expected identityref with bases: [foo:id1]')
 
 class foo__c1__l1_entry(yang.adata.MNode):
     k1: str
@@ -47,14 +54,16 @@ class foo__c1__l1_entry(yang.adata.MNode):
         children = {}
         _k1 = self.k1
         if _k1 is not None:
+            if not foo__c1__l1__k1__0type.validate_value(_k1):
+                raise ValueError('Invalid value {_k1} for leaf k1 - expected string')
             children['k1'] = yang.gdata.Leaf('string', _k1)
         _k2 = self.k2
         if _k2 is not None:
-            _identityref_k2, error = complete_and_validate_identityref(_k2, _identities, ['foo:id1'], 'foo')
+            _identityref_k2, error = complete_and_validate_identityref(_k2, _identities, [_base_foo_id1], 'foo')
             if _identityref_k2 is not None:
                 _k2 = _identityref_k2
             else:
-                raise ValueError('Invalid value for identityref leaf k2: {error}')
+                raise ValueError('Invalid value {_k2} for leaf k2: {error} - expected identityref with bases: [foo:id1]')
             children['k2'] = yang.gdata.Leaf('identityref', _k2)
         return yang.gdata.Container(children)
 

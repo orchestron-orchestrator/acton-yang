@@ -15,8 +15,13 @@ from yang.schema import DIdentity
 _identities: list[DIdentity] = []
 
 
+foo__l1__0type = DTypeUnion(module='foo', namespace='foo', prefix='foo', name='host', description=None, reference=None, exts=[], builtin_type='union', default=None, [DTypeString(module='foo', namespace='foo', prefix='foo', name='ipv4-address', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeString(module='foo', namespace='foo', prefix='foo', name='ipv6-address', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeString(module='foo', namespace='foo', prefix='foo', name='domain-name', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])])
+
 mut def from_data_foo__l1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('union', val, ns='http://example.com/foo', module='foo')
+    if foo__l1__0type.validate_value(val):
+        return yang.gdata.Leaf('union', val, ns='http://example.com/foo', module='foo')
+    else:
+        raise ValueError('Invalid value {val} leaf l1 - expected host union with types: [ipv4-address string OR ipv6-address string OR domain-name string]')
 
 class root(yang.adata.MNode):
     l1: ?str
@@ -29,6 +34,8 @@ class root(yang.adata.MNode):
         children = {}
         _l1 = self.l1
         if _l1 is not None:
+            if not foo__l1__0type.validate_value(_l1):
+                raise ValueError('Invalid value {_l1} for leaf l1 - expected host union with types: [ipv4-address string OR ipv6-address string OR domain-name string]')
             children['l1'] = yang.gdata.Leaf('union', _l1, ns='http://example.com/foo', module='foo')
         return yang.gdata.Container(children)
 
