@@ -6,20 +6,24 @@ import yang
 import yang.adata
 import yang.gdata
 import yang.gen3
-from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
-from yang.schema import DIdentity
+from yang.pattern import YangPattern
+from yang.schema import complete_and_validate_identityref, DIdentity, DTypeBinary, DTypeBits, DTypeBoolean, DTypeDecimal64, DTypeEmpty, DTypeEnum, DTypeIdentityref, DTypeInstanceIdentifier, DTypeInteger, DTypeLeafref, DTypeString, DTypeUnion
+from yang.type import Decimal, Ranges
 
 # == This file is generated ==
 
 
+_base_basics_id1 = DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id1', base=[])
 _identities = [
-    DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id1', base=[]),
+    _base_basics_id1,
+    DIdentity(module='basics', namespace='http://example.com/basics', prefix='b', name='id2', base=[_base_basics_id1]),
 ]
 
 
 # Identityref constants
 basics_id1 = Identityref('id1', ns='http://example.com/basics', mod='basics', pfx='b')
+basics_id2 = Identityref('id2', ns='http://example.com/basics', mod='basics', pfx='b')
 
 
 def src_yang():
@@ -29,6 +33,9 @@ def src_yang():
     namespace "http://example.com/basics";
     prefix "b";
     identity id1;
+    identity id2 {
+        base id1;
+    }
     container c {
         leaf l_str_def {
             type string;
@@ -59,7 +66,9 @@ def src_yang():
         leaf l_union_def_float {
             type union {
                 type string;
-                type decimal64;
+                type decimal64 {
+                    fraction-digits 2;
+                }
             }
             default 1.23;
         }
@@ -87,46 +96,78 @@ def src_yang():
             type identityref {
                 base id1;
             }
-            default id1;
+            default id2;
         }
     }
 }""")
     return res
 
 
+basics__c__l_str_def__0type = DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])
+
 mut def from_data_basics__c__l_str_def(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    if basics__c__l_str_def__0type.validate_value(val):
+        return yang.gdata.Leaf('string', val)
+    else:
+        raise ValueError('Invalid value {val} leaf l_str_def - expected string')
+
+basics__c__l_str_def_quoted__0type = DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])
 
 mut def from_data_basics__c__l_str_def_quoted(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    if basics__c__l_str_def_quoted__0type.validate_value(val):
+        return yang.gdata.Leaf('string', val)
+    else:
+        raise ValueError('Invalid value {val} leaf l_str_def_quoted - expected string')
+
+basics__c__l_uint64_def__0type = DTypeInteger(module='basics', namespace='basics', prefix='b', name='uint64', description=None, reference=None, exts=[], builtin_type='uint64', default=None, ranges=Ranges([(0, 18446744073709551615)]))
 
 mut def from_data_basics__c__l_uint64_def(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('uint64', val)
+    if basics__c__l_uint64_def__0type.validate_value(val):
+        return yang.gdata.Leaf('uint64', val)
+    else:
+        raise ValueError('Invalid value {val} leaf l_uint64_def - expected uint64 with range 0..18446744073709551615')
+
+basics__c__l_union_def_str__0type = DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeInteger(module='basics', namespace='basics', prefix='b', name='uint64', description=None, reference=None, exts=[], builtin_type='uint64', default=None, ranges=Ranges([(0, 18446744073709551615)]))])
 
 mut def from_data_basics__c__l_union_def_str(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('union', val)
 
+basics__c__l_union_def_int__0type = DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeInteger(module='basics', namespace='basics', prefix='b', name='uint64', description=None, reference=None, exts=[], builtin_type='uint64', default=None, ranges=Ranges([(0, 18446744073709551615)]))])
+
 mut def from_data_basics__c__l_union_def_int(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('union', val)
+
+basics__c__l_union_def_float__0type = DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeDecimal64(module='basics', namespace='basics', prefix='b', name='decimal64', description=None, reference=None, exts=[], builtin_type='decimal64', default=None, fraction_digits=2, ranges=Ranges([(Decimal(-9223372036854775808, -2), Decimal(9223372036854775807, -2))]))])
 
 mut def from_data_basics__c__l_union_def_float(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('union', val)
 
+basics__c__l_union_def_bool__0type = DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeString(module='basics', namespace='basics', prefix='b', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), DTypeBoolean(module='basics', namespace='basics', prefix='b', name='boolean', description=None, reference=None, exts=[], builtin_type='boolean', default=None)])
+
 mut def from_data_basics__c__l_union_def_bool(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('union', val)
+
+basics__c__l_union_def_enumeration__0type = DTypeUnion(module='basics', namespace='basics', prefix='b', name='union', description=None, reference=None, exts=[], builtin_type='union', default=None, types=[DTypeEnum(module='basics', namespace='basics', prefix='b', name='enumeration', description=None, reference=None, exts=[], builtin_type='enumeration', default=None, name_to_val={'unlimited':0}), DTypeInteger(module='basics', namespace='basics', prefix='b', name='uint16', description=None, reference=None, exts=[], builtin_type='uint16', default=None, ranges=Ranges([(0, 65535)]))])
 
 mut def from_data_basics__c__l_union_def_enumeration(val: value) -> yang.gdata.Leaf:
     return yang.gdata.Leaf('union', val)
 
+basics__c__l_binary_def__0type = DTypeBinary(module='basics', namespace='basics', prefix='b', name='binary', description=None, reference=None, exts=[], builtin_type='binary', default=None, length=None)
+
 mut def from_data_basics__c__l_binary_def(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('binary', val)
+    if basics__c__l_binary_def__0type.validate_value(val):
+        return yang.gdata.Leaf('binary', val)
+    else:
+        raise ValueError('Invalid value {val} leaf l_binary_def - expected binary')
+
+basics__c__l_identityref_def__0type = DTypeIdentityref(module='basics', namespace='basics', prefix='b', name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_basics_id1], identities=_identities)
 
 mut def from_data_basics__c__l_identityref_def(val: value) -> yang.gdata.Leaf:
-    new_val, error = complete_and_validate_identityref(val, _identities, ['b:id1'], 'basics')
+    new_val, error = complete_and_validate_identityref(val, _identities, [_base_basics_id1], 'basics')
     if new_val is not None:
         return yang.gdata.Leaf('identityref', new_val)
     else:
-        raise ValueError('Invalid value for identityref leaf l_identityref_def: {error}')
+        raise ValueError('Invalid value for identityref leaf l_identityref_def: {error} - expected identityref with bases: [\'b:id1\']')
 
 class basics__c(yang.adata.MNode):
     l_str_def: str
@@ -151,7 +192,7 @@ class basics__c(yang.adata.MNode):
         self.l_union_def_bool = l_union_def_bool if l_union_def_bool is not None else False
         self.l_union_def_enumeration = l_union_def_enumeration if l_union_def_enumeration is not None else "unlimited"
         self.l_binary_def = l_binary_def if l_binary_def is not None else base64.decode('SGVsbG8gQWN0b24g8J+roQ=='.encode())
-        _default_l_identityref_def, error = complete_and_validate_identityref(Identityref.from_adata('id1'), _identities, ['b:id1'], 'basics')
+        _default_l_identityref_def, error = complete_and_validate_identityref(Identityref.from_adata('id2'), _identities, [_base_basics_id1], 'basics')
         if _default_l_identityref_def is not None:
             self.l_identityref_def = l_identityref_def if l_identityref_def is not None else _default_l_identityref_def
         else:
@@ -161,12 +202,18 @@ class basics__c(yang.adata.MNode):
         children = {}
         _l_str_def = self.l_str_def
         if _l_str_def is not None:
+            if not basics__c__l_str_def__0type.validate_value(_l_str_def):
+                raise ValueError('Invalid value {_l_str_def} for leaf l_str_def - expected string')
             children['l_str_def'] = yang.gdata.Leaf('string', _l_str_def)
         _l_str_def_quoted = self.l_str_def_quoted
         if _l_str_def_quoted is not None:
+            if not basics__c__l_str_def_quoted__0type.validate_value(_l_str_def_quoted):
+                raise ValueError('Invalid value {_l_str_def_quoted} for leaf l_str_def_quoted - expected string')
             children['l_str_def_quoted'] = yang.gdata.Leaf('string', _l_str_def_quoted)
         _l_uint64_def = self.l_uint64_def
         if _l_uint64_def is not None:
+            if not basics__c__l_uint64_def__0type.validate_value(_l_uint64_def):
+                raise ValueError('Invalid value {_l_uint64_def} for leaf l_uint64_def - expected uint64 with range 0..18446744073709551615')
             children['l_uint64_def'] = yang.gdata.Leaf('uint64', _l_uint64_def)
         _l_union_def_str = self.l_union_def_str
         if _l_union_def_str is not None:
@@ -185,14 +232,16 @@ class basics__c(yang.adata.MNode):
             children['l_union_def_enumeration'] = yang.gdata.Leaf('union', _l_union_def_enumeration)
         _l_binary_def = self.l_binary_def
         if _l_binary_def is not None:
+            if not basics__c__l_binary_def__0type.validate_value(_l_binary_def):
+                raise ValueError('Invalid value {_l_binary_def} for leaf l_binary_def - expected binary')
             children['l_binary_def'] = yang.gdata.Leaf('binary', _l_binary_def)
         _l_identityref_def = self.l_identityref_def
         if _l_identityref_def is not None:
-            _identityref_l_identityref_def, error = complete_and_validate_identityref(_l_identityref_def, _identities, ['b:id1'], 'basics')
+            _identityref_l_identityref_def, error = complete_and_validate_identityref(_l_identityref_def, _identities, [_base_basics_id1], 'basics')
             if _identityref_l_identityref_def is not None:
                 _l_identityref_def = _identityref_l_identityref_def
             else:
-                raise ValueError('Invalid value for identityref leaf l_identityref_def: {error}')
+                raise ValueError('Invalid value {_l_identityref_def} for leaf l_identityref_def: {error} - expected identityref with bases: [\'b:id1\']')
             children['l_identityref_def'] = yang.gdata.Leaf('identityref', _l_identityref_def)
         return yang.gdata.Container(children, ns='http://example.com/basics', module='basics')
 
@@ -438,6 +487,7 @@ def src_schema():
     res = {}
     res["basics"] = Module('basics', yang_version=1.1, namespace='http://example.com/basics', prefix='b', children=[
     Identity('id1'),
+    Identity('id2', base=['id1']),
     Container('c', children=[
         Leaf('l_str_def', type_=Type('string'), default='foo'),
         Leaf('l_str_def_quoted', type_=Type('string'), default='"foo"'),
@@ -452,7 +502,7 @@ def src_schema():
     ]), default='1234567890'),
         Leaf('l_union_def_float', type_=Type('union', type_=[
         Type('string'),
-        Type('decimal64')
+        Type('decimal64', fraction_digits=2)
     ]), default='1.23'),
         Leaf('l_union_def_bool', type_=Type('union', type_=[
         Type('string'),
@@ -465,7 +515,7 @@ def src_schema():
         Type('uint16')
     ]), default='unlimited'),
         Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ=='),
-        Leaf('l_identityref_def', type_=Type('identityref', base=['id1']), default='id1')
+        Leaf('l_identityref_def', type_=Type('identityref', base=['id1']), default='id2')
     ])
 ])
     return res
@@ -474,6 +524,7 @@ def src_schema_compiled():
     res = {}
     res["basics"] = Module('basics', yang_version=1.1, namespace='http://example.com/basics', prefix='b', children=[
     Identity('id1'),
+    Identity('id2', base=['b:id1']),
     Container('c', children=[
         Leaf('l_str_def', type_=Type('string'), default='foo'),
         Leaf('l_str_def_quoted', type_=Type('string'), default='"foo"'),
@@ -488,7 +539,7 @@ def src_schema_compiled():
     ]), default='1234567890'),
         Leaf('l_union_def_float', type_=Type('union', type_=[
         Type('string'),
-        Type('decimal64')
+        Type('decimal64', fraction_digits=2)
     ]), default='1.23'),
         Leaf('l_union_def_bool', type_=Type('union', type_=[
         Type('string'),
@@ -501,7 +552,7 @@ def src_schema_compiled():
         Type('uint16')
     ]), default='unlimited'),
         Leaf('l_binary_def', type_=Type('binary'), default='SGVsbG8gQWN0b24g8J+roQ=='),
-        Leaf('l_identityref_def', type_=Type('identityref', base=['b:id1']), default='id1')
+        Leaf('l_identityref_def', type_=Type('identityref', base=['b:id1']), default='id2')
     ])
 ])
     return res

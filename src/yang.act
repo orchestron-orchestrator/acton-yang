@@ -235,7 +235,7 @@ def parse_modules(yang_sources: Iterable[yang.schema.Statement]) -> NameRevMap[y
     return modules
 
 
-def compile_modules(modules: NameRevMap[yang.schema.Module], skip_type_resolution: bool=False) -> list[yang.schema.Module]:
+def compile_modules(modules: NameRevMap[yang.schema.Module]) -> list[yang.schema.Module]:
     """Compile a list of YANG modules
 
     This function compiles the list of input Module nodes. Compiling a module
@@ -247,7 +247,7 @@ def compile_modules(modules: NameRevMap[yang.schema.Module], skip_type_resolutio
     Typedef, ...) still present.
     """
     # Compile in dependency by import depth-first search
-    ctx = yang.schema.Context(skip_type_resolution=skip_type_resolution)
+    ctx = yang.schema.Context()
     build_stack: list[(yang.schema.Module, list[yang.schema.Import])] = []
     while True:
         if len(build_stack) > 0:
@@ -285,7 +285,6 @@ def compile_modules(modules: NameRevMap[yang.schema.Module], skip_type_resolutio
             no_rev_modules.append(m)
     return no_rev_modules
 
-
 def compile_to_dmodules(modules: list[yang.schema.Module]) -> list[yang.schema.DModule]:
     """Compile a list of Module to DModule nodes
 
@@ -306,7 +305,9 @@ def compile_to_droot(dmodules: list[yang.schema.DModule]) -> yang.schema.DRoot:
     This function is the final step in compiling the schema. It takes a list of
     DModules and combines them into a single DRoot object.
     """
-    return yang.schema.DRoot(dmodules)
+    root = yang.schema.DRoot(dmodules)
+    root.resolve_references(root)
+    return root
 
 
 def _load_cached_statement(fc: file.FileCap, cache_file: str) -> ?yang.schema.Statement:

@@ -5,9 +5,10 @@ import yang
 import yang.adata
 import yang.gdata
 import yang.gen3
-from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
-from yang.schema import DIdentity
+from yang.pattern import YangPattern
+from yang.schema import complete_and_validate_identityref, DIdentity, DTypeBinary, DTypeBits, DTypeBoolean, DTypeDecimal64, DTypeEmpty, DTypeEnum, DTypeIdentityref, DTypeInstanceIdentifier, DTypeInteger, DTypeLeafref, DTypeString, DTypeUnion
+from yang.type import Decimal, Ranges
 
 # == This file is generated ==
 
@@ -15,8 +16,13 @@ from yang.schema import DIdentity
 _identities: list[DIdentity] = []
 
 
+foo__li1__l1__0type = DTypeString(module='foo', namespace='foo', prefix='foo', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])
+
 mut def from_data_foo__li1__l1(val: value) -> yang.gdata.Leaf:
-    return yang.gdata.Leaf('string', val)
+    if foo__li1__l1__0type.validate_value(val):
+        return yang.gdata.Leaf('string', val)
+    else:
+        raise ValueError('Invalid value {val} leaf l1 - expected string')
 
 class foo__li1_entry(yang.adata.MNode):
     l1: str
@@ -29,6 +35,8 @@ class foo__li1_entry(yang.adata.MNode):
         children = {}
         _l1 = self.l1
         if _l1 is not None:
+            if not foo__li1__l1__0type.validate_value(_l1):
+                raise ValueError('Invalid value {_l1} for leaf l1 - expected string')
             children['l1'] = yang.gdata.Leaf('string', _l1)
         return yang.gdata.Container(children)
 
@@ -171,7 +179,12 @@ mut def from_json_foo__li1(jd: list[dict[str, ?value]]) -> yang.gdata.List:
     elements = [from_json_foo__li1_element(e) for e in jd if isinstance(e, dict)]
     return yang.gdata.List(keys=['l1'], elements=elements, ns='http://example.com/foo', module='foo')
 
+foo__ll1__0type = DTypeString(module='foo', namespace='foo', prefix='foo', name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])
+
 mut def from_data_foo__ll1(val: list[value]) -> yang.gdata.LeafList:
+    for v in val:
+        if not foo__ll1__0type.validate_value(v):
+            raise ValueError('Invalid value {v} for leaf-list ll1 - expected string')
     return yang.gdata.LeafList('string', val, ns='http://example.com/foo', module='foo')
 
 class root(yang.adata.MNode):
@@ -190,6 +203,9 @@ class root(yang.adata.MNode):
             children['li1'] = _li1.to_gdata()
         _ll1 = self.ll1
         if _ll1 is not None:
+            for v in _ll1:
+                if not foo__ll1__0type.validate_value(v):
+                    raise ValueError('Invalid value {_ll1} for leaf-list ll1 - expected string')
             children['ll1'] = yang.gdata.LeafList('string', _ll1, ns='http://example.com/foo', module='foo')
         return yang.gdata.Container(children)
 

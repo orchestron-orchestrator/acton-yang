@@ -4,6 +4,7 @@ import json
 import xml
 
 from yang.identityref import Identityref, PartialIdentityref
+from yang.type import Decimal
 
 """YANG data
 
@@ -561,18 +562,18 @@ class Node(value):
     def get_opt_empty(self, name) -> ?bool:
         return self.get_opt_bool(name)
 
-    def get_float(self, name) -> float:
+    def get_Decimal(self, name) -> Decimal:
         child = self.get_leaf(name)
         childval = child.val
-        if isinstance(childval, float):
+        if isinstance(childval, Decimal):
             return childval
-        raise ValueError("Leaf {name} is not of type float")
+        raise ValueError("Leaf {name} is not of type Decimal")
 
-    def get_opt_float(self, name) -> ?float:
+    def get_opt_Decimal(self, name) -> ?Decimal:
         child = self.get_opt_leaf(name)
         if child is not None:
             childval = child.val
-            if isinstance(childval, float):
+            if isinstance(childval, Decimal):
                 return childval
 
     def get_int(self, name) -> int:
@@ -668,20 +669,20 @@ class Node(value):
         except ValueError:
             return []
 
-    def get_floats(self, name) -> list[float]:
+    def get_Decimals(self, name) -> list[Decimal]:
         if isinstance(self, Container):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
                     for v in child.vals:
-                        if isinstance(v, float):
+                        if isinstance(v, Decimal):
                             cvals.append(v)
                     return cvals
         raise ValueError("Cannot find leaf-list child with name {name}")
 
-    def get_opt_floats(self, name) -> list[float]:
+    def get_opt_Decimals(self, name) -> list[Decimal]:
         try:
-            return self.get_floats(name)
+            return self.get_Decimals(name)
         except ValueError:
             return []
 
@@ -930,6 +931,8 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, float) and isinstance(b, float):
         return a == b
+    if isinstance(a, Decimal) and isinstance(b, Decimal):
+        return a == b
     if isinstance(a, str) and isinstance(b, str):
         return a == b
     if isinstance(a, bytes) and isinstance(b, bytes):
@@ -977,6 +980,8 @@ def vals_less_than(a: value, b: value) -> bool:
     if isinstance(a, bool) and isinstance(b, bool):
         return not a  # False (0) before True (1)
     if isinstance(a, float) and isinstance(b, float):
+        return a < b
+    if isinstance(a, Decimal) and isinstance(b, Decimal):
         return a < b
     if isinstance(a, str) and isinstance(b, str):
         return a < b
@@ -1662,19 +1667,19 @@ def from_xml_opt_empty(n: xml.Node, name: str, ns: ?str) -> ?bool:
             return True
         raise ValueError("Expected no text for empty leaf {name}, got {str(text)}")
 
-def from_xml_float(n: xml.Node, name: str, ns: ?str) -> float:
+def from_xml_Decimal(n: xml.Node, name: str, ns: ?str) -> Decimal:
     text = get_xml_child(n, name, ns).text
     if text is not None:
-        res = float(text)
+        res = Decimal.parse(text)
         return res
     raise ValueError("Cannot find xml child with name {name}")
-    return 13.37 # bah, get C error otherwise
+    #return Decimal(1337, -2) # bah, get C error otherwise
 
-def from_xml_opt_float(n: xml.Node, name: str, ns: ?str) -> ?float:
+def from_xml_opt_Decimal(n: xml.Node, name: str, ns: ?str) -> ?Decimal:
     try:
         text = get_xml_child(n, name, ns).text
         if text is not None:
-            res = float(text)
+            res = Decimal.parse(text)
             return res
     except ValueError:
         return None
@@ -1830,18 +1835,18 @@ def from_xml_opt_ints(n: xml.Node, name: str, ns: ?str) -> ?list[int]:
         return None
     return res
 
-def from_xml_floats(n: xml.Node, name: str, ns: ?str) -> list[float]:
-    r = from_xml_opt_floats(n, name, ns)
+def from_xml_Decimals(n: xml.Node, name: str, ns: ?str) -> list[Decimal]:
+    r = from_xml_opt_Decimals(n, name, ns)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name {name}")
 
-def from_xml_opt_floats(n: xml.Node, name: str, ns: ?str) -> ?list[float]:
+def from_xml_opt_Decimals(n: xml.Node, name: str, ns: ?str) -> ?list[Decimal]:
     res = []
     for child in get_xml_children(n, name, ns):
         ctext = child.text
         if ctext is not None:
-            res.append(float(ctext))
+            res.append(Decimal.parse(ctext))
     if len(res) == 0:
         return None
     return res
@@ -2029,18 +2034,18 @@ def take_json_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> lis
         return val
     raise ValueError("Cannot find json int64 child with name {name}")
 
-def take_json_opt_float(jd: dict[str, ?value], name: str, module: ?str=None) -> ?float:
+def take_json_opt_Decimal(jd: dict[str, ?value], name: str, module: ?str=None) -> ?Decimal:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
-        if isinstance(child, float):
+        if isinstance(child, Decimal):
             return child
 
-def take_json_float(jd: dict[str, ?value], name: str, module: ?str=None) -> float:
-    val = take_json_opt_float(jd, name, module)
+def take_json_Decimal(jd: dict[str, ?value], name: str, module: ?str=None) -> Decimal:
+    val = take_json_opt_Decimal(jd, name, module)
     if val is not None:
         return val
-    raise ValueError("Cannot find json float child with name {name}")
-    return 13.37 # bah, get C error otherwise
+    raise ValueError("Cannot find json float/Decimal child with name {name}")
+    #return Decimal(1337, -2) # bah, get C error otherwise
 
 def take_json_opt_bool(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bool:
     child = take_json_opt_value(jd, name, module)
@@ -2102,27 +2107,27 @@ def take_json_bytess(jd: dict[str, ?value], name: str, module: ?str=None) -> lis
         return val
     raise ValueError("Cannot find json child with name {name}")
 
-def take_json_opt_floats(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[float]:
+def take_json_opt_Decimals(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[Decimal]:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, list):
             if len(child) == 0:
                 return []
-            float_vals = []
+            decimal_vals = []
             for c in child:
-                if isinstance(c, float):
-                    float_vals.append(c)
+                if isinstance(c, Decimal):
+                    decimal_vals.append(c)
                 else:
-                    raise ValueError("{name}is a list of wrong type, should be float, not {type(c)}")
-            return float_vals
-        raise ValueError(name + "is not a list of floats")
+                    raise ValueError("{name}is a list of wrong type, should be Decimal, not {type(c)}")
+            return decimal_vals
+        raise ValueError(name + "is not a list of Decimals")
     return None
 
-def take_json_floats(jd: dict[str, ?value], name: str, module: ?str=None) -> list[float]:
-    val = take_json_opt_floats(jd, name, module)
+def take_json_Decimals(jd: dict[str, ?value], name: str, module: ?str=None) -> list[Decimal]:
+    val = take_json_opt_Decimals(jd, name, module)
     if val is not None:
         return val
-    raise ValueError("Cannot find json float child with name {name}")
+    raise ValueError("Cannot find json float/Decimal child with name {name}")
 
 def take_json_opt_bools(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[bool]:
     child = take_json_opt_value(jd, name, module)
