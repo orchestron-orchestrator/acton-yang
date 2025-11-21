@@ -1,0 +1,382 @@
+import testing
+
+class Decimal(object):
+    significand: bigint
+    exponent: bigint
+
+    def __init__(self, significand: bigint, exponent: bigint):
+        self.significand = significand
+        self.exponent = exponent
+
+    def __str__(self):
+        s = str(self.integral_part())
+        if self.exponent < 0:
+            f = self.fractional_part()
+            s = s + "." + to_n_dec_str(f.significand, int(-f.exponent))
+        return s
+
+    def __repr__(self):
+        # return "Decimal({repr(self.significand)}, {repr(self.exponent)})"
+        # Workaround https://github.com/actonlang/acton/issues/2545
+        return "Decimal(bigint(\"{repr(self.significand)}\"), bigint(\"{repr(self.exponent)}\"))"
+
+    @staticmethod
+    def try_parse(s: str) -> ?Decimal:
+        parts = try_parse_float_parts(s)
+        if parts is not None:
+            _significand, _exponent = parts
+            return Decimal(_significand, _exponent)
+        return None
+
+    @staticmethod
+    def parse(s: str) -> Decimal:
+        d = Decimal.try_parse(s)
+        if d is not None:
+            return d
+        raise ValueError("Unable to parse as decimal: \"{s}\"")
+
+    def try_lossless_realign(self, new_exponent: bigint) -> ?Decimal:
+        exponent_diff = self.exponent - new_exponent
+        if exponent_diff == 0:
+            return self
+        elif exponent_diff < 0:
+            divider = 10**-exponent_diff
+            if self.significand % divider == 0:
+                return Decimal(self.significand // divider, new_exponent)
+            else:
+                return None # Would lose precision
+        else: # alignment > 0:
+            return Decimal(self.significand * 10**exponent_diff, new_exponent)
+
+    def lossy_realign(self, new_exponent: bigint) -> Decimal:
+        exponent_diff = self.exponent - new_exponent
+        if exponent_diff == 0:
+            return self
+        elif exponent_diff < 0:
+            return Decimal(self.significand // 10**-exponent_diff, new_exponent)
+        else: # alignment > 0:
+            return Decimal(self.significand * 10**exponent_diff, new_exponent)
+
+    def to_float(self) -> float:
+        return float(self.significand) / float(10**(self.exponent))
+
+    def integral_part(self) -> bigint:
+        if self.exponent >= 0:
+            return self.significand
+        else:
+            return self.significand // 10**-self.exponent
+
+    def fractional_part(self) -> Decimal:
+        divider = 10**-self.exponent
+        return Decimal(self.significand % divider, self.exponent)
+
+# Pending https://github.com/actonlang/acton/issues/1126
+# extension Decimal(Hashable):
+#     def __eq__(self, other: Decimal) -> bool:
+#         exponent_diff = self.exponent - other_exponent
+#         if exponent_diff == 0
+#             return self.significand == other.significand
+#         if exponent_diff > 0:
+#             return self.significand * 10**exponent_diff == other.significand
+#         return self.significand == other.significand * 10**(-exponent_diff)
+
+#     def hash(self, hasher):
+#         self.significand.hash(hasher)
+#         self.exponent.hash(hasher)
+
+extension Decimal(Ord):
+    def __eq__(self, other: Decimal) -> bool:
+        exponent_diff = self.exponent - other.exponent
+        if exponent_diff == 0:
+            return self.significand == other.significand
+        if exponent_diff > 0:
+            return self.significand * 10**exponent_diff == other.significand
+        return self.significand == other.significand * 10**(-exponent_diff)
+
+    def __lt__(self, other):
+        exponent_diff = self.exponent - other.exponent
+        if exponent_diff == 0:
+            return self.significand < other.significand
+        if exponent_diff > 0:
+            return self.significand * 10**exponent_diff < other.significand
+        return self.significand < other.significand * 10**(-exponent_diff)
+
+# -------------------------------------------------------------------------------
+
+class Ranges[T(Ord)](object):
+    @property
+    ranges: list[(T, T)] # Inclusive ranges!
+
+    def __init__(self, ranges: list[(T, T)]):
+        self.ranges = ranges
+
+    def __str__(self):
+        ranges = []
+        for r in self.ranges:
+            # https://github.com/actonlang/acton/issues/2533
+            # r_str = str(r.0) if r.0 == r.1 else "{str(r.0)}..{str(r.1)}" # Crashes
+            # <workaround>
+            r0: T = r.0
+            r1: T = r.1
+            if isinstance(r0, bigint) and isinstance(r1, bigint):
+                r_str = str(r0) if r0 == r1 else "{str(r0)}..{str(r1)}"
+            elif isinstance(r0, int) and isinstance(r1, int):
+                r_str = str(r0) if r0 == r1 else "{str(r0)}..{str(r1)}"
+            elif isinstance(r0, Decimal) and isinstance(r1, Decimal):
+                r_str = str(r0) if r0 == r1 else "{str(r0)}..{str(r1)}"
+            else:
+                raise NotImplementedError()
+            # </workaround>
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # ranges.append(r_str)
+            ranges += [r_str]
+        return " | ".join(ranges)
+
+
+    def __repr__(self):
+        # return "Ranges({repr(self.ranges)})"
+        # Workaround https://github.com/actonlang/acton/issues/2545
+        ranges = []
+        for r in self.ranges:
+            if isinstance(r.0, bigint):
+                r_repr = "(bigint(\"{repr(r.0)}\"), bigint(\"{repr(r.1)}\"))"
+            else:
+                r_repr = "({repr(r.0)}, {repr(r.1)})"
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # ranges.append(r_repr)
+            ranges += [r_repr]
+        return "Ranges([{", ".join(ranges)}])"
+
+    def is_disjoint(self) -> bool:
+        range_iter = iter(self.ranges)
+        try:
+            p = next(range_iter)
+        except StopIteration:
+            pass
+        else:
+            while True:
+                if p.0 > p.1:
+                    return False
+                try:
+                    n = next(range_iter)
+                except StopIteration:
+                    break
+                if n.0 <= p.1:
+                    return False
+        return True
+
+    def is_subset(self, other: Ranges[T]) -> bool:
+        curr_i = 0
+        for r in self.ranges:
+            match_i = Ranges._search_index(other, r.0, begin_i=curr_i)
+            if match_i is not None:
+                if r.1 > other.ranges[match_i].1:
+                    return False
+                curr_i = match_i
+            else:
+                return False
+        return True
+
+    def match(self, val) -> bool:
+        # return self._search_index(val, div) is not None
+        # Workaround https://github.com/actonlang/acton/issues/1448 & https://github.com/actonlang/acton/issues/2483
+        return True if Ranges._search_index(self, val) is not None else False
+
+    def _search_index(self, val, begin_i=0, div=10) -> ?int:
+        range_len = len(self.ranges)
+        end_i = range_len
+        while True:
+            span_len = (end_i - begin_i) // div
+            if span_len == 0:
+                span_len = 1
+            span_i = begin_i
+            while span_i < end_i:
+                next_span_i = span_i + span_len
+                if next_span_i > end_i:
+                    next_span_i = end_i
+                if val >= self.ranges[span_i].0 and val <= self.ranges[next_span_i - 1].1:
+                    if span_len == 1:
+                        return span_i
+                    else:
+                        begin_i = span_i
+                        end_i = next_span_i
+                        break
+                span_i = next_span_i
+            if span_i >= range_len:
+                break
+        return None
+
+class RangesBuilder[T(Ord)](Ranges[T]):
+    def __init__(self, ranges: list[(T, T)] = []):
+        self.ranges = ranges
+
+    @staticmethod
+    def from_ranges(r: Ranges[T]) -> RangesBuilder[T]:
+        return RangesBuilder(list(r.ranges))
+
+    def append_value(self, v: T):
+        RangesBuilder.append_range(self, v, v)
+
+    def append_range(self, l: T, u: T):
+        if l > u:
+            raise ValueError("Appended ranges must be specified as (min, max)")
+        if len(self.ranges) >= 1 and self.ranges[-1].1 >= l:
+            raise ValueError("Appended ranges must be disjoint and in ascending order")
+        self.ranges.append((l, u))
+
+    def append_value_restriction_of(self, v: T, other: Ranges[T]):
+        RangesBuilder.append_range_restriction_of(self, v, v, other)
+
+    def append_range_restriction_of(self, l: ?T, u: ?T, other: Ranges[T]):
+        if other.ranges:
+            _l = l if l is not None else other.ranges[0].0
+            _u = u if u is not None else other.ranges[-1].1
+
+            i = Ranges._search_index(other, _l)
+            if i is not None and _u <= other.ranges[i].1:
+                RangesBuilder.append_range(self, _l, _u)
+                return
+        elif l is None and u is None:
+            return # Empty base but no further restriction!
+        raise ValueError("Restriction must be a subset of existing range {str(self)}")
+
+    def into_ranges(self) -> Ranges[T]:
+        r = Ranges(self.ranges)
+        self.ranges = []
+        return r
+
+# -------------------------------------------------------------------------------
+
+def try_parse_float_parts(s: str) -> ?(bigint, bigint):
+    s = s.strip(" \t\n")
+
+    p = s.split('e', -1)
+    plen = len(p)
+    exp: bigint = 0
+    if plen == 2:
+        try:
+            exp = bigint(p[1])
+        except ValueError:
+            return None
+    elif plen != 1:
+        return None
+
+    f = p[0].split(".", -1)
+    flen = len(f)
+
+    significand: bigint = bigint(0)
+
+    if flen == 1:
+        try:
+            significand = bigint(f[0])
+        except ValueError:
+            return None
+    elif flen == 2:
+        ip = f[0]
+        fp = f[1]
+        if not fp.isdecimal():
+            return None
+        try:
+            significand = bigint(ip + fp)
+        except ValueError:
+            return None
+        exp -= bigint(len(fp))
+    else:
+        return None
+
+    return (significand, exp)
+
+def to_n_dec_str(v: bigint, min_digits: int) -> str:
+    s = str(v)
+    leading_zero_count = min_digits - len(s)
+    return "0" * leading_zero_count + s if leading_zero_count > 0 else s
+
+# -------------------------------------------------------------------------------
+
+def _test_decimal():
+    testing.assertEqual(Decimal.parse("42"), Decimal(42, 0))
+    testing.assertEqual(Decimal.parse("3.14"), Decimal(314, -2))
+    testing.assertEqual(Decimal(314, -2), Decimal.parse("3.14"))
+    testing.assertEqual(Decimal(3140, -3), Decimal(314, -2))
+    testing.assertEqual(Decimal(314, -2), Decimal(3140, -3))
+    testing.assertEqual(Decimal(314, -2).integral_part(), 3)
+    testing.assertEqual(Decimal(314, -2).fractional_part(), Decimal(14, -2))
+
+    testing.assertEqual(str(Decimal.parse("3.14")), "3.14")
+    testing.assertEqual(str(Decimal.parse("1.001")), "1.001")
+
+    testing.assertTrue(Decimal.parse("3.14") > Decimal.parse("3.139"))
+
+    testing.assertTrue(Decimal.parse("55.7") > Decimal.parse("-92233720368547759.92"))
+    testing.assertTrue(Decimal.parse("55.7") < Decimal.parse("92233720368547758.07"))
+
+def _test_decimal_fail():
+    try:
+        Decimal.parse("foo")
+    except:
+        pass
+    else:
+        testing.error("Expected exception")
+
+    testing.assertNone(Decimal.try_parse("foo"))
+
+def _test_ranges_int():
+    testing.assertTrue(Ranges.match(Ranges([(1, 2)]), 1))
+    testing.assertTrue(Ranges.match(Ranges([(1, 2)]), 2))
+    testing.assertFalse(Ranges.match(Ranges([(1, 2)]), 0))
+    testing.assertFalse(Ranges.match(Ranges([(1, 2)]), 3))
+    testing.assertFalse(Ranges.match(Ranges([(1, 10)]), 100))
+    testing.assertFalse(Ranges.match(Ranges([(1, 10)]), 101))
+
+def _test_ranges_decimal():
+    testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.1")))
+    testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.2")))
+    testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.3")))
+    testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("-92233720368547759.92"), Decimal.parse("92233720368547758.07"))]), Decimal.parse("55.7")))
+    testing.assertFalse(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.099999")))
+    testing.assertFalse(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.300001")))
+
+def _test_ranges_subset():
+    testing.assertTrue(Ranges.is_subset(Ranges([(0, 15), (19, 42)]), Ranges([(0, 15), (19, 42)])))
+    testing.assertTrue(Ranges.is_subset(Ranges([(0, 7), (9, 14), (19, 42)]), Ranges([(0, 15), (19, 42)])))
+    testing.assertFalse(Ranges.is_subset(Ranges([(0, 15), (19, 42)]), Ranges([(0, 7), (9, 14), (19, 42)])))
+    testing.assertFalse(Ranges.is_subset(Ranges([(0, 16), (19, 42)]), Ranges([(0, 7), (9, 14), (19, 42)])))
+
+def _test_ranges_builder():
+    rb1 = RangesBuilder()
+    RangesBuilder.append_range(rb1, 0, 15)
+    for i in range(0, 16):
+        testing.assertTrue(RangesBuilder.match(rb1, i))
+
+    rb2 = RangesBuilder()
+    RangesBuilder.append_value_restriction_of(rb2, 7, rb1)
+    for i in range(0, 7):
+        testing.assertFalse(RangesBuilder.match(rb2, i))
+    testing.assertTrue(RangesBuilder.match(rb2, 7))
+    for i in range(8, 15):
+        testing.assertFalse(RangesBuilder.match(rb2, i))
+
+def _test_ranges_builder_min():
+    rb1 = RangesBuilder()
+    RangesBuilder.append_range(rb1, 0, 15)
+
+    rb2 = RangesBuilder()
+    RangesBuilder.append_range_restriction_of(rb2, None, 13, rb1)
+    for i in range(0, 14):
+        testing.assertTrue(RangesBuilder.match(rb2, i))
+    for i in range(14, 15):
+        testing.assertFalse(RangesBuilder.match(rb2, i))
+
+def _test_ranges_builder_max():
+    rb1 = RangesBuilder()
+    RangesBuilder.append_range(rb1, 0, 15)
+
+    rb2 = RangesBuilder()
+    RangesBuilder.append_range_restriction_of(rb2, 4, None, rb1)
+    for i in range(0, 3):
+        testing.assertFalse(RangesBuilder.match(rb2, i))
+    for i in range(4, 15):
+        testing.assertTrue(RangesBuilder.match(rb2, i))
+
+def _test_ranges_builder_error():
+    rb = RangesBuilder()

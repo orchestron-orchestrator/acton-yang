@@ -6,6 +6,7 @@ import yang.parser
 import yang.schema
 import transform_explicit_cases
 import transform_remove_empty_refines
+import transform_repair_patterns
 
 
 def eq_optional[T(Eq)](a: ?T, b: ?T) -> bool:
@@ -98,6 +99,8 @@ def parse_modules(yang_sources: Iterable[yang.schema.Statement]) -> NameRevMap[y
         # SchemaNode pre-compile transforms by splitting this function into
         # smaller steps, like we already do with DNode
         transform_remove_empty_refines.remove_empty_refines(yang_module)
+        # Repair known broken yang model string patterns
+        transform_repair_patterns.repair_patterns(yang_module)
         if isinstance(yang_module, yang.schema.Module):
             modrev = yang_module.get_modrev()
             modules.add(modrev.modname, modrev.rev, yang_module)
@@ -235,7 +238,7 @@ def parse_modules(yang_sources: Iterable[yang.schema.Statement]) -> NameRevMap[y
     return modules
 
 
-def compile_modules(modules: NameRevMap[yang.schema.Module], skip_type_resolution: bool=False) -> list[yang.schema.Module]:
+def compile_modules(modules: NameRevMap[yang.schema.Module]) -> list[yang.schema.Module]:
     """Compile a list of YANG modules
 
     This function compiles the list of input Module nodes. Compiling a module
@@ -247,7 +250,7 @@ def compile_modules(modules: NameRevMap[yang.schema.Module], skip_type_resolutio
     Typedef, ...) still present.
     """
     # Compile in dependency by import depth-first search
-    ctx = yang.schema.Context(skip_type_resolution=skip_type_resolution)
+    ctx = yang.schema.Context()
     build_stack: list[(yang.schema.Module, list[yang.schema.Import])] = []
     while True:
         if len(build_stack) > 0:
@@ -284,7 +287,6 @@ def compile_modules(modules: NameRevMap[yang.schema.Module], skip_type_resolutio
         if mod_rev_rev is None:
             no_rev_modules.append(m)
     return no_rev_modules
-
 
 def compile_to_dmodules(modules: list[yang.schema.Module]) -> list[yang.schema.DModule]:
     """Compile a list of Module to DModule nodes

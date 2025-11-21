@@ -12,9 +12,9 @@ import yang
 import yang.adata
 import yang.gdata
 import yang.schema
-from yang.identity import complete_and_validate_identityref
 from yang.identityref import Identityref, PartialIdentityref
 from yang.gdata import repr_yang
+from yang.type import Decimal, Ranges
 
 
 NETCONF_OPS = {"create", "delete", "remove", "replace", "merge"}
@@ -33,10 +33,10 @@ class PathElement:
 
 class YangValidationError(ValueError):
     schema_path: list[PathElement]
-    expected_type: yang.schema.Type
-    actual_value: value
+    expected_type: yang.schema.DType
+    actual_value: ?value
 
-    def __init__(self, schema_path: list[PathElement], expected_type: yang.schema.Type, actual_value: value):
+    def __init__(self, schema_path: list[PathElement], expected_type: yang.schema.DType, actual_value: ?value):
         self.error_message = ""
         self.schema_path = schema_path
         self.expected_type = expected_type
@@ -44,125 +44,8 @@ class YangValidationError(ValueError):
 
     def __str__(self) -> str:
         path_str = format_schema_path(self.schema_path)
-        type_str = format_type(self.expected_type)
+        type_str = self.expected_type.format_hint()
         return "Invalid value at {path_str}: '{self.actual_value}' - expected {type_str}"
-
-
-def format_type(dt: yang.schema.Type) -> str:
-    """Format a Type for error messages"""
-    if dt.name == "union" and len(dt.type_) > 0:
-        union_types = [format_type(t) for t in dt.type_]
-        return "union of [" + ", ".join(union_types) + "]"
-    range_obj = dt.range_
-    if range_obj is not None:
-        return dt.name + " with range " + range_obj.value
-    return dt.name
-
-
-def parse_range_constraint(range_str: str) -> list[(min_str: str, max_str: str)]:
-    intervals = []
-    parts = range_str.split("|")
-    for part in parts:
-        part = part.strip()
-        if ".." in part:
-            range_parts = part.split("..")
-            if len(range_parts) == 2:
-                min_str = range_parts[0].strip()
-                max_str = range_parts[1].strip()
-                intervals.append((min_str=min_str, max_str=max_str))
-        elif part != "":
-            # Singleton range token, e.g., "5" => [5,5]
-            intervals.append((min_str=part, max_str=part))
-    return intervals
-
-
-def validate_int_range(value: bigint, range_str: str, type_name: str) -> bool:
-    intervals = parse_range_constraint(range_str)
-    numeric_value_i: bigint = value
-    for interval in intervals:
-        min_str = interval.min_str
-        max_str = interval.max_str
-
-        # Compute integer bounds
-        min_val_i: bigint = 0   # bigint because even the start of range may exceed i64_max
-        if min_str == "min":
-            if type_name == "int8":
-                min_val_i = -128
-            elif type_name == "int16":
-                min_val_i = -32768
-            elif type_name == "int32":
-                min_val_i = -2147483648
-            elif type_name == "int64":
-                min_val_i = bigint(-9223372036854775807-1)
-            elif type_name in ["uint8", "uint16", "uint32", "uint64"]:
-                min_val_i = 0
-            else:
-                min_val_i = bigint(-9223372036854775807-1)
-        else:
-            try:
-                min_val_i = bigint(min_str)
-            except ValueError:
-                # Malformed bound for integer type, skip this interval
-                continue
-
-        max_val_i: bigint = 0
-        if max_str == "max":
-            if type_name == "int8":
-                max_val_i = 127
-            elif type_name == "int16":
-                max_val_i = 32767
-            elif type_name == "int32":
-                max_val_i = 2147483647
-            elif type_name == "int64":
-                max_val_i = 9223372036854775807
-            elif type_name == "uint8":
-                max_val_i = 255
-            elif type_name == "uint16":
-                max_val_i = 65535
-            elif type_name == "uint32":
-                max_val_i = 4294967295
-            elif type_name == "uint64":
-                max_val_i = bigint(18446744073709551615)
-            else:
-                max_val_i = 9223372036854775807
-        else:
-            try:
-                max_val_i = bigint(max_str)
-            except ValueError:
-                # Malformed bound for integer type, skip this interval
-                continue
-
-        if numeric_value_i >= min_val_i and numeric_value_i <= max_val_i:
-            return True
-    return False
-
-
-def validate_decimal_range(value: float, range_str: str) -> bool:
-    intervals = parse_range_constraint(range_str)
-    numeric_value_f: float = value
-    for interval in intervals:
-        min_str = interval.min_str
-        max_str = interval.max_str
-        # Defaults align with previous behavior
-        min_val_f: float = 0.0
-        if min_str == "min":
-            min_val_f = -9223372036854775807.0-1.0
-        else:
-            try:
-                min_val_f = float(min_str)
-            except ValueError:
-                continue
-        max_val_f: float = 0.0
-        if max_str == "max":
-            max_val_f = 9223372036854775807.0
-        else:
-            try:
-                max_val_f = float(max_str)
-            except ValueError:
-                continue
-        if numeric_value_f >= min_val_f and numeric_value_f <= max_val_f:
-            return True
-    return False
 
 
 
@@ -225,83 +108,6 @@ def _test_get_nc_op_pref():
     testing.assertEqual(op, "replace")
 
 
-def try_parse_value(text_value: str, schema_type: yang.schema.Type, path: list[PathElement]) -> (t: str, val: value):
-    """Parse a textual value according to the provided schema type.
-
-    Returns:
-        (t, val): A typed tuple with the concrete type name and native value
-                  (e.g. ("uint8", 42)). For unions, returns the successful
-                  member type and parsed value.
-
-    Errors:
-        Raises YangValidationError with a message including the formatted
-        schema path (from the path parameter) and a textual description of the
-        expected type (including range constraints if present).
-    """
-    type_name = schema_type.name
-    if type_name == "union":
-        for member_type in schema_type.type_:
-            try:
-                return try_parse_value(text_value, member_type, path)
-            except YangValidationError:
-                continue
-        raise YangValidationError(path, schema_type, text_value)
-    elif type_name == "string":
-        return (t=type_name, val=text_value)
-    elif type_name == "int8" or type_name == "int16" or type_name == "int32" or type_name == "int64":
-        try:
-            int_val = bigint(text_value)
-            range_obj = schema_type.range_
-            if range_obj is not None:
-                if not validate_int_range(int_val, range_obj.value, type_name):
-                    raise YangValidationError(path, schema_type, text_value)
-            return (t=type_name, val=int_val)
-        except ValueError:
-            raise YangValidationError(path, schema_type, text_value)
-    elif type_name == "uint8" or type_name == "uint16" or type_name == "uint32" or type_name == "uint64":
-        try:
-            int_val = bigint(text_value)
-            if int_val < 0:
-                raise YangValidationError(path, schema_type, text_value)
-            range_obj = schema_type.range_
-            if range_obj is not None:
-                if not validate_int_range(int_val, range_obj.value, type_name):
-                    raise YangValidationError(path, schema_type, text_value)
-            return (t=type_name, val=int_val)
-        except ValueError:
-            raise YangValidationError(path, schema_type, text_value)
-    elif type_name == "decimal64":
-        try:
-            float_val = float(text_value)
-            range_obj = schema_type.range_
-            if range_obj is not None:
-                if not validate_decimal_range(float_val, range_obj.value):
-                    raise YangValidationError(path, schema_type, text_value)
-            return (t=type_name, val=float_val)
-        except ValueError:
-            raise YangValidationError(path, schema_type, text_value)
-    elif type_name == "boolean":
-        if text_value == "true":
-            return (t=type_name, val=True)
-        elif text_value == "false":
-            return (t=type_name, val=False)
-        else:
-            raise YangValidationError(path, schema_type, text_value)
-    elif type_name == "enumeration":
-        for e in schema_type.enum:
-            if text_value == e.name:
-                return (t=type_name, val=text_value)
-        raise YangValidationError(path, schema_type, text_value)
-    elif type_name == "binary":
-        try:
-            return (t=type_name, val=base64.decode(text_value.encode()))
-        except Exception:
-            raise YangValidationError(path, schema_type, text_value)
-    elif type_name == "empty":
-        return (t=type_name, val=True)
-    else:
-        return (t="string", val=text_value)
-
 
 protocol YangData:
     """Protocol for YANG data nodes
@@ -314,10 +120,10 @@ protocol YangData:
     take_list: mut(yang.schema.DList, str, bool, bool, list[PathElement]) -> list[value]
     # Return a typed tuple for leaves. The tuple carries the concrete type name
     # and the parsed value. Missing leaves return None.
-    take_leaf: mut(yang.schema.DLeaf, str, bool, bool, list[PathElement]) -> ?(t: str, val: ?value)
+    take_leaf: mut(yang.schema.DRoot, yang.schema.DLeaf, str, bool, bool, list[PathElement]) -> ?(t: str, val: ?value)
     # For leaf-lists, return a list of typed tuples (t, val).
     # For identityref items, val holds a PartialIdentityref.
-    take_leaflist: mut(yang.schema.DLeafList, str, bool, bool, list[PathElement]) -> list[(t: str, val: ?value)]
+    take_leaflist: mut(yang.schema.DRoot, yang.schema.DLeafList, str, bool, bool, list[PathElement]) -> list[(t: str, val: ?value)]
 
 
 extension xml.Node (YangData):
@@ -331,51 +137,103 @@ extension xml.Node (YangData):
         elements = yang.gdata.get_xml_children(self, name, schema.namespace if ns_qualified else None)
         return elements
 
-    def take_leaf(self, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
+    def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
         new_path = path + [PathElement(schema)]
         maybe_node = yang.gdata.get_xml_opt_child(self, name, schema.namespace if ns_qualified else None)
         if maybe_node is not None:
-            text_value = maybe_node.text
-            if text_value is not None:
-                if schema.type_.name == "identityref":
-                    return (t="identityref", val=Identityref.from_xml(text_value, maybe_node.nsdefs))
-                elif schema.type_.name == "binary":
-                    return (t="binary", val=base64.decode(text_value.encode()))
-                result = try_parse_value(text_value, schema.type_, new_path)
-                return result
-            else:
-                if schema.type_.name == "empty":
-                    return (t="empty", val=True)
-                else:
-                    return None
+            return try_parse_xml_value(maybe_node.text, schema.type_, new_path, maybe_node.nsdefs, root)
         else:
             return None
 
-    def take_leaflist(self, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
+    def take_leaflist(self, root: yang.schema.DRoot, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
         new_path = path + [PathElement(schema)]
         values: list[(t: str, val: ?value)] = []
         children = yang.gdata.get_xml_children(self, name, schema.namespace if ns_qualified else None)
         # Ignore NETCONF operation
-        if schema.type_.name == "identityref":
-            for child in children:
-                if isinstance(child, xml.Node):
-                    text_value = child.text
-                    if text_value is not None:
-                        values.append((t="identityref", val=Identityref.from_xml(text_value, child.nsdefs)))
-        elif schema.type_.name == "binary":
-            for child in children:
-                if isinstance(child, xml.Node):
-                    text_value = child.text
-                    if text_value is not None:
-                        values.append((t="binary", val=base64.decode(text_value.encode())))
-        else:
-            for child in children:
-                if isinstance(child, xml.Node):
-                    text_value = child.text
-                    if text_value is not None:
-                        tv = try_parse_value(text_value, schema.type_, new_path)
-                        values.append(tv)
+        for child in children:
+            if isinstance(child, xml.Node):
+                text_value = child.text
+                tv = try_parse_xml_value(text_value, schema.type_, new_path, child.nsdefs, root)
+                if tv is not None:
+                    values.append(tv)
         return values
+
+
+def try_parse_xml_value(text_value: ?str, schema_type: yang.schema.DType, path: list[PathElement], nsdefs: list[(?str, str)], root: yang.schema.DRoot) -> ?(t: str, val: value):
+    """Parse a textual value according to the provided schema type.
+
+    Returns:
+        (t, val): A typed tuple with the concrete type name and native value
+                  (e.g. ("uint8", 42)). For unions, returns the successful
+                  member type and parsed value.
+
+    Errors:
+        Raises YangValidationError with a message including the formatted
+        schema path (from the path parameter) and a textual description of the
+        expected type (including range constraints if present).
+    """
+    type_name = schema_type.builtin_type
+
+    if isinstance(schema_type, yang.schema.DTypeUnion):
+        for alt_type in schema_type.types:
+            try:
+                return try_parse_xml_value(text_value, alt_type, path, nsdefs, root)
+            except YangValidationError:
+                continue
+        if text_value is not None:
+            raise YangValidationError(path, schema_type, text_value)
+        return None
+    elif isinstance(schema_type, yang.schema.DTypeEmpty):
+        if text_value is not None and len(text_value) != 0:
+            raise YangValidationError(path, schema_type, text_value)
+        return (t=type_name, val=True)
+
+    if text_value is not None:
+        val: ?value = None
+        if isinstance(schema_type, yang.schema.DTypeString):
+            val = text_value
+        elif isinstance(schema_type, yang.schema.DTypeInteger):
+            try:
+                val = bigint(text_value)
+            except ValueError:
+                raise YangValidationError(path, schema_type, text_value)
+        elif isinstance(schema_type, yang.schema.DTypeEnum):
+            val = text_value
+        elif isinstance(schema_type, yang.schema.DTypeDecimal64):
+            val = Decimal.try_parse(text_value)
+        elif isinstance(schema_type, yang.schema.DTypeBoolean):
+            if text_value == "true":
+                val = True
+            elif text_value == "false":
+                val = False
+        elif isinstance(schema_type, yang.schema.DTypeBinary):
+            try:
+                val = base64.decode(text_value.encode())
+            except ValueError:
+                pass
+        elif isinstance(schema_type, yang.schema.DTypeIdentityref):
+            partial = Identityref.from_xml(text_value, nsdefs)
+            res = yang.schema.complete_identityref(partial, root.identities, schema_type.module)
+            val = res.0
+        elif isinstance(schema_type, yang.schema.DTypeLeafref):
+            val = text_value
+        elif isinstance(schema_type, yang.schema.DTypeInstanceIdentifier):
+            val = text_value
+        elif isinstance(schema_type, yang.schema.DTypeBits):
+            bits_val = set(None)
+            for bit in text_value.split(" "):
+                if bit in schema_type.name_to_pos:
+                    bits_val.add(bit)
+                else:
+                    raise YangValidationError(path, schema_type, text_value)
+            val = bits_val
+
+        if val is not None and schema_type.validate_value(val):
+            return (t=type_name, val=val)
+
+        raise YangValidationError(path, schema_type, text_value)
+
+    return None
 
 
 extension dict[A(Hashable), B] (YangData):
@@ -402,7 +260,7 @@ extension dict[A(Hashable), B] (YangData):
                 return lv
         return []
 
-    def take_leaf(self, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
+    def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
         new_path = path + [PathElement(schema)]
         if isinstance(self, dict):
             leaf_value = None
@@ -411,59 +269,14 @@ extension dict[A(Hashable), B] (YangData):
             else:
                 leaf_value = self.get(name)
             if leaf_value is not None:
-                if isinstance(leaf_value, str):
-                    if schema.type_.name == "identityref":
-                        return (t="identityref", val=Identityref.from_json(leaf_value))
-                    elif schema.type_.name == "binary":
-                        return (t="binary", val=base64.decode(leaf_value.encode()))
-                    result = try_parse_value(leaf_value, schema.type_, new_path)
-                    return result
-                else:
-                    # Special-case empty leaf JSON encoding: [null]
-                    if schema.type_.name == "empty":
-                        if isinstance(leaf_value, list) and len(leaf_value) == 1 and leaf_value[0] is None:
-                            return (t="empty", val=True)
-                        else:
-                            raise ValueError(f"Expected [null] for empty leaf {name}, got {leaf_value}")
-                    concrete_type = schema.type_.name
-                    if concrete_type == "union":
-                        for member_type in schema.type_.type_:
-                            member_name = member_type.name
-                            if isinstance(leaf_value, bool) and member_name == "boolean":
-                                concrete_type = "boolean"
-                                break
-                            elif isinstance(leaf_value, int) or isinstance(leaf_value, bigint):
-                                bigint_leaf_value = bigint(leaf_value)
-                                if member_name in ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]:
-                                    range_obj = member_type.range_
-                                    if range_obj is not None:
-                                        if validate_int_range(bigint_leaf_value, range_obj.value, member_name):
-                                            concrete_type = member_name
-                                            break
-                                    else:
-                                        concrete_type = member_name
-                                        break
-                            elif isinstance(leaf_value, float) and member_name == "decimal64":
-                                concrete_type = "decimal64"
-                                break
-                    range_obj = schema.type_.range_
-                    if range_obj is not None:
-                        if isinstance(leaf_value, int) or isinstance(leaf_value, bigint):
-                            bigint_leaf_value = bigint(leaf_value)
-                            if not validate_int_range(bigint_leaf_value, range_obj.value, concrete_type):
-                                raise YangValidationError(new_path, schema.type_, str(leaf_value))
-                        elif isinstance(leaf_value, float):
-                            if not validate_decimal_range(leaf_value, range_obj.value):
-                                raise YangValidationError(new_path, schema.type_, str(leaf_value))
-                    if isinstance(leaf_value, int):
-                        return (t=concrete_type, val=bigint(leaf_value))
-                    return (t=concrete_type, val=leaf_value)
+                result = try_parse_json_value(leaf_value, schema.type_, new_path, root)
+                return result
             else:
                 return None
         else:
             return None
 
-    def take_leaflist(self, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
+    def take_leaflist(self, root: yang.schema.DRoot, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
         values: list[(t: str, val: ?value)] = []
         if isinstance(self, dict):
             leaflist_data = None
@@ -472,56 +285,113 @@ extension dict[A(Hashable), B] (YangData):
             else:
                 leaflist_data = self.get(name)
             if isinstance(leaflist_data, list):
-                if schema.type_.name == "identityref":
-                    for item in leaflist_data:
-                        if isinstance(item, str):
-                            values.append((t="identityref", val=Identityref.from_json(item)))
-                        else:
-                            raise ValueError(f"Expected string for identityref in leaf-list {name}, got {type(item)}")
-                    return values
-                elif schema.type_.name == "binary":
-                    for item in leaflist_data:
-                        if isinstance(item, str):
-                            values.append((t="binary", val=base64.decode(item.encode())))
-                        else:
-                            raise ValueError(f"Expected string for binary in leaf-list {name}, got {type(item)}")
-                    return values
                 new_path = path + [PathElement(schema)]
                 for item in leaflist_data:
-                    if isinstance(item, str):
-                        tv = try_parse_value(item, schema.type_, new_path)
+                    tv = try_parse_json_value(item, schema.type_, new_path, root)
+                    if tv is not None:
                         values.append(tv)
-                    else:
-                        concrete_type = schema.type_.name
-                        if concrete_type == "union":
-                            for member_type in schema.type_.type_:
-                                member_name = member_type.name
-                                if isinstance(item, bool) and member_name == "boolean":
-                                    concrete_type = "boolean"
-                                    break
-                                elif isinstance(item, bigint) and not isinstance(item, bool):
-                                    if member_name in ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]:
-                                        range_obj = member_type.range_
-                                        if range_obj is not None:
-                                            if validate_int_range(item, range_obj.value, member_name):
-                                                concrete_type = member_name
-                                                break
-                                        else:
-                                            concrete_type = member_name
-                                            break
-                                elif isinstance(item, float) and member_name == "decimal64":
-                                    concrete_type = "decimal64"
-                                    break
-                        range_obj = schema.type_.range_
-                        if range_obj is not None:
-                            if isinstance(item, bigint) and not isinstance(item, bool):
-                                if not validate_int_range(item, range_obj.value, concrete_type):
-                                    raise YangValidationError(new_path, schema.type_, str(item))
-                            elif isinstance(item, float):
-                                if not validate_decimal_range(item, range_obj.value):
-                                    raise YangValidationError(new_path, schema.type_, str(item))
-                        values.append((t=concrete_type, val=item))
         return values
+
+
+def try_parse_json_value(leaf_value: ?value, schema_type: yang.schema.DType, path: list[PathElement], root: yang.schema.DRoot) -> ?(t: str, val: value):
+    """Parse a textual value according to the provided schema type.
+
+    Returns:
+        (t, val): A typed tuple with the concrete type name and native value
+                  (e.g. ("uint8", 42)). For unions, returns the successful
+                  member type and parsed value.
+
+    Errors:
+        Raises YangValidationError with a message including the formatted
+        schema path (from the path parameter) and a textual description of the
+        expected type (including range constraints if present).
+    """
+    type_name = schema_type.builtin_type
+
+    if isinstance(schema_type, yang.schema.DTypeUnion):
+        for alt_type in schema_type.types:
+            try:
+                return try_parse_json_value(leaf_value, alt_type, path, root)
+            except YangValidationError:
+                continue
+        if leaf_value is not None:
+            raise YangValidationError(path, schema_type, leaf_value)
+        return None
+    elif isinstance(schema_type, yang.schema.DTypeEmpty):
+        # Empty leaf JSON encoding: [null]
+        if isinstance(leaf_value, list) and len(leaf_value) == 1 and leaf_value[0] is None:
+            return (t=type_name, val=True)
+        elif leaf_value is not None and schema_type.validate_value(leaf_value):
+            return (t=type_name, val=True)
+        raise YangValidationError(path, schema_type, leaf_value)
+
+    if leaf_value is not None:
+        val: ?value = None
+        if isinstance(schema_type, yang.schema.DTypeString):
+            val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeInteger):
+            if isinstance(leaf_value, atom):
+                try:
+                    val = bigint(leaf_value)
+                except ValueError:
+                    raise YangValidationError(path, schema_type, leaf_value)
+            else:
+                raise YangValidationError(path, schema_type, leaf_value)
+        elif isinstance(schema_type, yang.schema.DTypeEnum):
+            val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeDecimal64):
+            if isinstance(leaf_value, str):
+                val = Decimal.try_parse(leaf_value)
+            elif isinstance(leaf_value, float):
+                # TODO: Make sure we won't receive floats as those may lose precision
+                val = Decimal.try_parse(str(leaf_value))
+            else:
+                val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeBoolean):
+            if isinstance(leaf_value, str):
+                if leaf_value == "true":
+                    val = True
+                elif leaf_value == "false":
+                    val = False
+            else:
+                val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeBinary):
+            if isinstance(leaf_value, str):
+                try:
+                    val = base64.decode(leaf_value.encode())
+                except ValueError:
+                    pass
+            else:
+                val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeIdentityref):
+            if isinstance(leaf_value, str):
+                partial = Identityref.from_json(leaf_value)
+                res = yang.schema.complete_identityref(partial, root.identities, schema_type.module)
+                val = res.0
+            else:
+                val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeLeafref):
+            val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeInstanceIdentifier):
+            val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeBits):
+            if isinstance(leaf_value, str):
+                bits_val = set(None)
+                for bit in leaf_value.split(" "):
+                    if bit in schema_type.name_to_pos:
+                        bits_val.add(bit)
+                    else:
+                        raise YangValidationError(path, schema_type, leaf_value)
+                val = bits_val
+            else:
+                val = leaf_value
+
+        if val is not None and schema_type.validate_value(val):
+            return (t=type_name, val=val)
+
+        raise YangValidationError(path, schema_type, leaf_value)
+
+    return None
 
 
 extension yang.adata.MNode (YangData):
@@ -536,37 +406,42 @@ extension yang.adata.MNode (YangData):
             return list(maybe_list)
         return [] # ??
 
-    def take_leaf(self, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
+    def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
         new_path = path + [PathElement(schema)]
         usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
         maybe_attr = self._get_attr(usname)
         if maybe_attr is not None:
-            if schema.type_.name == "identityref":
-                return (t="identityref", val=maybe_attr)
-            elif schema.type_.name == "binary":
-                return (t="binary", val=maybe_attr)
-            elif schema.type_.name == "empty":
-                return (t="empty", val=maybe_attr)
-            result = try_parse_value(yang.gdata.yang_str(maybe_attr), schema.type_, new_path)
-            return result
+            schema_type = schema.type_
+            concrete_type = validate_mnode_value(maybe_attr, schema_type)
+            if concrete_type is not None:
+                return (t=concrete_type, val=maybe_attr)
+            raise YangValidationError(path, schema_type, maybe_attr)
 
-    def take_leaflist(self, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
+    def take_leaflist(self, root: yang.schema.DRoot, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
         new_path = path + [PathElement(schema)]
         values: list[(t: str, val: ?value)] = []
         usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
         children = self._get_attr(usname)
         if isinstance(children, list):
-            if schema.type_.name == "identityref":
-                for child in children:
-                    values.append((t="identityref", val=child))
-            elif schema.type_.name == "binary":
-                for child in children:
-                    values.append((t="binary", val=child))
-            else:
-                for child in children:
-                    tv = try_parse_value(yang.gdata.yang_str(child), schema.type_, new_path)
-                    values.append(tv)
+            schema_type = schema.type_
+            for child in children:
+                concrete_type = validate_mnode_value(child, schema_type)
+                if concrete_type is not None:
+                    values.append((t=concrete_type, val=child))
+                else:
+                    raise YangValidationError(path, schema_type, child)
         return values
+
+
+def validate_mnode_value(val: value, schema_type: yang.schema.DType) -> ?str:
+    if isinstance(schema_type, yang.schema.DTypeUnion):
+        for alt_type in schema_type.types:
+            if alt_type.validate_value(val):
+                return alt_type.builtin_type
+    else:
+        if schema_type.validate_value(val):
+            return schema_type.builtin_type
+    return None
 
 
 def _user_order(ordered_by):
@@ -628,7 +503,7 @@ def from_json_path(root: yang.schema.DRoot, data: dict[str, ?value], path: list[
         # Creates: root -> list1[key1] as Absent (for removal)
         from_json_path(schema, {}, ["mod:list1", "key1"], "remove")
     """
-    result = _from_json_path_recursive(root, root.identities, data, path, op, loose, [PathElement(root)], True, True)
+    result = _from_json_path_recursive(root, root, data, path, op, loose, [PathElement(root)], True, True)
     # The top-level call always returns a Container because:
     # - If path is empty, from_data returns Container
     # - If path is non-empty, we wrap in Container
@@ -638,13 +513,13 @@ def from_json_path(root: yang.schema.DRoot, data: dict[str, ?value], path: list[
         raise ValueError("Internal error: expected Container at root level")
 
 
-def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: dict[str, ?value], path: list[str], op: str, loose: bool, current_path: list[PathElement], top: bool, set_ns: bool) -> yang.gdata.Node:
+def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner, data: dict[str, ?value], path: list[str], op: str, loose: bool, current_path: list[PathElement], top: bool, set_ns: bool) -> yang.gdata.Node:
     if isinstance(s, yang.schema.DRoot) or isinstance(s, yang.schema.DContainer):
         if len(path) == 0:
             # Base case: no more path elements, process the data
             if op == "merge":
                 # TODO: set_ns??
-                return _from_data_recursive(s, global_identity, data, loose=loose, set_ns=set_ns, spath=current_path)
+                return _from_data_recursive(root, s, data, loose=loose, set_ns=set_ns, spath=current_path)
             elif op == "remove":
                 return yang.gdata.Absent()
             raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
@@ -663,7 +538,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
             if isinstance(child, yang.schema.DNodeInner):
                 # Recursively process the child node
                 perhaps = True if (top or set_ns) and s.namespace != "" else False
-                cchild = _from_json_path_recursive(child, global_identity, data, rest_path, op, loose, current_path + [PathElement(child)], False, s.namespace != child.namespace)
+                cchild = _from_json_path_recursive(root, child, data, rest_path, op, loose, current_path + [PathElement(child)], False, s.namespace != child.namespace)
                 # Create a container with just this one child
                 return yang.gdata.Container({uname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
 
@@ -684,7 +559,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 else:
                     if str(data_with_keys[key]) != keys.pop(0):
                         raise ValueError("Key value mismatch between path and payload at {format_schema_path(current_path)}")
-            element_gdata = _from_data_recursive(s, global_identity, data_with_keys, loose, set_ns=False, spath=current_path + [PathElement(s, {k: v for k, v in data_with_keys.items() if k in s.key and v is not None})])
+            element_gdata = _from_data_recursive(root, s, data_with_keys, loose, set_ns=False, spath=current_path + [PathElement(s, {k: v for k, v in data_with_keys.items() if k in s.key and v is not None})])
             elements = []
             if op == "merge":
                 elements.append(element_gdata)
@@ -701,7 +576,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
 
             # First create this list with a single element with only key children.
             # For nested lists, we always use "merge" for intermediate elements.
-            slist = _from_json_path_recursive(s, global_identity, {}, [point], "merge", loose, current_path, top, set_ns)
+            slist = _from_json_path_recursive(root, s, {}, [point], "merge", loose, current_path, top, set_ns)
 
             # The return type must be a List, we just requested it
             if isinstance(slist, yang.gdata.List):
@@ -718,7 +593,7 @@ def _from_json_path_recursive(s: yang.schema.DNodeInner, global_identity, data: 
                 lchild = s.get(local_name, module=module, allow_unqualified=False)
                 if isinstance(lchild, yang.schema.DNodeInner):
                     # Now extract gdata for the rest of the path, from the child point
-                    inner_result = _from_json_path_recursive(lchild, global_identity, data, child_rest_path, op, loose, current_path + [PathElement(lchild)], False, False)
+                    inner_result = _from_json_path_recursive(root, lchild, data, child_rest_path, op, loose, current_path + [PathElement(lchild)], False, False)
 
                     # Add it to the structural list element, next to the existing keys
                     slist.elements[0].children[uname(lchild)] = inner_result
@@ -749,14 +624,14 @@ def from_data[A(YangData)](root: yang.schema.DRoot, data: A, loose: bool=False, 
     Returns:
         A yang.gdata.Container containing the parsed data tree
     """
-    return _from_data_recursive(root, root.identities, data, loose, root_path=root_path, spath=[PathElement(root)])
+    return _from_data_recursive(root, root, data, loose, root_path=root_path, spath=[PathElement(root)])
 
-def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity: list[yang.schema.DIdentity], data: A, loose: bool=False, set_ns: bool=True, root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
+def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DNodeInner, data: A, loose: bool=False, set_ns: bool=True, root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
     """Internal function with additional recursion accumulators
 
     Args:
+        root: Root schema node (must be the actual root, not an inner node), e.g. for resolving identityref values
         s: Schema node (container or list) - the root of the schema tree to start parsing from
-        global_identity: List of identity definitions for resolving identityref values
         data: Data wrapped in a YangData protocol implementation (XML or JSON)
         loose: Whether to use loose parsing (allows optional fields to be missing)
         set_ns: Whether to set namespace information on generated nodes
@@ -781,7 +656,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
         local_name, module = _parse_qualified_name(next)
         child = s.get(local_name, module=module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return _from_data_recursive(child, global_identity, data, loose, set_ns, root_path, spath + [PathElement(child)])
+            return _from_data_recursive(root, child, data, loose, set_ns, root_path, spath + [PathElement(child)])
         raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
 
     children: dict[str, yang.gdata.Node] = {}
@@ -821,20 +696,20 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                     elif cop == "delete":
                         children[uname(child)] = yang.gdata.Delete(ns=cns, module=cmod)
                     elif cop == "create":
-                        inner = _from_data_recursive(child, global_identity, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
+                        inner = _from_data_recursive(root, child, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
                         children[uname(child)] = yang.gdata.Create(inner.children, ns=cns, module=cmod)
                     elif cop == "replace":
-                        inner = _from_data_recursive(child, global_identity, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
+                        inner = _from_data_recursive(root, child, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
                         children[uname(child)] = yang.gdata.Replace(inner.children, ns=cns, module=cmod)
                     else:
-                        maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
+                        maybe = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                         children[uname(child)] = maybe
                 elif isinstance(val, dict):
-                    maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
+                    maybe = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                     children[uname(child)] = maybe
                 elif isinstance(val, yang.adata.MNode):
                     # TODO: can't we change YangData prorocol such that val implements YangData?!
-                    maybe = _from_data_recursive(child, global_identity, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
+                    maybe = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                     children[uname(child)] = maybe
                 else:
                     children[uname(child)] = yang.gdata.Container({})
@@ -865,30 +740,30 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                     eop = get_netconf_operation(element_data)
                     if eop in ["remove", "delete"]:
                             # Build element to extract proper key leaves, then create Absent/Delete with keys
-                            eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
+                            eg = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                             key_children = {key: unwrap_key(key, eg.children.get(key)) for key in child.key}
                             if eop == "remove":
                                 list_elements.append(yang.gdata.Absent(key_children))
                             else:
                                 list_elements.append(yang.gdata.Delete(key_children))
                     elif eop in ["create", "replace"]:
-                        eg = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
+                        eg = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                         if eop == "create":
                             list_elements.append(yang.gdata.Create(eg.children))
                         else:
                             list_elements.append(yang.gdata.Replace(eg.children))
                     else:
-                        element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
+                        element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                         list_elements.append(element_gdata)
                 elif isinstance(element_data, dict):
                     # Extract key values for better error context directly from the data (JSON)
                     key_values = {k: unwrap_key(k, element_data.get(k)) for k in child.key}
-                    element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
+                    element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                     list_elements.append(element_gdata)
                 elif isinstance(element_data, yang.adata.MNode):
                     # Extract key values for better error context directly from the data (adata)
                     key_values = {k: unwrap_key(k, element_data._get_attr(yang.schema._safe_name(k))) for k in child.key}
-                    element_gdata = _from_data_recursive(child, global_identity, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
+                    element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
                     list_elements.append(element_gdata)
                 else:
                     raise ValueError("Unsupported type for list element at {format_schema_path(path_with_child())}: {type(element_data)}")
@@ -897,34 +772,17 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                 children[uname(child)] = list_gdata
 
         elif isinstance(child, yang.schema.DLeafList):
-            leaflist_val = data.take_leaflist(child, child.name, s.namespace != child.namespace, is_unique(child), spath)
+            leaflist_val = data.take_leaflist(root, child, child.name,s.namespace != child.namespace, is_unique(child), spath)
             if len(leaflist_val) > 0:
-                if child.type_.name == "identityref":
-                    validated_values = []
-                    for val in leaflist_val:
-                        ival = val.val
-                        if ival is not None and (isinstance(ival, PartialIdentityref) or isinstance(ival, Identityref)):
-                            validated, error = complete_and_validate_identityref(
-                                ival, global_identity, child.type_.base, child.module
-                            )
-                            if validated is not None:
-                                validated_values.append(validated)
-                            else:
-                                raise ValueError("Invalid value for identityref leaf-list at {format_schema_path(path_with_child())}: {error}")
-                        else:
-                            raise ValueError("Expected PartialIdentityref for identityref leaf-list at {format_schema_path(path_with_child())}, got {type(ival)}")
-                    if len(validated_values) > 0:
-                        children[uname(child)] = yang.gdata.LeafList("identityref", validated_values, user_order=_user_order(child.ordered_by))
-                else:
-                    # Unwrap typed tuples
-                    unwrapped_values: list[value] = []
-                    for item in leaflist_val:
-                        iv = item.val
-                        if iv is not None:
-                            unwrapped_values.append(iv)
-                    leaflist_type = "union" if child.type_.name == "union" else (leaflist_val[0].t)
-                    if len(unwrapped_values) > 0:
-                        children[uname(child)] = yang.gdata.LeafList(leaflist_type, unwrapped_values, user_order=_user_order(child.ordered_by))
+                # Unwrap typed tuples
+                unwrapped_values: list[value] = []
+                for item in leaflist_val:
+                    iv = item.val
+                    if iv is not None:
+                        unwrapped_values.append(iv)
+                leaflist_type = "union" if child.type_.builtin_type == "union" else (leaflist_val[0].t)
+                if len(unwrapped_values) > 0:
+                    children[uname(child)] = yang.gdata.LeafList(leaflist_type, unwrapped_values, user_order=_user_order(child.ordered_by))
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf-list value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
@@ -948,36 +806,18 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                         typed = None
                         continue
                     # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
-            typed = data.take_leaf(child, child.name, s.namespace != child.namespace, is_unique(child), spath)
+            typed = data.take_leaf(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
             if typed is not None:
-                # identityref validation
-                if child.type_.name == "identityref":
-                    ival = typed.val
-                    if ival is not None and (isinstance(ival, PartialIdentityref) or isinstance(ival, Identityref)):
-                        validated, error = complete_and_validate_identityref(
-                            ival, global_identity, child.type_.base, child.module
-                        )
-                        if validated is not None:
-                            children[uname(child)] = yang.gdata.Leaf("identityref", validated)
-                        else:
-                            raise ValueError("Invalid value for identityref at {format_schema_path(path_with_child())}: {error}")
-                    else:
-                        raise ValueError("Expected PartialIdentityref for identityref leaf at {format_schema_path(path_with_child())}, got {type(typed.val)}")
-                else:
-                    # Determine concrete type
-                    leaf_ns = None
-                    leaf_module = None
-                    if ns is not None:
-                        leaf_ns = child.namespace
-                        leaf_module = child.module
-                    concrete_type = typed.t
-                    av = typed.val
-                    if child.type_.name == "union":
-                        if av is not None:
-                            children[uname(child)] = yang.gdata.Leaf("union", av, ns=leaf_ns, module=leaf_module)
-                    else:
-                        if av is not None:
-                            children[uname(child)] = yang.gdata.Leaf(concrete_type, av, ns=leaf_ns, module=leaf_module)
+                # Determine concrete type
+                leaf_ns = None
+                leaf_module = None
+                if ns is not None:
+                    leaf_ns = child.namespace
+                    leaf_module = child.module
+                concrete_type = typed.t
+                av = typed.val
+                if av is not None:
+                    children[uname(child)] = yang.gdata.Leaf(concrete_type, av, ns=leaf_ns, module=leaf_module)
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
