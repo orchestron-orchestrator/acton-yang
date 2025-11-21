@@ -364,7 +364,7 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> list[str]:
         """Print the data class for this schema node
         """
         raise NotImplementedError('DNode pdc: {type(self)} - {get_path(spath)}')
@@ -455,7 +455,7 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns=set(), gen_json=True, gen_xml=True, include_state=False) -> list[str]:
         """Print the data class for this schema node
         """
         def path_with_child(c):
@@ -464,44 +464,6 @@ class DNodeInner(DNode):
         if self.namespace != "":
             schema_ns.add(self.namespace)
         res = []
-        if top:
-            res.append("import base64")
-            res.append("import json")
-            res.append("import xml")
-            res.append("import yang")
-            res.append("import yang.adata")
-            res.append("import yang.gdata")
-            res.append("import yang.gen3")
-            res.append("from yang.identity import complete_and_validate_identityref")
-            res.append("from yang.identityref import Identityref, PartialIdentityref")
-            res.append("from yang.schema import DIdentity")
-            res.append("")
-            res.append("# == This file is generated ==")
-            res.append("")
-            res.append("")
-            if isinstance(self, DRoot) and len(self.identities) > 0:
-                res.extend(DIdentity.format_identity_list(self.identities))
-                res.append("")
-                res.append("")
-                res.extend(DIdentity.format_identityref_constants(self.identities))
-                res.append("")
-                res.append("")
-            if schema_yang is not None:
-# TODO: serialize list[str] of YANG models with repr(), use raw string to avoid interpolation?!
-# TODO: Why is the src_yang() function not found in from_xml, if it is
-# defined at the bottom of the module?!
-# After these two are addressed, then we can do away with these hacky workarounds
-#
-#"""def src_yang():
-#   return {repr(self.src)}
-#"""
-                res.append("def src_yang():")
-                res.append("    res = []")
-                for s in schema_yang:
-                    res.append('    res.append(r"""{s}""")')
-                res.append("    return res")
-                res.append("")
-                res.append("")
 
         # Reorder children so that positional arguments, like list keys, come first
         new_children = []
@@ -549,7 +511,7 @@ class DNodeInner(DNode):
             return ", user_order=True" if n.ordered_by == "user" else ""
 
         for child in self.children:
-            res.append(child._prdaclass_rec(path_with_child(child), schema_yang=schema_yang, loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
+            res.extend(child._prdaclass_rec(path_with_child(child), loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -1103,13 +1065,6 @@ class DNodeInner(DNode):
             res.append("    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
             res.append("")
 
-        if gen_xml and isinstance(self, DRoot):
-            res.append("def from_xml_gen3(node: xml.Node, root_path: list[str]=[]) -> yang.gdata.Container:")
-            res.append("    # WARNING: this wrapper for the gen3.from_xml schema-driven parser compiles the schema on every call!")
-            res.append("    s = yang.compile(src_yang())")
-            res.append("    return yang.gen3.from_data(s, node, loose={loose}, root_path=root_path)")
-            res.append("")
-
         # == JSON serde ================================
 
         # from_json(): from JSON -> gdata
@@ -1252,17 +1207,6 @@ class DNodeInner(DNode):
             res.append("    return yang.gdata.List(keys={repr(self.key)}, elements=elements{maybe_user_order(self)}{gdata_nsq})")
             res.append("")
 
-        if gen_json and isinstance(self, DRoot):
-            res.append("def from_json_gen3(jd: dict[str, ?value], root_path: list[str]=[]) -> yang.gdata.Container:")
-            res.append("    # WARNING: this wrapper for the gen3.from_json schema-driven parser compiles the schema on every call!")
-            res.append("    s = yang.compile(src_yang())")
-            res.append("    return yang.gen3.from_data(s, jd, loose={loose}, root_path=root_path)")
-            res.append("")
-            res.append("def from_json_path_gen3(jd: dict[str, ?value], path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:")
-            res.append("    s = yang.compile(src_yang())")
-            res.append("    return yang.gen3.from_json_path(s, jd, path, op, loose={loose})")
-            res.append("")
-
         if isinstance(self, DRoot) and len(self.rpcs) > 0:
             # First generate data classes for RPC input/output
             for rpc in self.rpcs:
@@ -1270,8 +1214,8 @@ class DNodeInner(DNode):
                 # - set_ns: from DRpc (=True)
                 # - include_state=True
                 for child in rpc.children:
-                    child_class_src = child._prdaclass_rec(spath + [rpc, child], schema_yang=schema_yang, loose=loose, top=False, set_ns=set_ns, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=True)
-                    res.append(child_class_src)
+                    child_class_src = child._prdaclass_rec(spath + [rpc, child], loose=loose, top=False, set_ns=set_ns, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=True)
+                    res.extend(child_class_src)
 
             # TODO: unique safe name for RPC function!
             # Generate rpc_root actor
@@ -1325,19 +1269,7 @@ class DNodeInner(DNode):
             res.append("")
             res.append("")
 
-        if top:
-            res.append("schema_namespaces: set[str] = {{")
-            for ns in sorted(schema_ns):
-                res.append("    '{ns}',")
-            res.append("}}")
-            res.append("")
-            res.append("def prsrc_gen3(data, self_name='ad'):")
-            res.append("    # WARNING: this wrapper for the gen3.prsrc schema-driven parser compiles the schema on every call!")
-            res.append("    s = yang.compile(src_yang())")
-            res.append("    return yang.gen3.pradata(s, data, self_name, loose={loose})")
-            res.append("")
-
-        return "\n".join(res)
+        return res
 
 class DNodeLeaf(DNode):
     if_feature: list[str]
@@ -1466,8 +1398,8 @@ class DIdentity(DNode):
 
         Returns a list of strings to be added to the result
         """
-        if not identities:
-            return ["_identities = []"]
+        if len(identities) == 0:
+            return ["_identities: list[DIdentity] = []", "", ""]
 
         result = []
 
@@ -1512,6 +1444,8 @@ class DIdentity(DNode):
                 base_refs = [base_var_map[base.key()] for base in identity.base]
                 result.append("    DIdentity(module={repr(identity.module)}, namespace={repr(identity.namespace)}, prefix={repr(identity.prefix)}, name={repr(identity.name)}, base=[{', '.join(base_refs)}]),")
         result.append("]")
+        result.append("")
+        result.append("")
 
         return result
 
@@ -1531,6 +1465,8 @@ class DIdentity(DNode):
             # Create variable name by replacing hyphens with underscores
             var_name = "{identity.module}_{identity.name}".replace("-", "_")
             result.append("{var_name} = Identityref({repr(identity.name)}, ns={repr(identity.namespace)}, mod={repr(identity.module)}, pfx={repr(identity.prefix)})")
+        result.append("")
+        result.append("")
 
         return result
 
@@ -1662,11 +1598,11 @@ class DLeaf(DNodeLeaf):
                     return True
         return False
 
-    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json: bool=True, gen_xml: bool=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns=set(), gen_json: bool=True, gen_xml: bool=True, include_state=False) -> list[str]:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
-            return ""
+            return []
         def pname(n):
             return get_path_name(n)
         # Include namespace qualifier(s) iff our namespace is different than our parent
@@ -1683,7 +1619,7 @@ class DLeaf(DNodeLeaf):
             else:
                 res.append("    return yang.gdata.Leaf('{self.type_.name}', val{gdata_nsq})")
             res.append("")
-        return "\n".join(res)
+        return res
 
 
 class DLeafList(DNodeLeaf):
@@ -1715,11 +1651,11 @@ class DLeafList(DNodeLeaf):
         self.when = when
         self.exts = exts
 
-    def _prdaclass_rec(self, spath: list[DNode], schema_yang: ?list[str]=None, loose=False, top=True, set_ns=True, schema_ns=set(), gen_json: bool=True, gen_xml: bool=True, include_state=False) -> str:
+    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns=set(), gen_json: bool=True, gen_xml: bool=True, include_state=False) -> list[str]:
         if self.namespace != "":
             schema_ns.add(self.namespace)
         if include_state == False and self.config == False:
-            return ""
+            return []
         def pname(n):
             return get_path_name(n)
         maybe_user_order = ", user_order=True" if self.ordered_by == "user" else ""
@@ -1741,7 +1677,7 @@ class DLeafList(DNodeLeaf):
             else:
                 res.append("    return yang.gdata.LeafList('{self.type_.name}', val{maybe_user_order}{gdata_nsq})")
             res.append("")
-        return "\n".join(res)
+        return res
 
 
 class DNotification(DNodeInner):
@@ -1880,8 +1816,73 @@ class DRoot(DNodeInner):
             child = spath[-1].get(local_name, module=module, allow_unqualified=False)
             return build_spath(spath + [child])
 
+        res = []
+        res.append("import base64")
+        res.append("import json")
+        res.append("import xml")
+        res.append("import yang")
+        res.append("import yang.adata")
+        res.append("import yang.gdata")
+        res.append("import yang.gen3")
+        res.append("from yang.identity import complete_and_validate_identityref")
+        res.append("from yang.identityref import Identityref, PartialIdentityref")
+        res.append("from yang.schema import DIdentity")
+        res.append("")
+        res.append("# == This file is generated ==")
+        res.append("")
+        res.append("")
+        res.extend(DIdentity.format_identity_list(self.identities))
+        res.extend(DIdentity.format_identityref_constants(self.identities))
+        if schema_yang is not None:
+# TODO: serialize list[str] of YANG models with repr(), use raw string to avoid interpolation?!
+# TODO: Why is the src_yang() function not found in from_xml, if it is
+# defined at the bottom of the module?!
+# After these two are addressed, then we can do away with these hacky workarounds
+#
+#"""def src_yang():
+#   return {repr(self.src)}
+#"""
+            res.append("def src_yang():")
+            res.append("    res = []")
+            for s in schema_yang:
+                res.append('    res.append(r"""{s}""")')
+            res.append("    return res")
+            res.append("")
+            res.append("")
+
         spath = build_spath([self])
-        return spath[-1]._prdaclass_rec(spath, schema_yang, loose, top=top, set_ns=True, schema_ns=set(), gen_json=gen_json, gen_xml=gen_xml, include_state=include_state)
+        schema_ns = set()
+        res.extend(spath[-1]._prdaclass_rec(spath, loose=loose, top=top, set_ns=True, schema_ns=schema_ns, gen_json=gen_json, gen_xml=gen_xml, include_state=include_state))
+
+        if gen_xml:
+            res.append("def from_xml_gen3(node: xml.Node, root_path: list[str]=[]) -> yang.gdata.Container:")
+            res.append("    # WARNING: this wrapper for the gen3.from_xml schema-driven parser compiles the schema on every call!")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.from_data(s, node, loose={loose}, root_path=root_path)")
+            res.append("")
+        if gen_json:
+            res.append("def from_json_gen3(jd: dict[str, ?value], root_path: list[str]=[]) -> yang.gdata.Container:")
+            res.append("    # WARNING: this wrapper for the gen3.from_json schema-driven parser compiles the schema on every call!")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.from_data(s, jd, loose={loose}, root_path=root_path)")
+            res.append("")
+            res.append("def from_json_path_gen3(jd: dict[str, ?value], path: list[str]=[], op: ?str='merge') -> yang.gdata.Node:")
+            res.append("    s = yang.compile(src_yang())")
+            res.append("    return yang.gen3.from_json_path(s, jd, path, op, loose={loose})")
+            res.append("")
+        res.append("def prsrc_gen3(data, self_name='ad'):")
+        res.append("    # WARNING: this wrapper for the gen3.prsrc schema-driven parser compiles the schema on every call!")
+        res.append("    s = yang.compile(src_yang())")
+        res.append("    return yang.gen3.pradata(s, data, self_name, loose={loose})")
+        res.append("")
+
+        res.append("schema_namespaces: set[str] = {{")
+        for ns in sorted(schema_ns):
+            res.append("    '{ns}',")
+        res.append("}}")
+        res.append("")
+
+        return "\n".join(res)
 
 
 class DRpc(DNodeInner):
