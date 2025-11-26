@@ -18,47 +18,6 @@ from yang.identityref import Identityref, PartialIdentityref
 NETCONF_OPS = {"create", "delete", "remove", "replace", "merge"}
 NETCONF_NS = "urn:ietf:params:xml:ns:netconf:base:1.0"
 
-# Map of gdata getter method names to actual methods
-GDATA_TAKERS = {
-    # Container getters
-    "get_cnt": yang.gdata.Node.get_cnt,
-    "get_opt_cnt": yang.gdata.Node.get_opt_cnt,
-    # List getters
-    "get_list": yang.gdata.Node.get_list,
-    "get_opt_list": yang.gdata.Node.get_opt_list,
-    # Leaf getters
-    "get_str": yang.gdata.Node.get_str,
-    "get_opt_str": yang.gdata.Node.get_opt_str,
-    "get_int": yang.gdata.Node.get_int,
-    "get_opt_int": yang.gdata.Node.get_opt_int,
-    "get_float": yang.gdata.Node.get_float,
-    "get_opt_float": yang.gdata.Node.get_opt_float,
-    "get_bool": yang.gdata.Node.get_bool,
-    "get_opt_bool": yang.gdata.Node.get_opt_bool,
-    "get_opt_empty": yang.gdata.Node.get_opt_empty,
-    "get_bytes": yang.gdata.Node.get_bytes,
-    "get_opt_bytes": yang.gdata.Node.get_opt_bytes,
-    "get_value": yang.gdata.Node.get_value,
-    "get_opt_value": yang.gdata.Node.get_opt_value,
-    "get_Identityref": yang.gdata.Node.get_Identityref,
-    "get_opt_Identityref": yang.gdata.Node.get_opt_Identityref,
-    # LeafList getters
-    "get_strs": yang.gdata.Node.get_strs,
-    "get_opt_strs": yang.gdata.Node.get_opt_strs,
-    "get_ints": yang.gdata.Node.get_ints,
-    "get_opt_ints": yang.gdata.Node.get_opt_ints,
-    "get_floats": yang.gdata.Node.get_floats,
-    "get_opt_floats": yang.gdata.Node.get_opt_floats,
-    "get_bools": yang.gdata.Node.get_bools,
-    "get_opt_bools": yang.gdata.Node.get_opt_bools,
-    "get_bytess": yang.gdata.Node.get_bytess,
-    "get_opt_bytess": yang.gdata.Node.get_opt_bytess,
-    "get_values": yang.gdata.Node.get_values,
-    "get_opt_values": yang.gdata.Node.get_opt_values,
-    "get_Identityrefs": yang.gdata.Node.get_Identityrefs,
-    "get_opt_Identityrefs": yang.gdata.Node.get_opt_Identityrefs,
-}
-
 
 class PathElement:
     """Represents an element in a schema path, with optional key values for lists"""
@@ -1034,12 +993,8 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 # The list of children is already sorted so that key leaves
                 # come first in the correct order.
                 if not yang.schema.is_optional_arg_yang_leaf(cchild, loose):
-                    taker_name = yang.schema.taker_name(cchild, "gdata", loose)
-                    taken_node = GDATA_TAKERS[taker_name](node, unique_namer.unique_name(cchild.name, cchild.prefix))
-                    if taken_node is not None:
-                        non_optional_args.append("{repr(taken_node)}")
-                    else:
-                        raise ValueError("Missing non-optional leaf {pname(cchild)}")
+                    leaf = node.get_leaf(unique_namer.unique_name(cchild.name, cchild.prefix))
+                    non_optional_args.append("{repr(leaf.val)}")
             elif isinstance(cchild, yang.schema.DContainer):
                 if not (cchild.presence or loose or yang.schema.optional_subtree(cchild)):
                     cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
@@ -1092,31 +1047,28 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         def path_with_child(k=None):
             return spath + [PathElement(child, k)]
 
-        taker_name = yang.schema.taker_name(child, "gdata", loose)
-        taken_nodes = None
-        try:
-            taken_nodes = GDATA_TAKERS[taker_name](node, uname(child))
-        except ValueError as err:
-            raise ValueError("Error reading {format_schema_path(path_with_child())}: {err.error_message}")
-
-        if taken_nodes is not None:
-            if isinstance(child, yang.schema.DNodeLeaf):
+        if isinstance(child, yang.schema.DLeaf):
+            leaf = node.get_opt_leaf(uname(child))
+            if leaf is not None:
                 if not top and not yang.schema.is_optional_arg_yang_leaf(child, loose):
                     # Do not print non-optional leafs if not top level, because
                     # they are implicitly set with .create*()
                     continue
-                # DLeaf and DLeafList are both copied verbatim, except for empty
-                # leaf-list. The gdata takers for leaf-list return an empty list
-                # as default: (see yang.gdata.get_opt_*s)
-                if isinstance(child, yang.schema.DLeafList) and isinstance(taken_nodes, list) and len(taken_nodes) == 0:
-                    continue
-                leaves.append("{self_name}.{usname(child)} = {repr(taken_nodes)}")
-            elif isinstance(child, yang.schema.DContainer) and isinstance(taken_nodes, yang.gdata.Container):
+                # DLeaf values are copied verbatim
+                leaves.append("{self_name}.{usname(child)} = {repr(leaf.val)}")
+        elif isinstance(child, yang.schema.DLeafList):
+            leaflist = node.get_opt_leaflist(uname(child))
+            if leaflist is not None:
+                # DLeafList values are copied verbatim
+                leaves.append("{self_name}.{usname(child)} = {repr(leaflist.vals)}")
+        elif isinstance(child, yang.schema.DContainer):
+            container = node.get_opt_cnt(uname(child))
+            if container is not None:
                 if child.presence:
                     res.append("")
                     res.append("# P-container: {format_schema_path(path_with_child())}")
                     # Build .pradata() code for this P-container
-                    pc_args, pc_var_declarations = _find_non_optional_subtree(child, taken_nodes, [usname(child)])
+                    pc_args, pc_var_declarations = _find_non_optional_subtree(child, container, [usname(child)])
 
                     # Add variable declarations in reverse order to ensure the prerequisites are met
                     res.extend(list(reversed(pc_var_declarations)))
@@ -1125,11 +1077,13 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     pc_args_str = ", ".join(pc_args)
                     res.append("{child_accessor} = {self_name}.create_{usname(child)}({pc_args_str})")
                     # Recursive call to pradata() for the P-container, to fill in the rest of the optional children
-                    res.extend(_pradata_recursive(child, taken_nodes, usname(child), loose, root_path=root_path, spath=path_with_child()).splitlines())
+                    res.extend(_pradata_recursive(child, container, usname(child), loose, root_path=root_path, spath=path_with_child()).splitlines())
                 else:
-                    res.extend(_pradata_recursive(child, taken_nodes, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child()).splitlines())
-            elif isinstance(child, yang.schema.DList) and isinstance(taken_nodes, yang.gdata.List):
-                for element in taken_nodes.elements:
+                    res.extend(_pradata_recursive(child, container, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child()).splitlines())
+        elif isinstance(child, yang.schema.DList):
+            glist = node.get_opt_list(uname(child))
+            if glist is not None:
+                for element in glist.elements:
                     res.append("")
                     res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(child.key)}")
 
@@ -1145,8 +1099,8 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     res.append("{usname(child)}_element = {self_name}.{usname(child)}.create({create_args_str})")
                     # Recursive call to pradata() for the list element
                     res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(child.key))).splitlines())
-            else:
-                raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
+        else:
+            raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
 
     # Add the leaves as a single group at the beginning of the section,
     # optionally add container header if we're not printing a list element
