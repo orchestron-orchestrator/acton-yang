@@ -524,7 +524,7 @@ class DNodeInner(DNode):
 
         for child in self.children:
             if isinstance(child, DLeaf):
-                res.append("    {usname(child)}: {yang_leaf_to_acton_type(child, self, loose)}")
+                res.append("    {usname(child)}: {yang_leaf_to_acton_type(child, list_keys(self), loose)}")
             elif isinstance(child, DLeafList):
                 res.append("    {usname(child)}: {yang_leaflist_to_acton_type(child)}")
             elif isinstance(child, DContainer):
@@ -562,8 +562,8 @@ class DNodeInner(DNode):
                 child_default = child.default
                 if not loose and child_default is not None:
                     defval = "=None"
-                child_arg = "{usname(child)}: {yang_leaf_to_acton_arg_type(child, self, loose)}{defval}"
-                if is_optional_arg_yang_leaf(child, self, loose):
+                child_arg = "{usname(child)}: {yang_leaf_to_acton_arg_type(child, list_keys(self), loose)}{defval}"
+                if is_optional_arg_yang_leaf(child, list_keys(self), loose):
                     opt_args.append(child_arg)
                 else:
                     req_args.append(child_arg)
@@ -693,9 +693,9 @@ class DNodeInner(DNode):
         from_gdata_args_list = []
         for child in self.children:
             if isinstance(child, DNodeLeaf):
-                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, self, 'gdata', loose=loose)}('{uname(child)}')")
+                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), 'gdata', loose=loose)}('{uname(child)}')")
             else:
-                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, self, 'gdata', loose=loose)}('{uname(child)}'))")
+                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), 'gdata', loose=loose)}('{uname(child)}'))")
         from_gdata_args = ", ".join(from_gdata_args_list)
         res.append("    @staticmethod")
         if isinstance(self, DList):
@@ -769,7 +769,7 @@ class DNodeInner(DNode):
                 if isinstance(cchild, DLeaf):
                     # The list of children is already sorted so that key leaves
                     # come first in the correct order.
-                    if not is_optional_arg_yang_leaf(cchild, container, loose):
+                    if not is_optional_arg_yang_leaf(cchild, list_keys(container), loose):
                         cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
                         # Use repr() in nested f-string to print local variable / attribute verbatim
                         non_optional_args.append("{{repr({local_prefix}{'.'.join(path)}.{cchild_safe_name})}}")
@@ -826,7 +826,7 @@ class DNodeInner(DNode):
         res.append("        leaves = []")
         for child in self.children:
             if isinstance(child, DNodeLeaf):
-                if not top and not is_optional_arg_yang_leaf(child, self, loose):
+                if not top and not is_optional_arg_yang_leaf(child, list_keys(self), loose):
                     # Do not print non-optional leafs if not top level, because
                     # they are implicitly set with .create*()
                     continue
@@ -1043,7 +1043,7 @@ class DNodeInner(DNode):
                 maybe_ns = ", '{child.namespace}'" if child.namespace != self.namespace else ""
                 # TODO: no need for local variables when we switch from the
                 # gdata.Container.key attribute to key_str() method
-                res.append("    child_{usname(child)} = yang.gdata.{taker_name(child, self, 'xml', loose=loose)}(node, '{child.name}'{maybe_ns})")
+                res.append("    child_{usname(child)} = yang.gdata.{taker_name(child, list_keys(self), 'xml', loose=loose)}(node, '{child.name}'{maybe_ns})")
                 if isinstance(child, DNodeLeaf):
                     res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_data_{pname(child)}, child_{usname(child)})")
                 else:
@@ -1185,7 +1185,7 @@ class DNodeInner(DNode):
                 maybe_module = ", '{child.module}'" if child.namespace != self.namespace else ""
                 # TODO: no need for local variables when we switch from the
                 # gdata.Container.key attribute to key_str() method
-                res.append("    child_{usname(child)} = yang.gdata.{taker_name(child, self, 'json', loose=loose)}(jd, '{child.name}'{maybe_module})")
+                res.append("    child_{usname(child)} = yang.gdata.{taker_name(child, list_keys(self), 'json', loose=loose)}(jd, '{child.name}'{maybe_module})")
                 if isinstance(child, DNodeLeaf):
                     res.append("    yang.gdata.maybe_add(children, '{uname(child)}', from_data_{pname(child)}, child_{usname(child)})")
                 else:
@@ -2884,7 +2884,7 @@ def _prsrc_attrs(indent, attrs):
     return ", ".join(res)
 
 
-def is_optional_yang_leaf(leaf: DNodeLeaf, parent: DNodeInner, loose: bool=False) -> bool:
+def is_optional_yang_leaf(leaf: DNodeLeaf, key_names: ?list[str], loose: bool=False) -> bool:
     """Maps YANG leaf optionality to Acton type
     """
     optional = True
@@ -2911,12 +2911,12 @@ def is_optional_yang_leaf(leaf: DNodeLeaf, parent: DNodeInner, loose: bool=False
     if loose:
         optional = True
     # ... although being part of a key always makes it non-optional
-    if isinstance(parent, DList):
-        if leaf.name in parent.key:
+    if key_names is not None:
+        if leaf.name in key_names:
             optional = False
     return optional
 
-def is_optional_arg_yang_leaf(leaf: DNodeLeaf, parent: DNodeInner, loose: bool=False) -> bool:
+def is_optional_arg_yang_leaf(leaf: DNodeLeaf, key_names: ?list[str], loose: bool=False) -> bool:
     r"""Maps YANG leaf optionality to Acton type for object constructor arg
 
     This is different from the is_optional_yang_leaf because for YANG leafs with
@@ -2932,7 +2932,7 @@ def is_optional_arg_yang_leaf(leaf: DNodeLeaf, parent: DNodeInner, loose: bool=F
     argument, it is optional. This method is used to determine if the argument
     type should be optional.
     """
-    optional = is_optional_yang_leaf(leaf, parent, loose)
+    optional = is_optional_yang_leaf(leaf, key_names, loose)
 
     if isinstance(leaf, DLeaf):
         if leaf.default is not None:
@@ -2940,14 +2940,14 @@ def is_optional_arg_yang_leaf(leaf: DNodeLeaf, parent: DNodeInner, loose: bool=F
 
     return optional
 
-def yang_leaf_to_acton_type(leaf: DNodeLeaf, parent: DNodeInner, loose: bool=False) -> str:
-    optional = is_optional_yang_leaf(leaf, parent, loose)
+def yang_leaf_to_acton_type(leaf: DNodeLeaf, key_names: ?list[str], loose: bool=False) -> str:
+    optional = is_optional_yang_leaf(leaf, key_names, loose)
     optional_str = "?" if optional else ""
     t = yang_type_to_acton_type(leaf.type_)
     return optional_str + t
 
-def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, parent: DNodeInner, loose: bool=False) -> str:
-    optional = is_optional_yang_leaf(leaf, parent, loose)
+def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, key_names: ?list[str], loose: bool=False) -> str:
+    optional = is_optional_yang_leaf(leaf, key_names, loose)
     if isinstance(leaf, DLeaf):
         if leaf.default is not None:
             optional = True
@@ -2955,7 +2955,7 @@ def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, parent: DNodeInner, loose: bool
     t = yang_type_to_acton_type(leaf.type_)
     return optional_str + t
 
-def taker_name(n: DNode, parent: DNodeInner, input_format: str, loose: bool=False) -> str:
+def taker_name(n: DNode, key_names: ?list[str], input_format: str, loose: bool=False) -> str:
     taker_prefix = ""
     if input_format == "xml":
         taker_prefix = "from_xml_"
@@ -2974,7 +2974,7 @@ def taker_name(n: DNode, parent: DNodeInner, input_format: str, loose: bool=Fals
         optional_str = "opt_" if optional else ""
         return taker_prefix + optional_str + "list"
     if isinstance(n, DLeaf):
-        optional = is_optional_arg_yang_leaf(n, parent, loose)
+        optional = is_optional_arg_yang_leaf(n, key_names, loose)
         optional_str = "opt_" if optional else ""
         if n.type_.name == "empty":
             return taker_prefix + optional_str + "empty"

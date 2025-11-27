@@ -862,7 +862,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                     leaflist_type = "union" if child.type_.name == "union" else (leaflist_val[0].t)
                     if len(unwrapped_values) > 0:
                         children[uname(child)] = yang.gdata.LeafList(leaflist_type, unwrapped_values, user_order=_user_order(child.ordered_by))
-            elif not yang.schema.is_optional_arg_yang_leaf(child, s, loose):
+            elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf-list value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
 
@@ -919,7 +919,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                     else:
                         if av is not None:
                             children[uname(child)] = yang.gdata.Leaf(concrete_type, av, ns=leaf_ns, module=leaf_module)
-            elif not yang.schema.is_optional_arg_yang_leaf(child, s, loose):
+            elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
         else:
@@ -993,7 +993,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             if isinstance(cchild, yang.schema.DLeaf):
                 # The list of children is already sorted so that key leaves
                 # come first in the correct order.
-                if not yang.schema.is_optional_arg_yang_leaf(cchild, container, loose):
+                if not yang.schema.is_optional_arg_yang_leaf(cchild, yang.schema.list_keys(container), loose):
                     leaf = node.get_leaf(unique_namer.unique_name(cchild.name, cchild.prefix))
                     non_optional_args.append("{repr(leaf.val)}")
             elif isinstance(cchild, yang.schema.DContainer):
@@ -1051,7 +1051,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         if isinstance(child, yang.schema.DLeaf):
             leaf = node.get_opt_leaf(uname(child))
             if leaf is not None:
-                if not top and not yang.schema.is_optional_arg_yang_leaf(child, s, loose):
+                if not top and not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                     # Do not print non-optional leafs if not top level, because
                     # they are implicitly set with .create*()
                     continue
