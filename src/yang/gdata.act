@@ -204,6 +204,9 @@ def yang_str(v) -> str:
     return s
 
 
+_min_i64 = bigint(-9223372036854775807-1)
+_max_i64 = bigint(9223372036854775807)
+_max_u64 = bigint(18446744073709551615)
 def json_val(yang_type: str, v: value) -> ?value:
     if isinstance(v, bytes):
         return base64.encode(v).decode()
@@ -211,6 +214,14 @@ def json_val(yang_type: str, v: value) -> ?value:
         return str(v)
     if isinstance(v, Identityref):
         return "{v.mod}:{v.val}"
+    # JSON encoder doesn't handle bigint, so we convert to a fixed size int, else a string
+    if isinstance(v, bigint):
+        if v >= _min_i64 and v <= _max_i64:
+            return int(v)
+        elif v >= 0 and v <= _max_u64:
+            return u64(v)
+        else:
+            return str(v)
     return v
 
 
@@ -219,6 +230,16 @@ def fmt_json_name(name, module=None):
     if module is not None:
         return "{module}:{name_without_prefix}"
     return name_without_prefix
+
+
+def repr_yang(v) -> str:
+    # All numeric gdata values are bigint, so include an explicit cast because
+    # these printed values are assigned to the "value" type when compiled
+    if isinstance(v, bigint):
+        return "bigint({v})"
+    elif isinstance(v, list):
+        return "[" + ", ".join([repr_yang(e) for e in v]) + "]"
+    return repr(v)
 
 
 class Node(value):
@@ -259,11 +280,11 @@ class Node(value):
         base_args = ns_args + module_args
 
         if isinstance(self, Leaf):
-            args = ["'{str(self.t)}'", repr(self.val)] + base_args
+            args = ["'{str(self.t)}'", repr_yang(self.val)] + base_args
             return "Leaf({", ".join(args)})"
         elif isinstance(self, LeafList):
             # Only sort if deterministic=True and not user_order
-            vals_str = repr(self.vals if (self.user_order or not deterministic) else vals_list_sorted(self.vals))
+            vals_str = repr_yang(self.vals if (self.user_order or not deterministic) else vals_list_sorted(self.vals))
             order_args = ["user_order=True"] if self.user_order else []
             args = ["'{str(self.t)}'", vals_str] + base_args + order_args
             return "LeafList({", ".join(args)})"
@@ -575,34 +596,34 @@ class Node(value):
             if isinstance(childval, float):
                 return childval
 
-    def get_int(self, name) -> int:
+    def get_bigint(self, name) -> bigint:
         child = self.get_leaf(name)
         childval = child.val
-        if isinstance(childval, int):
+        if isinstance(childval, bigint):
             return childval
-        raise ValueError("Leaf {name} is not of type int")
+        raise ValueError("Leaf {name} is not of type bigint")
 
-    def get_ints(self, name) -> list[int]:
+    def get_bigints(self, name) -> list[bigint]:
         if isinstance(self, Container):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
                     for v in child.vals:
-                        if isinstance(v, int):
+                        if isinstance(v, bigint):
                             cvals.append(v)
                     return cvals
         raise ValueError("Cannot find leaf-list child with name {name}")
 
-    def get_opt_int(self, name) -> ?int:
+    def get_opt_bigint(self, name) -> ?bigint:
         child = self.get_opt_leaf(name)
         if child is not None:
             childval = child.val
-            if isinstance(childval, int):
+            if isinstance(childval, bigint):
                 return childval
 
-    def get_opt_ints(self, name) -> list[int]:
+    def get_opt_bigints(self, name) -> list[bigint]:
         try:
-            return self.get_ints(name)
+            return self.get_bigints(name)
         except ValueError:
             return []
 
@@ -924,7 +945,7 @@ def sorted_elements(elements, key_names):
 
 def vals_equal(a: value, b: value) -> bool:
     # Compare known leaf value types
-    if isinstance(a, int) and isinstance(b, int):
+    if isinstance(a, bigint) and isinstance(b, bigint):
         return a == b
     if isinstance(a, bool) and isinstance(b, bool):
         return a == b
@@ -950,7 +971,7 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, i32) and isinstance(b, i32):
         return a == b
-    if isinstance(a, i64) and isinstance(b, i64):
+    if isinstance(a, int) and isinstance(b, int):
         return a == b
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a == b
@@ -972,7 +993,7 @@ def vals_list_equal(a: list[value], b: list[value]) -> bool:
 
 def vals_less_than(a: value, b: value) -> bool:
     # Compare known leaf value types
-    if isinstance(a, int) and isinstance(b, int):
+    if isinstance(a, bigint) and isinstance(b, bigint):
         return a < b
     if isinstance(a, bool) and isinstance(b, bool):
         return not a  # False (0) before True (1)
@@ -998,7 +1019,7 @@ def vals_less_than(a: value, b: value) -> bool:
         return a < b
     if isinstance(a, i32) and isinstance(b, i32):
         return a < b
-    if isinstance(a, i64) and isinstance(b, i64):
+    if isinstance(a, int) and isinstance(b, int):
         return a < b
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a < b
@@ -1679,16 +1700,16 @@ def from_xml_opt_float(n: xml.Node, name: str, ns: ?str) -> ?float:
     except ValueError:
         return None
 
-def from_xml_opt_int(n: xml.Node, name: str, ns: ?str) -> ?int:
+def from_xml_opt_bigint(n: xml.Node, name: str, ns: ?str) -> ?bigint:
     try:
         text = get_xml_child(n, name, ns).text
         if text is not None:
-            return int(text)
+            return bigint(text)
     except ValueError:
         return None
 
-def from_xml_int(n: xml.Node, name: str, ns: ?str) -> int:
-    r = from_xml_opt_int(n, name, ns)
+def from_xml_bigint(n: xml.Node, name: str, ns: ?str) -> bigint:
+    r = from_xml_opt_bigint(n, name, ns)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name {name}")
@@ -1814,18 +1835,18 @@ def from_xml_opt_values(n: xml.Node, name: str, ns: ?str) -> ?list[value]:
         return None
     return res
 
-def from_xml_ints(n: xml.Node, name: str, ns: ?str) -> list[int]:
-    r = from_xml_opt_ints(n, name, ns)
+def from_xml_bigints(n: xml.Node, name: str, ns: ?str) -> list[bigint]:
+    r = from_xml_opt_bigints(n, name, ns)
     if r is not None:
         return r
     raise ValueError("Cannot find xml child with name {name}")
 
-def from_xml_opt_ints(n: xml.Node, name: str, ns: ?str) -> ?list[int]:
+def from_xml_opt_bigints(n: xml.Node, name: str, ns: ?str) -> ?list[bigint]:
     res = []
     for child in get_xml_children(n, name, ns):
         ctext = child.text
         if ctext is not None:
-            res.append(int(ctext))
+            res.append(bigint(ctext))
     if len(res) == 0:
         return None
     return res
@@ -1952,24 +1973,24 @@ def take_json_strs(jd: dict[str, ?value], name: str, module: ?str=None) -> list[
         return val
     raise ValueError("Cannot find json str child with name {name}")
 
-def take_json_opt_int(jd: dict[str, ?value], name: str, module: ?str=None) -> ?int:
+def take_json_opt_bigint(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bigint:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
-        if isinstance(child, int):
+        if isinstance(child, bigint):
             return child
         # TODO: strings are only allowed / mandated for 64-bit numbers!
         elif isinstance(child, str):
-            return int(child)
+            return bigint(child)
         raise ValueError("Expected an int for {name}")
     return None
 
-def take_json_int(jd: dict[str, ?value], name: str, module: ?str=None) -> int:
-    val = take_json_opt_int(jd, name, module)
+def take_json_bigint(jd: dict[str, ?value], name: str, module: ?str=None) -> bigint:
+    val = take_json_opt_bigint(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json int child with name {name}")
 
-def take_json_opt_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[int]:
+def take_json_opt_bigints(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[bigint]:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, list):
@@ -1978,7 +1999,7 @@ def take_json_opt_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> ?
             elem = child[0]
             int_vals = []
             for c in child:
-                if isinstance(c, int):
+                if isinstance(c, bigint):
                     int_vals.append(c)
                 else:
                     raise ValueError("{name}is a list of wrong type, should be int, not {type(elem)}")
@@ -1986,27 +2007,27 @@ def take_json_opt_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> ?
         raise ValueError(name + "is not a list of ints")
     return None
 
-def take_json_ints(jd: dict[str, ?value], name: str, module: ?str=None) -> list[int]:
-    val = take_json_opt_ints(jd, name, module)
+def take_json_bigints(jd: dict[str, ?value], name: str, module: ?str=None) -> list[bigint]:
+    val = take_json_opt_bigints(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json int child with name {name}")
 
-def take_json_opt_int64(jd: dict[str, ?value], name: str, module: ?str=None) -> ?int:
+def take_json_opt_int64(jd: dict[str, ?value], name: str, module: ?str=None) -> ?bigint:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, str):
-            return int(child)
+            return bigint(child)
         raise ValueError("Expected a string for 64-bit number {name}")
     return None
 
-def take_json_int64(jd: dict[str, ?value], name: str, module: ?str=None) -> int:
+def take_json_int64(jd: dict[str, ?value], name: str, module: ?str=None) -> bigint:
     val = take_json_opt_int64(jd, name, module)
     if val is not None:
         return val
     raise ValueError("Cannot find json int64 child with name {name}")
 
-def take_json_opt_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[int]:
+def take_json_opt_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> ?list[bigint]:
     child = take_json_opt_value(jd, name, module)
     if child is not None:
         if isinstance(child, list):
@@ -2016,14 +2037,14 @@ def take_json_opt_int64s(jd: dict[str, ?value], name: str, module: ?str=None) ->
             int_vals = []
             for c in child:
                 if isinstance(c, str):
-                    int_vals.append(int(c))
+                    int_vals.append(bigint(c))
                 else:
                     raise ValueError("{name}is a list of wrong type, should be str, not {type(elem)}")
             return int_vals
         raise ValueError(name + "is not a list of 64-bit numbers")
     return None
 
-def take_json_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> list[int]:
+def take_json_int64s(jd: dict[str, ?value], name: str, module: ?str=None) -> list[bigint]:
     val = take_json_opt_int64s(jd, name, module)
     if val is not None:
         return val
@@ -2234,37 +2255,37 @@ def _test_format_gdata_path():
     path = [
         _PathElement("config"),
         _PathElement("interfaces"),
-        _PathElement(keys={"name": Leaf("str", "eth0"), "vlan": Leaf("int", 100)}),
+        _PathElement(keys={"name": Leaf("str", "eth0"), "vlan": Leaf("int", bigint(100))}),
         _PathElement("ipv4"),
-        _PathElement(keys={"ip": Leaf("str", "10.0.0.1"), "prefix": Leaf("int", 24)})
+        _PathElement(keys={"ip": Leaf("str", "10.0.0.1"), "prefix": Leaf("int", bigint(24))})
     ]
     testing.assertEqual("/config/interfaces[name='eth0',vlan=100]/ipv4[ip='10.0.0.1',prefix=24]", _format_gdata_path(path))
 
 
 def _test_merge1():
     y1 = Container({
-        "a": Leaf("int", 1),
+        "a": Leaf("int", bigint(1)),
         "l1": List(["name"], [
             Container({
                 "name": Leaf("str", "k1"),
-                "n1": Leaf("int", 1),
-                "n2": Leaf("int", 2)
+                "n1": Leaf("int", bigint(1)),
+                "n2": Leaf("int", bigint(2))
             }),
             Container({
                 "name": Leaf("str", "k4"),
-                "n4": Leaf("int", 4),
+                "n4": Leaf("int", bigint(4)),
             }),
         ])
     }, ns="http://example.com/acme", module="acme")
 
     y2 = Container({
-        "b": Leaf("int", 2),
-        "c": Leaf("int", 3),
+        "b": Leaf("int", bigint(2)),
+        "c": Leaf("int", bigint(3)),
         "l1": List(["name"], [
             Container({
                 "name": Leaf("str", "k2"),
-                "n1": Leaf("int", 1),
-                "n3": Leaf("int", 3)
+                "n1": Leaf("int", bigint(1)),
+                "n3": Leaf("int", bigint(3))
             }),
         ]),
         "d": LeafList("str", ["a", "b", "c"])
@@ -2273,23 +2294,23 @@ def _test_merge1():
     res = merge(y1, y2)
 
     exp = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
-        "c": Leaf("int", 3),
+        "a": Leaf("int", bigint(1)),
+        "b": Leaf("int", bigint(2)),
+        "c": Leaf("int", bigint(3)),
         "l1": List(["name"], [
             Container({
                 "name": Leaf("str", "k1"),
-                "n1": Leaf("int", 1),
-                "n2": Leaf("int", 2)
+                "n1": Leaf("int", bigint(1)),
+                "n2": Leaf("int", bigint(2))
             }),
             Container({
                 "name": Leaf("str", "k2"),
-                "n1": Leaf("int", 1),
-                "n3": Leaf("int", 3)
+                "n1": Leaf("int", bigint(1)),
+                "n3": Leaf("int", bigint(3))
             }),
             Container({
                 "name": Leaf("str", "k4"),
-                "n4": Leaf("int", 4),
+                "n4": Leaf("int", bigint(4)),
             }),
         ]),
         "d": LeafList("str", ["a", "b", "c"])
@@ -2301,23 +2322,23 @@ def _test_merge_list1():
     y1 = List(["name"], [
         Container({
             "name": Leaf("str", "first"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "breaker"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "fourth"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "common"),
-            "n2": Leaf("int", 2)
+            "n2": Leaf("int", bigint(2))
         }),
         Container({
             "name": Leaf("str", "last"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
@@ -2327,15 +2348,15 @@ def _test_merge_list1():
         }),
         Container({
             "name": Leaf("str", "second"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "third"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "common"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "last")
@@ -2345,32 +2366,32 @@ def _test_merge_list1():
     exp = List(["name"], [
         Container({
             "name": Leaf("str", "first"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "breaker"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "fourth"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "common"),
-            "n2": Leaf("int", 2),
-            "n1": Leaf("int", 1)
+            "n2": Leaf("int", bigint(2)),
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "last"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "second"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "third"),
-            "n1": Leaf("int", 1)
+            "n1": Leaf("int", bigint(1))
         }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
@@ -2378,10 +2399,10 @@ def _test_merge_list1():
 
 def _test_merge_leaf_conflict():
     y1 = Container({
-        "a": Leaf("int", 1)
+        "a": Leaf("int", bigint(1))
     })
     y2 = Container({
-        "a": Leaf("int", 2)
+        "a": Leaf("int", bigint(2))
     })
 
     try:
@@ -2394,21 +2415,21 @@ def _test_eq_list():
     l1 = List(["name"], [
         Container({
             "name": Leaf("str", "a"),
-            "x": Leaf("int", 1)
+            "x": Leaf("int", bigint(1))
         }),
         Container({
             "name": Leaf("str", "b"),
-            "x": Leaf("int", 2)
+            "x": Leaf("int", bigint(2))
         })
     ])
     l2 = List(["name"], [
         Container({
             "name": Leaf("str", "b"),
-            "x": Leaf("int", 2)
+            "x": Leaf("int", bigint(2))
         }),
         Container({
             "name": Leaf("str", "a"),
-            "x": Leaf("int", 1)
+            "x": Leaf("int", bigint(1))
         })
     ])
     testing.assertEqual(l1, l1)
@@ -2417,18 +2438,18 @@ def _test_eq_list():
 def _test_eq_list_user_order():
     l1 = List(["name"], user_order=True, elements=[
         Container({
-            "x": Leaf("int", 1)
+            "x": Leaf("int", bigint(1))
         }),
         Container({
-            "x": Leaf("int", 2)
+            "x": Leaf("int", bigint(2))
         })
     ])
     l2 = List(["name"], user_order=True, elements=[
         Container({
-            "x": Leaf("int", 2)
+            "x": Leaf("int", bigint(2))
         }),
         Container({
-            "x": Leaf("int", 1)
+            "x": Leaf("int", bigint(1))
         })
     ])
     testing.assertEqual(l1, l1)
@@ -2451,13 +2472,13 @@ def _test_diff_no_change():
     since there are no differences.
     """
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2)
+        "a": Leaf("int", bigint(1)),
+        "b": Leaf("int", bigint(2))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2)
+        "a": Leaf("int", bigint(1)),
+        "b": Leaf("int", bigint(2))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
@@ -2468,19 +2489,19 @@ def _test_diff_leaf_change():
     with just that leaf changed.
     """
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2)
+        "a": Leaf("int", bigint(1)),
+        "b": Leaf("int", bigint(2))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 42), # Changed from 1 to 42
-        "b": Leaf("int", 2)
+        "a": Leaf("int", bigint(42)), # Changed from 1 to 42
+        "b": Leaf("int", bigint(2))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     exp = Container({
-        "a": Leaf("int", 42)
+        "a": Leaf("int", bigint(42))
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2490,14 +2511,14 @@ def _test_diff_node_removal():
     diff at the place where c was.
     """
     old = Container({
-        "a": Leaf("int", 1),
-        "c": Leaf("int", 3),
-        "d": Leaf("int", 4)
+        "a": Leaf("int", bigint(1)),
+        "c": Leaf("int", bigint(3)),
+        "d": Leaf("int", bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 1),
-        "d": Leaf("int", 4)
+        "a": Leaf("int", bigint(1)),
+        "d": Leaf("int", bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
@@ -2505,7 +2526,7 @@ def _test_diff_node_removal():
     # c is removed
     exp = Container({
         "c": Absent({
-            "c": Leaf("int", 3)
+            "c": Leaf("int", bigint(3))
         })
     }, ns="http://example.com/acme", module="acme")
 
@@ -2517,12 +2538,12 @@ def _test_diff_list_removal():
         "l": List(["name"], [
         Container({
             "name": Leaf("str", "k1"),
-            "n1": Leaf("int", 1),
-            "n2": Leaf("int", 2),
+            "n1": Leaf("int", bigint(1)),
+            "n2": Leaf("int", bigint(2)),
         }),
         Container({
             "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "n4": Leaf("int", bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
     })
@@ -2537,12 +2558,12 @@ def _test_diff_list_removal():
             "l": List(["name"], [
                 Container({
                     "name": Leaf("str", "k1"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2),
+                    "n1": Leaf("int", bigint(1)),
+                    "n2": Leaf("int", bigint(2)),
                 }),
                 Container({
                     "name": Leaf("str", "k4"),
-                    "n4": Leaf("int", 4),
+                    "n4": Leaf("int", bigint(4)),
                 }),
             ], ns="http://example.com/acme", module="acme")
         }, ns="http://example.com/acme", module="acme")
@@ -2559,19 +2580,19 @@ def _test_diff_elem_removal():
     old = List(["name"], [
         Container({
             "name": Leaf("str", "k1"),
-            "n1": Leaf("int", 1),
-            "n2": Leaf("int", 2),
+            "n1": Leaf("int", bigint(1)),
+            "n2": Leaf("int", bigint(2)),
         }),
         Container({
             "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "n4": Leaf("int", bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
 
     new = List(["name"], [
         Container({
             "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "n4": Leaf("int", bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
 
@@ -2590,19 +2611,19 @@ def _test_diff_node_addition():
     """A new node e is added in new. We expect the diff to have that new node.
     """
     old = Container({
-        "a": Leaf("int", 1)
+        "a": Leaf("int", bigint(1))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 1),
-        "e": Leaf("int", 5)
+        "a": Leaf("int", bigint(1)),
+        "e": Leaf("int", bigint(5))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # e is new
     exp = Container({
-        "e": Leaf("int", 5)
+        "e": Leaf("int", bigint(5))
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2633,15 +2654,15 @@ def _test_diff_complex_ordering():
     before the new node d in the diff.
     """
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
-        "c": Leaf("int", 3)
+        "a": Leaf("int", bigint(1)),
+        "b": Leaf("int", bigint(2)),
+        "c": Leaf("int", bigint(3))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf("int", 1),
-        "c": Leaf("int", 3),
-        "d": Leaf("int", 4)
+        "a": Leaf("int", bigint(1)),
+        "c": Leaf("int", bigint(3)),
+        "d": Leaf("int", bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
@@ -2649,17 +2670,17 @@ def _test_diff_complex_ordering():
     # "b" is absent before "d" is introduced
     exp = Container({
         "b": Absent({
-            "b": Leaf("int", 2)
+            "b": Leaf("int", bigint(2))
         }),
-        "d": Leaf("int", 4)
+        "d": Leaf("int", bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
 def _test_patch_no_change():
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
+        "a": Leaf("int", bigint(1)),
+        "b": Leaf("int", bigint(2)),
     }, ns="http://example.com/acme", module="acme")
 
     # diff is None means no changes
@@ -2670,28 +2691,28 @@ def _test_patch_no_change():
 
 def _test_patch_leaf_change():
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
+        "a": Leaf("int", bigint(1)),
+        "b": Leaf("int", bigint(2)),
     }, ns="http://example.com/acme", module="acme")
 
     # Suppose we want to change leaf 'a' from 1 to 42
     # diff would look like this:
     p = Container({
-        "a": Leaf("int", 42),
+        "a": Leaf("int", bigint(42)),
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf("int", 42),
-        "b": Leaf("int", 2),
+        "a": Leaf("int", bigint(42)),
+        "b": Leaf("int", bigint(2)),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
 def _test_patch_node_removal():
     old = Container({
-        "a": Leaf("int", 1),
-        "c": Leaf("int", 3),
+        "a": Leaf("int", bigint(1)),
+        "c": Leaf("int", bigint(3)),
     }, ns="http://example.com/acme", module="acme")
 
     # Suppose we remove 'c'
@@ -2702,7 +2723,7 @@ def _test_patch_node_removal():
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf("int", 1),
+        "a": Leaf("int", bigint(1)),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
@@ -2711,12 +2732,12 @@ def _test_patch_elem_removal():
     old = List(["name"], [
         Container({
             "name": Leaf("str", "k1"),
-            "n1": Leaf("int", 1),
-            "n2": Leaf("int", 2)
+            "n1": Leaf("int", bigint(1)),
+            "n2": Leaf("int", bigint(2))
         }),
         Container({
             "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "n4": Leaf("int", bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
 
@@ -2732,7 +2753,7 @@ def _test_patch_elem_removal():
     exp = List(["name"], [
         Container({
             "name": Leaf("str", "k4"),
-            "n4": Leaf("int", 4),
+            "n4": Leaf("int", bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
 
@@ -2740,8 +2761,8 @@ def _test_patch_elem_removal():
 
 def _test_patch_elem_removal2():
     old = Container({
-        "n1": Leaf("int", 1),
-        "n2": Leaf("int", 2)
+        "n1": Leaf("int", bigint(1)),
+        "n2": Leaf("int", bigint(2))
     })
 
     p = Absent({
@@ -2754,18 +2775,18 @@ def _test_patch_elem_removal2():
 
 def _test_patch_node_addition():
     old = Container({
-        "a": Leaf("int", 1),
+        "a": Leaf("int", bigint(1)),
     }, ns="http://example.com/acme", module="acme")
 
     # Add a new leaf 'e':
     p = Container({
-        "e": Leaf("int", 5)
+        "e": Leaf("int", bigint(5))
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf("int", 1),
-        "e": Leaf("int", 5),
+        "a": Leaf("int", bigint(1)),
+        "e": Leaf("int", bigint(5)),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
@@ -2773,23 +2794,23 @@ def _test_patch_node_addition():
 def _test_patch_complex_ordering():
     # old: a, b, c
     old = Container({
-        "a": Leaf("int", 1),
-        "b": Leaf("int", 2),
-        "c": Leaf("int", 3),
+        "a": Leaf("int", bigint(1)),
+        "b": Leaf("int", bigint(2)),
+        "c": Leaf("int", bigint(3)),
     }, ns="http://example.com/acme", module="acme")
 
     # new: a, c, d
     # diff: remove b, add d
     p = Container({
         "b": Absent(),
-        "d": Leaf("int", 4)
+        "d": Leaf("int", bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf("int", 1),
-        "c": Leaf("int", 3),
-        "d": Leaf("int", 4),
+        "a": Leaf("int", bigint(1)),
+        "c": Leaf("int", bigint(3)),
+        "d": Leaf("int", bigint(4)),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
@@ -2875,13 +2896,13 @@ def _test_diff_and_patch_large_tree():
             "acl": Container(children={
                 "rules": List(["id"], elements=[
                     Container({
-                        "id": Leaf("int", 10),
+                        "id": Leaf("int", bigint(10)),
                         "action": Leaf("str", "permit"),
                         "src": Leaf("str", "10.0.0.0/24"),
                         "dst": Leaf("str", "10.0.1.0/24"),
                     }),
                     Container({
-                        "id": Leaf("int", 20),
+                        "id": Leaf("int", bigint(20)),
                         "action": Leaf("str", "deny"),
                         "src": Leaf("str", "any"),
                         "dst": Leaf("str", "any"),
@@ -2927,19 +2948,19 @@ def _test_diff_and_patch_large_tree():
             "acl": Container(children={
                 "rules": List(["id"], elements=[
                     Container({
-                        "id": Leaf("int", 10),
+                        "id": Leaf("int", bigint(10)),
                         "action": Leaf("str", "permit"),
                         "src": Leaf("str", "10.0.0.0/24"),
                         "dst": Leaf("str", "10.0.1.0/24"),
                     }),
                     Container({
-                        "id": Leaf("int", 20),
+                        "id": Leaf("int", bigint(20)),
                         "action": Leaf("str", "drop"),  # changed from deny
                         "src": Leaf("str", "any"),
                         "dst": Leaf("str", "any"),
                     }),
                     Container({
-                        "id": Leaf("int", 30),
+                        "id": Leaf("int", bigint(30)),
                         "action": Leaf("str", "permit"),
                         "src": Leaf("str", "192.0.2.0/24"),
                         "dst": Leaf("str", "198.51.100.0/24"),
@@ -2971,16 +2992,16 @@ def _test_diff_and_patch_large_tree():
 def _test_prsrc():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf("int", bigint(1)),
             "l1": List(["name"], [
                 Container({
                     "name": Leaf("str", "k1"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2)
+                    "n1": Leaf("int", bigint(1)),
+                    "n2": Leaf("int", bigint(2))
                 }),
                 Container({
                     "name": Leaf("str", "k4"),
-                    "n4": Leaf("int", 4),
+                    "n4": Leaf("int", bigint(4)),
                 }),
             ])
         }, ns="http://example.com/acme", module="acme")
@@ -2998,7 +3019,7 @@ def _test_prsrc_absent():
                 }),
                 Container({
                     "name": Leaf("str", "k4"),
-                    "n4": Leaf("int", 4),
+                    "n4": Leaf("int", bigint(4)),
                 }),
             ])
         }, ns="http://example.com/acme", module="acme")
@@ -3009,7 +3030,7 @@ def _test_prsrc_absent():
 def _test_prsrc_root():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf("int", bigint(1)),
             "b": LeafList("str", ["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
@@ -3019,8 +3040,8 @@ def _test_prsrc_root():
 def _test_prsrc_leaf_ns():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1, ns="http://example.com/foo", module="foo"),
-            "b": Leaf("int", 2)
+            "a": Leaf("int", bigint(1), ns="http://example.com/foo", module="foo"),
+            "b": Leaf("int", bigint(2))
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3038,27 +3059,27 @@ def _test_prsrc_identityref():
 def _test_to_json():
     y1 = Container({
         "acme:foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf("int", bigint(1)),
             "l1": List(["name", "name_two"], [
                 Container({
                     "name": Leaf("str", "k1"),
                     "name_two": Leaf("str", "k1a"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2)
+                    "n1": Leaf("int", bigint(1)),
+                    "n2": Leaf("int", bigint(2))
                 }),
                 Container({
                     "name": Leaf("str", "k4"),
                     "name_two": Leaf("str", "k4a"),
-                    "n4": Leaf("int", 4),
+                    "n4": Leaf("int", bigint(4)),
                 }),
             ]),
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
             "llb": LeafList("binary", [b"Hello Acton \xf0\x9f\xab\xa1"]),
-            "c": Leaf("uint64", 18446744073709551615),
+            "c": Leaf("uint64", bigint(18446744073709551615)),
         }, ns="http://example.com/acme", module="acme"),
         "beep:foo": Container({
-            "a": Leaf("int", 1)
+            "a": Leaf("int", bigint(1))
         }, ns="http://example.com/beep", module="beep")
     })
 
@@ -3084,27 +3105,27 @@ def _test_to_json_identityref():
 def _test_to_xmlstr():
     y1 = Container({
         "acme:foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf("int", bigint(1)),
             "l1": List(["name", "name_two"], [
                 Container({
                     "name": Leaf("str", "k1"),
                     "name_two": Leaf("str", "k1a"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2)
+                    "n1": Leaf("int", bigint(1)),
+                    "n2": Leaf("int", bigint(2))
                 }),
                 Container({
                     "name": Leaf("str", "k4"),
                     "name_two": Leaf("str", "k4a"),
-                    "n4": Leaf("int", 4),
+                    "n4": Leaf("int", bigint(4)),
                 }),
             ]),
             "b": Leaf("bool", False),
             "lb": Leaf("binary", b"Hello Acton \xf0\x9f\xab\xa1"),
             "llb": LeafList("binary", [b"Hello Acton \xf0\x9f\xab\xa1"]),
-            "c": Leaf("uint64", 18446744073709551615),
+            "c": Leaf("uint64", bigint(18446744073709551615)),
         }, ns="http://example.com/acme", module="acme"),
         "beep:foo": Container({
-            "a": Leaf("int", 1)
+            "a": Leaf("int", bigint(1))
         }, ns="http://example.com/beep", module="beep")
     })
 
@@ -3113,7 +3134,7 @@ def _test_to_xmlstr():
 def _test_to_xmlstr_root():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf("int", bigint(1)),
             "b": LeafList("binary", ["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
@@ -3123,7 +3144,7 @@ def _test_to_xmlstr_root():
 def _test_to_xmlstr_module():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf("int", bigint(1)),
             "b": LeafList("str", ["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
@@ -3133,8 +3154,8 @@ def _test_to_xmlstr_module():
 def _test_to_xmlstr_leaf_ns():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1, ns="http://example.com/foo", module="foo"),
-            "b": Leaf("int", 2)
+            "a": Leaf("int", bigint(1), ns="http://example.com/foo", module="foo"),
+            "b": Leaf("int", bigint(2))
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3167,13 +3188,13 @@ def _test_to_xmlstr_mixed():
 def _test_to_xmlstr_root_merge():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1),
+            "a": Leaf("int", bigint(1)),
             "b": LeafList("str", ["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
     y2 = Container({
         "bar": Container({
-            "b": Leaf("int", 42),
+            "b": Leaf("int", bigint(42)),
         }, ns="http://example.com/bar", module="bar")
     })
     ym = merge(y1, y2)
@@ -3183,7 +3204,7 @@ def _test_to_xmlstr_root_merge():
 def _test_to_xmlstr_presence():
     y1 = Container({
         "foo": Container({
-            "a": Leaf("int", 1)
+            "a": Leaf("int", bigint(1))
         }, presence=True, ns="http://example.com/acme", module="acme")
     })
 
@@ -3219,12 +3240,12 @@ def _test_to_xmlstr_list_removal():
             "l": List(["name"], [
                 Container({
                     "name": Leaf("str", "k1"),
-                    "n1": Leaf("int", 1),
-                    "n2": Leaf("int", 2),
+                    "n1": Leaf("int", bigint(1)),
+                    "n2": Leaf("int", bigint(2)),
                 }),
                 Container({
                     "name": Leaf("str", "k4"),
-                    "n4": Leaf("int", 4),
+                    "n4": Leaf("int", bigint(4)),
                 }),
             ], ns="http://example.com/acme", module="acme")
         }, ns="http://example.com/acme", module="acme")
