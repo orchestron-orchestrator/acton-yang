@@ -771,8 +771,8 @@ class DNodeInner(DNode):
                     # come first in the correct order.
                     if not is_optional_arg_yang_leaf(cchild, list_keys(container), loose):
                         cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
-                        # Use repr() in nested f-string to print local variable / attribute verbatim
-                        non_optional_args.append("{{repr({local_prefix}{'.'.join(path)}.{cchild_safe_name})}}")
+                        # Use our bigint-aware repr helper in nested f-string to print local variable / attribute verbatim
+                        non_optional_args.append("{{repr_yang({local_prefix}{'.'.join(path)}.{cchild_safe_name})}}")
                 elif isinstance(cchild, DContainer):
                     if not (cchild.presence or loose or optional_subtree(cchild)):
                         cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
@@ -838,7 +838,7 @@ class DNodeInner(DNode):
                     res.append("        if len(_{usname(child)}) != 0:")
                 else:
                     res.append("        if _{usname(child)} is not None:")
-                res.append("            leaves.append('{{self_name}}.{usname(child)} = {{repr(_{usname(child)})}}')")
+                res.append("            leaves.append('{{self_name}}.{usname(child)} = {{repr_yang(_{usname(child)})}}')")
             elif isinstance(child, DContainer):
                 res.append("        _{usname(child)} = self.{usname(child)}")
                 res.append("        if _{usname(child)} is not None:")
@@ -1822,11 +1822,14 @@ class DRoot(DNodeInner):
         res.append("import yang.adata")
         res.append("import yang.gdata")
         res.append("import yang.gen3")
+        res.append("from yang.gdata import repr_yang")
         res.append("from yang.identity import complete_and_validate_identityref")
         res.append("from yang.identityref import Identityref, PartialIdentityref")
         res.append("from yang.schema import DIdentity")
         res.append("")
         res.append("# == This file is generated ==")
+        res.append("")
+        res.append("")
         res.append("")
         res.append("")
         res.extend(DIdentity.format_identity_list(self.identities))
@@ -3015,7 +3018,7 @@ def yang_typename_to_acton_type(type_name: str) -> str:
     elif type_name == "instance-identifier":
         return "str"
     elif type_name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
-        return "int"
+        return "bigint"
     elif type_name == "leafref":
         return "str"
     elif type_name == "string":
@@ -3072,12 +3075,12 @@ def yang_type_to_acton_type(t: ?Type) -> str:
                 max_size = max(list(map(lambda x: int(x[3:]), unique_base_types)))
                 # TODO: once we have integer subtyping, return largest necessary iXX type
                 #return "i{max_size}"
-                return "int"
+                return "bigint"
             elif all(map(lambda x: x in {"uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
                 max_size = max(list(map(lambda x: int(x[4:]), unique_base_types)))
                 # TODO: once we have integer subtyping, return largest necessary uXX type
                 #return "u{max_size}"
-                return "int"
+                return "bigint"
             elif all(map(lambda x: x in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
                 # We have a union of a mix of signed and unsigned integers, so let's find the largest
                 int_sizes = filter(lambda x: x in {"int8", "int16", "int32", "int64"}, unique_base_types)
@@ -3093,10 +3096,10 @@ def yang_type_to_acton_type(t: ?Type) -> str:
                 max_size = max([max_int_size, max_int_mapped_uint_size])
                 if max_size > 64:
                     # Need to use our int (a.k.a. "bigint")
-                    return "int"
+                    return "bigint"
                 # TODO: once we have integer subtyping, return largest necessary iXX type
                 #return "i{max_size}"
-                return "int"
+                return "bigint"
 
             # TODO: use atom when union consists of types that we represent with Acton built-in types
             # TODO: use Acton union
@@ -3115,7 +3118,7 @@ def prsrc_literal(ytype: str, value: str) -> str:
     elif ytype == "identityref":
         return value
     elif ytype in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
-        return value
+        return "bigint(" + value + ")"
     elif ytype == "binary":
         # Binary values are encoded as base64 strings in YANG and NETCONF, but
         # stored as Acton bytes, so we need to decode it first
