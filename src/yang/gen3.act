@@ -308,30 +308,30 @@ protocol YangData:
     Provides a uniform interface for extracting data from different data formats
     that can carry YANG-modeled data, like XML and JSON
     """
-    take_container: mut(yang.schema.DContainer, str, ?str, list[PathElement]) -> ?value
-    take_list: mut(yang.schema.DList, str, ?str, list[PathElement]) -> list[value]
+    take_container: mut(yang.schema.DContainer, str, bool, list[PathElement]) -> ?value
+    take_list: mut(yang.schema.DList, str, bool, list[PathElement]) -> list[value]
     # Return a typed tuple for leaves. The tuple carries the concrete type name
     # and the parsed value. Missing leaves return None.
-    take_leaf: mut(yang.schema.DLeaf, str, ?str, list[PathElement]) -> ?(t: str, val: ?value)
+    take_leaf: mut(yang.schema.DLeaf, str, bool, list[PathElement]) -> ?(t: str, val: ?value)
     # For leaf-lists, return a list of typed tuples (t, val).
     # For identityref items, val holds a PartialIdentityref.
-    take_leaflist: mut(yang.schema.DLeafList, str, ?str, list[PathElement]) -> list[(t: str, val: ?value)]
+    take_leaflist: mut(yang.schema.DLeafList, str, bool, list[PathElement]) -> list[(t: str, val: ?value)]
 
 
 extension xml.Node (YangData):
-    def take_container(self, schema: yang.schema.DContainer, name: str, ns: ?str=None, path: list[PathElement]=[]) -> ?value:
-        child_node = yang.gdata.get_xml_opt_child(self, name, ns)
+    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, path: list[PathElement]=[]) -> ?value:
+        child_node = yang.gdata.get_xml_opt_child(self, name, schema.namespace if ns_qualified else None)
         if child_node is not None:
             return child_node
         return None
 
-    def take_list(self, schema: yang.schema.DList, name: str, ns: ?str=None, path: list[PathElement]=[]) -> list[value]:
-        elements = yang.gdata.get_xml_children(self, name, ns)
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, path: list[PathElement]=[]) -> list[value]:
+        elements = yang.gdata.get_xml_children(self, name, schema.namespace if ns_qualified else None)
         return elements
 
-    def take_leaf(self, schema: yang.schema.DLeaf, name: str, ns: ?str=None, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
+    def take_leaf(self, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
         new_path = path + [PathElement(schema)]
-        maybe_node = yang.gdata.get_xml_opt_child(self, name, ns)
+        maybe_node = yang.gdata.get_xml_opt_child(self, name, schema.namespace if ns_qualified else None)
         if maybe_node is not None:
             text_value = maybe_node.text
             if text_value is not None:
@@ -349,10 +349,10 @@ extension xml.Node (YangData):
         else:
             return None
 
-    def take_leaflist(self, schema: yang.schema.DLeafList, name: str, ns: ?str=None, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
+    def take_leaflist(self, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
         new_path = path + [PathElement(schema)]
         values: list[(t: str, val: ?value)] = []
-        children = yang.gdata.get_xml_children(self, name, ns)
+        children = yang.gdata.get_xml_children(self, name, schema.namespace if ns_qualified else None)
         # Ignore NETCONF operation
         if schema.type_.name == "identityref":
             for child in children:
@@ -377,11 +377,11 @@ extension xml.Node (YangData):
 
 
 extension dict[A(Hashable), B] (YangData):
-    def take_container(self, schema: yang.schema.DContainer, name: str, ns: ?str=None, path: list[PathElement]=[]) -> ?value:
+    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, path: list[PathElement]=[]) -> ?value:
         if isinstance(self, dict):
             maybe = None
             # For cross-namespace children, only accept module-qualified keys
-            if ns is not None and schema.module is not None and schema.module != "":
+            if ns_qualified and schema.module is not None and schema.module != "":
                 maybe = self.get(f"{schema.module}:{name}")
             else:
                 maybe = self.get(name)
@@ -389,10 +389,10 @@ extension dict[A(Hashable), B] (YangData):
                 return maybe
         return None
 
-    def take_list(self, schema: yang.schema.DList, name: str, ns: ?str=None, path: list[PathElement]=[]) -> list[value]:
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, path: list[PathElement]=[]) -> list[value]:
         if isinstance(self, dict):
             lv = None
-            if ns is not None and schema.module is not None and schema.module != "":
+            if ns_qualified and schema.module is not None and schema.module != "":
                 lv = self.get(f"{schema.module}:{name}")
             else:
                 lv = self.get(name)
@@ -400,11 +400,11 @@ extension dict[A(Hashable), B] (YangData):
                 return lv
         return []
 
-    def take_leaf(self, schema: yang.schema.DLeaf, name: str, ns: ?str=None, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
+    def take_leaf(self, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, path: list[PathElement]=[]) -> ?(t: str, val: ?value):
         new_path = path + [PathElement(schema)]
         if isinstance(self, dict):
             leaf_value = None
-            if ns is not None and schema.module is not None and schema.module != "":
+            if ns_qualified and schema.module is not None and schema.module != "":
                 leaf_value = self.get(f"{schema.module}:{name}")
             else:
                 leaf_value = self.get(name)
@@ -461,11 +461,11 @@ extension dict[A(Hashable), B] (YangData):
         else:
             return None
 
-    def take_leaflist(self, schema: yang.schema.DLeafList, name: str, ns: ?str=None, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
+    def take_leaflist(self, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, path: list[PathElement]=[]) -> list[(t: str, val: ?value)]:
         values: list[(t: str, val: ?value)] = []
         if isinstance(self, dict):
             leaflist_data = None
-            if ns is not None and schema.module is not None and schema.module != "":
+            if ns_qualified and schema.module is not None and schema.module != "":
                 leaflist_data = self.get(f"{schema.module}:{name}")
             else:
                 leaflist_data = self.get(name)
@@ -760,7 +760,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
             mod = child.module
 
         if isinstance(child, yang.schema.DContainer):
-            val = data.take_container(child, child.name, ns, spath)
+            val = data.take_container(child, child.name, s.namespace != child.namespace, spath)
             if val is not None:
                 if isinstance(val, xml.Node):
                     # NETCONF operation on container
@@ -793,7 +793,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                         raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find xml child with name {child.name}")
 
         elif isinstance(child, yang.schema.DList):
-            list_val = data.take_list(child, child.name, ns, spath)
+            list_val = data.take_list(child, child.name, s.namespace != child.namespace, spath)
             list_elements = []
 
             def unwrap_key[T](name: str, val: ?T) -> T:
@@ -839,7 +839,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                 children[uname(child)] = list_gdata
 
         elif isinstance(child, yang.schema.DLeafList):
-            leaflist_val = data.take_leaflist(child, child.name, ns, spath)
+            leaflist_val = data.take_leaflist(child, child.name, s.namespace != child.namespace, spath)
             if len(leaflist_val) > 0:
                 if child.type_.name == "identityref":
                     validated_values = []
@@ -875,7 +875,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
             typed = None
             # If XML, inspect NETCONF operation first
             if isinstance(data, xml.Node):
-                leaf_node = yang.gdata.get_xml_opt_child(data, child.name, ns)
+                leaf_node = yang.gdata.get_xml_opt_child(data, child.name, child.namespace if s.namespace != child.namespace else None)
                 if leaf_node is not None:
                     lop = get_netconf_operation(leaf_node)
                     if lop == "remove":
@@ -890,7 +890,7 @@ def _from_data_recursive[A(YangData)](s: yang.schema.DNodeInner, global_identity
                         typed = None
                         continue
                     # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
-            typed = data.take_leaf(child, child.name, ns, spath)
+            typed = data.take_leaf(child, child.name, s.namespace != child.namespace, spath)
             if typed is not None:
                 # identityref validation
                 if child.type_.name == "identityref":
