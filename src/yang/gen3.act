@@ -956,10 +956,10 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, spath + [PathElement(child)])
         raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
 
-    def pname(n):
-        return yang.schema.get_path_name(n)
+    def pname(pe: list[PathElement]):
+        return yang.schema.get_path_name([e.node for e in pe])
 
-    def _find_non_optional_subtree(container: yang.schema.DNodeInner, node: yang.gdata.Node, path: list[str], local_prefix="_") -> (list[str], list[str]):
+    def _find_non_optional_subtree(container: yang.schema.DNodeInner, spath: list[PathElement], node: yang.gdata.Node, path: list[str], local_prefix="_") -> (list[str], list[str]):
         r"""Discover the non-optional descendants of a container
 
         The container here is either a DContainer or a DList (representing
@@ -993,6 +993,9 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         unique_namer = yang.schema._UniqueNamer(container)
 
         for cchild in container.children:
+            def path_with_child():
+                return spath + [PathElement(cchild)]
+
             if not (isinstance(cchild, yang.schema.DNodeLeaf) or isinstance(cchild, yang.schema.DContainer) or isinstance(cchild, yang.schema.DList)):
                 continue
             if isinstance(cchild, yang.schema.DLeaf):
@@ -1006,16 +1009,16 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
 
                     # Recursively build subtree for non-optional children
-                    sub_args, sub_containers = _find_non_optional_subtree(cchild, node.get_cnt(cchild.name), path + [cchild_safe_name], local_prefix)
+                    sub_args, sub_containers = _find_non_optional_subtree(cchild, path_with_child(), node.get_cnt(cchild.name), path + [cchild_safe_name], local_prefix)
 
                     # Create variable declaration for this container
                     mcchild_var = "{'_'.join(path)}_{cchild_safe_name}"
 
                     if sub_args:
                         sub_args_str = ", ".join(sub_args)
-                        non_optional_containers.append("{mcchild_var} = {pname(cchild)}({sub_args_str})")
+                        non_optional_containers.append("{mcchild_var} = {pname(path_with_child())}({sub_args_str})")
                     else:
-                        non_optional_containers.append("{mcchild_var} = {pname(cchild)}()")
+                        non_optional_containers.append("{mcchild_var} = {pname(path_with_child())}()")
 
                     # Add nested variable declarations
                     non_optional_containers.extend(sub_containers)
@@ -1033,7 +1036,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
     if top:
         res.append('# Top node: {format_schema_path(spath)}')
         # Build constructor arguments for non-optional children (same logic as in __init__)
-        constructor_args, constructor_containers = _find_non_optional_subtree(s, node, ["self"], local_prefix="")
+        constructor_args, constructor_containers = _find_non_optional_subtree(s, spath, node, ["self"], local_prefix="")
         if constructor_args:
             # Add variable declarations in reverse order to ensure dependencies are declared before use.
             # For example, if container C needs argument from container B, which needs argument from A,
@@ -1041,9 +1044,9 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             # Since find_non_optional_subtree() builds the list depth-first, we reverse it.
             res.extend(list(reversed(constructor_containers)))
             args_str = ", ".join(constructor_args)
-            res.append("{self_name} = {pname(s)}({args_str})")
+            res.append("{self_name} = {pname(spath)}({args_str})")
         else:
-            res.append("{self_name} = {pname(s)}()")
+            res.append("{self_name} = {pname(spath)}()")
     leaves = []
     for child in s.children:
         # Only process data nodes
@@ -1074,7 +1077,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     res.append("")
                     res.append("# P-container: {format_schema_path(path_with_child())}")
                     # Build .pradata() code for this P-container
-                    pc_args, pc_var_declarations = _find_non_optional_subtree(child, container, [usname(child)])
+                    pc_args, pc_var_declarations = _find_non_optional_subtree(child, path_with_child(), container, [usname(child)])
 
                     # Add variable declarations in reverse order to ensure the prerequisites are met
                     res.extend(list(reversed(pc_var_declarations)))
@@ -1096,7 +1099,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     # Build the list of arguments for create() method
                     list_create_args = []
 
-                    non_optional_args, non_optional_containers = _find_non_optional_subtree(child, element, ["element"])
+                    non_optional_args, non_optional_containers = _find_non_optional_subtree(child, path_with_child(), element, ["element"])
 
                     res.extend(list(reversed(non_optional_containers)))
                     list_create_args.extend(non_optional_args)
