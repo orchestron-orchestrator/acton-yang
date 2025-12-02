@@ -11,9 +11,6 @@ import test_data_classes
 import xml_full_gdata
 import xml_full_adata
 import xml_full_adata_loose
-import xml_full_gdata_gen2
-import xml_full_adata_gen2
-import xml_full_adata_loose_gen2
 
 def _test_xml_full():
     xml_out_full = xml_full_gdata.xml_full.to_xmlstr()
@@ -22,7 +19,7 @@ def _test_xml_full():
 
 def _test_gdata_full():
     xml_in = xml.decode(test_data_classes.xml_text_full)
-    gd = yang_foo.from_xml_gen3(xml_in)
+    gd = yang_foo.from_xml(xml_in)
     testing.assertEqual(gd, xml_full_gdata.xml_full)
 
 def _test_adata_full():
@@ -33,28 +30,6 @@ def _test_adata_full():
 
 def _test_adata_full_loose():
     ad = xml_full_adata_loose.adata()
-    xml_out_adata = ad.to_gdata().to_xmlstr()
-    xml_out_adata_wrapped = "<data>\n{xml_out_adata}\n</data>"
-    testing.assertEqual(test_data_classes.xml_text_full, xml_out_adata_wrapped)
-
-def _test_gdata_full_gen2():
-    xml_in = xml.decode(test_data_classes.xml_text_full)
-    gd = yang_foo.from_xml(xml_in)
-    testing.assertEqual(gd, xml_full_gdata_gen2.xml_full)
-
-def _test_xml_full_gen2():
-    xml_out_full = xml_full_gdata_gen2.xml_full.to_xmlstr()
-    xml_out_full_wrapped = "<data>\n{xml_out_full}\n</data>"
-    testing.assertEqual(test_data_classes.xml_text_full, xml_out_full_wrapped)
-
-def _test_adata_full_gen2():
-    ad = xml_full_adata_gen2.adata()
-    xml_out_adata = ad.to_gdata().to_xmlstr()
-    xml_out_adata_wrapped = "<data>\n{xml_out_adata}\n</data>"
-    testing.assertEqual(test_data_classes.xml_text_full, xml_out_adata_wrapped)
-
-def _test_adata_full_loose_gen2():
-    ad = xml_full_adata_loose_gen2.adata()
     xml_out_adata = ad.to_gdata().to_xmlstr()
     xml_out_adata_wrapped = "<data>\n{xml_out_adata}\n</data>"
     testing.assertEqual(test_data_classes.xml_text_full, xml_out_adata_wrapped)
@@ -70,17 +45,4 @@ actor _test_adata_loose_diff(t: testing.EnvT):
     adata_loose = file.ReadFile(
         rfcap,
         "src/xml_full_adata_loose.act").read().decode()
-    t.success(diff.diff(adata_strict, adata_loose))
-
-actor _test_adata_loose_diff_gen2(t: testing.EnvT):
-    """Golden test for tracking diff between .prsrc() output for "strict" and "loose" adata for gen2.
-    """
-
-    rfcap = file.ReadFileCap(file.FileCap(t.env.cap))
-    adata_strict = file.ReadFile(
-        rfcap,
-        "src/xml_full_adata_gen2.act").read().decode()
-    adata_loose = file.ReadFile(
-        rfcap,
-        "src/xml_full_adata_loose_gen2.act").read().decode()
     t.success(diff.diff(adata_strict, adata_loose))

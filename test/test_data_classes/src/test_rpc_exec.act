@@ -197,31 +197,6 @@ def _test_rpc_output_deserialization():
     testing.assertEqual(empty_output.outoo, None, "Empty output should have None value")
 
 
-actor _test_rpc_foo_with_gen3(t: testing.AsyncT):
-    """Test RPC execution using gen3 parser"""
-    def on_reply(r: ?yangrpc.yangrpc__foo__output, err: ?Exception):
-        if err is not None:
-            t.failure(err)
-            return
-
-        if r is not None:
-            # Verify the output data
-            testing.assertEqual(r.outoo, "Hello from RPC!", "Expected correct output message from gen3 parser")
-            t.success()
-        else:
-            t.failure(ValueError("Got no result when one was expected"))
-
-    tp = MockTreeProviderSuccess()
-    root = yangrpc.rpc_root(tp)
-
-    # Create input data
-    woo = yangrpc.yangrpc__foo__input__woo(2024)
-    foo_input = yangrpc.yangrpc__foo__input("gen3_test", woo)
-
-    # Execute the RPC with gen3=True
-    root.foo(on_reply, foo_input, gen3=True)
-
-
 actor _test_rpc_silent_no_input_output(t: testing.AsyncT):
     """Test RPC with no input and no output (silent RPC)"""
     def on_reply(err: ?Exception):
@@ -237,23 +212,6 @@ actor _test_rpc_silent_no_input_output(t: testing.AsyncT):
 
     # Execute the silent RPC - no input parameter needed
     root.silent(on_reply)
-
-
-actor _test_rpc_silent_with_gen3(t: testing.AsyncT):
-    """Test silent RPC using gen3 parser"""
-    def on_reply(err: ?Exception):
-        if err is not None:
-            t.failure(err)
-            return
-
-        # For silent RPC with gen3, we still expect successful completion
-        t.success()
-
-    tp = MockTreeProviderSuccess()
-    root = yangrpc.rpc_root(tp)
-
-    # Execute the silent RPC with gen3=True
-    root.silent(on_reply, gen3=True)
 
 
 actor _test_rpc_silent_error_handling(t: testing.AsyncT):
