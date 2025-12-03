@@ -25,12 +25,15 @@ class main_module__main_container__sub_group_container(yang.adata.MNode):
         self._ns = 'http://example.com/main'
         self.sub_group_leaf = sub_group_leaf if sub_group_leaf is not None else "from-submodule"
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'sub_group_leaf':
+            return self.sub_group_leaf
+        raise ValueError('Attribute {name} not found in main_module__main_container__sub_group_container')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _sub_group_leaf = self.sub_group_leaf
-        if _sub_group_leaf is not None:
-            children['sub-group-leaf'] = yang.gdata.Leaf('string', _sub_group_leaf)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['main-module:main-container', 'sub-group-container'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> main_module__main_container__sub_group_container:
@@ -57,18 +60,19 @@ class main_module__main_container__sub_list_entry(yang.adata.MNode):
         self.sub_value = sub_value
         self.ref_to_main = ref_to_main
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'name':
+            return self.name
+        if name == 'sub_value':
+            return self.sub_value
+        if name == 'ref_to_main':
+            return self.ref_to_main
+        raise ValueError('Attribute {name} not found in main_module__main_container__sub_list')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _name = self.name
-        if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
-        _sub_value = self.sub_value
-        if _sub_value is not None:
-            children['sub-value'] = yang.gdata.Leaf('string', _sub_value)
-        _ref_to_main = self.ref_to_main
-        if _ref_to_main is not None:
-            children['ref-to-main'] = yang.gdata.Leaf('leafref', _ref_to_main)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['main-module:main-container', 'sub-list'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> main_module__main_container__sub_list_entry:
@@ -101,14 +105,6 @@ class main_module__main_container__sub_list(yang.adata.MNode):
         self.elements.append(res)
         return res
 
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements)
-
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[main_module__main_container__sub_list_entry]:
         if n is not None:
@@ -138,15 +134,17 @@ class main_module__main_container__group_container(yang.adata.MNode):
         self.group_leaf = group_leaf if group_leaf is not None else "refined-default"
         self.augmented_in_group = augmented_in_group
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'group_leaf':
+            return self.group_leaf
+        if name == 'augmented_in_group':
+            return self.augmented_in_group
+        raise ValueError('Attribute {name} not found in main_module__main_container__group_container')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _group_leaf = self.group_leaf
-        if _group_leaf is not None:
-            children['group-leaf'] = yang.gdata.Leaf('string', _group_leaf)
-        _augmented_in_group = self.augmented_in_group
-        if _augmented_in_group is not None:
-            children['augmented-in-group'] = yang.gdata.Leaf('string', _augmented_in_group)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['main-module:main-container', 'group-container'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> main_module__main_container__group_container:
@@ -177,24 +175,23 @@ class main_module__main_container(yang.adata.MNode):
         self.sub_list = main_module__main_container__sub_list(elements=sub_list)
         self.group_container = group_container if group_container is not None else main_module__main_container__group_container()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'main_leaf':
+            return self.main_leaf
+        if name == 'sub_group_container':
+            return self.sub_group_container
+        if name == 'sub_leaf':
+            return self.sub_leaf
+        if name == 'sub_list':
+            return iter(self.sub_list)
+        if name == 'group_container':
+            return self.group_container
+        raise ValueError('Attribute {name} not found in main_module__main_container')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _main_leaf = self.main_leaf
-        if _main_leaf is not None:
-            children['main-leaf'] = yang.gdata.Leaf('string', _main_leaf)
-        _sub_group_container = self.sub_group_container
-        if _sub_group_container is not None:
-            children['sub-group-container'] = _sub_group_container.to_gdata()
-        _sub_leaf = self.sub_leaf
-        if _sub_leaf is not None:
-            children['sub-leaf'] = yang.gdata.Leaf('string', _sub_leaf)
-        _sub_list = self.sub_list
-        if _sub_list is not None:
-            children['sub-list'] = _sub_list.to_gdata()
-        _group_container = self.group_container
-        if _group_container is not None:
-            children['group-container'] = _group_container.to_gdata()
-        return yang.gdata.Container(children, ns='http://example.com/main', module='main-module')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['main-module:main-container'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> main_module__main_container:
@@ -217,12 +214,15 @@ class root(yang.adata.MNode):
         self._ns = ''
         self.main_container = main_container if main_container is not None else main_module__main_container()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'main_container':
+            return self.main_container
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _main_container = self.main_container
-        if _main_container is not None:
-            children['main-container'] = _main_container.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

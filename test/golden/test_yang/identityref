@@ -40,17 +40,15 @@ class base__config(yang.adata.MNode):
         self._ns = 'http://example.com/base'
         self.active_protocol = active_protocol
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'active_protocol':
+            return self.active_protocol
+        raise ValueError('Attribute {name} not found in base__config')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _active_protocol = self.active_protocol
-        if _active_protocol is not None:
-            _identityref_active_protocol, error = complete_and_validate_identityref(_active_protocol, _identities, ['base:protocol-type'], 'base')
-            if _identityref_active_protocol is not None:
-                _active_protocol = _identityref_active_protocol
-            else:
-                raise ValueError('Invalid value for identityref leaf active-protocol: {error}')
-            children['active-protocol'] = yang.gdata.Leaf('identityref', _active_protocol)
-        return yang.gdata.Container(children, ns='http://example.com/base', module='base')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:config'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> base__config:
@@ -73,12 +71,15 @@ class root(yang.adata.MNode):
         self._ns = ''
         self.config = config if config is not None else base__config()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'config':
+            return self.config
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _config = self.config
-        if _config is not None:
-            children['config'] = _config.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

@@ -27,15 +27,17 @@ class foo__l1_entry(yang.adata.MNode):
         self.name = name
         self.id = id
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'name':
+            return self.name
+        if name == 'id':
+            return self.id
+        raise ValueError('Attribute {name} not found in foo__l1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _name = self.name
-        if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
-        _id = self.id
-        if _id is not None:
-            children['id'] = yang.gdata.Leaf('string', _id)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:l1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__l1_entry:
@@ -67,14 +69,6 @@ class foo__l1(yang.adata.MNode):
         res = foo__l1_entry(name, id)
         self.elements.append(res)
         return res
-
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', module='foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__l1_entry]:

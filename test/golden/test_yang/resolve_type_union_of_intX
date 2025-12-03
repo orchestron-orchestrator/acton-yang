@@ -31,21 +31,21 @@ class root(yang.adata.MNode):
         self.l3 = l3
         self.l4 = l4
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l1':
+            return self.l1
+        if name == 'l2':
+            return self.l2
+        if name == 'l3':
+            return self.l3
+        if name == 'l4':
+            return self.l4
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l1 = self.l1
-        if _l1 is not None:
-            children['l1'] = yang.gdata.Leaf('union', _l1, ns='http://example.com/foo', module='foo')
-        _l2 = self.l2
-        if _l2 is not None:
-            children['l2'] = yang.gdata.Leaf('union', _l2, ns='http://example.com/foo', module='foo')
-        _l3 = self.l3
-        if _l3 is not None:
-            children['l3'] = yang.gdata.Leaf('union', _l3, ns='http://example.com/foo', module='foo')
-        _l4 = self.l4
-        if _l4 is not None:
-            children['l4'] = yang.gdata.Leaf('union', _l4, ns='http://example.com/foo', module='foo')
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:

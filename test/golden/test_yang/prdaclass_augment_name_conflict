@@ -27,15 +27,17 @@ class base__c1(yang.adata.MNode):
         self.bar_foo = bar_foo
         self.foo_foo = foo_foo
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'bar_foo':
+            return self.bar_foo
+        if name == 'foo_foo':
+            return self.foo_foo
+        raise ValueError('Attribute {name} not found in base__c1')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _bar_foo = self.bar_foo
-        if _bar_foo is not None:
-            children['bar:foo'] = yang.gdata.Leaf('string', _bar_foo, ns='http://example.com/bar', module='bar')
-        _foo_foo = self.foo_foo
-        if _foo_foo is not None:
-            children['foo:foo'] = yang.gdata.Leaf('string', _foo_foo, ns='http://example.com/foo', module='foo')
-        return yang.gdata.Container(children, ns='http://example.com/base', module='base')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:c1'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> base__c1:

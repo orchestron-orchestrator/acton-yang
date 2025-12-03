@@ -25,12 +25,15 @@ class foo__c__li__bar(yang.adata.MNode):
         self._ns = 'http://example.com/foo'
         self.man = man
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'man':
+            return self.man
+        raise ValueError('Attribute {name} not found in foo__c__li__bar')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _man = self.man
-        if _man is not None:
-            children['man'] = yang.gdata.Leaf('string', _man)
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:c', 'li', 'bar'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c__li__bar:
@@ -57,18 +60,19 @@ class foo__c__li_entry(yang.adata.MNode):
         self.foo = foo if foo is not None else "banana"
         self.bar = bar
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'name':
+            return self.name
+        if name == 'foo':
+            return self.foo
+        if name == 'bar':
+            return self.bar
+        raise ValueError('Attribute {name} not found in foo__c__li')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _name = self.name
-        if _name is not None:
-            children['name'] = yang.gdata.Leaf('string', _name)
-        _foo = self.foo
-        if _foo is not None:
-            children['foo'] = yang.gdata.Leaf('string', _foo)
-        _bar = self.bar
-        if _bar is not None:
-            children['bar'] = _bar.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:c', 'li'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c__li_entry:
@@ -100,14 +104,6 @@ class foo__c__li(yang.adata.MNode):
         res = foo__c__li_entry(name, bar)
         self.elements.append(res)
         return res
-
-    mut def to_gdata(self):
-        elements = []
-        for e in self:
-            e_gdata = e.to_gdata()
-            if isinstance(e_gdata, yang.gdata.Container):
-                elements.append(e_gdata)
-        return yang.gdata.List(['name'], elements, ns='http://example.com/foo', module='foo')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.List) -> list[foo__c__li_entry]:

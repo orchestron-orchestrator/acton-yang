@@ -125,44 +125,33 @@ class basics__c(yang.adata.MNode):
         else:
             raise ValueError('Invalid default value for identityref leaf c: {error}')
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'l_str_def':
+            return self.l_str_def
+        if name == 'l_str_def_quoted':
+            return self.l_str_def_quoted
+        if name == 'l_uint64_def':
+            return self.l_uint64_def
+        if name == 'l_union_def_str':
+            return self.l_union_def_str
+        if name == 'l_union_def_int':
+            return self.l_union_def_int
+        if name == 'l_union_def_float':
+            return self.l_union_def_float
+        if name == 'l_union_def_bool':
+            return self.l_union_def_bool
+        if name == 'l_union_def_enumeration':
+            return self.l_union_def_enumeration
+        if name == 'l_binary_def':
+            return self.l_binary_def
+        if name == 'l_identityref_def':
+            return self.l_identityref_def
+        raise ValueError('Attribute {name} not found in basics__c')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _l_str_def = self.l_str_def
-        if _l_str_def is not None:
-            children['l_str_def'] = yang.gdata.Leaf('string', _l_str_def)
-        _l_str_def_quoted = self.l_str_def_quoted
-        if _l_str_def_quoted is not None:
-            children['l_str_def_quoted'] = yang.gdata.Leaf('string', _l_str_def_quoted)
-        _l_uint64_def = self.l_uint64_def
-        if _l_uint64_def is not None:
-            children['l_uint64_def'] = yang.gdata.Leaf('uint64', _l_uint64_def)
-        _l_union_def_str = self.l_union_def_str
-        if _l_union_def_str is not None:
-            children['l_union_def_str'] = yang.gdata.Leaf('union', _l_union_def_str)
-        _l_union_def_int = self.l_union_def_int
-        if _l_union_def_int is not None:
-            children['l_union_def_int'] = yang.gdata.Leaf('union', _l_union_def_int)
-        _l_union_def_float = self.l_union_def_float
-        if _l_union_def_float is not None:
-            children['l_union_def_float'] = yang.gdata.Leaf('union', _l_union_def_float)
-        _l_union_def_bool = self.l_union_def_bool
-        if _l_union_def_bool is not None:
-            children['l_union_def_bool'] = yang.gdata.Leaf('union', _l_union_def_bool)
-        _l_union_def_enumeration = self.l_union_def_enumeration
-        if _l_union_def_enumeration is not None:
-            children['l_union_def_enumeration'] = yang.gdata.Leaf('union', _l_union_def_enumeration)
-        _l_binary_def = self.l_binary_def
-        if _l_binary_def is not None:
-            children['l_binary_def'] = yang.gdata.Leaf('binary', _l_binary_def)
-        _l_identityref_def = self.l_identityref_def
-        if _l_identityref_def is not None:
-            _identityref_l_identityref_def, error = complete_and_validate_identityref(_l_identityref_def, _identities, ['b:id1'], 'basics')
-            if _identityref_l_identityref_def is not None:
-                _l_identityref_def = _identityref_l_identityref_def
-            else:
-                raise ValueError('Invalid value for identityref leaf l_identityref_def: {error}')
-            children['l_identityref_def'] = yang.gdata.Leaf('identityref', _l_identityref_def)
-        return yang.gdata.Container(children, ns='http://example.com/basics', module='basics')
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['basics:c'])
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> basics__c:
@@ -185,12 +174,15 @@ class root(yang.adata.MNode):
         self._ns = ''
         self.c = c if c is not None else basics__c()
 
+    def _get_attr(self, name: str) -> ?value:
+        if name == 'c':
+            return self.c
+        raise ValueError('Attribute {name} not found in root')
+
     mut def to_gdata(self) -> yang.gdata.Node:
-        children = {}
-        _c = self.c
-        if _c is not None:
-            children['c'] = _c.to_gdata()
-        return yang.gdata.Container(children)
+        if isinstance(self, yang.adata.MNode):
+            return yang.gen3.from_data(src_dnode(), self, loose=False)
+        raise ValueError('unreachable')
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
