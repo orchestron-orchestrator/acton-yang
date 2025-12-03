@@ -267,17 +267,23 @@ class Node(value):
         the same data structure in Acton code. This is useful for debugging and
         testing.
 
-        The deterministic output mode reorders system-ordered leaf-list and list
-        elements in order to render deterministic output which is very useful
-        for testing. Only user-ordered lists and leaf-lists have semantic
-        meaning, for non-user-ordered lists, the order of elements has no
-        meaning which is why we can reorder them for deterministic output. The
-        default is to produce raw non-deterministic output, which is more true
-        to nature and a better representation for debugging.
+        The deterministic output mode reorders children along with
+        system-ordered leaf-list and list elements in order to render
+        deterministic output which is very useful for testing. Only user-ordered
+        lists and leaf-lists have semantic meaning, for non-user-ordered lists,
+        the order of elements has no meaning which is why we can reorder them
+        for deterministic output. The default is to produce raw
+        non-deterministic output, which is more true to nature and a better
+        representation for debugging.
         """
         ns_args = ["ns='{self.ns}'"] if self.ns is not None else []
         module_args = ["module='{self.module}'"] if self.module is not None else []
         base_args = ns_args + module_args
+
+        if deterministic:
+            self_children = {k: self.children[k] for k in sorted(self.children.keys())}
+        else:
+            self_children = self.children
 
         if isinstance(self, Leaf):
             args = ["'{str(self.t)}'", repr_yang(self.val)] + base_args
@@ -290,11 +296,11 @@ class Node(value):
             return "LeafList({", ".join(args)})"
         elif isinstance(self, Absent):
             sname = "Absent"
-            if len(self.children) == 0:
+            if len(self_children) == 0:
                 return "{sname}({", ".join(base_args)})"
             else:
                 child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
-                             for nm,child in self.children.items()]
+                             for nm,child in self_children.items()]
                 args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
                 return "\n".join([
                     sname + r"({",
@@ -303,11 +309,11 @@ class Node(value):
                 ])
         elif isinstance(self, Delete):
             sname = "Delete"
-            if len(self.children) == 0:
+            if len(self_children) == 0:
                 return "{sname}({", ".join(base_args)})"
             else:
                 child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
-                             for nm,child in self.children.items()]
+                             for nm,child in self_children.items()]
                 args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
                 return "\n".join([
                     sname + r"({",
@@ -334,11 +340,11 @@ class Node(value):
             sname = "Container"
             presence_args = ["presence=True"] if self.presence else []
             args = presence_args + base_args
-            if len(self.children) == 0:
+            if len(self_children) == 0:
                 return "{sname}({", ".join(args)})"
             else:
                 child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
-                             for nm,child in self.children.items()]
+                             for nm,child in self_children.items()]
                 args_str = ", {", ".join(args)}" if len(args) > 0 else ""
                 return "\n".join([
                     sname + r"({",
@@ -348,11 +354,11 @@ class Node(value):
         elif isinstance(self, Create):
             sname = "Create"
             args = base_args
-            if len(self.children) == 0:
+            if len(self_children) == 0:
                 return "{sname}({", ".join(args)})"
             else:
                 child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
-                             for nm,child in self.children.items()]
+                             for nm,child in self_children.items()]
                 args_str = ", {", ".join(args)}" if len(args) > 0 else ""
                 return "\n".join([
                     sname + r"({",
@@ -362,11 +368,11 @@ class Node(value):
         elif isinstance(self, Replace):
             sname = "Replace"
             args = base_args
-            if len(self.children) == 0:
+            if len(self_children) == 0:
                 return "{sname}({", ".join(args)})"
             else:
                 child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
-                             for nm,child in self.children.items()]
+                             for nm,child in self_children.items()]
                 args_str = ", {", ".join(args)}" if len(args) > 0 else ""
                 return "\n".join([
                     sname + r"({",
@@ -376,19 +382,32 @@ class Node(value):
         else:
             raise ValueError("Unsupported node type in prsrc")
 
-    def to_json(self, pretty=True) -> str:
-        """Convert gdata to JSON
-        """
-        return json.encode(self.to_dict(), pretty=pretty)
+    def to_json(self, pretty=True, deterministic=False) -> str:
+        """Convert gdata to JSON.
 
-    def to_dict(self, pretty=True) -> dict[str, ?value]:
-        """Convert gdata to a dict, suitable for JSON serialization
+        When deterministic=True, node children are emitted in sorted order
+        and system-ordered lists and leaf-lists elements are sorted. This makes
+        the output stable for comparisons/tests.
         """
+        return json.encode(self.to_dict(pretty, deterministic), pretty=pretty)
+
+    def to_dict(self, pretty=True, deterministic=False) -> dict[str, ?value]:
+        """Convert gdata to a dict, suitable for JSON serialization.
+
+        When deterministic=True, node children are emitted in sorted order
+        and system-ordered lists and leaf-lists elements are sorted. This makes
+        the output stable for comparisons/tests.
+        """
+        if deterministic:
+            self_children = {k: self.children[k] for k in sorted(self.children.keys())}
+        else:
+            self_children = self.children
+
         if isinstance(self, Container):
             child_dict = {}
-            for nm,child in self.children.items():
+            for nm,child in self_children.items():
                 if isinstance(child, Container):
-                    child_dict[fmt_json_name(nm, child.module)] = child.to_dict(pretty)
+                    child_dict[fmt_json_name(nm, child.module)] = child.to_dict(pretty, deterministic)
                 elif isinstance(child, Leaf):
                     # "empty" type is encoded as an array with a null element "[null]"
                     if child.t == "empty":
@@ -400,14 +419,22 @@ class Node(value):
                         child_dict[fmt_json_name(nm, child.module)] = json_val(child.t, child.val)
                 elif isinstance(child, LeafList):
                     vals = []
-                    for v in child.vals if child.user_order else vals_list_sorted(child.vals):
+                    if child.user_order or not deterministic:
+                        iter_vals = child.vals
+                    else:
+                        iter_vals = vals_list_sorted(child.vals)
+                    for v in iter_vals:
                         vals.append(json_val(child.t, v))
                     child_dict[fmt_json_name(nm, child.module)] = vals
                 elif isinstance(child, List):
                     elems = []
-                    for elem in child.elements if child.user_order else sorted_elements(child.elements, child.keys):
+                    if child.user_order or not deterministic:
+                        iter_elems = child.elements
+                    else:
+                        iter_elems = sorted_elements(child.elements, child.keys)
+                    for elem in iter_elems:
                         if isinstance(elem, Container):
-                            elems.append(elem.to_dict(pretty))
+                            elems.append(elem.to_dict(pretty, deterministic))
                         else:
                             raise ValueError("Unexpected list ({nm}) element type: {type(elem)}")
                     child_dict[fmt_json_name(nm, child.module)] = elems
@@ -418,18 +445,22 @@ class Node(value):
             return child_dict
         raise ValueError("Unsupported node type in to_dict: {type(self)}")
 
-    def _to_xml_rec(self, key_names: ?list[str]=None, skip_nonkeys: bool=False, parent_absent: bool=False) -> list[xml.Node]:
+    def _to_xml_rec(self, key_names: ?list[str]=None, skip_nonkeys: bool=False, parent_absent: bool=False, deterministic=False) -> list[xml.Node]:
         if isinstance(self, Container) or isinstance(self, Absent) or isinstance(self, Create) or isinstance(self, Delete) or isinstance(self, Replace):
+            if deterministic:
+                self_children = {k: self.children[k] for k in sorted(self.children.keys())}
+            else:
+                self_children = self.children
             children = []
             if key_names is not None:
                 if skip_nonkeys:
                     iter_children = iter(key_names)
                 else:
-                    iter_children = iter(key_names + [nm for nm in self.children.keys() if nm not in key_names])
+                    iter_children = iter(key_names + [nm for nm in self_children.keys() if nm not in key_names])
             else:
-                iter_children = self.children.keys()
+                iter_children = self_children.keys()
             for name in iter_children:
-                child = self.children[name]
+                child = self_children[name]
                 if parent_absent and not isinstance(child, List):
                     continue
                 if ":" in name:
@@ -437,14 +468,14 @@ class Node(value):
                 else:
                     local_name = name
                 if isinstance(child, Container):
-                    cchildren = child._to_xml_rec()
+                    cchildren = child._to_xml_rec(deterministic=deterministic)
                     if len(cchildren) > 0:
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns), children=cchildren))
                     elif isinstance(self, Container) and child.presence:
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
 
                 elif isinstance(child, List):
-                    for elem in child.elements if child.user_order else sorted_elements(child.elements, child.keys):
+                    for elem in child.elements if child.user_order or not deterministic else sorted_elements(child.elements, child.keys):
                         # Determine NETCONF operation for list element based on node type
                         skip_nonkeys = False
                         if isinstance(elem, Absent) or parent_absent:
@@ -459,7 +490,7 @@ class Node(value):
                             attrs = replace_op
                         else:
                             attrs = (nsdefs=[], attrs=[])
-                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + attrs.nsdefs, attributes=attrs.attrs, children=elem._to_xml_rec(child.keys, skip_nonkeys)))
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + attrs.nsdefs, attributes=attrs.attrs, children=elem._to_xml_rec(child.keys, skip_nonkeys, deterministic=deterministic)))
                 elif isinstance(child, Leaf):
                     if child.t == "empty":
                         v = child.val
@@ -473,22 +504,22 @@ class Node(value):
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, child.val), text=v))
                 elif isinstance(child, LeafList):
                     vals = []
-                    for val in child.vals if child.user_order else vals_list_sorted(child.vals):
+                    for val in child.vals if child.user_order or not deterministic else vals_list_sorted(child.vals):
                         v = yang_str(val)
                         vals.append(xml.Node(local_name, nsdefs=_nsq(child.ns, val), text=v))
                     children.extend(vals)
                 elif isinstance(child, Create):
                     # Render as element with create op, include children
-                    children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + create_op.nsdefs, attributes=create_op.attrs, children=child._to_xml_rec()))
+                    children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + create_op.nsdefs, attributes=create_op.attrs, children=child._to_xml_rec(deterministic=deterministic)))
                 elif isinstance(child, Replace):
                     # Render as element with replace op, include children
-                    children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + replace_op.nsdefs, attributes=replace_op.attrs, children=child._to_xml_rec()))
+                    children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + replace_op.nsdefs, attributes=replace_op.attrs, children=child._to_xml_rec(deterministic=deterministic)))
                 elif isinstance(child, Delete):
                     # Render as element with delete op
                     children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + delete_op.nsdefs, attributes=delete_op.attrs))
                 elif isinstance(child, Absent):
                     # Render as element with remove op, unless the children are rendered explicitly (list)
-                    cchildren = child._to_xml_rec(parent_absent=True)
+                    cchildren = child._to_xml_rec(parent_absent=True, deterministic=deterministic)
                     if len(cchildren) > 0:
                         children.extend(cchildren)
                     else:
@@ -498,21 +529,29 @@ class Node(value):
             return children
         raise ValueError("Unsupported node type in to_xml: {type(self)}")
 
-    def to_xml(self) -> list[xml.Node]:
-        """Convert this gdata node to a list of xml.Node
+    def to_xml(self, deterministic=False) -> list[xml.Node]:
+        """Convert this gdata node to a list of xml.Node.
 
         The top-level node in a valid gdata structure is an unnamed container
         with named children. But in a valid XML document there must be a single
         top-level element. Thus we return a list of xml.Node fragments, one for
-        each of the top-level gdata Container children."""
-        return self._to_xml_rec()
+        each of the top-level gdata Container children.
 
-    def to_xmlstr(self, pretty=True) -> str:
-        """Convert this gdata node to an XML string
+        When deterministic=True, node children are emitted in sorted order
+        and system-ordered lists and leaf-lists elements are sorted. This makes
+        the output stable for comparisons/tests."""
+        return self._to_xml_rec(deterministic=deterministic)
+
+    def to_xmlstr(self, pretty=True, deterministic=False) -> str:
+        """Convert this gdata node to an XML string.
 
         The result is a joined XML string of all the fragments, one for each of
-        the top-level gdata Container children."""
-        return xml.encode_nodes(self.to_xml(), pretty)
+        the top-level gdata Container children.
+
+        When deterministic=True, node children are emitted in sorted order
+        and system-ordered lists and leaf-lists elements are sorted. This makes
+        the output stable for comparisons/tests."""
+        return xml.encode_nodes(self.to_xml(deterministic), pretty)
 
     # --
     def get_leaf(self, name) -> Leaf:
