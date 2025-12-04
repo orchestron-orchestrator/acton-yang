@@ -689,9 +689,9 @@ class DNodeInner(DNode):
         from_gdata_args_list = []
         for child in self.children:
             if isinstance(child, DNodeLeaf):
-                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), 'gdata', loose=loose)}('{uname(child)}')")
+                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), loose=loose)}('{uname(child)}')")
             else:
-                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), 'gdata', loose=loose)}('{uname(child)}'))")
+                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), loose=loose)}('{uname(child)}'))")
         from_gdata_args = ", ".join(from_gdata_args_list)
         res.append("    @staticmethod")
         if isinstance(self, DList):
@@ -2750,16 +2750,8 @@ def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, key_names: ?list[str], loose: b
     t = yang_type_to_acton_type(leaf.type_)
     return optional_str + t
 
-def taker_name(n: DNode, key_names: ?list[str], input_format: str, loose: bool=False) -> str:
-    taker_prefix = ""
-    if input_format == "xml":
-        taker_prefix = "from_xml_"
-    elif input_format == "json":
-        taker_prefix = "take_json_"
-    elif input_format == "gdata":
-        taker_prefix = "get_"
-    else:
-        raise ValueError("Unknown input format {input_format}")
+def taker_name(n: DNode, key_names: ?list[str], loose: bool=False) -> str:
+    taker_prefix = "get_"
     if isinstance(n, DContainer):
         optional = loose or n.presence or optional_subtree(n)
         optional_str = "opt_" if optional else ""
@@ -2773,14 +2765,10 @@ def taker_name(n: DNode, key_names: ?list[str], input_format: str, loose: bool=F
         optional_str = "opt_" if optional else ""
         if n.type_.name == "empty":
             return taker_prefix + optional_str + "empty"
-        if input_format == "json" and (n.type_.name == "uint64" or n.type_.name == "int64"):
-            return taker_prefix + optional_str + "int64"
         return taker_prefix + optional_str + yang_type_to_acton_type(n.type_)
     if isinstance(n, DLeafList):
         optional = loose or n.min_elements == 0
         optional_str = "opt_" if optional else ""
-        if input_format == "json" and (n.type_.name == "uint64" or n.type_.name == "int64"):
-            return taker_prefix + optional_str + "int64s"
         return taker_prefix + optional_str + yang_type_to_acton_type(n.type_) + "s"
     raise ValueError("unreachable - unknown node type {type(n)}")
 
