@@ -1,0 +1,40 @@
+import yang.schema
+
+PATTERN_MAP = {
+    r"[a-zA-Z0-9_.-]+": r"[a-zA-Z0-9_\.-]+", # Cisco-XR 24.1.1 # Assuming literal '.' rather than wildcard that would make other group members redundant
+    r"[a-zA-Z0-9_.-:]+": r"[a-zA-Z0-9_\.\-:]+", # Cisco-XR 24.1.1 # Assuming literal '.' and '-' rather than wildcard in invalid range
+    r"^[a-zA-Z0-9][a-zA-Z0-9_.-]+$": r"[a-zA-Z0-9][a-zA-Z0-9_\.-]+", # Cisco-XR 24.1.1 # This looks like start/end anchors that would be interpreted as literals in yang/w3c regexes, and escaping issue.
+    r"^[1-9]+[0-9]+": r"[1-9]+[0-9]+", # Cisco-XR 24.1.1 # This looks like start anchor that would be interpreted as literal in yang/w3c regexes
+    r"^(Loopback)": r"(Loopback)", # Cisco-XR 24.1.1 # This looks like start anchor that would be interpreted as literal in yang/w3c regexes
+}
+
+mut def repair_patterns(node: yang.schema.SchemaNode) -> None:
+    """Repair known invalid string patterns
+    """
+
+    def repair_type(t: yang.schema.Type):
+        for pattern in t.pattern:
+            pattern_str = pattern.value
+            try:
+                replacement_pattern_str = PATTERN_MAP[pattern_str]
+            except KeyError:
+                pass
+            else:
+                pattern.value = replacement_pattern_str
+
+        # Recurse into union alternatives
+        for alt_type in t.type_:
+            repair_type(alt_type)
+
+    # For types, replace known broken pattern expressions
+    if isinstance(node, yang.schema.Leaf):
+        repair_type(node.type_)
+    elif isinstance(node, yang.schema.LeafList):
+        repair_type(node.type_)
+    elif isinstance(node, yang.schema.Typedef):
+        repair_type(node.type_)
+
+    # Recursively process children if this is an inner node
+    if isinstance(node, yang.schema.SchemaNodeInner):
+        for child in node.children:
+            repair_patterns(child)

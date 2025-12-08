@@ -515,7 +515,7 @@ def basics_leaf_defaults(r):
     testing.assertEqual(r.c.l_uint64_def, 1234567890)
     testing.assertEqual(r.c.l_str_def_quoted, '"foo"')
     testing.assertEqual(r.c.l_binary_def, "Hello Acton 🫡".encode())
-    testing.assertEqual(r.c.l_identityref_def, yang_basics.basics_id1)
+    testing.assertEqual(r.c.l_identityref_def, yang_basics.basics_id2)
 
     # union types
     uds = r.c.l_union_def_str
@@ -992,7 +992,7 @@ def _test_validate_identityref_xml_invalid():
         d = yang.gen3.from_data(yang_foo.src_dnode(), xml_in)
         testing.error("Expected ValueError for invalid identityref value")
     except ValueError as exc:
-        if "Invalid value for identityref" not in exc.error_message:
+        if "Invalid value at /c1/l_identityref: 'invalid-identity'" not in str(exc):
             raise exc
 
 def _test_validate_identityref_leaflist_xml_qual():
@@ -1034,7 +1034,7 @@ def _test_validate_identityref_leaflist_xml_invalid():
         gd_out = ad.to_gdata()
         testing.error("Expected ValueError for invalid identityref value in leaf-list")
     except ValueError as exc:
-        if "Invalid value for identityref" not in exc.error_message:
+        if "Invalid value at /c1/ll_identityref: 'foo:invalid-identity'" not in str(exc):
             raise exc
 
 # JSON tests for identityref validation
@@ -1073,7 +1073,7 @@ def _test_validate_identityref_json_invalid():
         gd_out = ad.to_gdata()
         testing.error("Expected ValueError for invalid identityref value")
     except ValueError as exc:
-        if "Invalid value for identityref" not in exc.error_message:
+        if "Invalid value at /c1/l_identityref: 'invalid-identity'" not in str(exc):
             raise exc
 
 
@@ -1113,7 +1113,7 @@ def _test_validate_identityref_leaflist_json_invalid():
         gd_out = ad.to_gdata()
         testing.error("Expected ValueError for invalid identityref value in leaf-list")
     except ValueError as exc:
-        if "Invalid value for identityref" not in exc.error_message:
+        if "Invalid value at /c1/ll_identityref: 'foo:invalid-identity'" not in str(exc):
             raise exc
 
 def _test_gen3_from_xml_full():

@@ -4,6 +4,7 @@ import json
 import xml
 
 from yang.identityref import Identityref, PartialIdentityref
+from yang.type import Decimal
 
 """YANG data
 
@@ -210,7 +211,7 @@ _max_u64 = bigint(18446744073709551615)
 def json_val(yang_type: str, v: value) -> ?value:
     if isinstance(v, bytes):
         return base64.encode(v).decode()
-    if yang_type == "int64" or yang_type == "uint64":
+    if yang_type == "int64" or yang_type == "uint64" or yang_type == "decimal64":
         return str(v)
     if isinstance(v, Identityref):
         return "{v.mod}:{v.val}"
@@ -621,18 +622,18 @@ class Node(value):
     def get_opt_empty(self, name) -> ?bool:
         return self.get_opt_bool(name)
 
-    def get_float(self, name) -> float:
+    def get_Decimal(self, name) -> Decimal:
         child = self.get_leaf(name)
         childval = child.val
-        if isinstance(childval, float):
+        if isinstance(childval, Decimal):
             return childval
-        raise ValueError("Leaf {name} is not of type float")
+        raise ValueError("Leaf {name} is not of type Decimal")
 
-    def get_opt_float(self, name) -> ?float:
+    def get_opt_Decimal(self, name) -> ?Decimal:
         child = self.get_opt_leaf(name)
         if child is not None:
             childval = child.val
-            if isinstance(childval, float):
+            if isinstance(childval, Decimal):
                 return childval
 
     def get_bigint(self, name) -> bigint:
@@ -728,20 +729,20 @@ class Node(value):
         except ValueError:
             return []
 
-    def get_floats(self, name) -> list[float]:
+    def get_Decimals(self, name) -> list[Decimal]:
         if isinstance(self, Container):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
                     for v in child.vals:
-                        if isinstance(v, float):
+                        if isinstance(v, Decimal):
                             cvals.append(v)
                     return cvals
         raise ValueError("Cannot find leaf-list child with name {name}")
 
-    def get_opt_floats(self, name) -> list[float]:
+    def get_opt_Decimals(self, name) -> list[Decimal]:
         try:
-            return self.get_floats(name)
+            return self.get_Decimals(name)
         except ValueError:
             return []
 
@@ -990,6 +991,8 @@ def vals_equal(a: value, b: value) -> bool:
         return a == b
     if isinstance(a, float) and isinstance(b, float):
         return a == b
+    if isinstance(a, Decimal) and isinstance(b, Decimal):
+        return a == b
     if isinstance(a, str) and isinstance(b, str):
         return a == b
     if isinstance(a, bytes) and isinstance(b, bytes):
@@ -1037,6 +1040,8 @@ def vals_less_than(a: value, b: value) -> bool:
     if isinstance(a, bool) and isinstance(b, bool):
         return not a  # False (0) before True (1)
     if isinstance(a, float) and isinstance(b, float):
+        return a < b
+    if isinstance(a, Decimal) and isinstance(b, Decimal):
         return a < b
     if isinstance(a, str) and isinstance(b, str):
         return a < b

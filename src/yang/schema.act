@@ -88,10 +88,17 @@
 # YANG module). We can convert a SchemaNode tree to DNode by first compiling it
 # and then running .to_dnode().
 
+import base64
 import re
-from yang.identityref import Identityref
+from yang.identityref import Identityref, PartialIdentityref
+from yang.pattern import YangPattern
+from yang.type import Decimal, Ranges, RangesBuilder
 
 RECURSION_LIMIT = 512
+
+MAX_LENGTH_STMT = 9223372036854775807 # Maximum supported by len(str) should be 18446744073709551615 as per RFC7950 9.4.4
+MAX_ENUM_VALUE = 2147483647 # RFC7950 9.6.4.2
+MAX_BIT_POSITION = 4294967295 # RFC7950 9.7.4.2
 
 def _yind(n):
     return "  " * n
@@ -451,9 +458,9 @@ class DNode(object):
                 node_prefix += "o"
             if isinstance(node, DLeaf):
                 optional = "?" if node.mandatory == False else ""
-                res.append("{node_prefix} {node.name}{optional} {node.type_.name}")
+                res.append("{node_prefix} {node.name}{optional} {node.type_.format_short_hint()}")
             elif isinstance(node, DLeafList):
-                res.append("{node_prefix} {node.name}* {node.type_.name}")
+                res.append("{node_prefix} {node.name}* {node.type_.format_short_hint()}")
             elif isinstance(node, DContainer):
                 res.append("{node_prefix} {node.name}{'!' if node.presence else ''}")
             elif isinstance(node, DList):
@@ -475,6 +482,9 @@ class DNode(object):
             return res
 
         return "\n".join(print_node(self, ""))
+
+    def resolve_references(self, root: DRoot):
+        pass
 
 class DNodeInner(DNode):
     children: list[DNode]
@@ -617,14 +627,15 @@ class DNodeInner(DNode):
             elif isinstance(child, DLeaf):
                 child_default = child.default
                 if not loose and child_default is not None:
-                    if child.type_.name == "identityref":
-                        res.append("        _default_{usname(child)}, error = complete_and_validate_identityref(Identityref.from_adata('{child_default}'), _identities, {repr(child.type_.base)}, {repr(child.module)})")
+                    child_type = child.type_
+                    if isinstance(child_type, DTypeIdentityref):
+                        res.append("        _default_{usname(child)}, error = complete_and_validate_identityref(Identityref.from_adata('{child_default}'), _identities, {DIdentity.format_base_identity_var_name_list(child_type.identity_bases)}, {repr(child.module)})")
                         res.append("        if _default_{usname(child)} is not None:")
                         res.append("            self.{usname(child)} = {usname(child)} if {usname(child)} is not None else _default_{usname(child)}")
                         res.append("        else:")
                         res.append("            raise ValueError('Invalid default value for identityref leaf {self.name}: {{error}}')")
                     else:
-                        res.append("        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {prsrc_literal(child.type_.name, child_default)}")
+                        res.append("        self.{usname(child)} = {usname(child)} if {usname(child)} is not None else {prsrc_literal(child_type.builtin_type, child_default)}")
                 else:
                     res.append("        self.{usname(child)} = {usname(child)}")
             elif isinstance(child, DLeafList):
@@ -770,10 +781,12 @@ class DNodeInner(DNode):
             for us_key in us_list_key():
                 # Order-preserving deduplication
                 unique_base_types = []
-                for t in list_key_types[us_key].type_:
-                    acton_type = yang_type_to_acton_type(t)
-                    if acton_type not in unique_base_types:
-                        unique_base_types.append(acton_type)
+                key_dtype = list_key_types[us_key]
+                if isinstance(key_dtype, DTypeUnion):
+                    for t in key_dtype.types:
+                        acton_type = yang_type_to_acton_type(t)
+                        if acton_type not in unique_base_types:
+                            unique_base_types.append(acton_type)
                 if len(unique_base_types) <= 1:
                     # Class attribute is a not a "value" Acton type because it
                     # is either not an union or it an union that was resolved
@@ -894,12 +907,19 @@ class DNodeInner(DNode):
 
         return res
 
+    def resolve_references(self, root: DRoot):
+        for child in self.children:
+            child.resolve_references(root)
+
 class DNodeLeaf(DNode):
     if_feature: list[str]
     must: list[Must]
     status: ?str
-    type_: Type
+    type_: DType
     when: ?str
+
+    def resolve_references(self, root: DRoot):
+        self.type_.resolve_references(root)
 
 class DAction(DNodeInner):
     if_feature: list[str]
@@ -1117,7 +1137,7 @@ class DIdentity(DNode):
         base_var_map = {}
         for identity in identities:
             for base in identity.base:
-                base_var_map[base.key()] = "_base_{base.module}_{base.name}".replace("-", "_")
+                base_var_map[base.key()] = base.format_base_var_name()
 
         # Print variable declarations for identities that are used as bases in order of precedence
         for identity in sorted_identities:
@@ -1162,6 +1182,13 @@ class DIdentity(DNode):
         result.append("")
 
         return result
+
+    @staticmethod
+    def format_base_identity_var_name_list(identities: list[DIdentity]) -> str:
+        return "[{", ".join([b.format_base_var_name() for b in identities])}]"
+
+    def format_base_var_name(self):
+        return "_base_{self.module}_{self.name}".replace("-", "_")
 
 class DInput(DNodeInner):
     must: list[Must]
@@ -1311,7 +1338,8 @@ class DLeaf(DNodeLeaf):
     mandatory: bool
     units: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: DType, units=None, when=None, exts=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1367,7 +1395,8 @@ class DLeafList(DNodeLeaf):
     ordered_by: str
     units: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: Type, units=None, when=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: DType, units=None, when=None, exts=[]):
+        self.parent = None
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1567,7 +1596,12 @@ class DRoot(DNodeInner):
 
         identities = [v.identity for v in identity_map.values()]
 
-        return DRoot(children, identities, rpcs)
+        root = DRoot(children, identities, rpcs)
+
+        # Resolve DType references, e.g. resolve base identities
+        root.resolve_references(root)
+
+        return root
 
     def _get_attrs(self):
         return [
@@ -1594,9 +1628,10 @@ class DRoot(DNodeInner):
         res.append("import yang.gdata")
         res.append("import yang.gen3")
         res.append("from yang.gdata import repr_yang")
-        res.append("from yang.identity import complete_and_validate_identityref")
         res.append("from yang.identityref import Identityref, PartialIdentityref")
+        res.append("from yang.pattern import YangPattern")
         res.append("from yang.schema import *")
+        res.append("from yang.type import Decimal, Ranges")
         res.append("")
         res.append("# == This file is generated ==")
         res.append("")
@@ -1678,6 +1713,715 @@ class DRpc(DNodeInner):
             ("exts", self.exts),
         ]
 
+
+class DType(object):
+    parent: ?DNodeLeaf
+    module: str      # The name of the module this node belongs to
+    namespace: str
+    prefix: str
+    name: str
+    config: bool
+    description: ?str
+    reference: ?str
+    exts: list[Ext]
+    builtin_type: str
+    default: ?value
+    units: ?str
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+        self.parent = None
+        self.module = module
+        self.namespace = module
+        self.prefix = prefix
+        self.name = name
+        self.config = False
+        self.description = description
+        self.reference = reference
+        self.units = units
+        self.exts = exts
+        self.builtin_type = builtin_type
+        self.default = default
+
+    @staticmethod
+    def from_resolved_type(type_: ResolvedType) -> DType:
+        resolver = DTypeResolver.resolve(type_)
+        return DType.from_resolver(resolver)
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DType:
+        if resolver.builtin_type == "string":
+            return DTypeString.from_resolver(resolver)
+        elif resolver.builtin_type in ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"]:
+            return DTypeInteger.from_resolver(resolver)
+        elif resolver.builtin_type == "boolean":
+            return DTypeBoolean.from_resolver(resolver)
+        elif resolver.builtin_type == "empty":
+            return DTypeEmpty.from_resolver(resolver)
+        elif resolver.builtin_type == "identityref":
+            return DTypeIdentityref.from_resolver(resolver)
+        elif resolver.builtin_type == "enumeration":
+            return DTypeEnum.from_resolver(resolver)
+        elif resolver.builtin_type == "decimal64":
+            return DTypeDecimal64.from_resolver(resolver)
+        elif resolver.builtin_type == "leafref":
+            return DTypeLeafref.from_resolver(resolver)
+        elif resolver.builtin_type == "union":
+            return DTypeUnion.from_resolver(resolver)
+        elif resolver.builtin_type == "binary":
+            return DTypeBinary.from_resolver(resolver)
+        elif resolver.builtin_type == "bits":
+            return DTypeBits.from_resolver(resolver)
+        elif resolver.builtin_type == "instance-identifier":
+            return DTypeInstanceIdentifier.from_resolver(resolver)
+        raise ValueError("Unable to resolve type ({resolver.type_}) into builtin base-type")
+
+    def resolve_references(self, root: DRoot):
+        pass
+
+    # Validate value type. NOT relations to other data i.e. leafref/instance-identifier targets.
+    def validate_value(self, val: value) -> bool:
+        return False
+
+    def prtyinst(self) -> str:
+        return "DType({self.format_common_params()})"
+
+    def format_common_params(self) -> str:
+        return "module={repr(self.module)}, namespace={repr(self.namespace)}, prefix={repr(self.prefix)}, name={repr(self.name)}, description={repr(self.description)}, reference={repr(self.reference)}, exts={repr(self.exts)}, builtin_type={repr(self.builtin_type)}, default={repr(self.default)}"
+
+    def format_short_hint(self) -> str:
+        return  self.builtin_type if self.builtin_type == self.name else "{self.builtin_type} {self.name}"
+
+    def format_hint(self) -> str:
+        name_and_base = self.builtin_type if self.builtin_type == self.name else "{self.name} {self.builtin_type}"
+        hints = self.format_hints()
+        return "{name_and_base} with {", ".join(hints)}" if hints else name_and_base
+
+    def format_hints(self) -> list[str]:
+        return []
+
+class DTypeBinary(DType):
+    length: ?Ranges[int]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, length: ?Ranges[int]):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.length = length
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeBinary:
+        t = resolver.type_
+        return DTypeBinary(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.length)
+
+    def validate_value(self, val: value) -> bool:
+        if isinstance(val, bytes):
+            length = self.length
+            if length is not None:
+                return Ranges.match(length, len(val))
+            return True
+        return False
+
+    def prtyinst(self) -> str:
+        return "DTypeBinary({self.format_common_params()}, length={repr(self.length)})"
+
+    def format_hints(self) -> list[str]:
+        hints = DType.format_hints(self)
+        _length = self.length
+        if _length is not None:
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # hints.append("length: ({str(_length)})")
+            hints += ["length: ({str(_length)})"]
+        return hints
+
+class DTypeBits(DType):
+    name_to_pos: dict[str, int]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, name_to_pos: dict[str, int]):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.name_to_pos = name_to_pos
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeBits:
+        t = resolver.type_
+        return DTypeBits(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.bits)
+
+    def validate_value(self, val: value) -> bool:
+        if isinstance(val, set):
+            for elem in val:
+                if elem not in self.name_to_pos:
+                    return False
+            return True
+        return False
+
+    def prtyinst(self) -> str:
+        return "DTypeBits({self.format_common_params()}, name_to_pos={repr(self.name_to_pos)})"
+
+    def format_hints(self) -> list[str]:
+        return ["[", ", ".join(self.name_to_pos.keys()) , "]"]
+
+class DTypeBoolean(DType):
+    # No restrictions
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeBoolean:
+        t = resolver.type_
+        return DTypeBoolean(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default)
+
+    def validate_value(self, val: value) -> bool:
+        return isinstance(val, bool)
+
+    def prtyinst(self) -> str:
+        return "DTypeBoolean({self.format_common_params()})"
+
+class DTypeDecimal64(DType):
+    fraction_digits: bigint
+    ranges: ?Ranges[Decimal]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, fraction_digits: bigint, ranges: ?Ranges[Decimal]):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.fraction_digits = fraction_digits
+        self.ranges = ranges
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeDecimal64:
+        _fraction_digits = resolver.fraction_digits
+        if _fraction_digits is not None:
+            t = resolver.type_
+            return DTypeDecimal64(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _fraction_digits, resolver.decimal_ranges)
+        raise ValueError("Missing required fraction-digits for decimal64 type \"{resolver.type_.name}\"")
+
+    def validate_value(self, val: value) -> bool:
+        if isinstance(val, Decimal):
+            if val.try_lossless_realign(-self.fraction_digits) is None:
+                return False
+            ranges = self.ranges
+            if ranges is not None and not Ranges.match(ranges, val):
+                return False
+            return True
+        return False
+
+    def prtyinst(self) -> str:
+        return "DTypeDecimal64({self.format_common_params()}, fraction_digits={repr(self.fraction_digits)}, ranges={repr(self.ranges)})"
+
+    def format_hints(self) -> list[str]:
+        hints = ["fraction-digits: {self.fraction_digits}"]
+        _ranges = self.ranges
+        if _ranges is not None:
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # hints.append("range ({str(_ranges)})")
+            hints += ["range ({str(_ranges)})"]
+        return hints
+
+class DTypeEmpty(DType):
+    # No restrictions
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type)
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeEmpty:
+        t = resolver.type_
+        return DTypeEmpty(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default)
+
+    def validate_value(self, val: value) -> bool:
+        return isinstance(val, bool)
+
+    def prtyinst(self) -> str:
+        return "DTypeEmpty({self.format_common_params()})"
+
+class DTypeEnum(DType):
+    name_to_val: dict[str, int]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, name_to_val: dict[str, int]):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.name_to_val = name_to_val
+
+    def prtyinst(self) -> str:
+        return "DTypeEnum({self.format_common_params()}, name_to_val={repr(self.name_to_val)})"
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeEnum:
+        t = resolver.type_
+        return DTypeEnum(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.enum_name_to_val)
+
+    def validate_value(self, val: value) -> bool:
+        return isinstance(val, str) and val in self.name_to_val
+
+    def format_hints(self) -> list[str]:
+        return ["either of {repr(list(self.name_to_val.keys()))}"]
+
+class DTypeIdentityref(DType):
+    identity_bases: list[DIdentity]
+    identities: list[DIdentity]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, identity_bases: list[DIdentity], identities: list[DIdentity]):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.identity_bases = identity_bases
+        self.identities = identities
+
+    def prtyinst(self) -> str:
+        return "DTypeIdentityref({self.format_common_params()}, identity_bases={DIdentity.format_base_identity_var_name_list(self.identity_bases)}, identities=_identities)"
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeIdentityref:
+        identity_bases = []
+        for base in resolver.identity_bases:
+            maybe_prefix, name = split_prefix_name(base)
+            prefix = maybe_prefix if maybe_prefix is not None else resolver.type_.get_prefix()
+            # Create temporary DIdentity instances to be completed and replaced by resolve_references
+            identity_base = DIdentity("", "", prefix, name, [])
+            identity_bases.append(identity_base)
+        t = resolver.type_
+        return DTypeIdentityref(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, identity_bases, [])
+
+    def resolve_references(self, root: DRoot):
+        resolved_identity_bases = []
+        for identity_base in self.identity_bases:
+            resolved_identity_base = find_identity_by_ref(root.identities, identity_base.name, prefix=identity_base.prefix)
+            if resolved_identity_base is not None:
+                resolved_identity_bases.append(resolved_identity_base)
+            else:
+                raise ValueError("Unknown base identity \"{identity_base.prefix}:{identity_base.name}\" in type \"{self.name}\"")
+        self.identity_bases = resolved_identity_bases
+        self.identities = root.identities
+
+    def validate_value(self, val: value) -> bool:
+        if isinstance(val, Identityref):
+            identity = find_identity_by_ref(self.identities, val.val, val.ns, val.mod, val.pfx)
+            if identity is not None:
+                return is_derived_from(identity, self.identity_bases)
+        return False
+
+    def format_hints(self) -> list[str]:
+        bases = ", ".join(["'{b.prefix}:{b.name}'" for b in self.identity_bases])
+        return ["bases: [{bases}]"]
+
+class DTypeInstanceIdentifier(DType):
+    require_instance: bool
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, require_instance: bool):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.require_instance = require_instance
+
+    def prtyinst(self) -> str:
+        return "DTypeInstanceIdentifier({self.format_common_params()}, require_instance={repr(self.require_instance)})"
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeInstanceIdentifier:
+        t = resolver.type_
+        _require_instance = resolver.require_instance
+        return DTypeInstanceIdentifier(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _require_instance is not None and _require_instance)
+
+    def validate_value(self, val: value) -> bool:
+        return True # TODO
+
+    def format_hints(self) -> list[str]:
+        _require_instance = self.require_instance
+        if _require_instance is not None and not _require_instance:
+            return ["require-instance: false"]
+        return []
+
+class DTypeInteger(DType):
+    ranges: ?Ranges[bigint]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[bigint]):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.ranges = ranges
+
+    def prtyinst(self) -> str:
+        return "DTypeInteger({self.format_common_params()}, ranges={repr(self.ranges)})"
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeInteger:
+        t = resolver.type_
+        return DTypeInteger(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.integer_ranges)
+
+    def validate_value(self, val: value) -> bool:
+        if isinstance(val, bigint):
+            ranges = self.ranges
+            if ranges is not None:
+                return Ranges.match(ranges, val)
+            return True
+        # FIXME: Only allow bigint once all instances of int are removed from sorespo
+        if isinstance(val, int):
+            ranges = self.ranges
+            if ranges is not None:
+                return Ranges.match(ranges, bigint(val))
+            return True
+        return False
+
+    def format_hints(self) -> list[str]:
+        _ranges = self.ranges
+        if _ranges is not None:
+            return ["range {str(_ranges)}"]
+        return []
+
+class DTypeLeafref(DType):
+    path: str # TODO: XPath
+    require_instance: bool # default: True
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, path: str, require_instance: bool):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.path = path
+        self.require_instance = require_instance
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeLeafref:
+        _path = resolver.path
+        if _path is not None:
+            t = resolver.type_
+            _require_instance = resolver.require_instance
+            return DTypeLeafref(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _path, _require_instance is not None and _require_instance)
+        raise ValueError("Type {resolver.type_.name} of base-type leafref requires path restriction")
+
+    def resolve_references(self, root: DRoot):
+        pass # TODO: Verify path expression
+
+    def validate_value(self, val: value) -> bool:
+        return True # TODO
+
+    def prtyinst(self) -> str:
+        return "DTypeLeafref({self.format_common_params()}, path={repr(self.path)}, require_instance={repr(self.require_instance)})"
+
+    def format_hints(self) -> list[str]:
+        hints = ["path: {self.path}"]
+        _require_instance = self.require_instance
+        if _require_instance is not None and not _require_instance:
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # hints.append("require-instance: false")
+            hints += ["require-instance: false"]
+        return hints
+
+class DTypeString(DType):
+    length: ?Ranges[int]
+    patterns: list[YangPattern]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, length: ?Ranges[int], patterns: list[YangPattern]):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.length = length
+        self.patterns = patterns
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeString:
+        t = resolver.type_
+        return DTypeString(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.length, resolver.patterns)
+
+    def validate_value(self, val: value) -> bool:
+        if isinstance(val, str):
+            length = self.length
+            if length is not None and not Ranges.match(length, len(val)):
+                return False
+
+            for pattern in self.patterns:
+                if not pattern.match(val):
+                    return False
+
+            return True
+        return False
+
+    def prtyinst(self) -> str:
+        return "DTypeString({self.format_common_params()}, length={repr(self.length)}, patterns={repr(self.patterns)})"
+
+    def format_hints(self) -> list[str]:
+        hints = []
+        _length = self.length
+        if _length is not None:
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # hints.append("length: ({str(_length)})")
+            hints += ["length: {str(_length)}"]
+        _patterns = self.patterns
+        if len(_patterns) > 0:
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # hints.append("pattern: {" AND ".join([str(p) for p in _patterns])}")
+            hints += ["pattern: {" AND ".join([str(p) for p in _patterns])}"]
+        return hints
+
+class DTypeUnion(DType):
+    types: list[DType]
+
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, types: list[DType]):
+        DType.__init__(self, module, namespace, prefix, name, description, reference, units, exts, builtin_type, default)
+        self.types = types
+
+    @staticmethod
+    def from_resolver(resolver: DTypeResolver) -> DTypeUnion:
+        t = resolver.type_
+        alt_types = [DType.from_resolver(r) for r in resolver.alt_types]
+        return DTypeUnion(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, alt_types)
+
+    def resolve_references(self, root: DRoot):
+        for t in self.types:
+            t.resolve_references(root)
+
+    def validate_value(self, val: value) -> bool:
+        for t in self.types:
+            if t.validate_value(val):
+                return True
+        return False
+
+    def prtyinst(self) -> str:
+        return "DTypeUnion({self.format_common_params()}, types=[{", ".join([t.prtyinst() for t in self.types])}])"
+
+    def format_hints(self) -> list[str]:
+        return ["types: [{" OR ".join([t.format_hint() for t in self.types])}]"]
+
+class DTypeResolver(object):
+    type_: ResolvedType
+    builtin_type: str
+    identity_bases: list[str] # RFC7950: "An identityref cannot be restricted."
+    bits: dict[str, int] # # Assume only allowed in the type "bits" statement with no further restrictions in base-type chain
+    enum_name_to_val: dict[str, int] # May be restricted to subset only
+    enum_val_to_name: dict[int, str]
+    fraction_digits: ?bigint # Assume only allowed in the type "decimal64" statement with no further restrictions in base-type chain
+    length: ?Ranges[int] # May be restricted to sub-ranges only
+    path: ?str # Assume only allowed in the type "leafref" statement, with no further restrictions in base-type chain
+              # TODO: XPath !!!
+    patterns: list[YangPattern] # A value must match patterns in type and base-types chain
+    integer_ranges: ?Ranges[bigint] # May be restricted to sub-ranges only
+    decimal_ranges: ?Ranges[Decimal] # May be restricted to sub-ranges only
+    require_instance: ?bool # Assuming 'True' unless explicitly 'False' in base-type chain, disallowing redefinition from explicit 'True'
+    alt_types: list[DTypeResolver] # Merge base type union sets
+    default: ?value # sub-type overrides base-type
+    description: ?str # sub-type overrides base-type
+    reference: ?str # sub-type overrides base-type
+    units: ?str # sub-type overrides base-type
+
+    def __init__(self, type_: ResolvedType):
+        self.type_ = type_
+        self.builtin_type = ""
+        self.identity_bases = []
+        self.bits = {}
+        self.enum_name_to_val = {}
+        self.enum_val_to_name = {}
+        self.fraction_digits = None
+        self.length = None
+        self.path = None
+        self.patterns = []
+        self.integer_ranges = None
+        self.decimal_ranges = None
+        self.require_instance = None
+        self.alt_types = []
+        self.default = None
+        self.description = None
+        self.reference = None
+        self.units = None
+
+    @staticmethod
+    def resolve(type_: ResolvedType) -> DTypeResolver:
+        r = DTypeResolver(type_)
+        r._resolve(type_)
+        return r
+
+    def _resolve(self, t: ResolvedType):
+        if t.name == "union":
+            self.builtin_type = t.name
+            for alt_type in t.type_:
+                if isinstance(alt_type, ResolvedType):
+                    alt_resolver = DTypeResolver.resolve(alt_type)
+                    if alt_resolver.builtin_type == "union":
+                        self.alt_types.extend(alt_resolver.alt_types)
+                    else:
+                        self.alt_types.append(alt_resolver)
+                else:
+                    raise ValueError("Internal error: expected resolved alt-types in {t.name}")
+        else:
+            # Resolve base typedef
+            base_typedef  = t.resolved_base_typedef
+            if base_typedef is not None:
+                # default value
+                if base_typedef.default is not None and self.default is None:
+                    self.default = base_typedef.default
+                # description
+                if base_typedef.description is not None and self.description is None:
+                    self.description = base_typedef.description
+                # reference
+                if base_typedef.reference is not None and self.reference is None:
+                    self.reference = base_typedef.reference
+                # units
+                if base_typedef.units is not None and self.units is None:
+                    self.units = base_typedef.units
+                # recurse into base typedef
+                base_typedef_type = base_typedef.type_
+                if isinstance(base_typedef_type, ResolvedType):
+                    self._resolve(base_typedef_type)
+                else:
+                    raise ValueError("Internal error: expected resolved in typedef {base_typedef.name}")
+            else:
+                if t.name not in _builtin_types:
+                    raise ValueError("Type \"{t.name}\" does not have a builtin type as base")
+                self.builtin_type = t.name
+
+            # base
+            _base = t.base
+            if _base:
+                if self.identity_bases:
+                    raise ValueError("Invalid restriction of bases in type \"{t.name}\"")
+                self.identity_bases = _base
+
+            # bit
+            _bit = t.bit
+            if _bit:
+                next_pos = 0
+                if self.bits:
+                    raise ValueError("Invalid restriction of bits in type \"{t.name}\"")
+                positions = set(None)
+                for b in _bit:
+                    name = b.name
+                    _position = b.position
+                    if _position is not None:
+                        position = _position
+                        if position in positions:
+                            raise ValueError("Duplicate bit position \"{name}\": {position} in type \"{t.name}\"")
+                        if position >= next_pos:
+                            next_pos = position + 1
+                    else:
+                        if next_pos >= MAX_BIT_POSITION:
+                            raise ValueError("Bit \"{name}\" must be assigned an explicit position when automatic assignment would exceed maximum limit of {MAX_BIT_POSITION} in type \"{t.name}\"")
+                        position = next_pos
+                        next_pos += 1
+                    self.bits[name] = position
+
+            # enum
+            _enum = t.enum
+            if _enum:
+                new_enum_name_to_val = {}
+                new_enum_val_to_name = {}
+
+                next_val: int = 0 # TODO no need to get values of base-type?
+
+                for e in _enum:
+                    name = e.name
+                    val = None
+                    val_str = e.value
+                    if val_str is not None:
+                        try:
+                            val = int(val_str)
+                        except ValueError:
+                            raise ValueError("Invalid enum value \"{name}\": {e.value} in sub-type \"{t.name}\"")
+                    if self.enum_name_to_val and name not in self.enum_name_to_val:
+                        raise ValueError("Enum \"{name}\" is not present in base-type of \"{t.name}\"")
+                    if val is not None:
+                        try:
+                            existing_val_name = self.enum_val_to_name[val]
+                        except:
+                            pass # Non-colliding value
+                        else:
+                            if existing_val_name != name:
+                                raise ValueError("Enum \"{name}\" may not reuse value of \"{existing_val_name}\" in sub-type \"{t.name}\"")
+                        new_enum_val_to_name[val] = name
+                        new_enum_name_to_val[name] = val
+                        if val >= next_val:
+                            next_val = val + 1
+                    else:
+                        if next_val >= MAX_ENUM_VALUE:
+                            raise ValueError("Enum \"{name}\" must be assigned an explicit value when automatic assignment would exceed maximum limit of {MAX_ENUM_VALUE} in type \"{t.name}\"")
+                        new_enum_val_to_name[next_val] = name
+                        new_enum_name_to_val[name] = next_val
+                        next_val += 1
+
+                self.enum_name_to_val = new_enum_name_to_val
+                self.enum_val_to_name = new_enum_val_to_name
+
+            # fraction-digits
+            _fraction_digits = t.fraction_digits
+            if _fraction_digits is not None:
+                if self.fraction_digits is not None:
+                    raise ValueError("The fraction-digits of a base-type may not be redefined in sub-type\"{t.name}\"")
+                self.fraction_digits = bigint(_fraction_digits)
+
+            # length
+            _length = t.length
+            if _length is not None:
+                _last_length = self.length
+                base_length = _last_length if _last_length is not None else Ranges([(0, MAX_LENGTH_STMT)])
+                try:
+                    new_length = parse_int_range_stmt(_length.value, base_length)
+                except ValueError as ex:
+                    raise ValueError("Invalid length in type \"{t.name}\": {ex.error_message}")
+                self.length = new_length
+
+            # path
+            _path = t.path
+            if _path is not None:
+                if self.path is not None:
+                    raise ValueError("The path of a base-type may not be redefined in sub-type \"{t.name}\"")
+                self.path = _path # TODO: XPath !!!
+
+            # pattern
+            for pattern in t.pattern:
+                _modifier = pattern.modifier
+                invert_match = _modifier is not None and _modifier == "invert-match"
+                try:
+                    new_pattern = YangPattern.from_yang_regex(pattern.value, invert_match)
+                except Exception as ex:
+                    raise ValueError("Unable to parse pattern of \"{t.name}\": {ex.error_message}")
+                self.patterns.append(new_pattern)
+
+            # builtin restrictions
+            if t.name == "int8":
+                self.integer_ranges = Ranges([(-128, 127)])
+            elif t.name == "int16":
+                self.integer_ranges = Ranges([(-32768, 32767)])
+            elif t.name == "int32":
+                self.integer_ranges = Ranges([(-2147483648, 2147483647)])
+            elif t.name == "int64":
+                # self.integer_ranges = Ranges([(-9223372036854775808, 9223372036854775807)])
+                # Workaround https://github.com/actonlang/acton/issues/2545
+                self.integer_ranges = Ranges([(-92233720368547758080//10, 9223372036854775807)])
+            elif t.name == "uint8":
+                self.integer_ranges = Ranges([(0, 255)])
+            elif t.name == "uint16":
+                self.integer_ranges = Ranges([(0, 65535)])
+            elif t.name == "uint32":
+                self.integer_ranges = Ranges([(0, 4294967295)])
+            elif t.name == "uint64":
+                self.integer_ranges = Ranges([(0, bigint(18446744073709551615))])
+            elif t.name == "decimal64":
+                fraction_digits = self.fraction_digits
+                if fraction_digits is not None:
+                    if fraction_digits < 1 or fraction_digits > 18:
+                        raise ValueError("Invalid fraction-digits value, must be between 1 and 18 inclusivly")
+                    # self.decimal_ranges = Ranges([(Decimal(bigint(-9223372036854775808), -fraction_digits), Decimal(9223372036854775807, -fraction_digits))])
+                    # Workaround https://github.com/actonlang/acton/issues/2545
+                    self.decimal_ranges = Ranges([(Decimal(-92233720368547758080//10, -fraction_digits), Decimal(9223372036854775807, -fraction_digits))])
+            # range
+            _range = t.range_
+            if _range is not None:
+                if self.builtin_type == "decimal64":
+                    base_decimal_ranges = self.decimal_ranges
+                    if base_decimal_ranges is not None:
+                        try:
+                            new_decimal_ranges = parse_decimal_range_stmt(_range.value, base_decimal_ranges)
+                        except ValueError as ex:
+                            raise ValueError("Invalid range in type \"{t.name}\": {ex.error_message}")
+                    else:
+                        raise ValueError("Internal error: missing builtin ({self.builtin_type}) base range for {t.name}")
+                    self.decimal_ranges = new_decimal_ranges
+                else:
+                    base_integer_ranges = self.integer_ranges
+                    if base_integer_ranges is not None:
+                        try:
+                            new_integer_ranges = parse_bigint_range_stmt(_range.value, base_integer_ranges)
+                        except ValueError as ex:
+                            raise ValueError("Invalid range in type \"{t.name}\": {ex.error_message}")
+                    else:
+                        raise ValueError("Internal error: missing builtin ({self.builtin_type}) base range for {t.name}")
+                    self.integer_ranges = new_integer_ranges
+
+            # require_instance
+            _require_instance = t.require_instance
+            if _require_instance is not None:
+                if _require_instance:
+                    self.require_instance = True
+                else:
+                    base_require_instance = self.require_instance
+                    if base_require_instance is not None:
+                        if base_require_instance:
+                            raise ValueError("The require-instance=true of a base-type may not be redefined to false in sub-type \"{t.name}\"")
+                    else:
+                        self.require_instance = False
+
 # -------------------------------------------------------------------------------
 
 def split_prefix_name(name: str) -> (?str, str):
@@ -1713,11 +2457,9 @@ class Context(object):
     """Compilation context
     """
     modules: dict[ModRev, Module]
-    skip_type_resolution: bool
 
-    def __init__(self, modules: list[Module]=[], skip_type_resolution: bool=False):
+    def __init__(self, modules: list[Module]=[]):
         self.modules = {}
-        self.skip_type_resolution = skip_type_resolution
         for thing in modules:
             self.add_module(thing)
 
@@ -2453,6 +3195,9 @@ class Ext(SchemaNode):
         self.arg = arg
         self.exts = exts
 
+    def __repr__(self):
+        return "Ext(prefix={repr(self.prefix)}, name={repr(self.name)}, arg={repr(self.arg)}, exts={repr(self.exts)})"
+
     @staticmethod
     def from_fullname(fullname: str, arg: ?str=None, exts=[]) -> Ext:
         parts = fullname.split(":", 1)
@@ -2503,6 +3248,57 @@ extension Ext (Ord):
     def __lt__(self, other: Ext) -> bool:
         return self.name < other.name
 
+def parse_int_range_stmt(range_str: str, base_ranges: Ranges[int]) -> Ranges[int]:
+    builder = RangesBuilder()
+    for r in parse_range_constraint(range_str):
+        ls = r.min_str
+        us = r.max_str
+
+        l = None if ls == "min" else int(ls)
+        u = None if us == "max" else int(us)
+
+        RangesBuilder.append_range_restriction_of(builder, l, u, base_ranges)
+    return RangesBuilder.into_ranges(builder)
+
+def parse_bigint_range_stmt(range_str: str, base_ranges: Ranges[bigint]) -> Ranges[bigint]:
+    builder = RangesBuilder()
+    for r in parse_range_constraint(range_str):
+        ls = r.min_str
+        us = r.max_str
+
+        l = None if ls == "min" else bigint(ls)
+        u = None if us == "max" else bigint(us)
+
+        RangesBuilder.append_range_restriction_of(builder, l, u, base_ranges)
+    return RangesBuilder.into_ranges(builder)
+
+def parse_decimal_range_stmt(range_str: str, base_ranges: Ranges[Decimal]) -> Ranges[Decimal]:
+    builder = RangesBuilder()
+    for r in parse_range_constraint(range_str):
+        ls = r.min_str
+        us = r.max_str
+
+        l = None if ls == "min" else Decimal.parse(ls)
+        u = None if us == "max" else Decimal.parse(us)
+
+        RangesBuilder.append_range_restriction_of(builder, l, u, base_ranges)
+    return RangesBuilder.into_ranges(builder)
+
+def parse_range_constraint(range_str: str) -> list[(min_str: str, max_str: str)]:
+    intervals = []
+    parts = range_str.split("|")
+    for part in parts:
+        part = part.strip()
+        if ".." in part:
+            range_parts = part.split("..")
+            if len(range_parts) == 2:
+                min_str = range_parts[0].strip()
+                max_str = range_parts[1].strip()
+                intervals.append((min_str=min_str, max_str=max_str))
+        elif part != "":
+            # Singleton range token, e.g., "5" => [5,5]
+            intervals.append((min_str=part, max_str=part))
+    return intervals
 
 def take_opt_bool(stmts: list[Statement], kw: str) -> ?bool:
     v = take_opt_str(stmts, kw)
@@ -2655,6 +3451,8 @@ def _prsrc_attrs(indent, attrs):
                 res.append("{name}={value.prsrc(0)}")
             elif isinstance(value, DNode):
                 res.append("{name}={value.prsrc(0)}")
+            elif isinstance(value, DType):
+                res.append("{name}={value.prtyinst()}")
             else:
                 res.append("{name}={repr(value)}")
     return ", ".join(res)
@@ -2744,7 +3542,7 @@ def taker_name(n: DNode, key_names: ?list[str], loose: bool=False) -> str:
     if isinstance(n, DLeaf):
         optional = is_optional_arg_yang_leaf(n, key_names, loose)
         optional_str = "opt_" if optional else ""
-        if n.type_.name == "empty":
+        if n.type_.builtin_type == "empty":
             return taker_prefix + optional_str + "empty"
         return taker_prefix + optional_str + yang_type_to_acton_type(n.type_)
     if isinstance(n, DLeafList):
@@ -2767,7 +3565,7 @@ def yang_typename_to_acton_type(type_name: str) -> str:
         return "bool"
     elif type_name == "decimal64":
         # TODO: do something better
-        return "float"
+        return "Decimal"
     elif type_name == "empty":
         # TODO: is this right?
         return "bool"
@@ -2789,7 +3587,7 @@ def yang_typename_to_acton_type(type_name: str) -> str:
         raise ValueError("Union type not supported")
     raise ValueError("Unknown YANG type: {type_name}")
 
-def yang_type_to_acton_type(t: ?Type) -> str:
+def yang_type_to_acton_type(t: ?DType) -> str:
     # +---------------------+-------------------------------------+
     # | Name                | Description                         |
     # +---------------------+-------------------------------------+
@@ -2814,20 +3612,20 @@ def yang_type_to_acton_type(t: ?Type) -> str:
     # | union               | Choice of member types              |
     # +---------------------+-------------------------------------+
     if t is not None:
-        if t.name == "union":
-            def get_unique_types(tys: list[Type]) -> set[str]:
+        if isinstance(t, DTypeUnion):
+            def get_unique_types(tys: list[DType]) -> set[str]:
                 """Recursively expand union to the base types"""
                 res = set()
                 for ty in tys:
-                    if ty.name == "union":
-                        res.update(get_unique_types(ty.type_))
+                    if isinstance(ty, DTypeUnion):
+                        res.update(get_unique_types(ty.types))
                     else:
-                        res.add(ty.name)
+                        res.add(ty.builtin_type)
                 return res
 
             # Recursively find unique base types, if they all map down to the
             # same base type, we can just use that as the Acton type
-            unique_base_types = list(get_unique_types(t.type_))
+            unique_base_types = list(get_unique_types(t.types))
             if len(unique_base_types) == 1:
                 return yang_typename_to_acton_type(unique_base_types[0])
 
@@ -2866,7 +3664,7 @@ def yang_type_to_acton_type(t: ?Type) -> str:
             # TODO: use Acton union
             return "value"
         else:
-            return yang_typename_to_acton_type(t.name)
+            return yang_typename_to_acton_type(t.builtin_type)
     raise ValueError("type not defined")
 
 def prsrc_literal(ytype: str, value: str) -> str:
@@ -2892,11 +3690,9 @@ def prsrc_literal(ytype: str, value: str) -> str:
         # TODO: binary and other types?? The correct thing to do is to instead
         # pass the entire list of resolved types from the union and try to
         # convert to each in the order they are defined in the YANG model?
-        try:
-            a = float(value)
+        a = Decimal.try_parse(value)
+        if a is not None:
             return value
-        except ValueError:
-            pass
         # true, false is boolean,
         if value.lower() == "true":
             return str(True)
@@ -5502,43 +6298,41 @@ class Leaf(SchemaNodeOuter):
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        if context.skip_type_resolution:
-            new_type = self.type_
-            new_default = self.default
-            new_units = self.units
-        else:
-            base_typedef = self.type_.resolve_typedef(context)
-            new_type = base_typedef.type_
-
-            new_default = self.default
-            if new_default is None:
-                new_default = base_typedef.default
-
-            new_units = self.units
-            if new_units is None:
-                new_units = base_typedef.units
+        resolved_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
 
         new = Leaf(self.name,
                    config=self.config,
-                   default=new_default,
+                   default=self.default,
                    description=self.description,
                    if_feature=self.if_feature,
                    mandatory=self.mandatory,
                    must=self.must,
                    reference=self.reference,
                    status=self.status,
-                   type_=new_type,
-                   units=new_units,
+                   type_=resolved_type,
+                   units=self.units,
                    when=self.when,
                    exts=self.exts,
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx)
 
+        resolved_type.parent = new
+
         return new
 
     def to_dnode(self) -> DLeaf:
-        return DLeaf(
+        dtype = self.type_.to_dtype()
+
+        new_default = self.default
+        if new_default is None:
+            new_default = dtype.default
+
+        new_units = self.units
+        if new_units is None:
+            new_units = dtype.units
+
+        new_dnode = DLeaf(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
@@ -5551,11 +6345,13 @@ class Leaf(SchemaNodeOuter):
             must=self.must,
             reference=self.reference,
             status=self.status,
-            type_=self.type_,
+            type_=dtype,
             units=self.units,
             when=self.when,
             exts=self.exts
         )
+        dtype.parent = new_dnode
+        return new_dnode
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
         """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
@@ -5719,16 +6515,7 @@ class LeafList(SchemaNodeOuter):
         self.exts.extend(refine.exts)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        if context.skip_type_resolution:
-            new_type = self.type_
-            new_units = self.units
-        else:
-            base_typedef = self.type_.resolve_typedef(context)
-            new_type = base_typedef.type_
-
-            new_units = self.units
-            if new_units is None:
-                new_units = base_typedef.units
+        resolved_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
 
         new = LeafList(self.name,
                        config=self.config,
@@ -5741,13 +6528,16 @@ class LeafList(SchemaNodeOuter):
                        ordered_by=self.ordered_by,
                        reference=self.reference,
                        status=self.status,
-                       type_=new_type,
-                       units=new_units,
+                       type_=resolved_type,
+                       units=self.units,
                        when=self.when,
                        exts=self.exts,
                        mod=new_mod if new_mod is not None else self.mod,
                        ns=new_ns if new_ns is not None else self.ns,
                        pfx=new_pfx if new_pfx is not None else self.pfx)
+
+        resolved_type.parent = new
+
         return new
 
     def get_max_elements(self) -> ?int:
@@ -5763,7 +6553,13 @@ class LeafList(SchemaNodeOuter):
         return 0
 
     def to_dnode(self) -> DLeafList:
-        return DLeafList(
+        dtype = self.type_.to_dtype()
+
+        new_units = self.units
+        if new_units is None:
+            new_units = dtype.units
+
+        new_dnode = DLeafList(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
@@ -5778,11 +6574,13 @@ class LeafList(SchemaNodeOuter):
             ordered_by=self.ordered_by,
             reference=self.reference,
             status=self.status,
-            type_=self.type_,
+            type_=dtype,
             units=self.units,
             when=self.when,
             exts=self.exts
         )
+        dtype.parent = new_dnode
+        return new_dnode
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
         """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
@@ -7831,39 +8629,43 @@ class Type(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    def resolve_union_types(self, context: Context) -> Type:
-        if self.name == "union":
-            # Resolve union types
-            resolved_union_types = [ut.resolve_typedef(context).type_ for ut in self.type_]
-            new = Type(self.name,
-                       base=self.base,
-                       bit=self.bit,
-                       enum=self.enum,
-                       fraction_digits=self.fraction_digits,
-                       length=self.length,
-                       path=self.path,
-                       pattern=self.pattern,
-                       range_=self.range_,
-                       require_instance=self.require_instance,
-                       type_=resolved_union_types)
-            return new
-        else:
-            return self
+    def resolve_type(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
+        top_name = _top_name if _top_name is not None else self.name
+        if recursion_level >= RECURSION_LIMIT:
+            raise ValueError("Recursion limit reached for typedef {top_name}")
 
-    def resolve_identities(self, context: Context) -> Type:
-        if self.name == "identityref":
-            # Normalize identity base to always include the module prefix. In doing
-            # so we make it easier to later look up bases in DIdentity.
-            fq_base = []
-            for base in self.base:
-                if ":" not in base:
+        if self.name in _builtin_types:
+            if self.name == "identityref":
+                # Normalize identity base to always include the origin module prefix. In doing
+                # so we make it easier to later look up bases in DIdentity.
+                fq_base = []
+                for base in self.base:
                     base_identity = self.get_identity(base, context)
                     fq_base.append("{base_identity.pfx}:{base_identity.name}")
-                else:
-                    fq_base.append(base)
 
-            new = Type(self.name,
-                    base=fq_base,
+                return ResolvedType(
+                        self.name,
+                        base=fq_base,
+                        require_instance=self.require_instance,
+                        exts=self.exts,
+                        mod=self.mod,
+                        ns=self.ns,
+                        pfx=self.pfx)
+
+            elif self.name == "union":
+                # Resolve union types
+                resolved_union_types = [ut.resolve_type(context, new_mod, new_ns, new_pfx, recursion_level + 1, top_name) for ut in self.type_]
+                return ResolvedType(self.name,
+                        base=self.base,
+                        type_=resolved_union_types,
+                        mod=self.mod,
+                        ns=self.ns,
+                        pfx=self.pfx)
+
+            # Remaining builtin types
+            return ResolvedType(
+                    self.name,
+                    base=self.base,
                     bit=self.bit,
                     enum=self.enum,
                     fraction_digits=self.fraction_digits,
@@ -7877,41 +8679,41 @@ class Type(SchemaNodeOuter):
                     mod=self.mod,
                     ns=self.ns,
                     pfx=self.pfx)
-            return new
-        else:
-            return self
 
-    def resolve_typedef(self, context: Context) -> Typedef:
-        if self.name in _builtin_types:
-            return Typedef(self.name, type_=self.resolve_union_types(context).resolve_identities(context))
-        td = self.get_typedef(self.name, context)
-        for i in range(RECURSION_LIMIT+1):
-            if td.type_.name in _builtin_types:
-                new_t = td.type_.resolve_union_types(context).resolve_identities(context)
-                td.type_ = new_t
-                return td
-            td = td.type_.resolve_typedef(context)
-            if i == RECURSION_LIMIT:
-                raise ValueError("Recursion limit reached for typedef {self.name}")
-        raise ValueError("Unable to resolve typedef {self.name}")
+        new_name = self.name
+        orig_prefix = self.get_prefix()
+        if new_pfx is not None and new_pfx != orig_prefix:
+            # Add explicit prefix when part of grouping expanded into other module
+            prefix, name = split_prefix_name(self.name)
+            if prefix is None:
+                new_name = "{orig_prefix}:{name}"
+
+        found_typedef = self.get_typedef(new_name, context)
+        resolved_typedef = found_typedef.resolve_typedef(context, new_mod, new_ns, new_pfx, recursion_level + 1, top_name)
+
+        return ResolvedType(
+                new_name,
+                base=self.base,
+                bit=self.bit,
+                enum=self.enum,
+                fraction_digits=self.fraction_digits,
+                length=self.length,
+                path=self.path,
+                pattern=self.pattern,
+                range_=self.range_,
+                require_instance=self.require_instance,
+                type_=self.type_,
+                exts=self.exts,
+                mod=self.mod,
+                ns=self.ns,
+                pfx=self.pfx,
+                resolved_base_typedef=resolved_typedef)
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        new = Type(self.name,
-                   base=self.base,
-                   bit=self.bit,
-                   enum=self.enum,
-                   fraction_digits=self.fraction_digits,
-                   length=self.length,
-                   path=self.path,
-                   pattern=self.pattern,
-                   range_=self.range_,
-                   require_instance=self.require_instance,
-                   type_=self.type_,
-                   exts=self.exts,
-                   mod=new_mod if new_mod is not None else self.mod,
-                   ns=new_ns if new_ns is not None else self.ns,
-                   pfx=new_pfx if new_pfx is not None else self.pfx)
-        return new
+        return self.resolve_type(context, new_mod, new_ns, new_pfx)
+
+    def to_dtype(self) -> DType:
+        raise NotImplementedError("Type.to_dtype: expect call to ResolvedType instead")
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
         """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
@@ -8025,26 +8827,28 @@ class Typedef(SchemaNodeOuter):
             self.reference = ref_reference
         self.exts.extend(refine.exts)
 
-    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        base_typedef = self.type_.resolve_typedef(context)
+    def resolve_typedef(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
+        top_name = _top_name if _top_name is not None else self.name
+        if recursion_level >= RECURSION_LIMIT:
+            raise ValueError("Recursion limit reached for typedef {top_name}")
 
-        new_default = self.default
-        if new_default is None:
-            new_default = base_typedef.default
-
-        new_units = self.units
-        if new_units is None:
-            new_units = base_typedef.units
+        resolved_base_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
 
         new = Typedef(self.name,
-                      default=new_default,
+                      default=self.default,
                       description=self.description,
                       reference=self.reference,
                       status=self.status,
-                      type_=base_typedef.type_,
-                      units=new_units,
+                      type_=resolved_base_type,
+                      units=self.units,
                       exts=self.exts)
+
+        resolved_base_type.parent = new
+
         return new
+
+    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        return self.resolve_typedef(context)
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
         """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
@@ -9458,6 +10262,118 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
     raise ValueError("Unknown statement: {stmt.kw}")
 
 
+class ResolvedType(Type):
+    resolved_base_typedef: ?Typedef
+
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None):
+        Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, require_instance, type_, exts, parent, mod, ns, pfx)
+        self.resolved_base_typedef = resolved_base_typedef
+
+    def resolve_type(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
+        new_name = self.name
+
+        if self.name not in _builtin_types:
+            orig_prefix = self.get_prefix()
+            if new_pfx is not None and new_pfx != orig_prefix:
+                # Add explicit prefix when part of grouping expanded into other module
+                prefix, name = split_prefix_name(self.name)
+                if prefix is None:
+                    new_name = "{orig_prefix}:{name}"
+
+        new = ResolvedType(new_name,
+                   base=self.base,
+                   bit=self.bit,
+                   enum=self.enum,
+                   fraction_digits=self.fraction_digits,
+                   length=self.length,
+                   path=self.path,
+                   pattern=self.pattern,
+                   range_=self.range_,
+                   require_instance=self.require_instance,
+                   type_=self.type_,
+                   exts=self.exts,
+                   mod=new_mod if new_mod is not None else self.mod,
+                   ns=new_ns if new_ns is not None else self.ns,
+                   pfx=new_pfx if new_pfx is not None else self.pfx,
+                   resolved_base_typedef=self.resolved_base_typedef)
+        return new
+
+    def to_dtype(self) -> DType:
+        return DType.from_resolved_type(self)
+
+
+def find_identity_by_ref(identities: list[DIdentity], name: str, namespace: ?str=None, module: ?str=None, prefix: ?str=None) -> ?DIdentity:
+    """Find an identity by name and optionally namespace or module"""
+    for identity in identities:
+        if identity.name == name:
+            if namespace is not None and identity.namespace == namespace:
+                return identity
+            elif module is not None and identity.module == module:
+                return identity
+            elif prefix is not None and identity.prefix == prefix:
+                return identity
+    return None
+
+
+def complete_identityref(partial: value, identities: list[DIdentity], current_module: str) -> (?Identityref, ?DIdentity, ?str):
+    """Complete an Identityref by filling in missing namespace or module, if only one is set"""
+    if isinstance(partial, Identityref):
+        identity = find_identity_by_ref(identities, partial.val, namespace=partial.ns, module=partial.mod, prefix=partial.pfx)
+        if identity is not None:
+            return partial, identity, None
+        else:
+            return None, None, "Identityref {partial.val} not found in namespace={partial.ns} module={partial.mod} prefix={partial.pfx}"
+    elif isinstance(partial, PartialIdentityref):
+        partial_ns = partial.ns
+        partial_mod = partial.mod
+        partial_pfx = partial.pfx
+        if partial_ns is None and partial_mod is None and partial_pfx is None:
+            identity = find_identity_by_ref(identities, partial.val, module=current_module)
+            if identity is not None:
+                complete = Identityref(partial.val, identity.namespace, identity.module, identity.prefix)
+                return complete, identity, None
+            else:
+                return None, None, "Identityref {partial.val} not found in current module {current_module}"
+        else:
+            # Have namespace or module (also both, but that doesn't happen when we parse XML / JSON)
+            identity = find_identity_by_ref(identities, partial.val, namespace=partial_ns, module=partial_mod, prefix=partial_pfx)
+            if identity is not None:
+                complete = Identityref(partial.val, identity.namespace, identity.module, identity.prefix)
+                return complete, identity, None
+            else:
+                return None, None, "Identityref {partial.val} not found in namespace={partial.ns} module={partial.mod} prefix={partial.pfx}"
+    else:
+        raise ValueError('"partial" argument type is a union of Identityref, PartialIdentityref')
+
+
+def is_derived_from(identity: DIdentity, bases: list[DIdentity]) -> bool:
+    """Check if an identity is derived from any of the given base identities"""
+    for b in bases:
+        if b.module == identity.module and b.name == identity.name:
+            return True
+
+    for base in identity.base:
+        # Check direct match
+        for b in bases:
+            if b.module == base.module and b.name == base.name:
+                return True
+        # Check recursive derivation
+        if is_derived_from(base, bases):
+            return True
+    return False
+
+
+# partial is a union of Identityref, PartialIdentityref
+def complete_and_validate_identityref(partial: value, identities: list[DIdentity], bases: list[DIdentity], current_module: str) -> (?Identityref, ?str):
+    identityref, identity, error = complete_identityref(partial, identities, current_module)
+    if identity is not None:
+        if is_derived_from(identity, bases):
+            return identityref, None
+        else:
+            return None, "Identityref {identityref} not derived from any of the valid bases: {bases}"
+    return None, error
+
+
 def list_keys(node: DNodeInner) -> ?list[str]:
     if isinstance(node, DList):
         return node.key
@@ -9497,4 +10413,37 @@ def stmt_to_smodule(stmt):
     if isinstance(m, Module):
         return m
     raise ValueError("Expected a module, got {type(m)}")
+
+
+def escape_as_fstr(s: str) -> str:
+    parts = []
+    s_len = len(s)
+    b = 0
+
+    def copy_until(b, i):
+        if i > b:
+           parts.append(s[b:i])
+        return i
+
+    def replace(b, i, p, skip=1):
+        new_b = copy_until(b, i)
+        parts.append(p)
+        return new_b + skip
+
+    for i in range(0, s_len):
+        c = s[i]
+        if c == '\\':
+            b = replace(b, i, "\\\\")
+        elif c == '{{':
+            b = replace(b, i, "{{{{")
+        elif c == '}}':
+            b = replace(b, i, "}}}}")
+        elif c == '\'':
+            b = replace(b, i, "\\\'")
+        elif c == '%':
+            b = replace(b, i, "\\x25") # Workaround ...
+
+    copy_until(b, s_len)
+
+    return "".join(parts)
 
