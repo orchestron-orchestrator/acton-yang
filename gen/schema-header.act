@@ -1717,6 +1717,21 @@ class DRpc(DNodeInner):
         ]
 
 
+class DTypeContext(object):
+    cache: dict[ResolvedType, DType]
+
+    def __init__(self):
+        self.cache = {}
+
+    def try_get_cached_dtype(self, type_: ResolvedType) -> ?DType:
+        try:
+            return self.cache[type_]
+        except KeyError:
+            return None
+
+    def set_cached_dtype(self, type_: ResolvedType, dtype: DType):
+        self.cache[type_] = dtype
+
 class DType(object):
     parent: ?DNodeLeaf
     module: str      # The name of the module this node belongs to
@@ -1746,9 +1761,14 @@ class DType(object):
         self.default = default
 
     @staticmethod
-    def from_resolved_type(type_: ResolvedType) -> DType:
-        resolver = DTypeResolver.resolve(type_)
-        return DType.from_resolver(resolver)
+    def from_resolved_type(type_: ResolvedType, context: DTypeContext) -> DType:
+        cached_dtype = context.try_get_cached_dtype(type_)
+        if cached_dtype is not None:
+            return cached_dtype
+        resolver = DTypeResolver.resolve(type_, context)
+        dtype = DType.from_resolver(resolver)
+        context.set_cached_dtype(type_, dtype)
+        return dtype
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DType:
@@ -2150,8 +2170,7 @@ class DTypeUnion(DType):
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeUnion:
         t = resolver.type_
-        alt_types = [DType.from_resolver(r) for r in resolver.alt_types]
-        return DTypeUnion(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, alt_types)
+        return DTypeUnion(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.alt_types)
 
     def resolve_references(self, root: DRoot):
         for t in self.types:
@@ -2184,7 +2203,7 @@ class DTypeResolver(object):
     integer_ranges: ?Ranges[bigint] # May be restricted to sub-ranges only
     decimal_ranges: ?Ranges[Decimal] # May be restricted to sub-ranges only
     require_instance: ?bool # Assuming 'True' unless explicitly 'False' in base-type chain, disallowing redefinition from explicit 'True'
-    alt_types: list[DTypeResolver] # Merge base type union sets
+    alt_types: list[DType] # Merge base type union sets
     default: ?value # sub-type overrides base-type
     description: ?str # sub-type overrides base-type
     reference: ?str # sub-type overrides base-type
@@ -2211,21 +2230,21 @@ class DTypeResolver(object):
         self.units = None
 
     @staticmethod
-    def resolve(type_: ResolvedType) -> DTypeResolver:
+    def resolve(type_: ResolvedType, context: DTypeContext) -> DTypeResolver:
         r = DTypeResolver(type_)
-        r._resolve(type_)
+        r._resolve(type_, context)
         return r
 
-    def _resolve(self, t: ResolvedType):
+    def _resolve(self, t: ResolvedType, context: DTypeContext):
         if t.name == "union":
             self.builtin_type = t.name
             for alt_type in t.type_:
                 if isinstance(alt_type, ResolvedType):
-                    alt_resolver = DTypeResolver.resolve(alt_type)
-                    if alt_resolver.builtin_type == "union":
-                        self.alt_types.extend(alt_resolver.alt_types)
+                    alt_dtype = DType.from_resolved_type(alt_type, context)
+                    if isinstance(alt_dtype, DTypeUnion):
+                        self.alt_types.extend(alt_dtype.types)
                     else:
-                        self.alt_types.append(alt_resolver)
+                        self.alt_types.append(alt_dtype)
                 else:
                     raise ValueError("Internal error: expected resolved alt-types in {t.name}")
         else:
@@ -2247,7 +2266,7 @@ class DTypeResolver(object):
                 # recurse into base typedef
                 base_typedef_type = base_typedef.type_
                 if isinstance(base_typedef_type, ResolvedType):
-                    self._resolve(base_typedef_type)
+                    self._resolve(base_typedef_type, context)
                 else:
                     raise ValueError("Internal error: expected resolved in typedef {base_typedef.name}")
             else:
@@ -2553,10 +2572,10 @@ class SchemaNode(object):
         """
         raise NotImplementedError('SchemaNode pdc')
 
-    mut def to_dnode(self) -> DNode:
+    mut def to_dnode(self, context: DTypeContext) -> DNode:
         raise NotImplementedError('SchemaNode to_dschema not implemented for {type(self)}')
 
-    def get_dnode_children(self, in_choice: bool=False):
+    def get_dnode_children(self, context: DTypeContext, in_choice: bool=False):
         mut def unset_mandatory(node):
             """Unset the mandatory attribute if present
             """
@@ -2573,14 +2592,14 @@ class SchemaNode(object):
                 if isinstance(child, Case):
                     # Direct descendants of case are data nodes, where we must
                     # unset mandatory
-                    new_children.extend(child.get_dnode_children(in_choice=True))
+                    new_children.extend(child.get_dnode_children(context, in_choice=True))
                     continue
                 if isinstance(child, Choice):
                     # Direct descendants of choice are either case or data node,
                     # like leaf, container, etc. We unset mandatory on these to
                     # avoid ending up with invalid mutually exclusive
                     # constraints in the data tree. Of course we then have no constraints ...
-                    new_children.extend(child.get_dnode_children(in_choice=True))
+                    new_children.extend(child.get_dnode_children(context, in_choice=True))
                     continue
                 if isinstance(child, Grouping):
                     continue
@@ -2590,7 +2609,7 @@ class SchemaNode(object):
                     continue
                 if isinstance(child, Uses):
                     continue
-                dnode_child = child.to_dnode()
+                dnode_child = child.to_dnode(context)
                 if in_choice:
                     unset_mandatory(dnode_child)
                 new_children.append(dnode_child)
