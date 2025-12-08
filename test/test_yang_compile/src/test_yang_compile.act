@@ -1,5 +1,6 @@
 import file
 import fs
+import logging
 import testing
 import time
 
@@ -122,7 +123,18 @@ actor _test_notconf_juniper_crpd_24_4R1_9_local(t: testing.EnvT):
     """Test compilation of Juniper CRPD YANG modules from notconf (local)"""
     test_compile_yang_directory(t, "test-yang/notconf-juniper-crpd-24_4R1_9-local")
 
+actor _test_openconfig_optical_transport(t: testing.EnvT):
+    """Test compilation of OpenConfig optical transport models"""
+    test_compile_yang_directory(t, "test-yang/openconfig-optical-transport")
+
 actor _test_sorespo(t: testing.EnvT):
     """Test compilation of combined SORESPO layers"""
     test_compile_yang_directory(t, "test-yang/sorespo")
 
+actor main(env):
+    def report(success, error, output):
+        print(success, error, output)
+    t = testing.EnvT(report, env, logging.Handler())
+    # Exclude junos-rpc modules due to missing grouping 'command-forwarding'
+    test_compile_yang_directory(t, "test-yang/juniper-crpd-24_4R1_9", ["junos-rpc-*"])
+    env.exit(0)
