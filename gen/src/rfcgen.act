@@ -330,15 +330,15 @@ snode_methods = {
         return new
 
 """,
-        "to_dnode": """    def to_dnode(self) -> DAction:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DAction:
         dnode_children = []
         self_input = self.input
         if self_input is not None:
-            input_dnode = self_input.to_dnode()
+            input_dnode = self_input.to_dnode(context)
             dnode_children.append(input_dnode)
         self_output = self.output
         if self_output is not None:
-            output_dnode = self_output.to_dnode()
+            output_dnode = self_output.to_dnode(context)
             dnode_children.append(output_dnode)
 
         new_dnode = DAction(
@@ -362,7 +362,7 @@ snode_methods = {
 """
     },
     "anydata": {
-        "to_dnode": """    def to_dnode(self) -> DAnydata:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DAnydata:
         return DAnydata(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -382,7 +382,7 @@ snode_methods = {
 """
     },
     "anyxml": {
-        "to_dnode": """    def to_dnode(self) -> DAnyxml:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DAnyxml:
         return DAnyxml(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -409,7 +409,7 @@ snode_methods = {
         return False
 
 """,
-        "to_dnode": """    def to_dnode(self) -> DContainer:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DContainer:
         new_dnode = DContainer(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -424,21 +424,21 @@ snode_methods = {
             status=self.status,
             when=self.when,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
 """
     },
     "input": {
-        "to_dnode": """    def to_dnode(self) -> DInput:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DInput:
         new_dnode = DInput(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             must=self.must,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -512,7 +512,7 @@ snode_methods = {
         return latest
 
 """,
-        "to_dnode": """    def to_dnode(self) -> DModule:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DModule:
         new_dnode = DModule(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -523,7 +523,7 @@ snode_methods = {
             revision=self.revision,
             reference=self.reference,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -570,7 +570,7 @@ snode_methods = {
 """
     },
     "notification": {
-        "to_dnode": """    def to_dnode(self) -> DNotification:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DNotification:
         new_dnode = DNotification(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -581,7 +581,7 @@ snode_methods = {
             reference=self.reference,
             status=self.status,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -613,7 +613,7 @@ snode_methods = {
         return 0
 
 """,
-        "to_dnode": """    def to_dnode(self) -> DList:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DList:
         new_dnode = DList(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -631,7 +631,7 @@ snode_methods = {
             status=self.status,
             when=self.when,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -665,8 +665,8 @@ snode_methods = {
         return new
 
 """,
-        "to_dnode": """    def to_dnode(self) -> DLeaf:
-        dtype = self.type_.to_dtype()
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DLeaf:
+        dtype = self.type_.to_dtype(context)
 
         new_default = self.default
         if new_default is None:
@@ -742,8 +742,8 @@ snode_methods = {
         return 0
 
 """,
-        "to_dnode": """    def to_dnode(self) -> DLeafList:
-        dtype = self.type_.to_dtype()
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DLeafList:
+        dtype = self.type_.to_dtype(context)
 
         new_units = self.units
         if new_units is None:
@@ -775,14 +775,14 @@ snode_methods = {
 """
     },
     "output": {
-        "to_dnode": """    def to_dnode(self) -> DOutput:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DOutput:
         new_dnode = DOutput(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             must=self.must,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -833,20 +833,20 @@ snode_methods = {
         return new
 
 """,
-        "to_dnode": """    def to_dnode(self) -> DRpc:
+        "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DRpc:
         # Convert SchemaNode Rpc.input/output to DRpc.input/output and add to
         # its children, but only if Input and Output actually contain data
         # nodes.
         dnode_children = []
         self_input = self.input
         if self_input is not None and len(self_input.children) > 0:
-            input_dnode = self_input.to_dnode()
+            input_dnode = self_input.to_dnode(context)
             dnode_children.append(input_dnode)
         else:
             input_dnode = None
         self_output = self.output
         if self_output is not None and len(self_output.children) > 0:
-            output_dnode = self_output.to_dnode()
+            output_dnode = self_output.to_dnode(context)
             dnode_children.append(output_dnode)
         else:
             output_dnode = None
@@ -975,7 +975,7 @@ snode_methods = {
         return self.resolve_type(context, new_mod, new_ns, new_pfx)
 
 """,
-        "to_dtype": r"""    def to_dtype(self) -> DType:
+        "to_dtype": r"""    def to_dtype(self, context: DTypeContext) -> DType:
         raise NotImplementedError("Type.to_dtype: expect call to ResolvedType instead")
 
 """,

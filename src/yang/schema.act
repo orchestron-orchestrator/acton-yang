@@ -1713,6 +1713,21 @@ class DRpc(DNodeInner):
         ]
 
 
+class DTypeContext(object):
+    cache: dict[ResolvedType, DType]
+
+    def __init__(self):
+        self.cache = {}
+
+    def try_get_cached_dtype(self, type_: ResolvedType) -> ?DType:
+        try:
+            return self.cache[type_]
+        except KeyError:
+            return None
+
+    def set_cached_dtype(self, type_: ResolvedType, dtype: DType):
+        self.cache[type_] = dtype
+
 class DType(object):
     parent: ?DNodeLeaf
     module: str      # The name of the module this node belongs to
@@ -1742,9 +1757,14 @@ class DType(object):
         self.default = default
 
     @staticmethod
-    def from_resolved_type(type_: ResolvedType) -> DType:
-        resolver = DTypeResolver.resolve(type_)
-        return DType.from_resolver(resolver)
+    def from_resolved_type(type_: ResolvedType, context: DTypeContext) -> DType:
+        cached_dtype = context.try_get_cached_dtype(type_)
+        if cached_dtype is not None:
+            return cached_dtype
+        resolver = DTypeResolver.resolve(type_, context)
+        dtype = DType.from_resolver(resolver)
+        context.set_cached_dtype(type_, dtype)
+        return dtype
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DType:
@@ -2146,8 +2166,7 @@ class DTypeUnion(DType):
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeUnion:
         t = resolver.type_
-        alt_types = [DType.from_resolver(r) for r in resolver.alt_types]
-        return DTypeUnion(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, alt_types)
+        return DTypeUnion(t.get_module_name(), t.get_namespace(), t.get_prefix(), t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.alt_types)
 
     def resolve_references(self, root: DRoot):
         for t in self.types:
@@ -2180,7 +2199,7 @@ class DTypeResolver(object):
     integer_ranges: ?Ranges[bigint] # May be restricted to sub-ranges only
     decimal_ranges: ?Ranges[Decimal] # May be restricted to sub-ranges only
     require_instance: ?bool # Assuming 'True' unless explicitly 'False' in base-type chain, disallowing redefinition from explicit 'True'
-    alt_types: list[DTypeResolver] # Merge base type union sets
+    alt_types: list[DType] # Merge base type union sets
     default: ?value # sub-type overrides base-type
     description: ?str # sub-type overrides base-type
     reference: ?str # sub-type overrides base-type
@@ -2207,21 +2226,21 @@ class DTypeResolver(object):
         self.units = None
 
     @staticmethod
-    def resolve(type_: ResolvedType) -> DTypeResolver:
+    def resolve(type_: ResolvedType, context: DTypeContext) -> DTypeResolver:
         r = DTypeResolver(type_)
-        r._resolve(type_)
+        r._resolve(type_, context)
         return r
 
-    def _resolve(self, t: ResolvedType):
+    def _resolve(self, t: ResolvedType, context: DTypeContext):
         if t.name == "union":
             self.builtin_type = t.name
             for alt_type in t.type_:
                 if isinstance(alt_type, ResolvedType):
-                    alt_resolver = DTypeResolver.resolve(alt_type)
-                    if alt_resolver.builtin_type == "union":
-                        self.alt_types.extend(alt_resolver.alt_types)
+                    alt_dtype = DType.from_resolved_type(alt_type, context)
+                    if isinstance(alt_dtype, DTypeUnion):
+                        self.alt_types.extend(alt_dtype.types)
                     else:
-                        self.alt_types.append(alt_resolver)
+                        self.alt_types.append(alt_dtype)
                 else:
                     raise ValueError("Internal error: expected resolved alt-types in {t.name}")
         else:
@@ -2243,7 +2262,7 @@ class DTypeResolver(object):
                 # recurse into base typedef
                 base_typedef_type = base_typedef.type_
                 if isinstance(base_typedef_type, ResolvedType):
-                    self._resolve(base_typedef_type)
+                    self._resolve(base_typedef_type, context)
                 else:
                     raise ValueError("Internal error: expected resolved in typedef {base_typedef.name}")
             else:
@@ -2549,10 +2568,10 @@ class SchemaNode(object):
         """
         raise NotImplementedError('SchemaNode pdc')
 
-    mut def to_dnode(self) -> DNode:
+    mut def to_dnode(self, context: DTypeContext) -> DNode:
         raise NotImplementedError('SchemaNode to_dschema not implemented for {type(self)}')
 
-    def get_dnode_children(self, in_choice: bool=False):
+    def get_dnode_children(self, context: DTypeContext, in_choice: bool=False):
         mut def unset_mandatory(node):
             """Unset the mandatory attribute if present
             """
@@ -2569,14 +2588,14 @@ class SchemaNode(object):
                 if isinstance(child, Case):
                     # Direct descendants of case are data nodes, where we must
                     # unset mandatory
-                    new_children.extend(child.get_dnode_children(in_choice=True))
+                    new_children.extend(child.get_dnode_children(context, in_choice=True))
                     continue
                 if isinstance(child, Choice):
                     # Direct descendants of choice are either case or data node,
                     # like leaf, container, etc. We unset mandatory on these to
                     # avoid ending up with invalid mutually exclusive
                     # constraints in the data tree. Of course we then have no constraints ...
-                    new_children.extend(child.get_dnode_children(in_choice=True))
+                    new_children.extend(child.get_dnode_children(context, in_choice=True))
                     continue
                 if isinstance(child, Grouping):
                     continue
@@ -2586,7 +2605,7 @@ class SchemaNode(object):
                     continue
                 if isinstance(child, Uses):
                     continue
-                dnode_child = child.to_dnode()
+                dnode_child = child.to_dnode(context)
                 if in_choice:
                     unset_mandatory(dnode_child)
                 new_children.append(dnode_child)
@@ -4213,15 +4232,15 @@ class Action(SchemaNodeInner):
         self.expand_children(context, new, new_ns, new_pfx)
         return new
 
-    def to_dnode(self) -> DAction:
+    def to_dnode(self, context: DTypeContext) -> DAction:
         dnode_children = []
         self_input = self.input
         if self_input is not None:
-            input_dnode = self_input.to_dnode()
+            input_dnode = self_input.to_dnode(context)
             dnode_children.append(input_dnode)
         self_output = self.output
         if self_output is not None:
-            output_dnode = self_output.to_dnode()
+            output_dnode = self_output.to_dnode(context)
             dnode_children.append(output_dnode)
 
         new_dnode = DAction(
@@ -4367,7 +4386,7 @@ class Anydata(SchemaNodeOuter):
             self.reference = ref_reference
         self.exts.extend(refine.exts)
 
-    def to_dnode(self) -> DAnydata:
+    def to_dnode(self, context: DTypeContext) -> DAnydata:
         return DAnydata(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -4524,7 +4543,7 @@ class Anyxml(SchemaNodeOuter):
             self.reference = ref_reference
         self.exts.extend(refine.exts)
 
-    def to_dnode(self) -> DAnyxml:
+    def to_dnode(self, context: DTypeContext) -> DAnyxml:
         return DAnyxml(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -5277,7 +5296,7 @@ class Container(SchemaNodeInner):
             return True
         return False
 
-    def to_dnode(self) -> DContainer:
+    def to_dnode(self, context: DTypeContext) -> DContainer:
         new_dnode = DContainer(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -5292,7 +5311,7 @@ class Container(SchemaNodeInner):
             status=self.status,
             when=self.when,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -6126,14 +6145,14 @@ class Input(SchemaNodeInner):
                 self.must.append(ref_must)
         self.exts.extend(refine.exts)
 
-    def to_dnode(self) -> DInput:
+    def to_dnode(self, context: DTypeContext) -> DInput:
         new_dnode = DInput(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             must=self.must,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -6320,8 +6339,8 @@ class Leaf(SchemaNodeOuter):
 
         return new
 
-    def to_dnode(self) -> DLeaf:
-        dtype = self.type_.to_dtype()
+    def to_dnode(self, context: DTypeContext) -> DLeaf:
+        dtype = self.type_.to_dtype(context)
 
         new_default = self.default
         if new_default is None:
@@ -6551,8 +6570,8 @@ class LeafList(SchemaNodeOuter):
             return int(selfmin_elements)
         return 0
 
-    def to_dnode(self) -> DLeafList:
-        dtype = self.type_.to_dtype()
+    def to_dnode(self, context: DTypeContext) -> DLeafList:
+        dtype = self.type_.to_dtype(context)
 
         new_units = self.units
         if new_units is None:
@@ -6849,7 +6868,7 @@ class List(SchemaNodeInner):
             return int(selfmin_elements)
         return 0
 
-    def to_dnode(self) -> DList:
+    def to_dnode(self, context: DTypeContext) -> DList:
         new_dnode = DList(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -6867,7 +6886,7 @@ class List(SchemaNodeInner):
             status=self.status,
             when=self.when,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -7133,7 +7152,7 @@ class Module(SchemaNodeInner):
                 latest = rev
         return latest
 
-    def to_dnode(self) -> DModule:
+    def to_dnode(self, context: DTypeContext) -> DModule:
         new_dnode = DModule(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -7144,7 +7163,7 @@ class Module(SchemaNodeInner):
             revision=self.revision,
             reference=self.reference,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -7414,7 +7433,7 @@ class Notification(SchemaNodeInner):
             self.reference = ref_reference
         self.exts.extend(refine.exts)
 
-    def to_dnode(self) -> DNotification:
+    def to_dnode(self, context: DTypeContext) -> DNotification:
         new_dnode = DNotification(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
@@ -7425,7 +7444,7 @@ class Notification(SchemaNodeInner):
             reference=self.reference,
             status=self.status,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -7548,14 +7567,14 @@ class Output(SchemaNodeInner):
                 self.must.append(ref_must)
         self.exts.extend(refine.exts)
 
-    def to_dnode(self) -> DOutput:
+    def to_dnode(self, context: DTypeContext) -> DOutput:
         new_dnode = DOutput(
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             must=self.must,
             exts=self.exts,
-            children=self.get_dnode_children()
+            children=self.get_dnode_children(context)
         )
         return new_dnode
 
@@ -8185,20 +8204,20 @@ class Rpc(SchemaNodeInner):
         self.expand_children(context, new, new_ns, new_pfx)
         return new
 
-    def to_dnode(self) -> DRpc:
+    def to_dnode(self, context: DTypeContext) -> DRpc:
         # Convert SchemaNode Rpc.input/output to DRpc.input/output and add to
         # its children, but only if Input and Output actually contain data
         # nodes.
         dnode_children = []
         self_input = self.input
         if self_input is not None and len(self_input.children) > 0:
-            input_dnode = self_input.to_dnode()
+            input_dnode = self_input.to_dnode(context)
             dnode_children.append(input_dnode)
         else:
             input_dnode = None
         self_output = self.output
         if self_output is not None and len(self_output.children) > 0:
-            output_dnode = self_output.to_dnode()
+            output_dnode = self_output.to_dnode(context)
             dnode_children.append(output_dnode)
         else:
             output_dnode = None
@@ -8711,7 +8730,7 @@ class Type(SchemaNodeOuter):
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         return self.resolve_type(context, new_mod, new_ns, new_pfx)
 
-    def to_dtype(self) -> DType:
+    def to_dtype(self, context: DTypeContext) -> DType:
         raise NotImplementedError("Type.to_dtype: expect call to ResolvedType instead")
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
@@ -10297,8 +10316,75 @@ class ResolvedType(Type):
                    resolved_base_typedef=self.resolved_base_typedef)
         return new
 
-    def to_dtype(self) -> DType:
-        return DType.from_resolved_type(self)
+    def to_dtype(self, context: DTypeContext) -> DType:
+        return DType.from_resolved_type(self, context)
+
+extension ResolvedType(Hashable):
+    def __eq__(self, other: ResolvedType) -> bool:
+        return self.name == other.name \
+            and self.mod == other.mod \
+            and self.ns == other.ns \
+            and self.pfx == other.pfx \
+            and self.base == other.base \
+            and self.bit == other.bit \
+            and self.enum == other.enum \
+            and self.fraction_digits == other.fraction_digits \
+            and self.length == other.length \
+            and self.path == other.path \
+            and self.pattern == other.pattern \
+            and self.range_ == other.range_ \
+            and self.require_instance == other.require_instance \
+            and self.type_ == other.type_
+
+    def hash(self, hasher):
+        # TODO: Cache Hash calculation?
+        # Hash non-builtins right here as they implement Ord and therefore can't
+        # implement Hashable until https://github.com/actonlang/acton/issues/1126 is solved
+        self.name.hash(hasher)
+        _mod = self.mod
+        if _mod is not None:
+            _mod.hash(hasher)
+        _ns = self.ns
+        if _ns is not None:
+            _ns.hash(hasher)
+        _pfx = self.pfx
+        if _pfx is not None:
+            _pfx.hash(hasher)
+        for base in self.base:
+            base.hash(hasher)
+        for bit in self.bit:
+            bit.name.hash(hasher)
+            _position = bit.position
+            if _position is not None:
+                _position.hash(hasher)
+        for enum in self.enum:
+            enum.name.hash(hasher)
+            _value = enum.value
+            if _value is not None:
+                _value.hash(hasher)
+        _fraction_digits = self.fraction_digits
+        if _fraction_digits is not None:
+            _fraction_digits.hash(hasher)
+        _length = self.length
+        if _length is not None:
+            _length.value.hash(hasher)
+        _path = self.path
+        if _path is not None:
+            _path.hash(hasher)
+        for pattern in self.pattern:
+            pattern.value.hash(hasher)
+            _modifier = pattern.modifier
+            if _modifier is not None:
+                _modifier.hash(hasher)
+        _range = self.range_
+        if _range is not None:
+            _range.value.hash(hasher)
+        _require_instance = self.require_instance
+        if _require_instance is not None:
+            _require_instance.hash(hasher)
+        for alt_type in self.type_:
+            if isinstance(alt_type, ResolvedType):
+                alt_type.hash(hasher)
 
 
 def find_identity_by_ref(identities: list[DIdentity], name: str, namespace: ?str=None, module: ?str=None, prefix: ?str=None) -> ?DIdentity:
