@@ -121,7 +121,7 @@ protocol YangData:
     """
     # TODO: can value implement YangData?
     take_container: mut(yang.schema.DContainer, str, bool, bool, list[PathElement]) -> ?(op: ?str, val: ?value)
-    take_list: mut(yang.schema.DList, str, bool, bool, list[PathElement]) -> list[value]
+    take_list: mut(yang.schema.DList, str, bool, bool, list[PathElement]) -> list[(op: ?str, val: value)]
     # Return a typed tuple for leaves. The tuple carries the concrete type name
     # and the parsed value. Missing leaves return None.
     take_leaf: mut(yang.schema.DRoot, yang.schema.DLeaf, str, bool, bool, list[PathElement]) -> ?(op: ?str, t: str, val: ?value)
@@ -138,9 +138,9 @@ extension xml.Node (YangData):
             return (op=op, val=child_node)
         return None
 
-    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[value]:
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: str, val: value)]:
         elements = yang.gdata.get_xml_children(self, name, schema.namespace if ns_qualified else None)
-        return elements
+        return [(op=get_netconf_operation(e), val=e) for e in elements]
 
     mut def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: str, t: str, val: ?value):
         new_path = path + [PathElement(schema)]
@@ -259,15 +259,15 @@ extension dict[A(Hashable), B] (YangData):
                 return (op=None, val=maybe)
         return None
 
-    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[value]:
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, val: value)]:
         if isinstance(self, dict):
             lv = None
             if ns_qualified and schema.module is not None and schema.module != "":
                 lv = self.get(f"{schema.module}:{name}")
             else:
                 lv = self.get(name)
-            if lv is not None:
-                return lv
+            if isinstance(lv, list):
+                return [(op=None, val=le) for le in lv]
         return []
 
     def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, t: str, val: ?value):
@@ -410,11 +410,11 @@ extension yang.adata.MNode (YangData):
         if maybe_cnt is not None:
             return (op=None, val=maybe_cnt)
 
-    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[value]:
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, val: value)]:
         usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
         maybe_list = self._get_attr(usname)
         if maybe_list is not None and isinstance(maybe_list, Iterator):
-            return list(maybe_list)
+            return [(op=None, val=e) for e in maybe_list]
         return [] # ??
 
     def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, t: str, val: ?value):
@@ -647,7 +647,7 @@ def from_data[A(YangData)](root: yang.schema.DRoot, data: A, loose: bool=False, 
     """
     return _from_data_recursive(root, root, data, loose, root_path=root_path, spath=[PathElement(root)])
 
-def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DNodeInner, data: A, loose: bool=False, set_ns: bool=True, root_path: list[str]=[], spath: list[PathElement]=[]) -> yang.gdata.Container:
+def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DNodeInner, data: A, loose: bool=False, set_ns: bool=True, root_path: list[str]=[], spath: list[PathElement]=[], skip_nonkeys: bool=False) -> yang.gdata.Container:
     """Internal function with additional recursion accumulators
 
     Args:
@@ -690,6 +690,9 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
 
     source_is_xml = isinstance(data, xml.Node)
     for child in s.children:
+        if skip_nonkeys and isinstance(s, yang.schema.DList) and child.name not in s.key:
+            continue
+
         # Only process data nodes
         if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
             continue
@@ -750,32 +753,31 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                     return val
                 raise ValueError("Missing key value at {format_schema_path(path_with_child())}: {name}")
 
-            for element_data in list_val:
+            for element in list_val:
+                element_data = element.val
                 if isinstance(element_data, xml.Node):
                     # Extract key values for better error context directly from the data (XML)
                     key_values = {}
                     for key_name in child.key:
                         key_node = unwrap_key(key_name, yang.gdata.get_xml_opt_child(element_data, key_name))
                         key_values[key_name] = unwrap_key(key_name, key_node.text)
-                    # Check NETCONF operation on the element
-                    eop = get_netconf_operation(element_data)
-                    if eop in ["remove", "delete"]:
-                            # Build element to extract proper key leaves, then create Absent/Delete with keys
-                            eg = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
-                            key_children = {key: unwrap_key(key, eg.children.get(key)) for key in child.key}
-                            if eop == "remove":
-                                list_elements.append(yang.gdata.Absent(key_children))
-                            else:
-                                list_elements.append(yang.gdata.Delete(key_children))
-                    elif eop in ["create", "replace"]:
-                        eg = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
-                        if eop == "create":
-                            list_elements.append(yang.gdata.Create(eg.children))
+
+                    if element.op == OP_REMOVE or element.op == OP_DELETE:
+                        element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values), skip_nonkeys=True)
+
+                        if element.op == OP_REMOVE:
+                            list_elements.append(yang.gdata.Absent(element_gdata.key_children(child.key)))
                         else:
-                            list_elements.append(yang.gdata.Replace(eg.children))
+                            list_elements.append(yang.gdata.Delete(element_gdata.key_children(child.key)))
                     else:
                         element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
-                        list_elements.append(element_gdata)
+
+                        if element.op == OP_CREATE:
+                            list_elements.append(yang.gdata.Create(element_gdata.children))
+                        elif element.op == OP_REPLACE:
+                            list_elements.append(yang.gdata.Replace(element_gdata.children))
+                        else:
+                            list_elements.append(element_gdata)
                 elif isinstance(element_data, dict):
                     # Extract key values for better error context directly from the data (JSON)
                     key_values = {k: unwrap_key(k, element_data.get(k)) for k in child.key}
@@ -788,7 +790,7 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                     list_elements.append(element_gdata)
                 else:
                     raise ValueError("Unsupported type for list element at {format_schema_path(path_with_child())}: {type(element_data)}")
-            if list_elements:
+            if len(list_elements) > 0:
                 list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
                 children[uname(child)] = list_gdata
 
