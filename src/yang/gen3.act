@@ -141,7 +141,7 @@ extension xml.Node (YangData):
         new_path = path + [PathElement(schema)]
         maybe_node = yang.gdata.get_xml_opt_child(self, name, schema.namespace if ns_qualified else None)
         if maybe_node is not None:
-            return try_parse_xml_value(maybe_node.text, schema.type_, new_path, maybe_node.nsdefs, root)
+            return try_parse_xml_value(maybe_node.text, schema, schema.type_, new_path, maybe_node.nsdefs, root)
         else:
             return None
 
@@ -153,13 +153,13 @@ extension xml.Node (YangData):
         for child in children:
             if isinstance(child, xml.Node):
                 text_value = child.text
-                tv = try_parse_xml_value(text_value, schema.type_, new_path, child.nsdefs, root)
+                tv = try_parse_xml_value(text_value, schema, schema.type_, new_path, child.nsdefs, root)
                 if tv is not None:
                     values.append(tv)
         return values
 
 
-def try_parse_xml_value(text_value: ?str, schema_type: yang.schema.DType, path: list[PathElement], nsdefs: list[(?str, str)], root: yang.schema.DRoot) -> ?(t: str, val: value):
+def try_parse_xml_value(text_value: ?str, schema_node: yang.schema.DNodeLeaf, schema_type: yang.schema.DType, path: list[PathElement], nsdefs: list[(?str, str)], root: yang.schema.DRoot) -> ?(t: str, val: value):
     """Parse a textual value according to the provided schema type.
 
     Returns:
@@ -177,7 +177,7 @@ def try_parse_xml_value(text_value: ?str, schema_type: yang.schema.DType, path: 
     if isinstance(schema_type, yang.schema.DTypeUnion):
         for alt_type in schema_type.types:
             try:
-                return try_parse_xml_value(text_value, alt_type, path, nsdefs, root)
+                return try_parse_xml_value(text_value, schema_node, alt_type, path, nsdefs, root)
             except YangValidationError:
                 continue
         if text_value is not None:
@@ -213,7 +213,7 @@ def try_parse_xml_value(text_value: ?str, schema_type: yang.schema.DType, path: 
                 pass
         elif isinstance(schema_type, yang.schema.DTypeIdentityref):
             partial = Identityref.from_xml(text_value, nsdefs)
-            res = yang.schema.complete_identityref(partial, root.identities, schema_type.module)
+            res = yang.schema.complete_identityref(partial, root.identities, schema_node.module)
             val = res.0
         elif isinstance(schema_type, yang.schema.DTypeLeafref):
             val = text_value
@@ -269,7 +269,7 @@ extension dict[A(Hashable), B] (YangData):
             else:
                 leaf_value = self.get(name)
             if leaf_value is not None:
-                result = try_parse_json_value(leaf_value, schema.type_, new_path, root)
+                result = try_parse_json_value(leaf_value, schema, schema.type_, new_path, root)
                 return result
             else:
                 return None
@@ -287,13 +287,13 @@ extension dict[A(Hashable), B] (YangData):
             if isinstance(leaflist_data, list):
                 new_path = path + [PathElement(schema)]
                 for item in leaflist_data:
-                    tv = try_parse_json_value(item, schema.type_, new_path, root)
+                    tv = try_parse_json_value(item, schema, schema.type_, new_path, root)
                     if tv is not None:
                         values.append(tv)
         return values
 
 
-def try_parse_json_value(leaf_value: ?value, schema_type: yang.schema.DType, path: list[PathElement], root: yang.schema.DRoot) -> ?(t: str, val: value):
+def try_parse_json_value(leaf_value: ?value, schema_node: yang.schema.DNodeLeaf, schema_type: yang.schema.DType, path: list[PathElement], root: yang.schema.DRoot) -> ?(t: str, val: value):
     """Parse a textual value according to the provided schema type.
 
     Returns:
@@ -311,7 +311,7 @@ def try_parse_json_value(leaf_value: ?value, schema_type: yang.schema.DType, pat
     if isinstance(schema_type, yang.schema.DTypeUnion):
         for alt_type in schema_type.types:
             try:
-                return try_parse_json_value(leaf_value, alt_type, path, root)
+                return try_parse_json_value(leaf_value, schema_node, alt_type, path, root)
             except YangValidationError:
                 continue
         if leaf_value is not None:
@@ -366,7 +366,7 @@ def try_parse_json_value(leaf_value: ?value, schema_type: yang.schema.DType, pat
         elif isinstance(schema_type, yang.schema.DTypeIdentityref):
             if isinstance(leaf_value, str):
                 partial = Identityref.from_json(leaf_value)
-                res = yang.schema.complete_identityref(partial, root.identities, schema_type.module)
+                res = yang.schema.complete_identityref(partial, root.identities, schema_node.module)
                 val = res.0
             else:
                 val = leaf_value
