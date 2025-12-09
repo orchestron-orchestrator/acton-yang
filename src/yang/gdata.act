@@ -243,7 +243,7 @@ def repr_gdata(v) -> str:
 
 def repr_adata(v) -> str:
     if isinstance(v, Present):
-        return str(v.present)
+        return "True"
     return repr_gdata(v)
 
 
@@ -417,9 +417,9 @@ class Node(value):
                     v = child.val
                     # "empty" type is encoded as an array with a null element "[null]"
                     if isinstance(v, Present):
-                        if v.present:
-                            child_dict[fmt_json_name(nm, child.module)] = [None]
-                    elif v is not None:
+                        child_dict[fmt_json_name(nm, child.module)] = [None]
+                    elif v is not None and not isinstance(v, Absent):
+                        # Absent - value for unset empty leaf
                         child_dict[fmt_json_name(nm, child.module)] = json_val(v)
                 elif isinstance(child, LeafList):
                     vals = []
@@ -494,11 +494,9 @@ class Node(value):
                 elif isinstance(child, Leaf):
                     v = child.val
                     if isinstance(v, Present):
-                        if v.present:
-                            children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
-                        else:
-                            children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
-                    elif v is not None:
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns)))
+                    elif v is not None and not isinstance(v, Absent):
+                        # Absent - value for unset empty leaf
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, child.val), text=yang_str(v)))
                     else:
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
@@ -566,6 +564,12 @@ class Node(value):
                 if isinstance(child, Leaf) and nm == name:
                     return child
 
+    def get_opt_leaf_or_absent(self, name) -> ?Node:
+        if isinstance(self, Container) or isinstance(self, Absent) or isinstance(self, Create) or isinstance(self, Replace) or isinstance(self, Delete):
+            for nm,child in self.children.items():
+                if nm == name and (isinstance(child, Leaf) or isinstance(child, Absent)):
+                    return child
+
     def get_leaflist(self, name) -> LeafList:
         l = self.get_opt_leaflist(name)
         if l is not None:
@@ -623,7 +627,9 @@ class Node(value):
         if child is not None:
             childval = child.val
             if isinstance(childval, Present):
-                return childval.present
+                return True
+            if isinstance(childval, Absent):
+                return False
 
     def get_Decimal(self, name) -> Decimal:
         child = self.get_leaf(name)
@@ -933,20 +939,15 @@ class Present:
     """Named type for empty leaf value
 
     This type is used for the empty leaf value, so that we can do an
-    isinstance(v, Present) check to detect whether the leaf is present. When
-    Acton supports pattern matching we can switch to the () identity.
-
-    This is the first step towards reducing reliance on the gdata.Node.type
-    attribute for comparisons, and instead just comparing the Acton types. In
-    the final form, the present boolean argument will also be removed, which
-    will make it possible to first make the value optional (?Present) and
-    ultimately replace with () identity once Acton supports pattern matching.
+    isinstance(v, Present) check to detect when an empty leaf is set. An unset
+    empty leaf has the value Absent(). When Acton supports pattern matching we
+    can switch to the () identity.
     """
-    def __init__(self, present: bool=True):
-        self.present = present
+    def __init__(self):
+        pass
 
     def __repr__(self):
-        return "yang.gdata.Present({'' if self.present else 'False'})"
+        return "Present()"
 
 class Absent(Node):
     """Declarative definition of the absence of a node
@@ -1036,7 +1037,7 @@ def vals_equal(a: value, b: value) -> bool:
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a == b
     if isinstance(a, Present) and isinstance(b, Present):
-        return a.present == b.present
+        return True
     if type(a) != type(b):
         # It is valid to compare values of different type, which happens if
         # leaves are of type union and value a and b happen to be of different
@@ -1088,7 +1089,7 @@ def vals_less_than(a: value, b: value) -> bool:
     if isinstance(a, Identityref) and isinstance(b, Identityref):
         return a < b
     if isinstance(a, Present) and isinstance(b, Present):
-        return not a.present
+        return False
     raise ValueError("Unsupported value type or mismatch in lt comparison: {type(a)}, {type(b)}")
 
 pure def vals_list_sorted(a: list[value]) -> list[value]:
@@ -2548,7 +2549,7 @@ def _test_to_json():
 def _test_to_json_empty_leaf():
     y1 = Container({
         "e1": Leaf(Present()),
-        "e2": Leaf(Present(False))
+        "e2": Leaf(Absent())
     })
 
     return y1.to_json(pretty=True)
@@ -2680,7 +2681,7 @@ def _test_to_xmlstr_presence_childless():
 def _test_to_xmlstr_empty_leaf():
     y1 = Container({
         "e1": Leaf(Present()),
-        "e2": Leaf(Present(False))
+        "e2": Leaf(Absent())
     })
 
     return y1.to_xmlstr()

@@ -422,6 +422,8 @@ extension yang.adata.MNode (YangData):
             schema_type = schema.type_
             tv = try_validate_mnode_value(maybe_attr, schema_type)
             if tv is not None:
+                if tv.t == "empty":
+                    return (op=None if tv.val else OP_REMOVE, t=tv.t, val=yang.gdata.Present() if tv.val else None)
                 return (op=None, t=tv.t, val=tv.val)
             raise YangValidationError(path, schema_type, maybe_attr)
 
@@ -455,10 +457,6 @@ def try_validate_mnode_value(val: value, schema_type: yang.schema.DType) -> ?(t:
                 return tv
     else:
         if schema_type.validate_value(val):
-            # In adata the present type is modeled as bool. If validate_value is
-            # successful val is bool anyway, but the compiler can't know that ...
-            if isinstance(schema_type, yang.schema.DTypeEmpty) and isinstance(val, bool):
-                return (t=schema_type.builtin_type, val=yang.gdata.Present(val))
             return (t=schema_type.builtin_type, val=val)
     return None
 
@@ -952,14 +950,17 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             return spath + [PathElement(child, k)]
 
         if isinstance(child, yang.schema.DLeaf):
-            leaf = node.get_opt_leaf(uname(child))
-            if leaf is not None:
-                if not top and not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
-                    # Do not print non-optional leafs if not top level, because
-                    # they are implicitly set with .create*()
-                    continue
+            if not top and not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
+                # Do not print non-optional leafs if not top level, because
+                # they are implicitly set with .create*()
+                continue
+            leaf = node.get_opt_leaf_or_absent(uname(child))
+            if isinstance(leaf, yang.gdata.Leaf):
                 # DLeaf values are copied verbatim
                 leaves.append("{self_name}.{usname(child)} = {repr_adata(leaf.val)}")
+            elif isinstance(leaf, yang.gdata.Absent):
+                # "leaf": Absent() is a remove op on an empty leaf
+                leaves.append("{self_name}.{usname(child)} = False")
         elif isinstance(child, yang.schema.DLeafList):
             leaflist = node.get_opt_leaflist(uname(child))
             if leaflist is not None:
@@ -1985,6 +1986,12 @@ def _test_pradata():
         leaf optional-leaf {
           type int32;
         }
+        leaf empty-yes {
+          type empty;
+        }
+        leaf empty-no {
+          type empty;
+        }
         container c2 {
           presence "This is a presence container";
           leaf l1 {
@@ -2025,6 +2032,8 @@ def _test_pradata():
         "top-level-leaf": yang.gdata.Leaf("root value"),
         "c1": yang.gdata.Container({
             "optional-leaf": yang.gdata.Leaf(bigint(42)),
+            "empty-yes": yang.gdata.Leaf(yang.gdata.Present()),
+            "empty-no": yang.gdata.Absent(),
             "c2": yang.gdata.Container({
                 "l1": yang.gdata.Leaf("inner value"),
                 "mandatory-leaf": yang.gdata.Leaf("required value")
