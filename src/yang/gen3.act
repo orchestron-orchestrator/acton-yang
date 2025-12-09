@@ -120,7 +120,7 @@ protocol YangData:
     that can carry YANG-modeled data, like XML and JSON
     """
     # TODO: can value implement YangData?
-    take_container: mut(yang.schema.DContainer, str, bool, bool, list[PathElement]) -> ?value
+    take_container: mut(yang.schema.DContainer, str, bool, bool, list[PathElement]) -> ?(op: ?str, val: ?value)
     take_list: mut(yang.schema.DList, str, bool, bool, list[PathElement]) -> list[value]
     # Return a typed tuple for leaves. The tuple carries the concrete type name
     # and the parsed value. Missing leaves return None.
@@ -131,10 +131,11 @@ protocol YangData:
 
 
 extension xml.Node (YangData):
-    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?value:
+    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: str, val: ?value):
         child_node = yang.gdata.get_xml_opt_child(self, name, schema.namespace if ns_qualified else None)
         if child_node is not None:
-            return child_node
+            op = get_netconf_operation(child_node)
+            return (op=op, val=child_node)
         return None
 
     def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[value]:
@@ -246,7 +247,7 @@ def try_parse_xml_value(text_value: ?str, schema_node: yang.schema.DNodeLeaf, sc
 
 
 extension dict[A(Hashable), B] (YangData):
-    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?value:
+    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, val: ?value):
         if isinstance(self, dict):
             maybe = None
             # For cross-namespace children, only accept module-qualified keys
@@ -255,7 +256,7 @@ extension dict[A(Hashable), B] (YangData):
             else:
                 maybe = self.get(name)
             if isinstance(maybe, dict):
-                return maybe
+                return (op=None, val=maybe)
         return None
 
     def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[value]:
@@ -403,9 +404,11 @@ def try_parse_json_value(leaf_value: ?value, schema_node: yang.schema.DNodeLeaf,
 
 
 extension yang.adata.MNode (YangData):
-    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?value:
+    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, val: ?value):
         usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
-        return self._get_attr(usname)
+        maybe_cnt = self._get_attr(usname)
+        if maybe_cnt is not None:
+            return (op=None, val=maybe_cnt)
 
     def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[value]:
         usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
@@ -702,36 +705,34 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
             mod = child.module
 
         if isinstance(child, yang.schema.DContainer):
-            val = data.take_container(child, child.name, s.namespace != child.namespace, is_unique(child), spath)
-            if val is not None:
+            opval = data.take_container(child, child.name, s.namespace != child.namespace, is_unique(child), spath)
+            if opval is not None:
+                val = opval.val
                 if isinstance(val, xml.Node):
-                    # NETCONF operation on container
-                    cop = get_netconf_operation(val)
-                    cns = child.namespace if set_ns and child.namespace != "" else None
-                    cmod = child.module if set_ns and child.module != "" else None
-                    if cop == "remove":
-                        cchild = yang.gdata.Absent(ns=cns, module=cmod)
-                    elif cop == "delete":
-                        cchild = yang.gdata.Delete(ns=cns, module=cmod)
-                    elif cop == "create":
-                        inner = _from_data_recursive(root, child, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
-                        cchild = yang.gdata.Create(inner.children, ns=cns, module=cmod)
-                    elif cop == "replace":
-                        inner = _from_data_recursive(root, child, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
-                        cchild = yang.gdata.Replace(inner.children, ns=cns, module=cmod)
-                    else:
-                        cchild = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
+                    cchild = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                 elif isinstance(val, dict):
                     cchild = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                 elif isinstance(val, yang.adata.MNode):
-                    # TODO: can't we change YangData prorocol such that val implements YangData?!
                     cchild = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                 else:
-                    cchild = yang.gdata.Container({})
-                if isinstance(cchild, yang.gdata.Container) and (cchild.presence or len(cchild.children) > 0):
-                    children[uname(child)] = cchild
-                elif not isinstance(cchild, yang.gdata.Container):
-                    # Absent, Delete, Create, Replace
+                    # TODO: can't we change YangData protocol such that val implements YangData?!
+                    raise ValueError("Unsupported type for container {format_schema_path(path_with_child())}: {type(val)}")
+                cns = child.namespace if set_ns and child.namespace != "" else None
+                cmod = child.module if set_ns and child.module != "" else None
+                wcchild = None
+                if opval.op == OP_REMOVE:
+                    wcchild = yang.gdata.Absent(cchild.children, ns=cns, module=cmod)
+                elif opval.op == OP_DELETE:
+                    wcchild = yang.gdata.Delete(cchild.children, ns=cns, module=cmod)
+                elif opval.op == OP_CREATE:
+                    wcchild = yang.gdata.Create(cchild.children, ns=cns, module=cmod)
+                elif opval.op == OP_REPLACE:
+                    wcchild = yang.gdata.Replace(cchild.children, ns=cns, module=cmod)
+
+                if wcchild is not None and not isinstance(wcchild, yang.gdata.Container):
+                    # Absent, Delete, Create, Replace wrappers are not Container and may not have any children
+                    children[uname(child)] = wcchild
+                elif isinstance(cchild, yang.gdata.Container) and (cchild.presence or len(cchild.children) > 0):
                     children[uname(child)] = cchild
             else:
                 # Missing container: if this is a non-presence container and it has
