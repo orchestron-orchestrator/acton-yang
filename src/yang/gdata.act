@@ -1332,6 +1332,10 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
     if old is None:
         return new
 
+    # old is empty leaf, new is an explicit remove: Leaf -> Absent: Absent
+    if isinstance(old, Leaf) and isinstance(new, Absent):
+        return new
+
     if type(old) != type(new):
         raise ValueError("diff called with nodes of different types at {_format_gdata_path(path)}: {type(old)} != {type(new)}")
 
@@ -2119,6 +2123,18 @@ def _test_diff_union_type():
     new = Container({
         "l": Leaf("forty-two"),
         "ll": LeafList(["forty-two"])
+    })
+
+    d = diff(old, new)
+    testing.assertEqual(d, new)
+
+def _test_diff_empty_leaf_delete():
+    old = Container({
+        "a": Leaf(Present()),
+    })
+
+    new = Container({
+        "a": Absent()
     })
 
     d = diff(old, new)
