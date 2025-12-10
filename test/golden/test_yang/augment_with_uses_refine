@@ -18,6 +18,18 @@ from yang.type import Decimal, Ranges
 _identities: list[DIdentity] = []
 
 
+SRC_DNODE = DRoot(children=[
+    DContainer(module='base', namespace='http://example.com/base', prefix='base', name='system-capabilities', config=True, description='System capabilities', presence=False, children=[
+        DList(module='base', namespace='http://example.com/base', prefix='base', name='per-node-capabilities', config=True, description='Per-node capabilities', min_elements=0, ordered_by='system'),
+        DContainer(module='augmenter', namespace='http://example.com/augmenter', prefix='aug', name='subscription-capabilities', config=True, presence=False, children=[
+            DLeaf(module='augmenter', namespace='http://example.com/augmenter', prefix='aug', name='max-nodes', config=True, default='42', mandatory=False, type_=DTypeInteger(name='uint32', description=None, reference=None, exts=[], builtin_type='uint32', default=None, ranges=Ranges([(bigint("0"), bigint("4294967295"))]))),
+            DLeafList(module='augmenter', namespace='http://example.com/augmenter', prefix='aug', name='supported-excluded-change-type', config=True, default=[
+"leaf-list default doesn't work right now"
+                ], min_elements=0, ordered_by='system', type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+        ])
+    ])
+])
+
 class base__system_capabilities__per_node_capabilities_entry(yang.adata.MNode):
 
     mut def __init__(self):
@@ -26,7 +38,7 @@ class base__system_capabilities__per_node_capabilities_entry(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:system-capabilities', 'per-node-capabilities'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['base:system-capabilities', 'per-node-capabilities'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -92,7 +104,7 @@ class base__system_capabilities__subscription_capabilities(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:system-capabilities', 'augmenter:subscription-capabilities'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['base:system-capabilities', 'augmenter:subscription-capabilities'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -124,7 +136,7 @@ class base__system_capabilities(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:system-capabilities'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['base:system-capabilities'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -152,7 +164,7 @@ class root(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False)
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False)
         raise ValueError('unreachable')
 
     @staticmethod
@@ -165,19 +177,6 @@ class root(yang.adata.MNode):
         """Create a deep copy of this adata object"""
         return root.from_gdata(self.to_gdata())
 
-
-def src_dnode():
-    return DRoot(children=[
-    DContainer(module='base', namespace='http://example.com/base', prefix='base', name='system-capabilities', config=True, description='System capabilities', presence=False, children=[
-        DList(module='base', namespace='http://example.com/base', prefix='base', name='per-node-capabilities', config=True, description='Per-node capabilities', min_elements=0, ordered_by='system'),
-        DContainer(module='augmenter', namespace='http://example.com/augmenter', prefix='aug', name='subscription-capabilities', config=True, presence=False, children=[
-            DLeaf(module='augmenter', namespace='http://example.com/augmenter', prefix='aug', name='max-nodes', config=True, default='42', mandatory=False, type_=DTypeInteger(name='uint32', description=None, reference=None, exts=[], builtin_type='uint32', default=None, ranges=Ranges([(bigint("0"), bigint("4294967295"))]))),
-            DLeafList(module='augmenter', namespace='http://example.com/augmenter', prefix='aug', name='supported-excluded-change-type', config=True, default=[
-"leaf-list default doesn't work right now"
-                ], min_elements=0, ordered_by='system', type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-        ])
-    ])
-])
 
 schema_namespaces: set[str] = {
     'http://example.com/augmenter',

@@ -18,6 +18,18 @@ from yang.type import Decimal, Ranges
 _identities: list[DIdentity] = []
 
 
+SRC_DNODE = DRoot(children=[
+    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c', config=True, presence=False, children=[
+        DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='li', key=['name'], config=True, min_elements=0, ordered_by='system', children=[
+            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='name', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='foo', config=True, description='Since this has a default value, it should be an optional object argument', default='banana', mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+            DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='bar', config=True, presence=False, children=[
+                DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='man', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+            ])
+        ])
+    ])
+])
+
 class foo__c__li__bar(yang.adata.MNode):
     man: str
 
@@ -32,7 +44,7 @@ class foo__c__li__bar(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:c', 'li', 'bar'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:c', 'li', 'bar'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -68,7 +80,7 @@ class foo__c__li_entry(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:c', 'li'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:c', 'li'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -118,19 +130,6 @@ class foo__c__li(yang.adata.MNode):
 extension foo__c__li(Iterable[foo__c__li_entry]):
     def __iter__(self) -> Iterator[foo__c__li_entry]:
         return self.elements.__iter__()
-
-def src_dnode():
-    return DRoot(children=[
-    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c', config=True, presence=False, children=[
-        DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='li', key=['name'], config=True, min_elements=0, ordered_by='system', children=[
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='name', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='foo', config=True, description='Since this has a default value, it should be an optional object argument', default='banana', mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-            DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='bar', config=True, presence=False, children=[
-                DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='man', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-            ])
-        ])
-    ])
-])
 
 schema_namespaces: set[str] = {
     'http://example.com/foo',

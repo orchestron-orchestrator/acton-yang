@@ -33,6 +33,26 @@ foo_tcp = Identityref('tcp', ns='http://example.com/foo', mod='foo', pfx='foo')
 foo_udp = Identityref('udp', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
+SRC_DNODE = DRoot(identities=[
+        DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type'),
+        DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='sctp', base=[
+                DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type')
+            ]),
+        DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='dccp', base=[
+                DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type')
+            ]),
+        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='tcp', base=[
+                DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type')
+            ]),
+        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='udp', base=[
+                DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type')
+            ])
+    ], children=[
+    DContainer(module='base', namespace='http://example.com/base', prefix='base', name='config', config=True, presence=False, children=[
+        DLeaf(module='base', namespace='http://example.com/base', prefix='base', name='active-protocol', config=True, description='Currently active protocol', mandatory=False, type_=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_base_protocol_type], identities=_identities))
+    ])
+])
+
 class base__config(yang.adata.MNode):
     active_protocol: ?Identityref
 
@@ -47,7 +67,7 @@ class base__config(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:config'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['base:config'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -75,7 +95,7 @@ class root(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False)
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False)
         raise ValueError('unreachable')
 
     @staticmethod
@@ -88,27 +108,6 @@ class root(yang.adata.MNode):
         """Create a deep copy of this adata object"""
         return root.from_gdata(self.to_gdata())
 
-
-def src_dnode():
-    return DRoot(identities=[
-        DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type'),
-        DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='sctp', base=[
-                DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type')
-            ]),
-        DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='dccp', base=[
-                DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type')
-            ]),
-        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='tcp', base=[
-                DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type')
-            ]),
-        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='udp', base=[
-                DIdentity(module='base', namespace='http://example.com/base', prefix='base', name='protocol-type')
-            ])
-    ], children=[
-    DContainer(module='base', namespace='http://example.com/base', prefix='base', name='config', config=True, presence=False, children=[
-        DLeaf(module='base', namespace='http://example.com/base', prefix='base', name='active-protocol', config=True, description='Currently active protocol', mandatory=False, type_=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_base_protocol_type], identities=_identities))
-    ])
-])
 
 schema_namespaces: set[str] = {
     'http://example.com/base',
