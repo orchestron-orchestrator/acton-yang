@@ -623,13 +623,13 @@ class Node(value):
                 return childval
 
     def get_opt_empty(self, name) -> ?bool:
-        child = self.get_opt_leaf(name)
-        if child is not None:
+        child = self.get_opt_leaf_or_absent(name)
+        if isinstance(child, Leaf):
             childval = child.val
             if isinstance(childval, Present):
                 return True
-            if isinstance(childval, Absent):
-                return False
+        if isinstance(child, Absent):
+            return False
 
     def get_Decimal(self, name) -> Decimal:
         child = self.get_leaf(name)
@@ -1330,6 +1330,10 @@ def merge(a: Node, b: Node) -> Node:
 
 def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
     if old is None:
+        return new
+
+    # old is empty leaf, new is an explicit remove: Leaf -> Absent: Absent
+    if isinstance(old, Leaf) and isinstance(new, Absent):
         return new
 
     if type(old) != type(new):
@@ -2124,6 +2128,18 @@ def _test_diff_union_type():
     d = diff(old, new)
     testing.assertEqual(d, new)
 
+def _test_diff_empty_leaf_delete():
+    old = Container({
+        "a": Leaf(Present()),
+    })
+
+    new = Container({
+        "a": Absent()
+    })
+
+    d = diff(old, new)
+    testing.assertEqual(d, new)
+
 def _test_patch_no_change():
     old = Container({
         "a": Leaf(bigint(1)),
@@ -2549,7 +2565,7 @@ def _test_to_json():
 def _test_to_json_empty_leaf():
     y1 = Container({
         "e1": Leaf(Present()),
-        "e2": Leaf(Absent())
+        "e2": Absent()
     })
 
     return y1.to_json(pretty=True)
@@ -2681,7 +2697,7 @@ def _test_to_xmlstr_presence_childless():
 def _test_to_xmlstr_empty_leaf():
     y1 = Container({
         "e1": Leaf(Present()),
-        "e2": Leaf(Absent())
+        "e2": Absent()
     })
 
     return y1.to_xmlstr()
