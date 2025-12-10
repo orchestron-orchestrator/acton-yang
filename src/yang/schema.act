@@ -913,7 +913,7 @@ class DNodeInner(DNode):
 
 class DNodeLeaf(DNode):
     if_feature: list[str]
-    must: list[Must]
+    must: list[DMust]
     status: ?str
     type_: DType
     when: ?str
@@ -956,11 +956,11 @@ class DAction(DNodeInner):
 class DAnydata(DNode):
     if_feature: list[str]
     mandatory: ?bool
-    must: list[Must]
+    must: list[DMust]
     status: ?str
     when: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[DMust]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -996,11 +996,11 @@ class DAnydata(DNode):
 class DAnyxml(DNode):
     if_feature: list[str]
     mandatory: ?bool
-    must: list[Must]
+    must: list[DMust]
     status: ?str
     when: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[DMust]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1035,7 +1035,7 @@ class DAnyxml(DNode):
 
 class DContainer(DNodeInner):
     if_feature: list[str]
-    must: list[Must]
+    must: list[DMust]
     presence: bool
     status: ?str
 
@@ -1190,7 +1190,7 @@ class DIdentity(DNode):
         return _safe_name("_base_{self.module}_{self.name}", safe_kw=False)
 
 class DInput(DNodeInner):
-    must: list[Must]
+    must: list[DMust]
 
     def __init__(self, module: str, namespace: str, prefix: str, must=[], exts=[], children=[]):
         self.module = module
@@ -1284,7 +1284,7 @@ class DList(DNodeInner):
     key: list[str]
     max_elements: ?int
     min_elements: int
-    must: list[Must]
+    must: list[DMust]
     ordered_by: str
     status: ?str
     unique: list[str]
@@ -1439,9 +1439,21 @@ class DLeafList(DNodeLeaf):
         ]
 
 
+class DMust(object):
+    def __init__(self, condition: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None):
+        self.description = description
+        self.condition = condition
+        self.error_app_tag = error_app_tag
+        self.error_message = error_message
+        self.reference = reference
+
+    def __repr__(self):
+        return "DMust(condition={repr(self.condition)}, description={repr(self.description)}, error_app_tag={repr(self.error_app_tag)}, error_message={repr(self.error_message)}, reference={repr(self.reference)})"
+
+
 class DNotification(DNodeInner):
     if_feature: list[str]
-    must: list[Must]
+    must: list[DMust]
     status: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
@@ -1475,7 +1487,7 @@ class DNotification(DNodeInner):
         ]
 
 class DOutput(DNodeInner):
-    must: list[Must]
+    must: list[DMust]
 
     def __init__(self, module: str, namespace: str, prefix: str, must=[], exts=[], children=[]):
         self.module = module
@@ -4386,7 +4398,7 @@ class Anydata(SchemaNodeOuter):
             description=self.description,
             if_feature=self.if_feature,
             mandatory=self.mandatory,
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             reference=self.reference,
             status=self.status,
             when=self.when,
@@ -4543,7 +4555,7 @@ class Anyxml(SchemaNodeOuter):
             description=self.description,
             if_feature=self.if_feature,
             mandatory=self.mandatory,
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             reference=self.reference,
             status=self.status,
             when=self.when,
@@ -5295,7 +5307,7 @@ class Container(SchemaNodeInner):
             config=self.is_config(),
             description=self.description,
             if_feature=self.if_feature,
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             presence=self.is_presence(),
             reference=self.reference,
             status=self.status,
@@ -6140,7 +6152,7 @@ class Input(SchemaNodeInner):
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             exts=self.exts,
             children=self.get_dnode_children(context)
         )
@@ -6350,7 +6362,7 @@ class Leaf(SchemaNodeOuter):
             description=self.description,
             if_feature=self.if_feature,
             mandatory=self.mandatory,
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             reference=self.reference,
             status=self.status,
             type_=dtype,
@@ -6577,7 +6589,7 @@ class LeafList(SchemaNodeOuter):
             if_feature=self.if_feature,
             max_elements=self.get_max_elements(),
             min_elements=self.get_min_elements(),
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             ordered_by=self.ordered_by,
             reference=self.reference,
             status=self.status,
@@ -6868,7 +6880,7 @@ class List(SchemaNodeInner):
             if_feature=self.if_feature,
             max_elements=self.get_max_elements(),
             min_elements=self.get_min_elements(),
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             ordered_by=self.ordered_by,
             reference=self.reference,
             status=self.status,
@@ -7294,6 +7306,14 @@ class Must(SchemaNodeOuter):
             self.reference = ref_reference
         self.exts.extend(refine.exts)
 
+    def to_dmust(self) -> DMust:
+        return DMust(
+            description=self.description,
+            condition=self.condition,
+            error_app_tag=self.error_app_tag,
+            error_message=self.error_message,
+        )
+
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Must(self.condition,
                    description=self.description,
@@ -7560,7 +7580,7 @@ class Output(SchemaNodeInner):
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             exts=self.exts,
             children=self.get_dnode_children(context)
         )
