@@ -623,13 +623,13 @@ class Node(value):
                 return childval
 
     def get_opt_empty(self, name) -> ?bool:
-        child = self.get_opt_leaf(name)
-        if child is not None:
+        child = self.get_opt_leaf_or_absent(name)
+        if isinstance(child, Leaf):
             childval = child.val
             if isinstance(childval, Present):
                 return True
-            if isinstance(childval, Absent):
-                return False
+        if isinstance(child, Absent):
+            return False
 
     def get_Decimal(self, name) -> Decimal:
         child = self.get_leaf(name)
@@ -2549,7 +2549,7 @@ def _test_to_json():
 def _test_to_json_empty_leaf():
     y1 = Container({
         "e1": Leaf(Present()),
-        "e2": Leaf(Absent())
+        "e2": Absent()
     })
 
     return y1.to_json(pretty=True)
@@ -2681,7 +2681,7 @@ def _test_to_xmlstr_presence_childless():
 def _test_to_xmlstr_empty_leaf():
     y1 = Container({
         "e1": Leaf(Present()),
-        "e2": Leaf(Absent())
+        "e2": Absent()
     })
 
     return y1.to_xmlstr()
