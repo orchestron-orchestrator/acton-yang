@@ -2808,7 +2808,7 @@ def _test_is_derived_from():
     unrelated = yang.schema.DIdentity("example-three", "uri:example:three", "example-three", "unrelated", base=[])
 
     # Test direct base identity
-    testing.assertTrue(yang.schema.is_derived_from(base, [base]), "base should be derived from itself")
+    testing.assertFalse(yang.schema.is_derived_from(base, [base]), "base should not be derived from itself")
 
     # Test derived identity
     testing.assertTrue(yang.schema.is_derived_from(one, [base]), "one should be derived from base")
@@ -2816,7 +2816,8 @@ def _test_is_derived_from():
     # Test multi-base derived identity
     testing.assertTrue(yang.schema.is_derived_from(two, [base]), "two should be derived from base")
     testing.assertTrue(yang.schema.is_derived_from(two, [base_two]), "two should be derived from base_two")
-    testing.assertTrue(yang.schema.is_derived_from(two, [base, base_two]), "two should be derived from base or base_two")
+    testing.assertTrue(yang.schema.is_derived_from(two, [base, base_two]), "two should be derived from base and base_two")
+    testing.assertFalse(yang.schema.is_derived_from(base, []), "empty base list should not accept any identity")
 
     # Test unrelated identity
     testing.assertFalse(yang.schema.is_derived_from(unrelated, [base]), "unrelated should not be derived from base")
@@ -2826,6 +2827,7 @@ def _test_is_derived_from():
     three = yang.schema.DIdentity("example-one", "uri:example:one", "example-one", "three", base=[one])
     testing.assertTrue(yang.schema.is_derived_from(three, [base]), "three should be transitively derived from base through one")
     testing.assertTrue(yang.schema.is_derived_from(three, [one]), "three should be directly derived from one")
+    testing.assertFalse(yang.schema.is_derived_from(three, [base, base_two]), "three should not be valid unless derived from all bases")
 
 def _test_identity_base_resolution_import_prefix():
     """Test that identity base references using import prefixes are correctly resolved"""

@@ -2154,3 +2154,89 @@ def _test_json_path_container_list_container():
         }, ns='urn:example:y1', module='y1')
     })
     testing.assertEqual(gd2.prsrc(), expected2.prsrc())
+
+def _test_identityref():
+    # Extended test case from https://github.com/CESNET/libyang/issues/1009
+    _ys_identityref = r"""module mod1 {
+  yang-version 1.1;
+  namespace "urn:cesent:mod1";
+  prefix aa;
+
+  identity id1;
+
+  identity id4;
+
+  identity id7;
+
+  identity id2 {
+    base id1;
+  }
+
+  identity id3 {
+    base id2;
+  }
+
+  identity id5 {
+    base id4;
+  }
+
+  identity id6 {
+    base id5;
+  }
+
+  identity id8 {
+    base id7;
+    base id6;
+  }
+
+  leaf le1 {
+    // Valid value must be derived from both bases (intersect)
+    type identityref {
+      base id1;
+      base id4;
+    }
+    default "id8";  // "id8" is derived from "id4"
+  }
+  leaf le2 {
+    // Valid value must be derived from either base (union)
+    type union {
+      type identityref {
+        base id1;
+      }
+      type identityref {
+        base id4;
+      }
+    }
+  }
+  leaf le3 {
+    // Valid value must be derived from the base, and there are none!
+    type identityref {
+      base id8;
+    }
+  }
+}"""
+    s = yang.compile([_ys_identityref])
+
+    # Invalid value is not derived from all bases
+    xml_in = xml.decode("""<data><le1 xmlns="urn:cesent:mod1">id8</le1></data>""")
+    try:
+        gd = from_data(s, xml_in)
+        testing.error("Expected validation error")
+    except YangValidationError as e:
+        testing.assertEqual(str(e), "Invalid value at /le1: 'id8' - expected identityref with bases: ['aa:id1', 'aa:id4']")
+
+    # A valid value is derived from one of the bases in the union
+    xml_in = xml.decode("""<data><le2 xmlns="urn:cesent:mod1">id8</le2></data>""")
+    gd = from_data(s, xml_in)
+    exp = yang.gdata.Container({
+        "le2": yang.gdata.Leaf(Identityref('id8', ns='urn:cesent:mod1', mod='mod1', pfx='aa'), ns='urn:cesent:mod1', module='mod1')
+    })
+    testing.assertEqual(exp.prsrc(), gd.prsrc())
+
+    # A base is not derived from iteslf
+    xml_in = xml.decode("""<data><le3 xmlns="urn:cesent:mod1">id8</le3></data>""")
+    try:
+        gd = from_data(s, xml_in)
+        testing.error("Expected validation error")
+    except YangValidationError as e:
+        testing.assertEqual(str(e), "Invalid value at /le3: 'id8' - expected identityref with bases: ['aa:id8']")

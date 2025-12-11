@@ -10436,20 +10436,29 @@ def complete_identityref(partial: value, identities: list[DIdentity], current_mo
 
 
 def is_derived_from(identity: DIdentity, bases: list[DIdentity]) -> bool:
-    """Check if an identity is derived from any of the given base identities"""
-    for b in bases:
-        if b.module == identity.module and b.name == identity.name:
-            return True
+    """Check if an identity is derived from all of the given base identities"""
+    if len(bases) == 0:
+        return False
 
-    for base in identity.base:
-        # Check direct match
-        for b in bases:
-            if b.module == base.module and b.name == base.name:
-                return True
-        # Check recursive derivation
-        if is_derived_from(base, bases):
-            return True
-    return False
+    for base in bases:
+        # Validate that identity is derived from all provided base identities.
+        # Use depth-first search that requires at least one hop; base is not considered derived
+        stack: list[(DIdentity, int)] = [(identity, 0)]
+        visited = set()
+        while len(stack) > 0:
+            candidate, depth = stack.pop()
+            key = candidate.module + ":" + candidate.name
+            if key in visited:
+                continue
+            visited.add(key)
+
+            if depth > 0 and candidate.module == base.module and candidate.name == base.name:
+                break
+            for parent in candidate.base:
+                stack.append((parent, depth + 1))
+        else:
+            return False
+    return True
 
 
 # partial is a union of Identityref, PartialIdentityref
@@ -10459,7 +10468,7 @@ def complete_and_validate_identityref(partial: value, identities: list[DIdentity
         if is_derived_from(identity, bases):
             return identityref, None
         else:
-            return None, "Identityref {identityref} not derived from any of the valid bases: {bases}"
+            return None, "Identityref {identityref} not derived from all of the required bases: {bases}"
     return None, error
 
 
