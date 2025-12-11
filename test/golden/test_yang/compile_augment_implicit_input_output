@@ -18,6 +18,27 @@ from yang.type import Decimal, Ranges
 _identities: list[DIdentity] = []
 
 
+SRC_DNODE = DRoot(rpcs=[
+        DRpc(module='foo', namespace='http://example.com/foo', prefix='foo', name='r1', input=DInput(module='foo', namespace='http://example.com/foo', prefix='foo', children=[
+    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c3', config=False, presence=False, children=[
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l3', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+    ])
+]), output=DOutput(module='foo', namespace='http://example.com/foo', prefix='foo', children=[
+    DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l4', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+]), children=[
+            DInput(module='foo', namespace='http://example.com/foo', prefix='foo', children=[
+                DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c3', config=False, presence=False, children=[
+                    DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l3', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+                ])
+            ]),
+            DOutput(module='foo', namespace='http://example.com/foo', prefix='foo', children=[
+                DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l4', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+            ])
+        ])
+    ], children=[
+    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c1', config=True, presence=False)
+])
+
 class foo__c1(yang.adata.MNode):
 
     mut def __init__(self):
@@ -26,7 +47,7 @@ class foo__c1(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:c1'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:c1'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -54,7 +75,7 @@ class root(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False)
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False)
         raise ValueError('unreachable')
 
     @staticmethod
@@ -82,7 +103,7 @@ class foo__r1__input__c3(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:r1', 'input', 'c3'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'input', 'c3'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -110,7 +131,7 @@ class foo__r1__input(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:r1', 'input'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'input'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -138,7 +159,7 @@ class foo__r1__output(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:r1', 'output'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'output'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -156,7 +177,7 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
     def r1(cb: action(?foo__r1__output, ?Exception) -> None, inp: ?foo__r1__input):
         def cb_wrap(res: ?xml.Node, err: ?Exception):
             if res is not None:
-                gdata_res = yang.gen3.from_data(src_dnode(), res, False, ["foo:r1", "output"])
+                gdata_res = yang.gen3.from_data(SRC_DNODE, res, False, ["foo:r1", "output"])
                 adata_res = foo__r1__output.from_gdata(gdata_res)
                 cb(adata_res, err)
             else:
@@ -164,33 +185,11 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
 
         rpc_xml = xml.Node('r1', nsdefs=[(None, 'http://example.com/foo')])
         if inp is not None:
-            gdata_inp = yang.gen3.from_data(src_dnode(), inp, False, ["foo:r1", "input"])
+            gdata_inp = yang.gen3.from_data(SRC_DNODE, inp, False, ["foo:r1", "input"])
             rpc_xml.children.extend(gdata_inp.to_xml())
         tp.rpc_xml(cb_wrap, rpc_xml)
 
 
-
-def src_dnode():
-    return DRoot(rpcs=[
-        DRpc(module='foo', namespace='http://example.com/foo', prefix='foo', name='r1', input=DInput(module='foo', namespace='http://example.com/foo', prefix='foo', children=[
-    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c3', config=False, presence=False, children=[
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l3', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-    ])
-]), output=DOutput(module='foo', namespace='http://example.com/foo', prefix='foo', children=[
-    DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l4', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-]), children=[
-            DInput(module='foo', namespace='http://example.com/foo', prefix='foo', children=[
-                DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c3', config=False, presence=False, children=[
-                    DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l3', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-                ])
-            ]),
-            DOutput(module='foo', namespace='http://example.com/foo', prefix='foo', children=[
-                DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l4', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-            ])
-        ])
-    ], children=[
-    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c1', config=True, presence=False)
-])
 
 schema_namespaces: set[str] = {
     'http://example.com/foo',

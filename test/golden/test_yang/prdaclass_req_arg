@@ -18,6 +18,16 @@ from yang.type import Decimal, Ranges
 _identities: list[DIdentity] = []
 
 
+SRC_DNODE = DRoot(children=[
+    DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', key=['name'], config=True, min_elements=0, ordered_by='system', children=[
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='name', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='id', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+        DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='bar', config=True, presence=False, children=[
+            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='hi', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+        ])
+    ])
+])
+
 class foo__l1__bar(yang.adata.MNode):
     hi: ?str
 
@@ -32,7 +42,7 @@ class foo__l1__bar(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:l1', 'bar'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=True, root_path=['foo:l1', 'bar'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -68,7 +78,7 @@ class foo__l1_entry(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=True, root_path=['foo:l1'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=True, root_path=['foo:l1'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -133,7 +143,7 @@ class root(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=True)
+            return yang.gen3.from_data(SRC_DNODE, self, loose=True)
         raise ValueError('unreachable')
 
     @staticmethod
@@ -146,17 +156,6 @@ class root(yang.adata.MNode):
         """Create a deep copy of this adata object"""
         return root.from_gdata(self.to_gdata())
 
-
-def src_dnode():
-    return DRoot(children=[
-    DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', key=['name'], config=True, min_elements=0, ordered_by='system', children=[
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='name', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='id', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-        DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='bar', config=True, presence=False, children=[
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='hi', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-        ])
-    ])
-])
 
 schema_namespaces: set[str] = {
     'http://example.com/foo',

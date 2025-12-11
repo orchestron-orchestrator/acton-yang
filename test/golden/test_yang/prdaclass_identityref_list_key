@@ -27,6 +27,23 @@ foo_id1 = Identityref('id1', ns='http://example.com/foo', mod='foo', pfx='foo')
 foo_id2 = Identityref('id2', ns='http://example.com/foo', mod='foo', pfx='foo')
 
 
+SRC_DNODE = DRoot(identities=[
+        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1'),
+        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id2', base=[
+                DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1')
+            ])
+    ], children=[
+    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c1', config=True, presence=False, children=[
+        DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', key=[
+'k1',
+'k2'
+            ], config=True, min_elements=0, ordered_by='system', children=[
+            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k2', config=True, mandatory=False, type_=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_foo_id1], identities=_identities))
+        ])
+    ])
+])
+
 class foo__c1__l1_entry(yang.adata.MNode):
     k1: str
     k2: Identityref
@@ -45,7 +62,7 @@ class foo__c1__l1_entry(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:c1', 'l1'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:c1', 'l1'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -113,7 +130,7 @@ class foo__c1(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['foo:c1'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:c1'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -141,7 +158,7 @@ class root(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False)
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False)
         raise ValueError('unreachable')
 
     @staticmethod
@@ -154,24 +171,6 @@ class root(yang.adata.MNode):
         """Create a deep copy of this adata object"""
         return root.from_gdata(self.to_gdata())
 
-
-def src_dnode():
-    return DRoot(identities=[
-        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1'),
-        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id2', base=[
-                DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1')
-            ])
-    ], children=[
-    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c1', config=True, presence=False, children=[
-        DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', key=[
-'k1',
-'k2'
-            ], config=True, min_elements=0, ordered_by='system', children=[
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k2', config=True, mandatory=False, type_=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_foo_id1], identities=_identities))
-        ])
-    ])
-])
 
 schema_namespaces: set[str] = {
     'http://example.com/foo',

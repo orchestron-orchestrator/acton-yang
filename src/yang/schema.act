@@ -691,10 +691,10 @@ class DNodeInner(DNode):
         # know self inherits from MNode?!
         res.append("        if isinstance(self, yang.adata.MNode):")
         if isinstance(self, DRoot):
-            res.append("            return yang.gen3.from_data(src_dnode(), self, loose={loose})")
+            res.append("            return yang.gen3.from_data(SRC_DNODE, self, loose={loose})")
         else:
             root_path = ["{'{node.module}:' if prev.module != node.module else ''}{node.name}" if node is not None else None for prev, node in zip(spath, spath[1:] + [None])]
-            res.append("            return yang.gen3.from_data(src_dnode(), self, loose={loose}, root_path={repr(root_path[:-1])})")
+            res.append("            return yang.gen3.from_data(SRC_DNODE, self, loose={loose}, root_path={repr(root_path[:-1])})")
         res.append("        raise ValueError('unreachable')")
         res.append("")
 
@@ -882,7 +882,7 @@ class DNodeInner(DNode):
                 if output_node is not None:
                     res.append("        def cb_wrap(res: ?xml.Node, err: ?Exception):")
                     res.append("            if res is not None:")
-                    res.append('                gdata_res = yang.gen3.from_data(src_dnode(), res, {loose}, ["{rpc.module}:{rpc.name}", "output"])')
+                    res.append('                gdata_res = yang.gen3.from_data(SRC_DNODE, res, {loose}, ["{rpc.module}:{rpc.name}", "output"])')
                     res.append("                adata_res = {get_path_name(spath + [rpc, output_node])}.from_gdata(gdata_res)")
                     res.append("                cb(adata_res, err)")
                     res.append("            else:")
@@ -893,7 +893,7 @@ class DNodeInner(DNode):
                 res.append("        rpc_xml = xml.Node({repr(rpc.name)}, nsdefs=[(None, {repr(rpc.namespace)})])")
                 if input_node is not None:
                     res.append("        if inp is not None:")
-                    res.append('            gdata_inp = yang.gen3.from_data(src_dnode(), inp, {loose}, ["{rpc.module}:{rpc.name}", "input"])')
+                    res.append('            gdata_inp = yang.gen3.from_data(SRC_DNODE, inp, {loose}, ["{rpc.module}:{rpc.name}", "input"])')
                     res.append('            rpc_xml.children.extend(gdata_inp.to_xml())')
 
                 # Call tp.rpc_xml with appropriate callback
@@ -913,7 +913,7 @@ class DNodeInner(DNode):
 
 class DNodeLeaf(DNode):
     if_feature: list[str]
-    must: list[Must]
+    must: list[DMust]
     status: ?str
     type_: DType
     when: ?str
@@ -956,11 +956,11 @@ class DAction(DNodeInner):
 class DAnydata(DNode):
     if_feature: list[str]
     mandatory: ?bool
-    must: list[Must]
+    must: list[DMust]
     status: ?str
     when: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[DMust]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -996,11 +996,11 @@ class DAnydata(DNode):
 class DAnyxml(DNode):
     if_feature: list[str]
     mandatory: ?bool
-    must: list[Must]
+    must: list[DMust]
     status: ?str
     when: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[DMust]=[], reference: ?str=None, status: ?str=None, when: ?str=None, exts=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1035,7 +1035,7 @@ class DAnyxml(DNode):
 
 class DContainer(DNodeInner):
     if_feature: list[str]
-    must: list[Must]
+    must: list[DMust]
     presence: bool
     status: ?str
 
@@ -1190,7 +1190,7 @@ class DIdentity(DNode):
         return _safe_name("_base_{self.module}_{self.name}", safe_kw=False)
 
 class DInput(DNodeInner):
-    must: list[Must]
+    must: list[DMust]
 
     def __init__(self, module: str, namespace: str, prefix: str, must=[], exts=[], children=[]):
         self.module = module
@@ -1284,7 +1284,7 @@ class DList(DNodeInner):
     key: list[str]
     max_elements: ?int
     min_elements: int
-    must: list[Must]
+    must: list[DMust]
     ordered_by: str
     status: ?str
     unique: list[str]
@@ -1439,9 +1439,21 @@ class DLeafList(DNodeLeaf):
         ]
 
 
+class DMust(object):
+    def __init__(self, condition: str, description: ?str=None, error_app_tag: ?str=None, error_message: ?str=None, reference: ?str=None):
+        self.description = description
+        self.condition = condition
+        self.error_app_tag = error_app_tag
+        self.error_message = error_message
+        self.reference = reference
+
+    def __repr__(self):
+        return "DMust(condition={repr(self.condition)}, description={repr(self.description)}, error_app_tag={repr(self.error_app_tag)}, error_message={repr(self.error_message)}, reference={repr(self.reference)})"
+
+
 class DNotification(DNodeInner):
     if_feature: list[str]
-    must: list[Must]
+    must: list[DMust]
     status: ?str
 
     def __init__(self, module: str, namespace: str, prefix: str, name: str, description: ?str=None, if_feature=[], must=[], reference=None, status=None, exts=[], children=[]):
@@ -1475,7 +1487,7 @@ class DNotification(DNodeInner):
         ]
 
 class DOutput(DNodeInner):
-    must: list[Must]
+    must: list[DMust]
 
     def __init__(self, module: str, namespace: str, prefix: str, must=[], exts=[], children=[]):
         self.module = module
@@ -1618,6 +1630,16 @@ class DRoot(DNodeInner):
             child = spath[-1].get(local_name, module=module, allow_unqualified=False)
             return build_spath(spath + [child])
 
+        # HACK: DNodeInner._prdaclass_rec mutates the children list - it removes
+        # config false nodes, and reorders list keys! Obviously this is very bad
+        # and we  should really do this elsewhere (get_dnode_children?), or add
+        # arguments to the parsers for oper data handling. Right now I just need
+        # the SRC_DNODE constant to have the same view of the schema as the
+        # adata code generator ...
+        spath = build_spath([self])
+        schema_ns = set()
+        inner = spath[-1]._prdaclass_rec(spath, loose=loose, top=top, set_ns=True, schema_ns=schema_ns, include_state=include_state)
+
         res = []
         res.append("import base64")
         res.append("import json")
@@ -1638,6 +1660,10 @@ class DRoot(DNodeInner):
         res.append("")
         res.extend(DIdentity.format_identity_list(self.identities))
         res.extend(DIdentity.format_identityref_constants(self.identities))
+        # TODO: reuse namespace qualifiers from schema_namespaces to avoid allocating many new string
+        res.append("SRC_DNODE = {self.prsrc()}")
+        res.append("")
+
         if schema_yang is not None:
 # TODO: serialize list[str] of YANG models with repr(), use raw string to avoid interpolation?!
 # TODO: Why is the src_yang() function not found in from_xml, if it is
@@ -1655,15 +1681,7 @@ class DRoot(DNodeInner):
             res.append("")
             res.append("")
 
-        spath = build_spath([self])
-        schema_ns = set()
-        res.extend(spath[-1]._prdaclass_rec(spath, loose=loose, top=top, set_ns=True, schema_ns=schema_ns, include_state=include_state))
-
-        # TODO: module constant when we switch to DType
-        # TODO: reuse namespace qualifiers from schema_namespaces to avoid allocating many new string
-        res.append("def src_dnode():")
-        res.append("    return {self.prsrc()}")
-        res.append("")
+        res.extend(inner)
 
         res.append("schema_namespaces: set[str] = {{")
         for ns in sorted(schema_ns):
@@ -4380,7 +4398,7 @@ class Anydata(SchemaNodeOuter):
             description=self.description,
             if_feature=self.if_feature,
             mandatory=self.mandatory,
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             reference=self.reference,
             status=self.status,
             when=self.when,
@@ -4537,7 +4555,7 @@ class Anyxml(SchemaNodeOuter):
             description=self.description,
             if_feature=self.if_feature,
             mandatory=self.mandatory,
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             reference=self.reference,
             status=self.status,
             when=self.when,
@@ -5289,7 +5307,7 @@ class Container(SchemaNodeInner):
             config=self.is_config(),
             description=self.description,
             if_feature=self.if_feature,
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             presence=self.is_presence(),
             reference=self.reference,
             status=self.status,
@@ -6134,7 +6152,7 @@ class Input(SchemaNodeInner):
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             exts=self.exts,
             children=self.get_dnode_children(context)
         )
@@ -6344,7 +6362,7 @@ class Leaf(SchemaNodeOuter):
             description=self.description,
             if_feature=self.if_feature,
             mandatory=self.mandatory,
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             reference=self.reference,
             status=self.status,
             type_=dtype,
@@ -6571,7 +6589,7 @@ class LeafList(SchemaNodeOuter):
             if_feature=self.if_feature,
             max_elements=self.get_max_elements(),
             min_elements=self.get_min_elements(),
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             ordered_by=self.ordered_by,
             reference=self.reference,
             status=self.status,
@@ -6862,7 +6880,7 @@ class List(SchemaNodeInner):
             if_feature=self.if_feature,
             max_elements=self.get_max_elements(),
             min_elements=self.get_min_elements(),
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             ordered_by=self.ordered_by,
             reference=self.reference,
             status=self.status,
@@ -7288,6 +7306,14 @@ class Must(SchemaNodeOuter):
             self.reference = ref_reference
         self.exts.extend(refine.exts)
 
+    def to_dmust(self) -> DMust:
+        return DMust(
+            description=self.description,
+            condition=self.condition,
+            error_app_tag=self.error_app_tag,
+            error_message=self.error_message,
+        )
+
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Must(self.condition,
                    description=self.description,
@@ -7554,7 +7580,7 @@ class Output(SchemaNodeInner):
             module=self.get_module_name(),
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
-            must=self.must,
+            must=[m.to_dmust() for m in self.must],
             exts=self.exts,
             children=self.get_dnode_children(context)
         )

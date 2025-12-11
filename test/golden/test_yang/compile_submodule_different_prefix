@@ -18,6 +18,29 @@ from yang.type import Decimal, Ranges
 _identities: list[DIdentity] = []
 
 
+SRC_DNODE = DRoot(children=[
+    DContainer(module='main-module', namespace='http://example.com/main', prefix='main', name='main-container', config=True, presence=False, children=[
+        DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='main-leaf', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+        DContainer(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-group-container', config=True, presence=False, children=[
+            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-group-leaf', config=True, default='from-submodule', mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+        ]),
+        DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-leaf', config=True, mandatory=False, must=[
+DMust(condition='string-length(.) > 5', description='Sub-leaf must be longer than 5 characters', error_app_tag=None, error_message=None, reference=None)
+            ], type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), when="../main:main-leaf = 'trigger'"),
+        DList(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-list', key=['name'], config=True, min_elements=0, ordered_by='system', children=[
+            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='name', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-value', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='ref-to-main', config=True, mandatory=False, type_=DTypeLeafref(name='leafref', description=None, reference=None, exts=[], builtin_type='leafref', default=None, path='/main:main-container/main:main-leaf', require_instance=False))
+        ]),
+        DContainer(module='main-module', namespace='http://example.com/main', prefix='main', name='group-container', config=True, presence=False, children=[
+            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='group-leaf', config=True, default='refined-default', mandatory=False, must=[
+DMust(condition='string-length(.) > 3', description=None, error_app_tag=None, error_message=None, reference=None)
+                ], type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='augmented-in-group', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+        ])
+    ])
+])
+
 class main_module__main_container__sub_group_container(yang.adata.MNode):
     sub_group_leaf: str
 
@@ -32,7 +55,7 @@ class main_module__main_container__sub_group_container(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['main-module:main-container', 'sub-group-container'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['main-module:main-container', 'sub-group-container'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -68,7 +91,7 @@ class main_module__main_container__sub_list_entry(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['main-module:main-container', 'sub-list'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['main-module:main-container', 'sub-list'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -137,7 +160,7 @@ class main_module__main_container__group_container(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['main-module:main-container', 'group-container'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['main-module:main-container', 'group-container'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -181,7 +204,7 @@ class main_module__main_container(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['main-module:main-container'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['main-module:main-container'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -209,7 +232,7 @@ class root(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False)
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False)
         raise ValueError('unreachable')
 
     @staticmethod
@@ -222,30 +245,6 @@ class root(yang.adata.MNode):
         """Create a deep copy of this adata object"""
         return root.from_gdata(self.to_gdata())
 
-
-def src_dnode():
-    return DRoot(children=[
-    DContainer(module='main-module', namespace='http://example.com/main', prefix='main', name='main-container', config=True, presence=False, children=[
-        DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='main-leaf', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-        DContainer(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-group-container', config=True, presence=False, children=[
-            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-group-leaf', config=True, default='from-submodule', mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-        ]),
-        DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-leaf', config=True, mandatory=False, must=[
-                Must('string-length(.) > 5', description='Sub-leaf must be longer than 5 characters')
-            ], type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]), when="../main:main-leaf = 'trigger'"),
-        DList(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-list', key=['name'], config=True, min_elements=0, ordered_by='system', children=[
-            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='name', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='sub-value', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='ref-to-main', config=True, mandatory=False, type_=DTypeLeafref(name='leafref', description=None, reference=None, exts=[], builtin_type='leafref', default=None, path='/main:main-container/main:main-leaf', require_instance=False))
-        ]),
-        DContainer(module='main-module', namespace='http://example.com/main', prefix='main', name='group-container', config=True, presence=False, children=[
-            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='group-leaf', config=True, default='refined-default', mandatory=False, must=[
-                    Must('string-length(.) > 3')
-                ], type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-            DLeaf(module='main-module', namespace='http://example.com/main', prefix='main', name='augmented-in-group', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-        ])
-    ])
-])
 
 schema_namespaces: set[str] = {
     'http://example.com/main',

@@ -18,6 +18,28 @@ from yang.type import Decimal, Ranges
 _identities: list[DIdentity] = []
 
 
+SRC_DNODE = DRoot(rpcs=[
+        DRpc(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='foo', input=DInput(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', children=[
+    DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='a', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+    DContainer(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='woo', config=False, presence=False, children=[
+        DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='woo_b', config=False, mandatory=False, type_=DTypeInteger(name='int64', description=None, reference=None, exts=[], builtin_type='int64', default=None, ranges=Ranges([(bigint("-9223372036854775808"), bigint("9223372036854775807"))])))
+    ])
+]), output=DOutput(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', children=[
+    DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='outoo', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+]), children=[
+            DInput(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', children=[
+                DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='a', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+                DContainer(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='woo', config=False, presence=False, children=[
+                    DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='woo_b', config=False, mandatory=False, type_=DTypeInteger(name='int64', description=None, reference=None, exts=[], builtin_type='int64', default=None, ranges=Ranges([(bigint("-9223372036854775808"), bigint("9223372036854775807"))])))
+                ])
+            ]),
+            DOutput(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', children=[
+                DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='outoo', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+            ])
+        ]),
+        DRpc(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='silent')
+    ])
+
 class root(yang.adata.MNode):
 
     mut def __init__(self):
@@ -26,7 +48,7 @@ class root(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False)
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False)
         raise ValueError('unreachable')
 
     @staticmethod
@@ -54,7 +76,7 @@ class yangrpc__foo__input__woo(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['yangrpc:foo', 'input', 'woo'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['yangrpc:foo', 'input', 'woo'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -86,7 +108,7 @@ class yangrpc__foo__input(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['yangrpc:foo', 'input'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['yangrpc:foo', 'input'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -114,7 +136,7 @@ class yangrpc__foo__output(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['yangrpc:foo', 'output'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['yangrpc:foo', 'output'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -132,7 +154,7 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
     def foo(cb: action(?yangrpc__foo__output, ?Exception) -> None, inp: ?yangrpc__foo__input):
         def cb_wrap(res: ?xml.Node, err: ?Exception):
             if res is not None:
-                gdata_res = yang.gen3.from_data(src_dnode(), res, False, ["yangrpc:foo", "output"])
+                gdata_res = yang.gen3.from_data(SRC_DNODE, res, False, ["yangrpc:foo", "output"])
                 adata_res = yangrpc__foo__output.from_gdata(gdata_res)
                 cb(adata_res, err)
             else:
@@ -140,7 +162,7 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
 
         rpc_xml = xml.Node('foo', nsdefs=[(None, 'http://example.com/yangrpc')])
         if inp is not None:
-            gdata_inp = yang.gen3.from_data(src_dnode(), inp, False, ["yangrpc:foo", "input"])
+            gdata_inp = yang.gen3.from_data(SRC_DNODE, inp, False, ["yangrpc:foo", "input"])
             rpc_xml.children.extend(gdata_inp.to_xml())
         tp.rpc_xml(cb_wrap, rpc_xml)
 
@@ -149,29 +171,6 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
         tp.rpc_xml(lambda _, err: cb(err), rpc_xml)
 
 
-
-def src_dnode():
-    return DRoot(rpcs=[
-        DRpc(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='foo', input=DInput(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', children=[
-    DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='a', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-    DContainer(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='woo', config=False, presence=False, children=[
-        DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='woo_b', config=False, mandatory=False, type_=DTypeInteger(name='int64', description=None, reference=None, exts=[], builtin_type='int64', default=None, ranges=Ranges([(bigint("-9223372036854775808"), bigint("9223372036854775807"))])))
-    ])
-]), output=DOutput(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', children=[
-    DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='outoo', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-]), children=[
-            DInput(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', children=[
-                DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='a', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-                DContainer(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='woo', config=False, presence=False, children=[
-                    DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='woo_b', config=False, mandatory=False, type_=DTypeInteger(name='int64', description=None, reference=None, exts=[], builtin_type='int64', default=None, ranges=Ranges([(bigint("-9223372036854775808"), bigint("9223372036854775807"))])))
-                ])
-            ]),
-            DOutput(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', children=[
-                DLeaf(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='outoo', config=False, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-            ])
-        ]),
-        DRpc(module='yangrpc', namespace='http://example.com/yangrpc', prefix='yrpc', name='silent')
-    ])
 
 schema_namespaces: set[str] = {
     'http://example.com/yangrpc',

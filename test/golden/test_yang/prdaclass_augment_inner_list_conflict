@@ -18,6 +18,18 @@ from yang.type import Decimal, Ranges
 _identities: list[DIdentity] = []
 
 
+SRC_DNODE = DRoot(children=[
+    DContainer(module='base', namespace='http://example.com/base', prefix='base', name='c1', config=True, presence=False, children=[
+        DList(module='base', namespace='http://example.com/base', prefix='base', name='l1', key=['k1'], config=True, min_elements=0, ordered_by='system', children=[
+            DLeaf(module='base', namespace='http://example.com/base', prefix='base', name='k1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k1', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+        ]),
+        DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', key=['k2'], config=True, min_elements=0, ordered_by='system', children=[
+            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k2', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+        ])
+    ])
+])
+
 class base__c1__base_l1_entry(yang.adata.MNode):
     base_k1: str
     foo_k1: str
@@ -36,7 +48,7 @@ class base__c1__base_l1_entry(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:c1', 'l1'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['base:c1', 'l1'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -101,7 +113,7 @@ class base__c1__foo_l1_entry(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:c1', 'foo:l1'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['base:c1', 'foo:l1'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -170,7 +182,7 @@ class base__c1(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False, root_path=['base:c1'])
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['base:c1'])
         raise ValueError('unreachable')
 
     @staticmethod
@@ -198,7 +210,7 @@ class root(yang.adata.MNode):
 
     mut def to_gdata(self) -> yang.gdata.Node:
         if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(src_dnode(), self, loose=False)
+            return yang.gen3.from_data(SRC_DNODE, self, loose=False)
         raise ValueError('unreachable')
 
     @staticmethod
@@ -211,19 +223,6 @@ class root(yang.adata.MNode):
         """Create a deep copy of this adata object"""
         return root.from_gdata(self.to_gdata())
 
-
-def src_dnode():
-    return DRoot(children=[
-    DContainer(module='base', namespace='http://example.com/base', prefix='base', name='c1', config=True, presence=False, children=[
-        DList(module='base', namespace='http://example.com/base', prefix='base', name='l1', key=['k1'], config=True, min_elements=0, ordered_by='system', children=[
-            DLeaf(module='base', namespace='http://example.com/base', prefix='base', name='k1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k1', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-        ]),
-        DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', key=['k2'], config=True, min_elements=0, ordered_by='system', children=[
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k2', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-        ])
-    ])
-])
 
 schema_namespaces: set[str] = {
     'http://example.com/base',
