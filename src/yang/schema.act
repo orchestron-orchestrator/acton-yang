@@ -1133,29 +1133,22 @@ class DIdentity(DNode):
         for identity in identities:
             visit(identity)
 
-        # Assign (base) identity var name and also track it as a base
+        # Assign (base) identity var name
         base_var_map = {}
         for identity in identities:
-            for base in identity.base:
-                base_var_map[base.key()] = base.format_base_var_name()
+            base_var_map[identity.key()] = identity.format_base_var_name()
 
-        # Print variable declarations for identities that are used as bases in order of precedence
+        # Print variable declarations for identities in order of precedence
         for identity in sorted_identities:
-            if identity.key() in base_var_map:
-                var_name = base_var_map[identity.key()]
-                base_refs = [base_var_map[base.key()] for base in identity.base]
-                result.append("{var_name} = DIdentity(module={repr(identity.module)}, namespace={repr(identity.namespace)}, prefix={repr(identity.prefix)}, name={repr(identity.name)}, base=[{', '.join(base_refs)}])")
+            var_name = base_var_map[identity.key()]
+            base_refs = [base_var_map[base.key()] for base in identity.base]
+            result.append("{var_name} = DIdentity(module={repr(identity.module)}, namespace={repr(identity.namespace)}, prefix={repr(identity.prefix)}, name={repr(identity.name)}, base=[{', '.join(base_refs)}])")
 
         # Build the global _identities list
         result.append("_identities = [")
         for identity in identities:
-            if identity.key() in base_var_map:
-                # Reference the variable
-                result.append("    {base_var_map[identity.key()]},")
-            else:
-                # Inline declaration with base references
-                base_refs = [base_var_map[base.key()] for base in identity.base]
-                result.append("    DIdentity(module={repr(identity.module)}, namespace={repr(identity.namespace)}, prefix={repr(identity.prefix)}, name={repr(identity.name)}, base=[{', '.join(base_refs)}]),")
+            # Reference the variable
+            result.append("    {base_var_map[identity.key()]},")
         result.append("]")
         result.append("")
         result.append("")
