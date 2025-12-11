@@ -418,9 +418,15 @@ class _XmlRegexToRe(object):
                 c1 = self.try_get_char()
                 if c1 is not None:
                     # print("DEBUG48.2", self.i, c1)
-                    # PCRE2-compatible 'SingleCharEsc' and 'MultiCharEsc' \s \S \d \D
-                    if c1 in "nrt\\|.-^?*+{{}}()[]sSdD":
+                    # PCRE2-compatible 'SingleCharEsc' and 'MultiCharEsc' \s \S
+                    if c1 in "nrt\\|.-^?*+{{}}()[]sS":
                         return [c, c1], BP_ATOMIC
+                    # MultiCharEsc '\i'
+                    if c1 == 'd':
+                        return [r"\p{Nd}"], BP_ATOMIC
+                    # MultiCharEsc '\I'
+                    if c1 == 'D':
+                        return [r"[^\p{Nd}]"], BP_ATOMIC
                     # MultiCharEsc '\i'
                     if c1 == 'i':
                         return [r"[\p{L}_:]"], BP_ATOMIC
@@ -435,14 +441,10 @@ class _XmlRegexToRe(object):
                         return [r"[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]"], BP_ATOMIC # https://www.w3.org/TR/2000/WD-xml-2e-20000814#NT-NameChar
                     # MultiCharEsc '\w'
                     if c1 == 'w':
-                        # Current acton re doesn't support the full code points
-                        # return [r"(?![\p{P}\p{Z}\p{C}])[\x{0000}-\x{10FFFF}]"], BP_ATOMIC
-                        return [r"\w"], BP_ATOMIC
+                        return [r"(?![\p{P}\p{Z}\p{C}])[\x{0000}-\x{10FFFF}]"], BP_ATOMIC
                     # MultiCharEsc '\\W'
                     if c1 == 'W':
-                        # Current acton re doesn't support the full code points
-                        # return [r"[\p{P}\p{Z}\p{C}\x{110000}]"], BP_ATOMIC
-                        return [r"\W"], BP_ATOMIC
+                        return [r"[\p{P}\p{Z}\p{C}\x{110000}]"], BP_ATOMIC
                     # catEsc & complEsc
                     if c1 in "pP":
                         # print("DEBUG48.3", self.i, c1)
@@ -615,10 +617,16 @@ class _XmlRegexToRe(object):
                             builder.simple_part("\\{c1}")
                             state = _update_state_on_single_char(state)
                         # PCRE2-compatible 'MultiCharEsc' \s \S \d \D
-                        elif c1 in "sSdD":
+                        elif c1 in "sS":
                             builder.simple_part("\\{c1}")
                             state = _update_state_on_multi_char(state)
                         # MultiCharEsc '\i' expansion
+                        elif c1 == 'd':
+                            builder.expansion([r"\p{Nd}"])
+                            state = _update_state_on_multi_char(state)
+                        elif c1 == 'D':
+                            builder.expansion_complement([r"\p{Nd}"])
+                            state = _update_state_on_multi_char(state)
                         elif c1 == 'i':
                             builder.expansion([r"\p{L}", "_", ":"])
                             state = _update_state_on_multi_char(state)
@@ -636,15 +644,11 @@ class _XmlRegexToRe(object):
                             state = _update_state_on_multi_char(state)
                         # MultiCharEsc '\w' expansion
                         elif c1 == 'w':
-                            # Current acton re doesn't support the full code points
-                            # builder.rel_complement_expansion([r"\x{0000}", "-", r"\x{10FFFF}"], [r"\p{P}", r"\p{Z}", r"\p{C}"])
-                            builder.simple_part(r"\w")
+                            builder.rel_complement_expansion([r"\x{0000}", "-", r"\x{10FFFF}"], [r"\p{P}", r"\p{Z}", r"\p{C}"])
                             state = _update_state_on_multi_char(state)
                         # MultiCharEsc '\W' complement expansion
                         elif c1 == 'W':
-                            # Current acton re doesn't support the full code points
-                            # builder.rel_complement_expansion_complement([r"\x{0000}", "-", r"\x{10FFFF}"], [r"\p{P}", r"\p{Z}", r"\p{C}"])
-                            builder.simple_part(r"\W")
+                            builder.rel_complement_expansion_complement([r"\x{0000}", "-", r"\x{10FFFF}"], [r"\p{P}", r"\p{Z}", r"\p{C}"])
                             state = _update_state_on_multi_char(state)
                         # catEsc & complEsc expansion
                         elif c1 in "pP":
@@ -740,7 +744,7 @@ class _PosBuilder(_Builder):
         self._outer_groups.append("[^{_concat(n)}]")
 
     def rel_complement_expansion(self, p, n):
-        self._outer_groups.append("(?![^{_concat(p)}])[{_concat(n)}]")
+        self._outer_groups.append("(?![{_concat(n)}])[{_concat(p)}]")
         self.bp = BP_AND
 
     def rel_complement_expansion_complement(self, p, n):
@@ -898,16 +902,15 @@ def _test_w3cregex_to_re_search_escape():
 def _test_w3cregex_to_re_search_multichar():
     testing.assertEqual(w3cregex_to_re_search(r"."), r".")
     testing.assertEqual(w3cregex_to_re_search(r"\s"), r"\s")
-    testing.assertEqual(w3cregex_to_re_search(r"\d"), r"\d")
+    testing.assertEqual(w3cregex_to_re_search(r"\d"), r"\p{Nd}")
     testing.assertEqual(w3cregex_to_re_search(r"\S"), r"\S")
-    testing.assertEqual(w3cregex_to_re_search(r"\D"), r"\D")
+    testing.assertEqual(w3cregex_to_re_search(r"\D"), r"[^\p{Nd}]")
     testing.assertEqual(w3cregex_to_re_search(r"\i"), r"[\p{L}_:]")
     testing.assertEqual(w3cregex_to_re_search(r"\I"), r"[^\p{L}_:]")
     testing.assertEqual(w3cregex_to_re_search(r"\c"), r"[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]")
     testing.assertEqual(w3cregex_to_re_search(r"\C"), r"[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]")
-    # Current acton re doesn't support the full code points
-    # testing.assertEqual(w3cregex_to_re_search(r"\w"), r"(?![\p{P}\p{Z}\p{C}])[\x{0000}-\x{10FFFF}]")
-    # testing.assertEqual(w3cregex_to_re_search(r"\W"), r"[\p{P}\p{Z}\p{C}\x{110000}]")
+    testing.assertEqual(w3cregex_to_re_search(r"\w"), r"(?![\p{P}\p{Z}\p{C}])[\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"\W"), r"[\p{P}\p{Z}\p{C}\x{110000}]")
 
 def _test_w3cregex_to_re_search_escape_unicode_category():
     testing.assertEqual(w3cregex_to_re_search(r"\p{L}"), r"\p{L}")
@@ -921,9 +924,9 @@ def _test_w3cregex_to_re_search_group_escape():
     testing.assertEqual(w3cregex_to_re_search(r"[\n\r\t\\\\\|\.\-\^\?\*\+\{\{\}\}\(\)\[\]]"), r"[\n\r\t\\\\\|\.\-\^\?\*\+\{\{\}\}\(\)\[\]]")
 
 def _test_w3cregex_to_re_search_group_basic_multichar():
-    testing.assertEqual(w3cregex_to_re_search(r"[.\s\d]"), r"[.\s\d]")
-    testing.assertEqual(w3cregex_to_re_search(r"[\S\D]"), r"[\S\D]")
-    testing.assertEqual(w3cregex_to_re_search(r"[\d]"), r"\d")
+    testing.assertEqual(w3cregex_to_re_search(r"[.\s]"), r"[.\s]")
+    testing.assertEqual(w3cregex_to_re_search(r"[\S]"), r"\S")
+    testing.assertEqual(w3cregex_to_re_search(r"[x\d]"), r"[x\p{Nd}]")
     testing.assertEqual(w3cregex_to_re_search(r"[\i]"), r"[\p{L}_:]")
 
 def _test_w3cregex_to_re_search_group_subtraction():
@@ -931,25 +934,18 @@ def _test_w3cregex_to_re_search_group_subtraction():
     testing.assertEqual(w3cregex_to_re_search("[a-z-[c-d]]+"), "((?![c-d])[a-z])+")
 
 def _test_w3cregex_to_re_search_pos_group_with_rel_comp():
-    # Current acton re doesn't support the full code points
-    # testing.assertEqual(w3cregex_to_re_search("[ab-z\\i\\C\\w]"), r"[ab-z\p{L}_:]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|(?![^\x{0000}-\x{10FFFF}])[\p{P}\p{Z}\p{C}]")
-    pass
+    testing.assertEqual(w3cregex_to_re_search("[ab-z\\i\\C\\w]"), r"[ab-z\p{L}_:]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|(?![\p{P}\p{Z}\p{C}])[\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[\D]"), r"[^\p{Nd}]")
 
 def _test_w3cregex_to_re_search_pos_group_with_rel_comp_abs_comp():
-    # Current acton re doesn't support the full code points
-    # testing.assertEqual(w3cregex_to_re_search("[ab-z\\i\\C\\W]"), r"[ab-z\p{L}_:\p{P}\p{Z}\p{C}]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|[^\x{0000}-\x{10FFFF}]")
-    # testing.assertEqual(w3cregex_to_re_search("[ab-z\\I\\C\\W]"), r"[ab-z\p{P}\p{Z}\p{C}]|[^\p{L}_:]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|[^\x{0000}-\x{10FFFF}]")
-    pass
+    testing.assertEqual(w3cregex_to_re_search("[ab-z\\i\\C\\W]"), r"[ab-z\p{L}_:\p{P}\p{Z}\p{C}]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|[^\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search("[ab-z\\I\\C\\W]"), r"[ab-z\p{P}\p{Z}\p{C}]|[^\p{L}_:]|[^\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}]|[^\x{0000}-\x{10FFFF}]")
 
 def _test_w3cregex_to_re_search_comp_group_with_rel_comp():
-    # Current acton re doesn't support the full code points
-    # testing.assertEqual(w3cregex_to_re_search("[^ab-z\\i\\C\\w]"), r"(?=[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}])(?=[^\x{0000}-\x{10FFFF}]|[\p{P}\p{Z}\p{C}])[^ab-z\p{L}_:]")
-    pass
+    testing.assertEqual(w3cregex_to_re_search("[^ab-z\\i\\C\\w]"), r"(?=[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}])(?=[^\x{0000}-\x{10FFFF}]|[\p{P}\p{Z}\p{C}])[^ab-z\p{L}_:]")
 
 def _test_w3cregex_to_re_search_comp_group_with_abs_comp_of_rel_comp():
-    # Current acton re doesn't support the full code points
-    # testing.assertEqual(w3cregex_to_re_search("[^ab-z\\i\\C\\W]"), r"(?=[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}])(?=[\x{0000}-\x{10FFFF}])[^ab-z\p{L}_:\p{P}\p{Z}\p{C}]")
-    pass
+    testing.assertEqual(w3cregex_to_re_search("[^ab-z\\i\\C\\W]"), r"(?=[\p{Ll}\p{Lu}\p{Lo}\p{Nl}\p{Mc}\p{Me}\p{Mn}\p{Lm}\p{Nd}])(?=[\x{0000}-\x{10FFFF}])[^ab-z\p{L}_:\p{P}\p{Z}\p{C}]")
 
 def _test_w3cregex_to_re_search_group_single_specials():
     testing.assertEqual(w3cregex_to_re_search(r"[\-]"), r"-")
@@ -965,12 +961,10 @@ def _test_w3cregex_to_re_search_group_range_specials2():
     testing.assertEqual(w3cregex_to_re_search(r"[-a-zA-Z0-9_]*[-a-zA-Z0-9_]"), r"[-a-zA-Z0-9_]*[-a-zA-Z0-9_]")
 
 def _test_w3cregex_to_re_search_simple_group_order():
-    # Current acton re doesn't support the full code points
-    # testing.assertEqual(w3cregex_to_re_search(r"[\W+--]"), r"[\p{P}\p{Z}\p{C}+--]|[^\x{0000}-\x{10FFFF}]")
-    # testing.assertEqual(w3cregex_to_re_search(r"[--0\W]"), r"[--0\p{P}\p{Z}\p{C}]|[^\x{0000}-\x{10FFFF}]")
-    # testing.assertEqual(w3cregex_to_re_search(r"[^\W+--]"), r"(?=[\x{0000}-\x{10FFFF}])[^\p{P}\p{Z}\p{C}+--]")
-    # testing.assertEqual(w3cregex_to_re_search(r"[^--0\W]"), r"(?=[\x{0000}-\x{10FFFF}])[^--0\p{P}\p{Z}\p{C}]")
-    pass
+    testing.assertEqual(w3cregex_to_re_search(r"[\W+--]"), r"[\p{P}\p{Z}\p{C}+--]|[^\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[--0\W]"), r"[--0\p{P}\p{Z}\p{C}]|[^\x{0000}-\x{10FFFF}]")
+    testing.assertEqual(w3cregex_to_re_search(r"[^\W+--]"), r"(?=[\x{0000}-\x{10FFFF}])[^\p{P}\p{Z}\p{C}+--]")
+    testing.assertEqual(w3cregex_to_re_search(r"[^--0\W]"), r"(?=[\x{0000}-\x{10FFFF}])[^--0\p{P}\p{Z}\p{C}]")
 
 def _test_w3cregex_to_re_search_group_escape_unicode_category():
     testing.assertEqual(w3cregex_to_re_search(r"[\p{L}]"), r"\p{L}")
@@ -985,4 +979,4 @@ def _test_w3cregex_to_re_search_group_escape_unicode_block():
     testing.assertEqual(w3cregex_to_re_search(r"[\P{MathematicalOperators}\P{MiscellaneousTechnical}]"), r"[^\x{2200}-\x{22FF}]|[^\x{2300}-\x{23FF}]")
 
 def _test_w3cregex_to_re_search_cisci_xr():
-    testing.assertEqual(w3cregex_to_re_search(r"[\w\-\.:,_@#%$\+=\| ;]+"), r"[\w\-\.:,_@#%$\+=\| ;]+")
+    testing.assertEqual(w3cregex_to_re_search(r"[\w\-\.:,_@#%$\+=\| ;]+"), r"([\-\.:,_@#%$\+=\| ;]|(?![\p{P}\p{Z}\p{C}])[\x{0000}-\x{10FFFF}])+")
