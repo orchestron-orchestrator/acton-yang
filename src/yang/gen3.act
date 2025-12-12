@@ -120,6 +120,12 @@ def _test_get_nc_op_pref_ancestor():
     #testing.assertEqual(op, "create")
 
 
+def unwrap_key[T](name: str, val: ?T, spath) -> T:
+    if val is not None:
+        return val
+    raise ValueError("Missing key value at {format_schema_path(spath)}: {name}")
+
+
 protocol YangData:
     """Protocol for YANG data nodes
 
@@ -128,7 +134,7 @@ protocol YangData:
     """
     # TODO: can value implement YangData?
     take_container: mut(yang.schema.DContainer, str, bool, bool, list[PathElement]) -> ?(op: ?str, val: ?value)
-    take_list: mut(yang.schema.DList, str, bool, bool, list[PathElement]) -> list[(op: ?str, val: value)]
+    take_list: mut(yang.schema.DList, str, bool, bool, list[PathElement]) -> list[(op: ?str, key: dict[str, value], val: value)]
     # Return a typed tuple for leaves. The tuple carries the concrete type name
     # and the parsed value. Missing leaves return None.
     take_leaf: mut(yang.schema.DRoot, yang.schema.DLeaf, str, bool, bool, list[PathElement]) -> ?(op: ?str, t: str, val: ?value)
@@ -145,9 +151,18 @@ extension xml.Node (YangData):
             return (op=op, val=child_node)
         return None
 
-    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: str, val: value)]:
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: str, key: dict[str, value], val: value)]:
+        new_path = path + [PathElement(schema)]
         elements = yang.gdata.get_xml_children(self, name, schema.namespace if ns_qualified else None)
-        return [(op=get_netconf_operation(e), val=e) for e in elements]
+
+        def extract_key(element_data):
+            key_values = {}
+            for key_name in schema.key:
+                key_node = unwrap_key(key_name, yang.gdata.get_xml_opt_child(element_data, key_name), new_path)
+                key_values[key_name] = unwrap_key(key_name, key_node.text, new_path)
+            return key_values
+
+        return [(op=get_netconf_operation(e), key=extract_key(e), val=e) for e in elements]
 
     mut def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: str, t: str, val: ?value):
         new_path = path + [PathElement(schema)]
@@ -269,7 +284,8 @@ extension dict[A(Hashable), B] (YangData):
                 return (op=None, val=maybe)
         return None
 
-    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, val: value)]:
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, key: dict[str, value], val: value)]:
+        new_path = path + [PathElement(schema)]
         if isinstance(self, dict):
             lv = None
             if ns_qualified and schema.module is not None and schema.module != "":
@@ -277,7 +293,8 @@ extension dict[A(Hashable), B] (YangData):
             else:
                 lv = self.get(name)
             if isinstance(lv, list):
-                return [(op=None, val=le) for le in lv]
+                key_values: (dict[str, ?value]) -> dict[str, value] = lambda element_data: {k: unwrap_key(k, element_data.get(k), new_path) for k in schema.key}
+                return [(op=None, key=key_values(le), val=le) for le in lv]
         return []
 
     def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, t: str, val: ?value):
@@ -420,11 +437,13 @@ extension yang.adata.MNode (YangData):
         if maybe_cnt is not None:
             return (op=None, val=maybe_cnt)
 
-    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, val: value)]:
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, key: dict[str, value], val: value)]:
+        new_path = path + [PathElement(schema)]
         usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
         maybe_list = self._get_attr(usname)
         if maybe_list is not None and isinstance(maybe_list, Iterator):
-            return [(op=None, val=e) for e in maybe_list]
+            key_values = lambda element_data: {k: unwrap_key(k, element_data._get_attr(yang.schema._safe_name(k)), new_path) for k in schema.key}
+            return [(op=None, key=key_values(e), val=e) for e in maybe_list]
         return [] # ??
 
     def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, t: str, val: ?value):
@@ -758,48 +777,27 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
             list_val = data.take_list(child, child.name, s.namespace != child.namespace, is_unique(child), spath)
             list_elements = []
 
-            def unwrap_key[T](name: str, val: ?T) -> T:
-                if val is not None:
-                    return val
-                raise ValueError("Missing key value at {format_schema_path(path_with_child())}: {name}")
-
             for element in list_val:
                 element_data = element.val
+                do_skip = True if element.op == OP_REMOVE or element.op == OP_DELETE else False
                 if isinstance(element_data, xml.Node):
-                    # Extract key values for better error context directly from the data (XML)
-                    key_values = {}
-                    for key_name in child.key:
-                        key_node = unwrap_key(key_name, yang.gdata.get_xml_opt_child(element_data, key_name))
-                        key_values[key_name] = unwrap_key(key_name, key_node.text)
-
-                    if element.op == OP_REMOVE or element.op == OP_DELETE:
-                        element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values), skip_nonkeys=True)
-
-                        if element.op == OP_REMOVE:
-                            list_elements.append(yang.gdata.Absent(element_gdata.key_children(child.key)))
-                        else:
-                            list_elements.append(yang.gdata.Delete(element_gdata.key_children(child.key)))
-                    else:
-                        element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
-
-                        if element.op == OP_CREATE:
-                            list_elements.append(yang.gdata.Create(element_gdata.children))
-                        elif element.op == OP_REPLACE:
-                            list_elements.append(yang.gdata.Replace(element_gdata.children))
-                        else:
-                            list_elements.append(element_gdata)
+                    element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(element.key), skip_nonkeys=do_skip)
                 elif isinstance(element_data, dict):
-                    # Extract key values for better error context directly from the data (JSON)
-                    key_values = {k: unwrap_key(k, element_data.get(k)) for k in child.key}
-                    element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
-                    list_elements.append(element_gdata)
+                    element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(element.key), skip_nonkeys=do_skip)
                 elif isinstance(element_data, yang.adata.MNode):
-                    # Extract key values for better error context directly from the data (adata)
-                    key_values = {k: unwrap_key(k, element_data._get_attr(yang.schema._safe_name(k))) for k in child.key}
-                    element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(key_values))
-                    list_elements.append(element_gdata)
+                    element_gdata = _from_data_recursive(root, child, element_data, loose, set_ns=False, root_path=root_path, spath=path_with_child(element.key), skip_nonkeys=do_skip)
                 else:
                     raise ValueError("Unsupported type for list element at {format_schema_path(path_with_child())}: {type(element_data)}")
+                if element.op == OP_REMOVE:
+                    list_elements.append(yang.gdata.Absent(element_gdata.key_children(child.key)))
+                elif element.op == OP_DELETE:
+                    list_elements.append(yang.gdata.Delete(element_gdata.key_children(child.key)))
+                elif element.op == OP_CREATE:
+                    list_elements.append(yang.gdata.Create(element_gdata.children))
+                elif element.op == OP_REPLACE:
+                    list_elements.append(yang.gdata.Replace(element_gdata.children))
+                else:
+                    list_elements.append(element_gdata)
             if len(list_elements) > 0:
                 list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
                 children[uname(child)] = list_gdata
