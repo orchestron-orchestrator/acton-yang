@@ -16,10 +16,12 @@ from yang.type import Decimal, Ranges
 
 
 _base_foo_basey = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey', base=[])
+_base_foo_fooy = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='fooy', base=[_base_foo_basey])
+_base_bar_bary = DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='bary', base=[_base_foo_basey])
 _identities = [
-    DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='fooy', base=[_base_foo_basey]),
+    _base_foo_fooy,
     _base_foo_basey,
-    DIdentity(module='bar', namespace='http://example.com/bar', prefix='bar', name='bary', base=[_base_foo_basey]),
+    _base_bar_bary,
 ]
 
 
@@ -54,6 +56,7 @@ SRC_DNODE = DRoot(identities=[
         DLeafList(module='foo', namespace='http://example.com/foo', prefix='f', name='ll_str', config=True, min_elements=0, ordered_by='system', type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
         DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l_identityref', config=True, mandatory=False, type_=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_foo_basey], identities=_identities)),
         DLeafList(module='foo', namespace='http://example.com/foo', prefix='f', name='ll_identityref', config=True, min_elements=0, ordered_by='system', type_=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_foo_basey], identities=_identities)),
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l_identityref_noval', config=True, mandatory=False, type_=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_foo_fooy], identities=_identities)),
         DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l4', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
         DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
         DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l2', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
@@ -206,13 +209,17 @@ def src_yang():
         leaf l_identityref {
             type identityref {
                 base basey;
-
             }
         }
         leaf-list ll_identityref {
             type identityref {
                 base basey;
-
+            }
+        }
+        leaf l_identityref_noval {
+            // There are no identities derived from base fooy, this leaf has no valid value!
+            type identityref {
+                base fooy;
             }
         }
     }
@@ -558,11 +565,12 @@ class foo__c1(yang.adata.MNode):
     ll_str: list[str]
     l_identityref: ?Identityref
     ll_identityref: list[Identityref]
+    l_identityref_noval: ?Identityref
     l4: ?str
     bar_l1: ?str
     l2: ?str
 
-    mut def __init__(self, f_l1: ?str, l3: ?bigint, l_empty: ?bool, l_empty_delete: ?bool, li: list[foo__c1__li_entry]=[], ll_uint64: ?list[bigint]=None, ll_str: ?list[str]=None, l_identityref: ?Identityref, ll_identityref: ?list[Identityref]=None, l4: ?str, bar_l1: ?str, l2: ?str):
+    mut def __init__(self, f_l1: ?str, l3: ?bigint, l_empty: ?bool, l_empty_delete: ?bool, li: list[foo__c1__li_entry]=[], ll_uint64: ?list[bigint]=None, ll_str: ?list[str]=None, l_identityref: ?Identityref, ll_identityref: ?list[Identityref]=None, l_identityref_noval: ?Identityref, l4: ?str, bar_l1: ?str, l2: ?str):
         self._ns = 'http://example.com/foo'
         self.f_l1 = f_l1
         self.l3 = l3
@@ -573,6 +581,7 @@ class foo__c1(yang.adata.MNode):
         self.ll_str = ll_str if ll_str is not None else []
         self.l_identityref = l_identityref
         self.ll_identityref = ll_identityref if ll_identityref is not None else []
+        self.l_identityref_noval = l_identityref_noval
         self.l4 = l4
         self.bar_l1 = bar_l1
         self.l2 = l2
@@ -596,6 +605,8 @@ class foo__c1(yang.adata.MNode):
             return self.l_identityref
         if name == 'll_identityref':
             return self.ll_identityref
+        if name == 'l_identityref_noval':
+            return self.l_identityref_noval
         if name == 'l4':
             return self.l4
         if name == 'bar_l1':
@@ -612,7 +623,7 @@ class foo__c1(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
         if n is not None:
-            return foo__c1(f_l1=n.get_opt_str('f:l1'), l3=n.get_opt_bigint('l3'), l_empty=n.get_opt_empty('l_empty'), l_empty_delete=n.get_opt_empty('l_empty_delete'), li=foo__c1__li.from_gdata(n.get_opt_list('li')), ll_uint64=n.get_opt_bigints('ll_uint64'), ll_str=n.get_opt_strs('ll_str'), l_identityref=n.get_opt_Identityref('l_identityref'), ll_identityref=n.get_opt_Identityrefs('ll_identityref'), l4=n.get_opt_str('l4'), bar_l1=n.get_opt_str('bar:l1'), l2=n.get_opt_str('l2'))
+            return foo__c1(f_l1=n.get_opt_str('f:l1'), l3=n.get_opt_bigint('l3'), l_empty=n.get_opt_empty('l_empty'), l_empty_delete=n.get_opt_empty('l_empty_delete'), li=foo__c1__li.from_gdata(n.get_opt_list('li')), ll_uint64=n.get_opt_bigints('ll_uint64'), ll_str=n.get_opt_strs('ll_str'), l_identityref=n.get_opt_Identityref('l_identityref'), ll_identityref=n.get_opt_Identityrefs('ll_identityref'), l_identityref_noval=n.get_opt_Identityref('l_identityref_noval'), l4=n.get_opt_str('l4'), bar_l1=n.get_opt_str('bar:l1'), l2=n.get_opt_str('l2'))
         return foo__c1()
 
     def copy(self):
@@ -1831,7 +1842,8 @@ def src_schema():
         LeafList('ll_uint64', type_=Type('uint64')),
         LeafList('ll_str', type_=Type('string')),
         Leaf('l_identityref', type_=Type('identityref', base=['basey'])),
-        LeafList('ll_identityref', type_=Type('identityref', base=['basey']))
+        LeafList('ll_identityref', type_=Type('identityref', base=['basey'])),
+        Leaf('l_identityref_noval', type_=Type('identityref', base=['fooy']))
     ]),
     Container('pc1', presence='p', children=[
         Container('foo', children=[
