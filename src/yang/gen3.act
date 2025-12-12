@@ -710,27 +710,29 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                     cns = child.namespace if set_ns and child.namespace != "" else None
                     cmod = child.module if set_ns and child.module != "" else None
                     if cop == "remove":
-                        children[uname(child)] = yang.gdata.Absent(ns=cns, module=cmod)
+                        cchild = yang.gdata.Absent(ns=cns, module=cmod)
                     elif cop == "delete":
-                        children[uname(child)] = yang.gdata.Delete(ns=cns, module=cmod)
+                        cchild = yang.gdata.Delete(ns=cns, module=cmod)
                     elif cop == "create":
                         inner = _from_data_recursive(root, child, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
-                        children[uname(child)] = yang.gdata.Create(inner.children, ns=cns, module=cmod)
+                        cchild = yang.gdata.Create(inner.children, ns=cns, module=cmod)
                     elif cop == "replace":
                         inner = _from_data_recursive(root, child, val, loose, set_ns=False, root_path=root_path, spath=path_with_child())
-                        children[uname(child)] = yang.gdata.Replace(inner.children, ns=cns, module=cmod)
+                        cchild = yang.gdata.Replace(inner.children, ns=cns, module=cmod)
                     else:
-                        maybe = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
-                        children[uname(child)] = maybe
+                        cchild = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                 elif isinstance(val, dict):
-                    maybe = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
-                    children[uname(child)] = maybe
+                    cchild = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                 elif isinstance(val, yang.adata.MNode):
                     # TODO: can't we change YangData prorocol such that val implements YangData?!
-                    maybe = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
-                    children[uname(child)] = maybe
+                    cchild = _from_data_recursive(root, child, val, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
                 else:
-                    children[uname(child)] = yang.gdata.Container({})
+                    cchild = yang.gdata.Container({})
+                if isinstance(cchild, yang.gdata.Container) and (cchild.presence or len(cchild.children) > 0):
+                    children[uname(child)] = cchild
+                elif not isinstance(cchild, yang.gdata.Container):
+                    # Absent, Delete, Create, Replace
+                    children[uname(child)] = cchild
             else:
                 # Missing container: if this is a non-presence container and it has
                 # mandatory content, then raise an error in strict mode.
