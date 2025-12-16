@@ -520,9 +520,6 @@ class DNodeInner(DNode):
 
         unique_namer = _UniqueNamer(self)
 
-        def uname(n) -> str:
-            return unique_namer.unique_name(n.name, n.prefix)
-
         def usname(n) -> str:
             return unique_namer.unique_safe_name(n.name, n.prefix)
 
@@ -703,9 +700,9 @@ class DNodeInner(DNode):
         from_gdata_args_list = []
         for child in self.children:
             if isinstance(child, DNodeLeaf):
-                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), loose=loose)}('{uname(child)}')")
+                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id('{child.namespace}', '{child.name}'))")
             else:
-                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), loose=loose)}('{uname(child)}'))")
+                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id('{child.namespace}', '{child.name}')))")
         from_gdata_args = ", ".join(from_gdata_args_list)
         res.append("    @staticmethod")
         if isinstance(self, DList):

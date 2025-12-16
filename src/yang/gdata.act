@@ -226,11 +226,10 @@ def json_val(v: value) -> ?value:
     return v
 
 
-def fmt_json_name(name, module=None):
-    name_without_prefix = name.split(":")[-1]
+def fmt_json_name(name: Id, module=None):
     if module is not None:
-        return "{module}:{name_without_prefix}"
-    return name_without_prefix
+        return "{module}:{name.name}"
+    return name.name
 
 
 def repr_gdata(v) -> str:
@@ -249,25 +248,51 @@ def repr_adata(v) -> str:
     return repr_gdata(v)
 
 
+class Id:
+    def __init__(self, q: str, name: str):
+        self.q = q
+        self.name = name
+
+    def __str__(self):
+        return "{self.name}#{self.q}"
+
+    def __repr__(self):
+        return "Id({repr(self.q)}, {repr(self.name)})"
+
+
+extension Id (Ord):
+    def __lt__(self, other: Id):
+        return self.q < other.q or (self.q == other.q and self.name < other.name)
+
+    def __eq__(self, other: Id):
+        return self.q == other.q and self.name == other.name
+
+
+extension Id (Hashable):
+    def hash(self, hasher):
+        self.q.hash(hasher)
+        self.name.hash(hasher)
+
+
 class Node(value):
     ns: ?str
     module: ?str
-    children: dict[str, Node]
+    children: dict[Id, Node]
     txid: ?str
 
     def __repr__(self) -> str:
         return self.prsrc(deterministic=False)
 
-    def key_str(self, key_names: list[str]) -> str:
+    def key_str(self, key_names: list[Id]) -> str:
         return ",".join([str(self.get_leaf(kn).val).replace(",", "\\,") for kn in key_names])
 
-    def key_values(self, key_names: list[str]) -> dict[str, value]:
-        return {kn: self.get_leaf(kn).val for kn in key_names}
+    def key_values(self, key_names: list[Id]) -> dict[str, value]:
+        return {kn.name: self.get_leaf(kn).val for kn in key_names}
 
-    def key_children(self, key_names: list[str]) -> dict[str, Leaf]:
+    def key_children(self, key_names: list[Id]) -> dict[Id, Leaf]:
         return {kn: self.get_leaf(kn) for kn in key_names}
 
-    pure def prsrc(self, deterministic=False, indent=0, name="") -> str:
+    pure def prsrc(self, deterministic=False, indent=0) -> str:
         """Get the Acton source code representation of the node
 
         Returns a string representation of this node that can be used to recreate
@@ -306,7 +331,7 @@ class Node(value):
             if len(self_children) == 0:
                 return "{sname}({", ".join(base_args)})"
             else:
-                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                child_strs = ["{_ind(indent+1)}{repr(nm)}: {child.prsrc(deterministic, indent+1)}"
                              for nm,child in self_children.items()]
                 args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
                 return "\n".join([
@@ -319,7 +344,7 @@ class Node(value):
             if len(self_children) == 0:
                 return "{sname}({", ".join(base_args)})"
             else:
-                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                child_strs = ["{_ind(indent+1)}{repr(nm)}: {child.prsrc(deterministic, indent+1)}"
                              for nm,child in self_children.items()]
                 args_str = ", {", ".join(base_args)}" if len(base_args) > 0 else ""
                 return "\n".join([
@@ -328,7 +353,7 @@ class Node(value):
                     "{_ind(indent)}}}{args_str})"
                 ])
         elif isinstance(self, List):
-            keys_arg = [str(self.keys)]
+            keys_arg = [repr(self.keys)]
             order_args = ["user_order=True"] if self.user_order else []
             args = keys_arg + base_args + order_args
             if len(self.elements) == 0:
@@ -350,7 +375,7 @@ class Node(value):
             if len(self_children) == 0:
                 return "{sname}({", ".join(args)})"
             else:
-                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                child_strs = ["{_ind(indent+1)}{repr(nm)}: {child.prsrc(deterministic, indent+1)}"
                              for nm,child in self_children.items()]
                 args_str = ", {", ".join(args)}" if len(args) > 0 else ""
                 return "\n".join([
@@ -364,7 +389,7 @@ class Node(value):
             if len(self_children) == 0:
                 return "{sname}({", ".join(args)})"
             else:
-                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                child_strs = ["{_ind(indent+1)}{repr(nm)}: {child.prsrc(deterministic, indent+1)}"
                              for nm,child in self_children.items()]
                 args_str = ", {", ".join(args)}" if len(args) > 0 else ""
                 return "\n".join([
@@ -378,7 +403,7 @@ class Node(value):
             if len(self_children) == 0:
                 return "{sname}({", ".join(args)})"
             else:
-                child_strs = ["{_ind(indent+1)}'{nm}': {child.prsrc(deterministic, indent+1, nm)}"
+                child_strs = ["{_ind(indent+1)}{repr(nm)}: {child.prsrc(deterministic, indent+1)}"
                              for nm,child in self_children.items()]
                 args_str = ", {", ".join(args)}" if len(args) > 0 else ""
                 return "\n".join([
@@ -447,7 +472,7 @@ class Node(value):
             return child_dict
         raise ValueError("Unsupported node type in to_dict: {type(self)}")
 
-    def _to_xml_rec(self, key_names: ?list[str]=None, skip_nonkeys: bool=False, parent_absent: bool=False, deterministic=False) -> list[xml.Node]:
+    def _to_xml_rec(self, key_names: ?list[Id]=None, skip_nonkeys: bool=False, parent_absent: bool=False, deterministic=False) -> list[xml.Node]:
         if isinstance(self, Container) or isinstance(self, Absent) or isinstance(self, Create) or isinstance(self, Delete) or isinstance(self, Replace):
             if deterministic:
                 self_children = {k: self.children[k] for k in sorted(self.children.keys())}
@@ -465,10 +490,7 @@ class Node(value):
                 child = self_children[name]
                 if parent_absent and not isinstance(child, List):
                     continue
-                if ":" in name:
-                    local_name = name.split(":")[-1]
-                else:
-                    local_name = name
+                local_name = name.name
                 if isinstance(child, Container):
                     cchildren = child._to_xml_rec(deterministic=deterministic)
                     if len(cchildren) > 0:
@@ -602,7 +624,7 @@ class Node(value):
         l = self.get_opt_list(name)
         if l is not None:
             return l
-        raise ValueError("Cannot find list child with name " + name)
+        raise ValueError("Cannot find list child with name {name}")
 
     def get_opt_list(self, name) -> ?List:
         if isinstance(self, Container):
@@ -874,11 +896,11 @@ extension Node(Eq):
 
 
 class List(Node):
-    keys: list[str] # name of the key leafs
+    keys: list[Id] # name of the key leafs
     elements: list[Node]
     user_order: bool
 
-    def __init__(self, keys: list[str], elements: list[Node]=[], user_order=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
+    def __init__(self, keys: list[Id], elements: list[Node]=[], user_order=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.keys = keys
         self.elements = elements
         self.user_order = user_order
@@ -908,7 +930,7 @@ class List(Node):
         raise ValueError("Cannot find list entry with key {key}")
 
 class Container(Node):
-    def __init__(self, children: dict[str, Node]={}, presence: bool=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, presence: bool=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.children = children
         self.presence = presence
         self.ns = ns
@@ -959,7 +981,7 @@ class Absent(Node):
     Absent is declarative / idempotent, meaning that if the target to be removed
     / made absent is not present, no error is raised.
     """
-    def __init__(self, children: dict[str, Node]={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
@@ -971,7 +993,7 @@ class Delete(Node):
 
     Unlike Absent / remove, Delete of a non-existent node is a failure.
     """
-    def __init__(self, children: dict[str, Node]={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
@@ -1125,7 +1147,7 @@ pure def vals_list_sorted(a: list[value]) -> list[value]:
 
 
 class _PathElement:
-    def __init__(self, name: ?str=None, keys: ?dict[str, Leaf]=None):
+    def __init__(self, name: ?Id=None, keys: ?dict[str, value]=None):
         self.name = name
         self.keys = keys
 
@@ -1137,10 +1159,10 @@ def _format_gdata_path(path: list[_PathElement]) -> str:
     for elem in path:
         elem_name = elem.name
         if elem_name is not None:
-            path_str = path_str + "/" + elem_name
+            path_str = path_str + "/" + elem_name.name
         elem_keys = elem.keys
         if elem_keys is not None and len(elem_keys) > 0:
-            predicates = ["{k}={repr(v.val)}" for k, v in elem_keys.items()]
+            predicates = ["{k}={repr(v)}" for k, v in elem_keys.items()]
             path_str = path_str + "[" + ",".join(predicates) + "]"
     return path_str
 
@@ -1150,8 +1172,8 @@ def _merge_rec(a: Node, b: Node, path: list[_PathElement]) -> Node:
         raise ValueError("Cannot merge nodes of different types at {_format_gdata_path(path)}: {type(a)} != {type(b)}")
 
     # Helper to merge keyed children
-    def merge_keyed_children(a_children: dict[str, Node], b_children: dict[str, Node]) -> dict[str, Node]:
-        result: dict[str, Node] = {}
+    def merge_keyed_children(a_children: dict[Id, Node], b_children: dict[Id, Node]) -> dict[Id, Node]:
+        result: dict[Id, Node] = {}
 
         a_keys = list(a_children.keys())
         b_keys = list(b_children.keys())
@@ -1257,7 +1279,7 @@ def _merge_rec(a: Node, b: Node, path: list[_PathElement]) -> Node:
                 found = False
                 for b_elem in b.elements:
                     if b_elem.key_str(b.keys) == a_elem.key_str(a.keys):
-                        key_values = a_elem.key_children(a.keys)
+                        key_values = a_elem.key_values(a.keys)
                         merged_elem = _merge_rec(a_elem, b_elem, path + [_PathElement(keys=key_values)])
                         if isinstance(merged_elem, Container):
                             new_elements.append(merged_elem)
@@ -1308,7 +1330,7 @@ def _merge_rec(a: Node, b: Node, path: list[_PathElement]) -> Node:
                 elems = all_elements[key_str]
                 new_elem = elems[0]
                 if len(elems) > 1:
-                    key_values = new_elem.key_children(a.keys)
+                    key_values = new_elem.key_values(a.keys)
                     for elem in elems[1:]:
                         new_elem = _merge_rec(new_elem, elem, path + [_PathElement(keys=key_values)])
                 if isinstance(new_elem, Container):
@@ -1342,9 +1364,9 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
         raise ValueError("diff called with nodes of different types at {_format_gdata_path(path)}: {type(old)} != {type(new)}")
 
     # Helper function for diffing Container nodes that have children keyed by strings
-    def diff_keyed_children(old_children: dict[str, Node], new_children: dict[str, Node]) -> ?dict[str, Node]:
+    def diff_keyed_children(old_children: dict[Id, Node], new_children: dict[Id, Node]) -> ?dict[Id, Node]:
         # We'll produce a new_children_dict with the diff
-        result: dict[str, Node] = {}
+        result: dict[Id, Node] = {}
 
         for k,nchild in new_children.items():
             if k in old_children:
@@ -1366,7 +1388,7 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
 
     # Helper function for diffing list elements (specialized Container nodes)
     # that *must* always include the key leaf children
-    def diff_list_element(old_element: Node, new_element: Node, keys: list[str], elem_path: list[_PathElement]) -> ?Node:
+    def diff_list_element(old_element: Node, new_element: Node, keys: list[Id], elem_path: list[_PathElement]) -> ?Node:
         # Diff of element Container nodes will only contain the actual
         # differences, skipping keys which are equal in both
         entry_diff = _diff_rec(old_element, new_element, elem_path)
@@ -1395,7 +1417,7 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
         for key in sorted(all_keys):
             if key in old_map and key in new_map:
                 # Element exists in both - check for differences
-                key_values = old_map[key].key_children(old_list.keys)
+                key_values = old_map[key].key_values(old_list.keys)
                 elem_diff = diff_list_element(old_map[key], new_map[key], old_list.keys, path + [_PathElement(keys=key_values)])
                 if elem_diff is not None:
                     result.append(elem_diff)
@@ -1436,7 +1458,7 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
 
             if ok == nk:
                 # same element key
-                key_values = old_map[ok].key_children(old_list.keys)
+                key_values = old_map[ok].key_values(old_list.keys)
                 elem_diff = diff_list_element(old_map[ok], new_map[nk], old_list.keys, path + [_PathElement(keys=key_values)])
                 if elem_diff is not None:
                     result.append(elem_diff)
@@ -1542,7 +1564,7 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
 
     elif isinstance(old, Container) and isinstance(p, Container):
         # Start with old children
-        new_children: dict[str, Node] = {}
+        new_children: dict[Id, Node] = {}
         for key in old.children:
             new_children[key] = old.children[key]
 
@@ -1589,7 +1611,7 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                 k = pelem.key_str(p.keys)
                 if k in old_map:
                     # Patch existing element
-                    key_values = old_map[k].key_children(old.keys)
+                    key_values = old_map[k].key_values(old.keys)
                     res = _patch_rec(old_map[k], pelem, path + [_PathElement(keys=key_values)])
                     if res is not None and isinstance(res, Container):
                         old_map[k] = res
@@ -1692,11 +1714,11 @@ def get_xml_children(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
 
 def _test_format_gdata_path():
     path = [
-        _PathElement("config"),
-        _PathElement("interfaces"),
-        _PathElement(keys={"name": Leaf("eth0"), "vlan": Leaf(bigint(100))}),
-        _PathElement("ipv4"),
-        _PathElement(keys={"ip": Leaf("10.0.0.1"), "prefix": Leaf(bigint(24))})
+        _PathElement(Id("", "config")),
+        _PathElement(Id("", "interfaces")),
+        _PathElement(keys={"name": "eth0", "vlan": bigint(100)}),
+        _PathElement(Id("", "ipv4")),
+        _PathElement(keys={"ip": "10.0.0.1", "prefix": bigint(24)})
     ]
     testing.assertEqual("/config/interfaces[name='eth0',vlan=100]/ipv4[ip='10.0.0.1',prefix=24]", _format_gdata_path(path))
 
@@ -1704,7 +1726,7 @@ def _test_format_gdata_path():
 def _test_merge1():
     y1 = Container({
         "a": Leaf(bigint(1)),
-        "l1": List(["name"], [
+        "l1": List([Id("acme", "name")], [
             Container({
                 "name": Leaf("k1"),
                 "n1": Leaf(bigint(1)),
@@ -1720,7 +1742,7 @@ def _test_merge1():
     y2 = Container({
         "b": Leaf(bigint(2)),
         "c": Leaf(bigint(3)),
-        "l1": List(["name"], [
+        "l1": List([Id("acme", "name")], [
             Container({
                 "name": Leaf("k2"),
                 "n1": Leaf(bigint(1)),
@@ -1736,7 +1758,7 @@ def _test_merge1():
         "a": Leaf(bigint(1)),
         "b": Leaf(bigint(2)),
         "c": Leaf(bigint(3)),
-        "l1": List(["name"], [
+        "l1": List([Id("acme", "name")], [
             Container({
                 "name": Leaf("k1"),
                 "n1": Leaf(bigint(1)),
@@ -1758,7 +1780,7 @@ def _test_merge1():
     testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
 
 def _test_merge_list1():
-    y1 = List(["name"], [
+    y1 = List([Id("acme", "name")], [
         Container({
             "name": Leaf("first"),
             "n1": Leaf(bigint(1))
@@ -1781,7 +1803,7 @@ def _test_merge_list1():
         }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
-    y2 = List(["name"], [
+    y2 = List([Id("acme", "name")], [
         Container({
             "name": Leaf("breaker")
         }),
@@ -1802,7 +1824,7 @@ def _test_merge_list1():
         })
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
-    exp = List(["name"], [
+    exp = List([Id("acme", "name")], [
         Container({
             "name": Leaf("first"),
             "n1": Leaf(bigint(1))
@@ -1851,7 +1873,7 @@ def _test_merge_leaf_conflict():
         testing.assertEqual("Cannot merge leaves with different values at /a: 1 != 2", e.error_message)
 
 def _test_eq_list():
-    l1 = List(["name"], [
+    l1 = List([Id("", "name")], [
         Container({
             "name": Leaf("a"),
             "x": Leaf(bigint(1))
@@ -1861,7 +1883,7 @@ def _test_eq_list():
             "x": Leaf(bigint(2))
         })
     ])
-    l2 = List(["name"], [
+    l2 = List([Id("", "name")], [
         Container({
             "name": Leaf("b"),
             "x": Leaf(bigint(2))
@@ -1875,7 +1897,7 @@ def _test_eq_list():
     testing.assertEqual(l1, l2)
 
 def _test_eq_list_user_order():
-    l1 = List(["name"], user_order=True, elements=[
+    l1 = List([Id("", "name")], user_order=True, elements=[
         Container({
             "x": Leaf(bigint(1))
         }),
@@ -1883,7 +1905,7 @@ def _test_eq_list_user_order():
             "x": Leaf(bigint(2))
         })
     ])
-    l2 = List(["name"], user_order=True, elements=[
+    l2 = List([Id("", "name")], user_order=True, elements=[
         Container({
             "x": Leaf(bigint(2))
         }),
@@ -1974,7 +1996,7 @@ def _test_diff_node_removal():
 def _test_diff_list_removal():
     """The entire list (all entries) is removed."""
     old = Container({
-        "l": List(["name"], [
+        "l": List([Id("acme", "name")], [
         Container({
             "name": Leaf("k1"),
             "n1": Leaf(bigint(1)),
@@ -1994,7 +2016,7 @@ def _test_diff_list_removal():
     # Entire list is removed
     exp = Container({
         "l": Absent({
-            "l": List(["name"], [
+            "l": List([Id("acme", "name")], [
                 Container({
                     "name": Leaf("k1"),
                     "n1": Leaf(bigint(1)),
@@ -2016,7 +2038,7 @@ def _test_diff_elem_removal():
     """A list element k1 is removed from old to new. We expect an Absent("k1")
     node in the diff at the place where k1 was.
     """
-    old = List(["name"], [
+    old = List([Id("acme", "name")], [
         Container({
             "name": Leaf("k1"),
             "n1": Leaf(bigint(1)),
@@ -2028,7 +2050,7 @@ def _test_diff_elem_removal():
         }),
     ], ns="http://example.com/acme", module="acme")
 
-    new = List(["name"], [
+    new = List([Id("acme", "name")], [
         Container({
             "name": Leaf("k4"),
             "n4": Leaf(bigint(4)),
@@ -2038,7 +2060,7 @@ def _test_diff_elem_removal():
     d = diff(old, new)
 
     # k1 is removed
-    exp = List(["name"], [
+    exp = List([Id("acme", "name")], [
         Absent({
             "name": Leaf("k1")
         })
@@ -2194,7 +2216,7 @@ def _test_patch_node_removal():
     testing.assertEqual(res, exp)
 
 def _test_patch_elem_removal():
-    old = List(["name"], [
+    old = List([Id("acme", "name")], [
         Container({
             "name": Leaf("k1"),
             "n1": Leaf(bigint(1)),
@@ -2208,14 +2230,14 @@ def _test_patch_elem_removal():
 
     # Suppose we remove 'k1'
     # patch would be:
-    p = List(["name"], [
+    p = List([Id("acme", "name")], [
         Absent({
             "name": Leaf("k1")
         })
     ], ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
-    exp = List(["name"], [
+    exp = List([Id("acme", "name")], [
         Container({
             "name": Leaf("k4"),
             "n4": Leaf(bigint(4)),
@@ -2334,13 +2356,13 @@ def _test_diff_system_ordered_list_no_diff():
     })
 
     old_list = List(
-        keys=["id"],
+        keys=[Id("", "id")],
         elements=[elem1, elem2, elem3],
         user_order=False
     )
 
     new_list = List(
-        keys=["id"],
+        keys=[Id("", "id")],
         elements=[elem2, elem1, elem3],
         user_order=False
     )
@@ -2357,7 +2379,7 @@ def _test_diff_and_patch_large_tree():
                     "hostname": Leaf("old-router"),
                     "motd": Leaf("Welcome!")
                 }),
-                "interfaces": List(["name"], elements=[
+                "interfaces": List([Id("mod1", "name")], elements=[
                     Container({
                         "name": Leaf("eth0"),
                         "desc": Leaf("Uplink interface"),
@@ -2373,7 +2395,7 @@ def _test_diff_and_patch_large_tree():
         }),
         "mod2": Container(children={
             "acl": Container(children={
-                "rules": List(["id"], elements=[
+                "rules": List([Id("mod2", "id")], elements=[
                     Container({
                         "id": Leaf(bigint(10)),
                         "action": Leaf("permit"),
@@ -2408,7 +2430,7 @@ def _test_diff_and_patch_large_tree():
                     # motd removed
                     "ntp-servers": LeafList(["192.168.100.1", "192.168.100.2"])
                 }),
-                "interfaces": List(["name"], elements=[
+                "interfaces": List([Id("mod1", "name")], elements=[
                     Container({
                         "name": Leaf("eth0"),
                         "desc": Leaf("Uplink interface"),
@@ -2425,7 +2447,7 @@ def _test_diff_and_patch_large_tree():
         }),
         "mod2": Container(children={
             "acl": Container(children={
-                "rules": List(["id"], elements=[
+                "rules": List([Id("mod2", "id")], elements=[
                     Container({
                         "id": Leaf(bigint(10)),
                         "action": Leaf("permit"),
@@ -2472,7 +2494,7 @@ def _test_prsrc():
     y1 = Container({
         "foo": Container({
             "a": Leaf(bigint(1)),
-            "l1": List(["name"], [
+            "l1": List([Id("acme", "name")], [
                 Container({
                     "name": Leaf("k1"),
                     "n1": Leaf(bigint(1)),
@@ -2492,7 +2514,7 @@ def _test_prsrc_absent():
     y1 = Container({
         "foo": Container({
             "a": Absent(),
-            "l1": List(["name"], [
+            "l1": List([Id("acme", "name")], [
                 Absent({
                     "name": Leaf("k1")
                 }),
@@ -2539,7 +2561,7 @@ def _test_to_jsonstr():
     y1 = Container({
         "acme:foo": Container({
             "a": Leaf(bigint(1)),
-            "l1": List(["name", "name_two"], [
+            "l1": List([Id("acme", "name"), Id("acme", "name_two")], [
                 Container({
                     "name": Leaf("k1"),
                     "name_two": Leaf("k1a"),
@@ -2586,7 +2608,7 @@ def _test_to_xmlstr():
     y1 = Container({
         "acme:foo": Container({
             "a": Leaf(bigint(1)),
-            "l1": List(["name", "name_two"], [
+            "l1": List([Id("acme", "name"), Id("acme", "name_two")], [
                 Container({
                     "name": Leaf("k1"),
                     "name_two": Leaf("k1a"),
@@ -2644,7 +2666,7 @@ def _test_to_xmlstr_leaf_ns():
 
 def _test_to_xmlstr_mixed():
     y1 = Container({
-        "device": List(["name"], [
+        "device": List([Id("", "name")], [
             Container({
                 "name": Leaf("dev1"),
                 "config": Container({
@@ -2718,7 +2740,7 @@ def _test_to_xmlstr_identityref():
 def _test_to_xmlstr_list_removal():
     y1 = Container({
         "l": Absent({
-            "l": List(["name"], [
+            "l": List([Id("acme", "name")], [
                 Container({
                     "name": Leaf("k1"),
                     "n1": Leaf(bigint(1)),
