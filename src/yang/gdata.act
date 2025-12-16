@@ -1731,6 +1731,9 @@ def get_xml_children(n: xml.Node, name: str, ns: ?str) -> list[xml.Node]:
     return res
 
 
+NS_acme = "http://example.com/acme"
+
+
 def _test_format_gdata_path():
     path = [
         _PathElement(Id("", "config")),
@@ -1744,134 +1747,134 @@ def _test_format_gdata_path():
 
 def _test_merge1():
     y1 = Container({
-        "a": Leaf(bigint(1)),
-        "l1": List([Id("acme", "name")], [
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "l1"): List([Id(NS_acme, "name")], [
             Container({
-                "name": Leaf("k1"),
-                "n1": Leaf(bigint(1)),
-                "n2": Leaf(bigint(2))
+                Id(NS_acme, "name"): Leaf("k1"),
+                Id(NS_acme, "n1"): Leaf(bigint(1)),
+                Id(NS_acme, "n2"): Leaf(bigint(2))
             }),
             Container({
-                "name": Leaf("k4"),
-                "n4": Leaf(bigint(4)),
+                Id(NS_acme, "name"): Leaf("k4"),
+                Id(NS_acme, "n4"): Leaf(bigint(4)),
             }),
         ])
     }, ns="http://example.com/acme", module="acme")
 
     y2 = Container({
-        "b": Leaf(bigint(2)),
-        "c": Leaf(bigint(3)),
-        "l1": List([Id("acme", "name")], [
+        Id(NS_acme, "b"): Leaf(bigint(2)),
+        Id(NS_acme, "c"): Leaf(bigint(3)),
+        Id(NS_acme, "l1"): List([Id(NS_acme, "name")], [
             Container({
-                "name": Leaf("k2"),
-                "n1": Leaf(bigint(1)),
-                "n3": Leaf(bigint(3))
+                Id(NS_acme, "name"): Leaf("k2"),
+                Id(NS_acme, "n1"): Leaf(bigint(1)),
+                Id(NS_acme, "n3"): Leaf(bigint(3))
             }),
         ]),
-        "d": LeafList(["a", "b", "c"])
+        Id(NS_acme, "d"): LeafList(["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
 
     res = merge(y1, y2)
 
     exp = Container({
-        "a": Leaf(bigint(1)),
-        "b": Leaf(bigint(2)),
-        "c": Leaf(bigint(3)),
-        "l1": List([Id("acme", "name")], [
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "b"): Leaf(bigint(2)),
+        Id(NS_acme, "c"): Leaf(bigint(3)),
+        Id(NS_acme, "l1"): List([Id(NS_acme, "name")], [
             Container({
-                "name": Leaf("k1"),
-                "n1": Leaf(bigint(1)),
-                "n2": Leaf(bigint(2))
+                Id(NS_acme, "name"): Leaf("k1"),
+                Id(NS_acme, "n1"): Leaf(bigint(1)),
+                Id(NS_acme, "n2"): Leaf(bigint(2))
             }),
             Container({
-                "name": Leaf("k2"),
-                "n1": Leaf(bigint(1)),
-                "n3": Leaf(bigint(3))
+                Id(NS_acme, "name"): Leaf("k2"),
+                Id(NS_acme, "n1"): Leaf(bigint(1)),
+                Id(NS_acme, "n3"): Leaf(bigint(3))
             }),
             Container({
-                "name": Leaf("k4"),
-                "n4": Leaf(bigint(4)),
+                Id(NS_acme, "name"): Leaf("k4"),
+                Id(NS_acme, "n4"): Leaf(bigint(4)),
             }),
         ]),
-        "d": LeafList(["a", "b", "c"])
+        Id(NS_acme, "d"): LeafList(["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
 
 def _test_merge_list1():
-    y1 = List([Id("acme", "name")], [
+    y1 = List([Id(NS_acme, "name")], [
         Container({
-            "name": Leaf("first"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("first"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("breaker"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("breaker"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("fourth"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("fourth"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("common"),
-            "n2": Leaf(bigint(2))
+            Id(NS_acme, "name"): Leaf("common"),
+            Id(NS_acme, "n2"): Leaf(bigint(2))
         }),
         Container({
-            "name": Leaf("last"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("last"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
-    y2 = List([Id("acme", "name")], [
+    y2 = List([Id(NS_acme, "name")], [
         Container({
-            "name": Leaf("breaker")
+            Id(NS_acme, "name"): Leaf("breaker")
         }),
         Container({
-            "name": Leaf("second"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("second"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("third"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("third"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("common"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("common"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("last")
+            Id(NS_acme, "name"): Leaf("last")
         })
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
-    exp = List([Id("acme", "name")], [
+    exp = List([Id(NS_acme, "name")], [
         Container({
-            "name": Leaf("first"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("first"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("breaker"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("breaker"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("fourth"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("fourth"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("common"),
-            "n2": Leaf(bigint(2)),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("common"),
+            Id(NS_acme, "n2"): Leaf(bigint(2)),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("last"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("last"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("second"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("second"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("third"),
-            "n1": Leaf(bigint(1))
+            Id(NS_acme, "name"): Leaf("third"),
+            Id(NS_acme, "n1"): Leaf(bigint(1))
         }),
     ], user_order=True, ns="http://example.com/acme", module="acme")
 
@@ -1879,10 +1882,10 @@ def _test_merge_list1():
 
 def _test_merge_leaf_conflict():
     y1 = Container({
-        "a": Leaf(bigint(1))
+        Id("", "a"): Leaf(bigint(1))
     })
     y2 = Container({
-        "a": Leaf(bigint(2))
+        Id("", "a"): Leaf(bigint(2))
     })
 
     try:
@@ -1894,22 +1897,22 @@ def _test_merge_leaf_conflict():
 def _test_eq_list():
     l1 = List([Id("", "name")], [
         Container({
-            "name": Leaf("a"),
-            "x": Leaf(bigint(1))
+            Id("", "name"): Leaf("a"),
+            Id("", "x"): Leaf(bigint(1))
         }),
         Container({
-            "name": Leaf("b"),
-            "x": Leaf(bigint(2))
+            Id("", "name"): Leaf("b"),
+            Id("", "x"): Leaf(bigint(2))
         })
     ])
     l2 = List([Id("", "name")], [
         Container({
-            "name": Leaf("b"),
-            "x": Leaf(bigint(2))
+            Id("", "name"): Leaf("b"),
+            Id("", "x"): Leaf(bigint(2))
         }),
         Container({
-            "name": Leaf("a"),
-            "x": Leaf(bigint(1))
+            Id("", "name"): Leaf("a"),
+            Id("", "x"): Leaf(bigint(1))
         })
     ])
     testing.assertEqual(l1, l1)
@@ -1918,18 +1921,18 @@ def _test_eq_list():
 def _test_eq_list_user_order():
     l1 = List([Id("", "name")], user_order=True, elements=[
         Container({
-            "x": Leaf(bigint(1))
+            Id("", "x"): Leaf(bigint(1))
         }),
         Container({
-            "x": Leaf(bigint(2))
+            Id("", "x"): Leaf(bigint(2))
         })
     ])
     l2 = List([Id("", "name")], user_order=True, elements=[
         Container({
-            "x": Leaf(bigint(2))
+            Id("", "x"): Leaf(bigint(2))
         }),
         Container({
-            "x": Leaf(bigint(1))
+            Id("", "x"): Leaf(bigint(1))
         })
     ])
     testing.assertEqual(l1, l1)
@@ -1952,13 +1955,13 @@ def _test_diff_no_change():
     since there are no differences.
     """
     old = Container({
-        "a": Leaf(bigint(1)),
-        "b": Leaf(bigint(2))
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "b"): Leaf(bigint(2))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf(bigint(1)),
-        "b": Leaf(bigint(2))
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "b"): Leaf(bigint(2))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
@@ -1969,19 +1972,19 @@ def _test_diff_leaf_change():
     with just that leaf changed.
     """
     old = Container({
-        "a": Leaf(bigint(1)),
-        "b": Leaf(bigint(2))
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "b"): Leaf(bigint(2))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf(bigint(42)), # Changed from 1 to 42
-        "b": Leaf(bigint(2))
+        Id(NS_acme, "a"): Leaf(bigint(42)), # Changed from 1 to 42
+        Id(NS_acme, "b"): Leaf(bigint(2))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     exp = Container({
-        "a": Leaf(bigint(42))
+        Id(NS_acme, "a"): Leaf(bigint(42))
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -1991,22 +1994,22 @@ def _test_diff_node_removal():
     diff at the place where c was.
     """
     old = Container({
-        "a": Leaf(bigint(1)),
-        "c": Leaf(bigint(3)),
-        "d": Leaf(bigint(4))
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "c"): Leaf(bigint(3)),
+        Id(NS_acme, "d"): Leaf(bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf(bigint(1)),
-        "d": Leaf(bigint(4))
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "d"): Leaf(bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # c is removed
     exp = Container({
-        "c": Absent({
-            "c": Leaf(bigint(3))
+        Id(NS_acme, "c"): Absent({
+            Id(NS_acme, "c"): Leaf(bigint(3))
         })
     }, ns="http://example.com/acme", module="acme")
 
@@ -2015,15 +2018,15 @@ def _test_diff_node_removal():
 def _test_diff_list_removal():
     """The entire list (all entries) is removed."""
     old = Container({
-        "l": List([Id("acme", "name")], [
+        Id(NS_acme, "l"): List([Id(NS_acme, "name")], [
         Container({
-            "name": Leaf("k1"),
-            "n1": Leaf(bigint(1)),
-            "n2": Leaf(bigint(2)),
+            Id(NS_acme, "name"): Leaf("k1"),
+            Id(NS_acme, "n1"): Leaf(bigint(1)),
+            Id(NS_acme, "n2"): Leaf(bigint(2)),
         }),
         Container({
-            "name": Leaf("k4"),
-            "n4": Leaf(bigint(4)),
+            Id(NS_acme, "name"): Leaf("k4"),
+            Id(NS_acme, "n4"): Leaf(bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
     })
@@ -2034,16 +2037,16 @@ def _test_diff_list_removal():
 
     # Entire list is removed
     exp = Container({
-        "l": Absent({
-            "l": List([Id("acme", "name")], [
+        Id(NS_acme, "l"): Absent({
+            Id(NS_acme, "l"): List([Id(NS_acme, "name")], [
                 Container({
-                    "name": Leaf("k1"),
-                    "n1": Leaf(bigint(1)),
-                    "n2": Leaf(bigint(2)),
+                    Id(NS_acme, "name"): Leaf("k1"),
+                    Id(NS_acme, "n1"): Leaf(bigint(1)),
+                    Id(NS_acme, "n2"): Leaf(bigint(2)),
                 }),
                 Container({
-                    "name": Leaf("k4"),
-                    "n4": Leaf(bigint(4)),
+                    Id(NS_acme, "name"): Leaf("k4"),
+                    Id(NS_acme, "n4"): Leaf(bigint(4)),
                 }),
             ], ns="http://example.com/acme", module="acme")
         }, ns="http://example.com/acme", module="acme")
@@ -2057,31 +2060,31 @@ def _test_diff_elem_removal():
     """A list element k1 is removed from old to new. We expect an Absent("k1")
     node in the diff at the place where k1 was.
     """
-    old = List([Id("acme", "name")], [
+    old = List([Id(NS_acme, "name")], [
         Container({
-            "name": Leaf("k1"),
-            "n1": Leaf(bigint(1)),
-            "n2": Leaf(bigint(2)),
+            Id(NS_acme, "name"): Leaf("k1"),
+            Id(NS_acme, "n1"): Leaf(bigint(1)),
+            Id(NS_acme, "n2"): Leaf(bigint(2)),
         }),
         Container({
-            "name": Leaf("k4"),
-            "n4": Leaf(bigint(4)),
+            Id(NS_acme, "name"): Leaf("k4"),
+            Id(NS_acme, "n4"): Leaf(bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
 
-    new = List([Id("acme", "name")], [
+    new = List([Id(NS_acme, "name")], [
         Container({
-            "name": Leaf("k4"),
-            "n4": Leaf(bigint(4)),
+            Id(NS_acme, "name"): Leaf("k4"),
+            Id(NS_acme, "n4"): Leaf(bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # k1 is removed
-    exp = List([Id("acme", "name")], [
+    exp = List([Id(NS_acme, "name")], [
         Absent({
-            "name": Leaf("k1")
+            Id(NS_acme, "name"): Leaf("k1")
         })
     ], ns="http://example.com/acme", module="acme")
 
@@ -2091,19 +2094,19 @@ def _test_diff_node_addition():
     """A new node e is added in new. We expect the diff to have that new node.
     """
     old = Container({
-        "a": Leaf(bigint(1))
+        Id(NS_acme, "a"): Leaf(bigint(1))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf(bigint(1)),
-        "e": Leaf(bigint(5))
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "e"): Leaf(bigint(5))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # e is new
     exp = Container({
-        "e": Leaf(bigint(5))
+        Id(NS_acme, "e"): Leaf(bigint(5))
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2113,17 +2116,17 @@ def _test_diff_leaflist():
     added.
     """
     old = Container({
-        "l": LeafList(["a", "b", "c"])
+        Id(NS_acme, "l"): LeafList(["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "l": LeafList(["a", "x", "c", "d"]) # "b" changed to "x" and "d" added
+        Id(NS_acme, "l"): LeafList(["a", "x", "c", "d"]) # "b" changed to "x" and "d" added
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     exp = Container({
-        "l": LeafList(["a", "x", "c", "d"])
+        Id(NS_acme, "l"): LeafList(["a", "x", "c", "d"])
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2134,38 +2137,38 @@ def _test_diff_complex_ordering():
     before the new node d in the diff.
     """
     old = Container({
-        "a": Leaf(bigint(1)),
-        "b": Leaf(bigint(2)),
-        "c": Leaf(bigint(3))
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "b"): Leaf(bigint(2)),
+        Id(NS_acme, "c"): Leaf(bigint(3))
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        "a": Leaf(bigint(1)),
-        "c": Leaf(bigint(3)),
-        "d": Leaf(bigint(4))
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "c"): Leaf(bigint(3)),
+        Id(NS_acme, "d"): Leaf(bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     # "b" is absent before "d" is introduced
     exp = Container({
-        "b": Absent({
-            "b": Leaf(bigint(2))
+        Id(NS_acme, "b"): Absent({
+            Id(NS_acme, "b"): Leaf(bigint(2))
         }),
-        "d": Leaf(bigint(4))
+        Id(NS_acme, "d"): Leaf(bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
 
 def _test_diff_union_type():
     old = Container({
-        "l": Leaf(bigint(42)),
-        "ll": LeafList([bigint(42)])
+        Id("", "l"): Leaf(bigint(42)),
+        Id("", "ll"): LeafList([bigint(42)])
     })
 
     new = Container({
-        "l": Leaf("forty-two"),
-        "ll": LeafList(["forty-two"])
+        Id("", "l"): Leaf("forty-two"),
+        Id("", "ll"): LeafList(["forty-two"])
     })
 
     d = diff(old, new)
@@ -2173,11 +2176,11 @@ def _test_diff_union_type():
 
 def _test_diff_empty_leaf_delete():
     old = Container({
-        "a": Leaf(Present()),
+        Id("", "a"): Leaf(Present()),
     })
 
     new = Container({
-        "a": Absent()
+        Id("", "a"): Absent()
     })
 
     d = diff(old, new)
@@ -2185,8 +2188,8 @@ def _test_diff_empty_leaf_delete():
 
 def _test_patch_no_change():
     old = Container({
-        "a": Leaf(bigint(1)),
-        "b": Leaf(bigint(2)),
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "b"): Leaf(bigint(2)),
     }, ns="http://example.com/acme", module="acme")
 
     # diff is None means no changes
@@ -2197,69 +2200,69 @@ def _test_patch_no_change():
 
 def _test_patch_leaf_change():
     old = Container({
-        "a": Leaf(bigint(1)),
-        "b": Leaf(bigint(2)),
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "b"): Leaf(bigint(2)),
     }, ns="http://example.com/acme", module="acme")
 
     # Suppose we want to change leaf 'a' from 1 to 42
     # diff would look like this:
     p = Container({
-        "a": Leaf(bigint(42)),
+        Id(NS_acme, "a"): Leaf(bigint(42)),
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf(bigint(42)),
-        "b": Leaf(bigint(2)),
+        Id(NS_acme, "a"): Leaf(bigint(42)),
+        Id(NS_acme, "b"): Leaf(bigint(2)),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
 def _test_patch_node_removal():
     old = Container({
-        "a": Leaf(bigint(1)),
-        "c": Leaf(bigint(3)),
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "c"): Leaf(bigint(3)),
     }, ns="http://example.com/acme", module="acme")
 
     # Suppose we remove 'c'
     # patch would be:
     p = Container({
-        "c": Absent()
+        Id(NS_acme, "c"): Absent()
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf(bigint(1)),
+        Id(NS_acme, "a"): Leaf(bigint(1)),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
 def _test_patch_elem_removal():
-    old = List([Id("acme", "name")], [
+    old = List([Id(NS_acme, "name")], [
         Container({
-            "name": Leaf("k1"),
-            "n1": Leaf(bigint(1)),
-            "n2": Leaf(bigint(2))
+            Id(NS_acme, "name"): Leaf("k1"),
+            Id(NS_acme, "n1"): Leaf(bigint(1)),
+            Id(NS_acme, "n2"): Leaf(bigint(2))
         }),
         Container({
-            "name": Leaf("k4"),
-            "n4": Leaf(bigint(4)),
+            Id(NS_acme, "name"): Leaf("k4"),
+            Id(NS_acme, "n4"): Leaf(bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
 
     # Suppose we remove 'k1'
     # patch would be:
-    p = List([Id("acme", "name")], [
+    p = List([Id(NS_acme, "name")], [
         Absent({
-            "name": Leaf("k1")
+            Id(NS_acme, "name"): Leaf("k1")
         })
     ], ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
-    exp = List([Id("acme", "name")], [
+    exp = List([Id(NS_acme, "name")], [
         Container({
-            "name": Leaf("k4"),
-            "n4": Leaf(bigint(4)),
+            Id(NS_acme, "name"): Leaf("k4"),
+            Id(NS_acme, "n4"): Leaf(bigint(4)),
         }),
     ], ns="http://example.com/acme", module="acme")
 
@@ -2267,12 +2270,12 @@ def _test_patch_elem_removal():
 
 def _test_patch_elem_removal2():
     old = Container({
-        "n1": Leaf(bigint(1)),
-        "n2": Leaf(bigint(2))
+        Id("", "n1"): Leaf(bigint(1)),
+        Id("", "n2"): Leaf(bigint(2))
     })
 
     p = Absent({
-        "name": Leaf("k1")
+        Id("", "name"): Leaf("k1")
     })
 
     res = patch(old, p)
@@ -2281,18 +2284,18 @@ def _test_patch_elem_removal2():
 
 def _test_patch_node_addition():
     old = Container({
-        "a": Leaf(bigint(1)),
+        Id(NS_acme, "a"): Leaf(bigint(1)),
     }, ns="http://example.com/acme", module="acme")
 
     # Add a new leaf 'e':
     p = Container({
-        "e": Leaf(bigint(5))
+        Id(NS_acme, "e"): Leaf(bigint(5))
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf(bigint(1)),
-        "e": Leaf(bigint(5)),
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "e"): Leaf(bigint(5)),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
@@ -2300,54 +2303,54 @@ def _test_patch_node_addition():
 def _test_patch_complex_ordering():
     # old: a, b, c
     old = Container({
-        "a": Leaf(bigint(1)),
-        "b": Leaf(bigint(2)),
-        "c": Leaf(bigint(3)),
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "b"): Leaf(bigint(2)),
+        Id(NS_acme, "c"): Leaf(bigint(3)),
     }, ns="http://example.com/acme", module="acme")
 
     # new: a, c, d
     # diff: remove b, add d
     p = Container({
-        "b": Absent(),
-        "d": Leaf(bigint(4))
+        Id(NS_acme, "b"): Absent(),
+        Id(NS_acme, "d"): Leaf(bigint(4))
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "a": Leaf(bigint(1)),
-        "c": Leaf(bigint(3)),
-        "d": Leaf(bigint(4)),
+        Id(NS_acme, "a"): Leaf(bigint(1)),
+        Id(NS_acme, "c"): Leaf(bigint(3)),
+        Id(NS_acme, "d"): Leaf(bigint(4)),
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
 def _test_patch_leaflist():
     old = Container({
-        "l": LeafList(["a", "b", "c"])
+        Id(NS_acme, "l"): LeafList(["a", "b", "c"])
     }, ns="http://example.com/acme", module="acme")
 
     # new: l = [a, x, c, d]
     # diff would be a leaflist replace:
     p = Container({
-        "l": LeafList(["a", "x", "c", "d"])
+        Id(NS_acme, "l"): LeafList(["a", "x", "c", "d"])
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        "l": LeafList(["a", "x", "c", "d"])
+        Id(NS_acme, "l"): LeafList(["a", "x", "c", "d"])
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
 
 def _test_patch_union_type():
     old = Container({
-        "l": Leaf(bigint(42)),
-        "ll": LeafList([bigint(42)])
+        Id("", "l"): Leaf(bigint(42)),
+        Id("", "ll"): LeafList([bigint(42)])
     })
 
     p = Container({
-        "l": Leaf("forty-two"),
-        "ll": LeafList(["forty-two"])
+        Id("", "l"): Leaf("forty-two"),
+        Id("", "ll"): LeafList(["forty-two"])
     })
 
     res = patch(old, p)
@@ -2362,16 +2365,16 @@ def _test_diff_system_ordered_list_no_diff():
     with the same elements in different order.
     """
     elem1 = Container({
-        "id": Leaf("1"),
-        "name": Leaf("first")
+        Id("", "id"): Leaf("1"),
+        Id("", "name"): Leaf("first")
     })
     elem2 = Container({
-        "id": Leaf("2"),
-        "name": Leaf("second")
+        Id("", "id"): Leaf("2"),
+        Id("", "name"): Leaf("second")
     })
     elem3 = Container({
-        "id": Leaf("3"),
-        "name": Leaf("third")
+        Id("", "id"): Leaf("3"),
+        Id("", "name"): Leaf("third")
     })
 
     old_list = List(
@@ -2392,40 +2395,40 @@ def _test_diff_system_ordered_list_no_diff():
 def _test_diff_and_patch_large_tree():
     # Construct a large 'old' data tree under a Container node
     old = Container({
-        "mod1": Container(children={
-            "conf": Container(children={
-                "settings": Container({
-                    "hostname": Leaf("old-router"),
-                    "motd": Leaf("Welcome!")
+        Id("http://example.com/yang/mod1", "mod1"): Container(children={
+            Id("http://example.com/yang/mod1", "conf"): Container(children={
+                Id("http://example.com/yang/mod1", "settings"): Container({
+                    Id("http://example.com/yang/mod1", "hostname"): Leaf("old-router"),
+                    Id("http://example.com/yang/mod1", "motd"): Leaf("Welcome!")
                 }),
-                "interfaces": List([Id("mod1", "name")], elements=[
+                Id("http://example.com/yang/mod1", "interfaces"): List([Id("http://example.com/yang/mod1", "name")], elements=[
                     Container({
-                        "name": Leaf("eth0"),
-                        "desc": Leaf("Uplink interface"),
-                        "enabled": Leaf(True)
+                        Id("http://example.com/yang/mod1", "name"): Leaf("eth0"),
+                        Id("http://example.com/yang/mod1", "desc"): Leaf("Uplink interface"),
+                        Id("http://example.com/yang/mod1", "enabled"): Leaf(True)
                     }),
                     Container({
-                        "name": Leaf("eth1"),
-                        "desc": Leaf("Internal interface"),
-                        "enabled": Leaf(True)
+                        Id("http://example.com/yang/mod1", "name"): Leaf("eth1"),
+                        Id("http://example.com/yang/mod1", "desc"): Leaf("Internal interface"),
+                        Id("http://example.com/yang/mod1", "enabled"): Leaf(True)
                     }),
                 ])
             }, ns="http://example.com/yang/mod1", module="mod1")
         }),
-        "mod2": Container(children={
-            "acl": Container(children={
-                "rules": List([Id("mod2", "id")], elements=[
+        Id("http://example.com/yang/mod2", "mod2"): Container(children={
+            Id("http://example.com/yang/mod2", "acl"): Container(children={
+                Id("http://example.com/yang/mod2", "rules"): List([Id("http://example.com/yang/mod2", "id")], elements=[
                     Container({
-                        "id": Leaf(bigint(10)),
-                        "action": Leaf("permit"),
-                        "src": Leaf("10.0.0.0/24"),
-                        "dst": Leaf("10.0.1.0/24"),
+                        Id("http://example.com/yang/mod2", "id"): Leaf(bigint(10)),
+                        Id("http://example.com/yang/mod2", "action"): Leaf("permit"),
+                        Id("http://example.com/yang/mod2", "src"): Leaf("10.0.0.0/24"),
+                        Id("http://example.com/yang/mod2", "dst"): Leaf("10.0.1.0/24"),
                     }),
                     Container({
-                        "id": Leaf(bigint(20)),
-                        "action": Leaf("deny"),
-                        "src": Leaf("any"),
-                        "dst": Leaf("any"),
+                        Id("http://example.com/yang/mod2", "id"): Leaf(bigint(20)),
+                        Id("http://example.com/yang/mod2", "action"): Leaf("deny"),
+                        Id("http://example.com/yang/mod2", "src"): Leaf("any"),
+                        Id("http://example.com/yang/mod2", "dst"): Leaf("any"),
                     }),
                 ])
             }, ns="http://example.com/yang/mod2", module="mod2")
@@ -2442,48 +2445,48 @@ def _test_diff_and_patch_large_tree():
     # - a new acl rule 30 is added
     # - add a LeafList in settings "ntp-servers"
     new = Container(children={
-        "mod1": Container(children={
-            "conf": Container(children={
-                "settings": Container(children={
-                    "hostname": Leaf("new-router"),
+        Id("http://example.com/yang/mod1", "mod1"): Container(children={
+            Id("http://example.com/yang/mod1", "conf"): Container(children={
+                Id("http://example.com/yang/mod1", "settings"): Container(children={
+                    Id("http://example.com/yang/mod1", "hostname"): Leaf("new-router"),
                     # motd removed
-                    "ntp-servers": LeafList(["192.168.100.1", "192.168.100.2"])
+                    Id("http://example.com/yang/mod1", "ntp-servers"): LeafList(["192.168.100.1", "192.168.100.2"])
                 }),
-                "interfaces": List([Id("mod1", "name")], elements=[
+                Id("http://example.com/yang/mod1", "interfaces"): List([Id("http://example.com/yang/mod1", "name")], elements=[
                     Container({
-                        "name": Leaf("eth0"),
-                        "desc": Leaf("Uplink interface"),
-                        "enabled": Leaf(True)
+                        Id("http://example.com/yang/mod1", "name"): Leaf("eth0"),
+                        Id("http://example.com/yang/mod1", "desc"): Leaf("Uplink interface"),
+                        Id("http://example.com/yang/mod1", "enabled"): Leaf(True)
                     }),
                     # eth1 removed
                     Container({
-                        "name": Leaf("eth2"),
-                        "desc": Leaf("DMZ interface"),
-                        "enabled": Leaf(False)
+                        Id("http://example.com/yang/mod1", "name"): Leaf("eth2"),
+                        Id("http://example.com/yang/mod1", "desc"): Leaf("DMZ interface"),
+                        Id("http://example.com/yang/mod1", "enabled"): Leaf(False)
                     }),
                 ])
             }, ns="http://example.com/yang/mod1", module="mod1")
         }),
-        "mod2": Container(children={
-            "acl": Container(children={
-                "rules": List([Id("mod2", "id")], elements=[
+        Id("http://example.com/yang/mod2", "mod2"): Container(children={
+            Id("http://example.com/yang/mod2", "acl"): Container(children={
+                Id("http://example.com/yang/mod2", "rules"): List([Id("http://example.com/yang/mod2", "id")], elements=[
                     Container({
-                        "id": Leaf(bigint(10)),
-                        "action": Leaf("permit"),
-                        "src": Leaf("10.0.0.0/24"),
-                        "dst": Leaf("10.0.1.0/24"),
+                        Id("http://example.com/yang/mod2", "id"): Leaf(bigint(10)),
+                        Id("http://example.com/yang/mod2", "action"): Leaf("permit"),
+                        Id("http://example.com/yang/mod2", "src"): Leaf("10.0.0.0/24"),
+                        Id("http://example.com/yang/mod2", "dst"): Leaf("10.0.1.0/24"),
                     }),
                     Container({
-                        "id": Leaf(bigint(20)),
-                        "action": Leaf("drop"),  # changed from deny
-                        "src": Leaf("any"),
-                        "dst": Leaf("any"),
+                        Id("http://example.com/yang/mod2", "id"): Leaf(bigint(20)),
+                        Id("http://example.com/yang/mod2", "action"): Leaf("drop"),  # changed from deny
+                        Id("http://example.com/yang/mod2", "src"): Leaf("any"),
+                        Id("http://example.com/yang/mod2", "dst"): Leaf("any"),
                     }),
                     Container({
-                        "id": Leaf(bigint(30)),
-                        "action": Leaf("permit"),
-                        "src": Leaf("192.0.2.0/24"),
-                        "dst": Leaf("198.51.100.0/24"),
+                        Id("http://example.com/yang/mod2", "id"): Leaf(bigint(30)),
+                        Id("http://example.com/yang/mod2", "action"): Leaf("permit"),
+                        Id("http://example.com/yang/mod2", "src"): Leaf("192.0.2.0/24"),
+                        Id("http://example.com/yang/mod2", "dst"): Leaf("198.51.100.0/24"),
                     }),
                 ])
             }, ns="http://example.com/yang/mod2", module="mod2")
@@ -2511,17 +2514,17 @@ def _test_diff_and_patch_large_tree():
 
 def _test_prsrc():
     y1 = Container({
-        "foo": Container({
-            "a": Leaf(bigint(1)),
-            "l1": List([Id("acme", "name")], [
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1)),
+            Id(NS_acme, "l1"): List([Id(NS_acme, "name")], [
                 Container({
-                    "name": Leaf("k1"),
-                    "n1": Leaf(bigint(1)),
-                    "n2": Leaf(bigint(2))
+                    Id(NS_acme, "name"): Leaf("k1"),
+                    Id(NS_acme, "n1"): Leaf(bigint(1)),
+                    Id(NS_acme, "n2"): Leaf(bigint(2))
                 }),
                 Container({
-                    "name": Leaf("k4"),
-                    "n4": Leaf(bigint(4)),
+                    Id(NS_acme, "name"): Leaf("k4"),
+                    Id(NS_acme, "n4"): Leaf(bigint(4)),
                 }),
             ])
         }, ns="http://example.com/acme", module="acme")
@@ -2531,15 +2534,15 @@ def _test_prsrc():
 
 def _test_prsrc_absent():
     y1 = Container({
-        "foo": Container({
-            "a": Absent(),
-            "l1": List([Id("acme", "name")], [
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Absent(),
+            Id(NS_acme, "l1"): List([Id(NS_acme, "name")], [
                 Absent({
-                    "name": Leaf("k1")
+                    Id(NS_acme, "name"): Leaf("k1")
                 }),
                 Container({
-                    "name": Leaf("k4"),
-                    "n4": Leaf(bigint(4)),
+                    Id(NS_acme, "name"): Leaf("k4"),
+                    Id(NS_acme, "n4"): Leaf(bigint(4)),
                 }),
             ])
         }, ns="http://example.com/acme", module="acme")
@@ -2549,9 +2552,9 @@ def _test_prsrc_absent():
 
 def _test_prsrc_root():
     y1 = Container({
-        "foo": Container({
-            "a": Leaf(bigint(1)),
-            "b": LeafList(["a", "b", "c"]),
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1)),
+            Id(NS_acme, "b"): LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -2559,9 +2562,9 @@ def _test_prsrc_root():
 
 def _test_prsrc_leaf_ns():
     y1 = Container({
-        "foo": Container({
-            "a": Leaf(bigint(1), ns="http://example.com/foo", module="foo"),
-            "b": Leaf(bigint(2))
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1), ns="http://example.com/foo", module="foo"),
+            Id(NS_acme, "b"): Leaf(bigint(2))
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -2569,38 +2572,38 @@ def _test_prsrc_leaf_ns():
 
 def _test_prsrc_identityref():
     y1 = Container({
-        "identity-local": Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
-        "identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
-        "augmented-identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+        Id(NS_acme, "identity-local"): Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        Id(NS_acme, "identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        Id(NS_acme, "augmented-identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
     }, ns="http://example.com/acme", module="acme")
 
     return y1.prsrc()
 
 def _test_to_jsonstr():
     y1 = Container({
-        "acme:foo": Container({
-            "a": Leaf(bigint(1)),
-            "l1": List([Id("acme", "name"), Id("acme", "name_two")], [
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1)),
+            Id(NS_acme, "l1"): List([Id(NS_acme, "name"), Id(NS_acme, "name_two")], [
                 Container({
-                    "name": Leaf("k1"),
-                    "name_two": Leaf("k1a"),
-                    "n1": Leaf(bigint(1)),
-                    "n2": Leaf(bigint(2))
+                    Id(NS_acme, "name"): Leaf("k1"),
+                    Id(NS_acme, "name_two"): Leaf("k1a"),
+                    Id(NS_acme, "n1"): Leaf(bigint(1)),
+                    Id(NS_acme, "n2"): Leaf(bigint(2))
                 }),
                 Container({
-                    "name": Leaf("k4"),
-                    "name_two": Leaf("k4a"),
-                    "n4": Leaf(bigint(4)),
+                    Id(NS_acme, "name"): Leaf("k4"),
+                    Id(NS_acme, "name_two"): Leaf("k4a"),
+                    Id(NS_acme, "n4"): Leaf(bigint(4)),
                 }),
             ]),
-            "b": Leaf(False),
-            "lb": Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
-            "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"]),
-            "c": Leaf(bigint(18446744073709551615)),
-            "d": Leaf(Decimal(314, -2))
+            Id(NS_acme, "b"): Leaf(False),
+            Id(NS_acme, "lb"): Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
+            Id(NS_acme, "llb"): LeafList([b"Hello Acton \xf0\x9f\xab\xa1"]),
+            Id(NS_acme, "c"): Leaf(bigint(18446744073709551615)),
+            Id(NS_acme, "d"): Leaf(Decimal(314, -2))
         }, ns="http://example.com/acme", module="acme"),
-        "beep:foo": Container({
-            "a": Leaf(bigint(1))
+        Id("http://example.com/beep", "foo"): Container({
+            Id("http://example.com/beep", "a"): Leaf(bigint(1))
         }, ns="http://example.com/beep", module="beep")
     })
 
@@ -2608,46 +2611,46 @@ def _test_to_jsonstr():
 
 def _test_to_jsonstr_empty_leaf():
     y1 = Container({
-        "e1": Leaf(Present()),
-        "e2": Absent()
+        Id("", "e1"): Leaf(Present()),
+        Id("", "e2"): Absent()
     })
 
     return y1.to_jsonstr(pretty=True)
 
 def _test_to_jsonstr_identityref():
     y1 = Container({
-        "identity-local": Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
-        "identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
-        "augmented-identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+        Id(NS_acme, "identity-local"): Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        Id(NS_acme, "identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        Id(NS_acme, "augmented-identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
     }, ns="http://example.com/acme", module="acme")
 
     return y1.to_jsonstr(pretty=True)
 
 def _test_to_xmlstr():
     y1 = Container({
-        "acme:foo": Container({
-            "a": Leaf(bigint(1)),
-            "l1": List([Id("acme", "name"), Id("acme", "name_two")], [
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1)),
+            Id(NS_acme, "l1"): List([Id(NS_acme, "name"), Id(NS_acme, "name_two")], [
                 Container({
-                    "name": Leaf("k1"),
-                    "name_two": Leaf("k1a"),
-                    "n1": Leaf(bigint(1)),
-                    "n2": Leaf(bigint(2))
+                    Id(NS_acme, "name"): Leaf("k1"),
+                    Id(NS_acme, "name_two"): Leaf("k1a"),
+                    Id(NS_acme, "n1"): Leaf(bigint(1)),
+                    Id(NS_acme, "n2"): Leaf(bigint(2))
                 }),
                 Container({
-                    "name": Leaf("k4"),
-                    "name_two": Leaf("k4a"),
-                    "n4": Leaf(bigint(4)),
+                    Id(NS_acme, "name"): Leaf("k4"),
+                    Id(NS_acme, "name_two"): Leaf("k4a"),
+                    Id(NS_acme, "n4"): Leaf(bigint(4)),
                 }),
             ]),
-            "b": Leaf(False),
-            "lb": Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
-            "llb": LeafList([b"Hello Acton \xf0\x9f\xab\xa1"]),
-            "c": Leaf(bigint(18446744073709551615)),
-            "d": Leaf(Decimal(314, -2))
+            Id(NS_acme, "b"): Leaf(False),
+            Id(NS_acme, "lb"): Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
+            Id(NS_acme, "llb"): LeafList([b"Hello Acton \xf0\x9f\xab\xa1"]),
+            Id(NS_acme, "c"): Leaf(bigint(18446744073709551615)),
+            Id(NS_acme, "d"): Leaf(Decimal(314, -2))
         }, ns="http://example.com/acme", module="acme"),
-        "beep:foo": Container({
-            "a": Leaf(bigint(1))
+        Id("http://example.com/beep", "foo"): Container({
+            Id("http://example.com/beep", "a"): Leaf(bigint(1))
         }, ns="http://example.com/beep", module="beep")
     })
 
@@ -2655,9 +2658,9 @@ def _test_to_xmlstr():
 
 def _test_to_xmlstr_root():
     y1 = Container({
-        "foo": Container({
-            "a": Leaf(bigint(1)),
-            "b": LeafList(["a", "b", "c"]),
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1)),
+            Id(NS_acme, "b"): LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -2665,9 +2668,9 @@ def _test_to_xmlstr_root():
 
 def _test_to_xmlstr_module():
     y1 = Container({
-        "foo": Container({
-            "a": Leaf(bigint(1)),
-            "b": LeafList(["a", "b", "c"]),
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1)),
+            Id(NS_acme, "b"): LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -2675,9 +2678,9 @@ def _test_to_xmlstr_module():
 
 def _test_to_xmlstr_leaf_ns():
     y1 = Container({
-        "foo": Container({
-            "a": Leaf(bigint(1), ns="http://example.com/foo", module="foo"),
-            "b": Leaf(bigint(2))
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1), ns="http://example.com/foo", module="foo"),
+            Id(NS_acme, "b"): Leaf(bigint(2))
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -2685,20 +2688,20 @@ def _test_to_xmlstr_leaf_ns():
 
 def _test_to_xmlstr_mixed():
     y1 = Container({
-        "device": List([Id("", "name")], [
+        Id("http://orchestron.org/yang/orchestron-device.yang", "device"): List([Id("http://orchestron.org/yang/orchestron-device.yang", "name")], [
             Container({
-                "name": Leaf("dev1"),
-                "config": Container({
-                    "hostname": Container({
-                        "system-network-name": Leaf("dev1")
+                Id("http://orchestron.org/yang/orchestron-device.yang", "name"): Leaf("dev1"),
+                Id("http://orchestron.org/yang/orchestron-device.yang", "config"): Container({
+                    Id("http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg", "hostname"): Container({
+                        Id("http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg", "system-network-name"): Leaf("dev1")
                     }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
                 }),
             }),
             Container({
-                "name": Leaf("dev2"),
-                "config": Container({
-                    "hostname": Container({
-                        "system-network-name": Leaf("dev2")
+                Id("http://orchestron.org/yang/orchestron-device.yang", "name"): Leaf("dev2"),
+                Id("http://orchestron.org/yang/orchestron-device.yang", "config"): Container({
+                    Id("http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg", "hostname"): Container({
+                        Id("http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg", "system-network-name"): Leaf("dev2")
                     }, ns="http://cisco.com/ns/yang/Cisco-IOS-XR-um-hostname-cfg")
                 }),
             }),
@@ -2709,14 +2712,14 @@ def _test_to_xmlstr_mixed():
 
 def _test_to_xmlstr_root_merge():
     y1 = Container({
-        "foo": Container({
-            "a": Leaf(bigint(1)),
-            "b": LeafList(["a", "b", "c"]),
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1)),
+            Id(NS_acme, "b"): LeafList(["a", "b", "c"]),
         }, ns="http://example.com/acme", module="acme")
     })
     y2 = Container({
-        "bar": Container({
-            "b": Leaf(bigint(42)),
+        Id("http://example.com/bar", "bar"): Container({
+            Id("http://example.com/bar", "b"): Leaf(bigint(42)),
         }, ns="http://example.com/bar", module="bar")
     })
     ym = merge(y1, y2)
@@ -2725,8 +2728,8 @@ def _test_to_xmlstr_root_merge():
 
 def _test_to_xmlstr_presence():
     y1 = Container({
-        "foo": Container({
-            "a": Leaf(bigint(1))
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(bigint(1))
         }, presence=True, ns="http://example.com/acme", module="acme")
     })
 
@@ -2734,40 +2737,40 @@ def _test_to_xmlstr_presence():
 
 def _test_to_xmlstr_presence_childless():
     y1 = Container({
-        "foo": Container(presence=True, ns="http://example.com/acme", module="acme")
+        Id(NS_acme, "foo"): Container(presence=True, ns="http://example.com/acme", module="acme")
     })
 
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_empty_leaf():
     y1 = Container({
-        "e1": Leaf(Present()),
-        "e2": Absent()
+        Id("", "e1"): Leaf(Present()),
+        Id("", "e2"): Absent()
     })
 
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_identityref():
     y1 = Container({
-        "identity-local": Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
-        "identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
-        "augmented-identity-other": Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+        Id(NS_acme, "identity-local"): Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        Id(NS_acme, "identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        Id(NS_acme, "augmented-identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
     }, ns="http://example.com/acme", module="acme")
 
     return y1.to_xmlstr()
 
 def _test_to_xmlstr_list_removal():
     y1 = Container({
-        "l": Absent({
-            "l": List([Id("acme", "name")], [
+        Id(NS_acme, "l"): Absent({
+            Id(NS_acme, "l"): List([Id(NS_acme, "name")], [
                 Container({
-                    "name": Leaf("k1"),
-                    "n1": Leaf(bigint(1)),
-                    "n2": Leaf(bigint(2)),
+                    Id(NS_acme, "name"): Leaf("k1"),
+                    Id(NS_acme, "n1"): Leaf(bigint(1)),
+                    Id(NS_acme, "n2"): Leaf(bigint(2)),
                 }),
                 Container({
-                    "name": Leaf("k4"),
-                    "n4": Leaf(bigint(4)),
+                    Id(NS_acme, "name"): Leaf("k4"),
+                    Id(NS_acme, "n4"): Leaf(bigint(4)),
                 }),
             ], ns="http://example.com/acme", module="acme")
         }, ns="http://example.com/acme", module="acme")

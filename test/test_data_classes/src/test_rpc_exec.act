@@ -19,7 +19,7 @@ class MockTreeProviderSuccess(yang.gdata.TreeProvider):
 
     proc def rpc(self, cb: action(?yang.gdata.Node, ?Exception) -> None, rpc: yang.gdata.Node):
         output_gdata = yang.gdata.Container({
-            "outoo": yang.gdata.Leaf("string", "Hello from RPC!")
+            yang.gdata.Id("http://example.com/yangrpc", "outoo"): yang.gdata.Leaf("string", "Hello from RPC!")
         }, ns="http://example.com/yangrpc", module="yangrpc")
         cb(output_gdata, None)
 
@@ -164,12 +164,12 @@ def _test_rpc_input_serialization():
 
     # Verify structure
     testing.assertTrue(isinstance(gdata, yang.gdata.Container), "Should be a Container")
-    testing.assertEqual(gdata.get_str("a"), "test_string", "Leaf 'a' should have correct value")
+    testing.assertEqual(gdata.get_str(yang.gdata.Id("http://example.com/yangrpc", "a")), "test_string", "Leaf 'a' should have correct value")
 
     # Check nested container
-    woo_gdata = gdata.get_cnt("woo")
+    woo_gdata = gdata.get_cnt(yang.gdata.Id("http://example.com/yangrpc", "woo"))
     testing.assertNotNone(woo_gdata, "Container 'woo' should exist")
-    testing.assertEqual(woo_gdata.get_bigint("woo_b"), 123, "Leaf 'woo_b' should have correct value")
+    testing.assertEqual(woo_gdata.get_bigint(yang.gdata.Id("http://example.com/yangrpc", "woo_b")), 123, "Leaf 'woo_b' should have correct value")
 
     # Convert to XML string
     xml_str = gdata.to_xmlstr()
@@ -182,7 +182,7 @@ def _test_rpc_output_deserialization():
     """Test that RPC output data is properly deserialized from gdata"""
     # Create a gdata representation of output
     output_gdata = yang.gdata.Container({
-        "outoo": yang.gdata.Leaf("Test output value")
+        yang.gdata.Id("http://example.com/yangrpc", "outoo"): yang.gdata.Leaf("Test output value")
     }, ns="http://example.com/yangrpc", module="yangrpc")
 
     # Convert to adata

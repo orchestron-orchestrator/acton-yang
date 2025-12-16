@@ -271,7 +271,7 @@ def _test_foo_from_xml_pc1():
     xml_in = xml.decode(xml_text)
     gd2 = yang.gen3.from_data(yang_foo.SRC_DNODE, xml_in)
     print(gd2.prsrc(), err=True)
-    pc1_gdata = gd2.get_opt_cnt("pc1")
+    pc1_gdata = gd2.get_opt_cnt(yang.gdata.Id("http://example.com/foo", "pc1"))
     if pc1_gdata is not None:
         testing.assertTrue(pc1_gdata.presence)
     else:
@@ -307,7 +307,7 @@ def _test_foo_from_xml2():
     gd2 = yang.gen3.from_data(yang_foo.SRC_DNODE, xml_in)
     print(gd2.prsrc(), err=True)
     # The sibling presence container pc1 must not appear here
-    pc1_gdata = gd2.get_opt_cnt("pc1")
+    pc1_gdata = gd2.get_opt_cnt(yang.gdata.Id("http://example.com/foo", "pc1"))
     if pc1_gdata is not None:
         testing.error("pc1 found in gdata")
     ad = yang_foo_root.from_gdata(gd2)
@@ -455,7 +455,7 @@ def _test_foo_from_gdata_int():
 </data>"""
     xml_in = xml.decode(xml_text)
     gd2 = yang.gen3.from_data(yang_foo.SRC_DNODE, xml_in)
-    l3 = gd2.get_cnt("c1").get_leaf("l3").val
+    l3 = gd2.get_cnt(yang.gdata.Id("http://example.com/foo", "c1")).get_leaf(yang.gdata.Id("http://example.com/foo", "l3")).val
     if isinstance(l3, bigint):
         testing.assertEqual(l3, 1337)
     else:
@@ -480,10 +480,10 @@ def _test_foo_from_json_empty():
 
 def _test_foo_from_gdata_c1_l1():
     gd = yang.gdata.Container(children={
-        "c1": yang.gdata.Container(children={
-            "foo:l1": yang.gdata.Leaf("foo-foo"),
-            "bar:l1": yang.gdata.Leaf("foo-bar", ns="http://example.com/bar", module="bar"),
-            "l2": yang.gdata.Leaf("bar", ns="http://example.com/bar", module="bar"),
+        yang.gdata.Id("http://example.com/foo", "c1"): yang.gdata.Container(children={
+            yang.gdata.Id("http://example.com/foo", "l1"): yang.gdata.Leaf("foo-foo"),
+            yang.gdata.Id("http://example.com/bar", "l1"): yang.gdata.Leaf("foo-bar", ns="http://example.com/bar", module="bar"),
+            yang.gdata.Id("http://example.com/bar", "l2"): yang.gdata.Leaf("bar", ns="http://example.com/bar", module="bar"),
         })
     })
     # ValueError: Cannot find list child with name li
@@ -556,7 +556,7 @@ def _test_leaf_default_from_json():
 
 def _test_leaf_default_from_gdata():
     gd = yang.gdata.Container(children={
-        "c": yang.gdata.Container(children={})
+        yang.gdata.Id("http://example.com/basics", "c"): yang.gdata.Container(children={})
     })
     r = yang_basics.root.from_gdata(gd)
     basics_leaf_defaults(r)
