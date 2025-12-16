@@ -2,10 +2,13 @@
 
 class ResolvedType(Type):
     resolved_base_typedef: ?Typedef
+    resolved_path: ?xpath.AbsoluteLocationPath
 
-    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None):
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None, resolved_path: ?xpath.AbsoluteLocationPath=None):
         Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, require_instance, type_, exts, parent, mod, ns, pfx)
         self.resolved_base_typedef = resolved_base_typedef
+        self.resolved_path = resolved_path
+        path = self.path
 
     def resolve_type(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
         new_name = self.name
@@ -33,11 +36,114 @@ class ResolvedType(Type):
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx,
-                   resolved_base_typedef=self.resolved_base_typedef)
+                   resolved_base_typedef=self.resolved_base_typedef,
+                   resolved_path=self.resolved_path)
         return new
 
+    def resolve_compiled_schema_path_dependencies(self):
+        xpath_context_node = self.parent
+        if xpath_context_node is not None:
+            self.resolve_leafref_path(xpath_context_node)
+        else:
+            raise ValueError("Unable to find ancestor path due to unset parent")
+
     def to_dtype(self, context: DTypeContext) -> DType:
-        return DType.from_resolved_type(self, context)
+        try:
+            return DType.from_resolved_type(self, context)
+        except ValueError as ex:
+            def get_path():
+                path = []
+                n = self.parent
+                while True:
+                    _n = n
+                    if _n is not None:
+                        if isinstance(_n, Module):
+                            break
+                        _argname = _n._get_argname()
+                        if _argname is not None and _argname == 'name':
+                            _name = _n._get_arg()
+                            if _name is not None:
+                                _prefix = _n.get_prefix()
+                                path.append("{_prefix}:{_name}" if _prefix is not None else _name)
+                        n = _n.parent
+                    else:
+                        break
+                return "".join(["/{s}" for s in reversed(path)])
+            raise ValueError("Failed to resolve type at {get_path()}: {ex.error_message}")
+
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        Type.remap_prefix_references(self, old_pfx, new_pfx)
+        self_resolved_base_typedef = self.resolved_base_typedef
+        if self_resolved_base_typedef is not None:
+            self_resolved_base_typedef.remap_prefix_references(old_pfx, new_pfx)
+
+    def resolve_leafref_path(self, xpath_context_node):
+        # Resolve base
+        _resolved_base_typedef = self.resolved_base_typedef
+        if _resolved_base_typedef is not None:
+            _base_type = _resolved_base_typedef.type_
+            if isinstance(_base_type, ResolvedType):
+                _base_type.resolve_leafref_path(xpath_context_node)
+            else:
+                raise ValueError("Expected ResolvedType")
+
+        # Resolve union members
+        for alt_type in self.type_:
+            if isinstance(alt_type, ResolvedType):
+                alt_type.resolve_leafref_path(xpath_context_node)
+            else:
+                raise ValueError("Expected ResolvedType")
+
+        # Resolve self
+        path = self.path
+        if path is not None:
+            location_path = xpath.try_parse_location_path(path)
+            if location_path is not None:
+                if isinstance(location_path, xpath.AbsoluteLocationPath):
+                    absolute_path = location_path.steps
+                elif isinstance(location_path, xpath.RelativeLocationPath):
+                    reverse_base_path: list[xpath.Step] = []
+                    n = xpath_context_node
+                    while True:
+                        _n = n
+                        if _n is not None:
+                            if isinstance(_n, Container):
+                                reverse_base_path.append(xpath.NodeTestStep(_n.pfx, _n.name, []))
+                            elif isinstance(_n, List):
+                                reverse_base_path.append(xpath.NodeTestStep(_n.pfx, _n.name, []))
+                            elif isinstance(_n, Leaf):
+                                reverse_base_path.append(xpath.NodeTestStep(_n.pfx, _n.name, []))
+                            elif isinstance(_n, LeafList):
+                                reverse_base_path.append(xpath.NodeTestStep(_n.pfx, _n.name, []))
+                            elif isinstance(_n, Module):
+                                break
+                            elif isinstance(_n, Grouping) or isinstance(_n, Augment) or isinstance(_n, Typedef):
+                                return # Only resolve compiled data-path instances!
+                            n = _n.parent
+                        else:
+                            break
+                    absolute_path = list(reversed(reverse_base_path))
+                    absolute_path.extend(location_path.steps)
+                else:
+                    raise NotImplementedError("Unhandled type {type(location_path)}")
+
+                resolved_path = []
+                for step in absolute_path:
+                    if isinstance(step, xpath.NodeTestStep):
+                        resolved_path.append(step)
+                    elif isinstance(step, xpath.AbbreviatedStep):
+                        if step.step == "..":
+                            try:
+                                resolved_path.pop()
+                            except Exception:
+                                raise ValueError("Unable to resolve leafref path: {path}")
+                self.resolved_path = xpath.AbsoluteLocationPath(resolved_path)
+            else:
+                raise ValueError("Unable to parse leafref path: {path}")
+
 
 extension ResolvedType(Hashable):
     def __eq__(self, other: ResolvedType) -> bool:
@@ -54,7 +160,8 @@ extension ResolvedType(Hashable):
             and self.pattern == other.pattern \
             and self.range_ == other.range_ \
             and self.require_instance == other.require_instance \
-            and self.type_ == other.type_
+            and self.type_ == other.type_ \
+            and self.resolved_path == other.resolved_path
 
     def hash(self, hasher):
         # TODO: Cache Hash calculation?
@@ -105,6 +212,9 @@ extension ResolvedType(Hashable):
         for alt_type in self.type_:
             if isinstance(alt_type, ResolvedType):
                 alt_type.hash(hasher)
+        _resolved_path = self.resolved_path
+        if _resolved_path is not None:
+            _resolved_path.hash(hasher)
 
 
 def find_identity_by_ref(identities: list[DIdentity], name: str, namespace: ?str=None, module: ?str=None, prefix: ?str=None) -> ?DIdentity:

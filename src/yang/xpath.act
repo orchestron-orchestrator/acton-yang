@@ -1,0 +1,355 @@
+import re
+import testing
+
+class LocationPath(object):
+    steps: list[Step]
+
+    def __init__(self, steps):
+        self.steps = steps
+
+    @staticmethod
+    def try_parse(p: Parser):
+        a = AbsoluteLocationPath.try_parse(p)
+        if a is not None:
+            return a
+        r = RelativeLocationPath.try_parse(p)
+        if r is not None:
+            return r
+        return None
+
+class AbsoluteLocationPath(LocationPath):
+    def __init__(self, steps):
+        LocationPath.__init__(self, steps)
+
+    def __repr__(self):
+        return "{type(self)}({repr(self.steps)})"
+
+    def __str__(self):
+        return "".join(["/{str(step)}" for step in self.steps])
+
+    @staticmethod
+    def try_parse(p: Parser):
+        if p.try_get_char_in("/") is not None:
+            steps = []
+            step = Step.try_parse(p)
+            if step is not None:
+                steps.append(step)
+            while True:
+                if p.try_get_char_in("/") is not None:
+                    step = Step.try_parse(p)
+                    if step is not None:
+                        steps.append(step)
+                    else:
+                        return None
+                else:
+                    break
+            return AbsoluteLocationPath(steps)
+        return None
+
+extension AbsoluteLocationPath(Hashable):
+    def __eq__(self, other: AbsoluteLocationPath) -> bool:
+        # return self.steps == other.steps
+        if len(self.steps) == len(other.steps):
+            for i in range(0, len(self.steps)):
+                if self.steps[i] != other.steps[i]:
+                    return False
+            return True
+        return False
+
+    def hash(self, hasher):
+        type(self).hash(hasher)
+        for step in self.steps:
+            step.hash(hasher)
+
+class RelativeLocationPath(LocationPath):
+    def __init__(self, steps):
+        LocationPath.__init__(self, steps)
+
+    @staticmethod
+    def try_parse(p: Parser):
+        step = Step.try_parse(p)
+        if step is not None:
+            steps = [step]
+            while True:
+                if p.try_get_char_in("/") is not None:
+                    _step = Step.try_parse(p)
+                    if _step is not None:
+                        steps.append(_step)
+                    else:
+                        return None
+                else:
+                    break
+            return RelativeLocationPath(steps)
+        return None
+
+class Step(object):
+    @staticmethod
+    def try_parse(p: Parser):
+        a = AbbreviatedStep.try_parse(p)
+        if a is not None:
+            return a
+        n = NodeTestStep.try_parse(p)
+        if n is not None:
+            return n
+        return None
+
+extension Step(Hashable):
+    def __eq__(self, other: Step) -> bool:
+        if isinstance(self, NodeTestStep) and isinstance(other, NodeTestStep):
+            return self == other
+        if isinstance(self, AbbreviatedStep) and isinstance(other, AbbreviatedStep):
+            return self == other
+        return False
+
+    def hash(self, hasher):
+        if isinstance(self, NodeTestStep):
+            self.hash(hasher)
+        elif isinstance(self, AbbreviatedStep):
+            self.hash(hasher)
+
+class NodeTestStep(Step):
+    #axis_specifier: AxisSpecifier
+    prefix: ?str
+    name: str
+    predicates: list[Predicate]
+
+    def __init__(self, prefix, name, predicates):
+        self.prefix = prefix
+        self.name = name
+        self.predicates = predicates
+
+    def __repr__(self):
+        return "{type(self)}({repr(self.prefix)}, {repr(self.name)}, {repr(self.predicates)})"
+
+    def __str__(self):
+        _prefix = self.prefix
+        _predicates = "".join([str(p) for p in self.predicates])
+        return "{_prefix}:{self.name}{_predicates}" if _prefix is not None else "{self.name}{_predicates}"
+
+    @staticmethod
+    def try_parse(p: Parser):
+        # No axis_specifier for now and only NameTest followed by any predicates
+        n1 = try_parse_ncname(p)
+        if n1 is not None:
+            if p.try_get_char_in(":") is not None:
+                n2 = try_parse_ncname(p)
+                if n2 is not None:
+                    prefix = n1
+                    name = n2
+                else:
+                    return None
+            else:
+                prefix = None
+                name = n1
+
+            predicates = []
+            while True:
+                predicate = Predicate.try_parse(p)
+                if predicate is not None:
+                    predicates.append(predicate)
+                else:
+                    break
+
+            return NodeTestStep(prefix, name, predicates)
+
+        return None
+
+extension NodeTestStep(Hashable):
+    def __eq__(self, other: NodeTestStep) -> bool:
+        # return self.name == other.name and self.prefix == other.prefix and self.predicates == other.predicates
+        if self.name == other.name and self.prefix == other.prefix:
+            if len(self.predicates) == len(other.predicates):
+                for i in range(0, len(self.predicates)):
+                    if self.predicates[i] != other.predicates[i]:
+                        return False
+                return True
+        return False
+
+    def hash(self, hasher):
+        _prefix = self.prefix
+        if _prefix is not None:
+            _prefix.hash(hasher)
+        self.name.hash(hasher)
+        for predicate in self.predicates:
+            predicate.hash(hasher)
+
+class AbbreviatedStep(Step):
+    step: str
+
+    def __init__(self, step):
+        self.step = step
+
+    @staticmethod
+    def try_parse(p: Parser):
+        if p.try_get_char_in(".") is not None:
+            if p.try_get_char_in(".") is not None:
+                return AbbreviatedStep("..")
+            return AbbreviatedStep(".")
+        return None
+
+    def __repr__(self):
+        return "{type(self)}({repr(self.step)})"
+
+    def __str__(self):
+        return self.step
+
+extension AbbreviatedStep(Hashable):
+    def __eq__(self, other: AbbreviatedStep) -> bool:
+        return self.step == other.step
+
+    def hash(self, hasher):
+        self.step.hash(hasher)
+
+class Predicate:
+    predicate: str # TODO: Parsed predicate!
+
+    def __init__(self, predicate):
+        self.predicate = predicate
+
+    def __repr__(self):
+        return "{type(self)}({repr(self.predicate)})"
+
+    def __str__(self):
+        return "[{self.predicate}]"
+
+    @staticmethod
+    def try_parse(p: Parser):
+        if p.try_get_char_in("[") is not None:
+            # TODO: Parse predicate inners when we need them
+            #       For now we only look for literals as they could
+            #       contain ']'.
+            begin = p.i
+            while True:
+                c = p.try_get_char()
+                if c is not None:
+                    if c == ']':
+                        return Predicate(p.get_slice_substr(begin, p.i - 1))
+                    elif c in "'\"":
+                        l = p.get_substr_while(lambda _c: _c != c)
+                else:
+                    p.raise_error("Missing predicate closing bracket")
+        return None
+
+extension Predicate(Hashable):
+    def __eq__(self, other: Predicate) -> bool:
+        return self.predicate == other.predicate
+
+    def hash(self, hasher):
+        self.predicate.hash(hasher)
+
+class Parser(object):
+    input: str
+    input_len: int
+    i: int
+
+    def __init__(self, input):
+        self.input = input
+        self.input_len = len(input)
+        self.i = 0
+
+    def try_peek_char(self, offset=0) -> ?str:
+        i = self.i + offset
+        if i < self.input_len:
+            c = self.input[i]
+            return c
+        return None
+
+    def try_peek_char_if(self, predicate, offset=0) -> ?str:
+        c = self.try_peek_char(offset)
+        if c is not None and predicate(c):
+            return c
+        return None
+
+    def try_peek_char_in(self, chars, offset=0) -> ?str:
+        return self.try_peek_char_if(lambda c: c in chars, offset)
+
+    def try_get_char(self) -> ?str:
+        if self.i < self.input_len:
+            c = self.input[self.i]
+            self.i += 1
+            return c
+        return None
+
+    def try_get_char_if(self, predicate) -> ?str:
+        if self.i < self.input_len:
+            c = self.input[self.i]
+            if predicate(c):
+                self.i += 1
+                return c
+        return None
+
+    def get_slice_while(self, predicate):
+        begin = self.i
+        end = self.i
+        while end < self.input_len and predicate(self.input[end]):
+            end += 1
+        # return slice(begin, end)
+        return (begin, end)
+
+    def get_slice_substr(self, begin, end):
+        return self.input[begin:end]
+
+    def get_substr_while(self, predicate) -> str:
+        # return self.input[self.get_slice_while(predicate)]
+        s = self.get_slice_while(predicate)
+        self.i = s.1
+        return self.input[s.0:s.1]
+
+    def try_get_substr_re(self, pattern) -> ?str:
+        m = re.match(pattern, self.input, self.i)
+        if m is not None:
+            s = self.input[self.i:m.end_pos]
+            self.i = m.end_pos
+            return s
+        return None
+
+    def try_get_char_in(self, chars) -> ?str:
+        return self.try_get_char_if(lambda c: c in chars)
+
+    def raise_error(self, message: str, index: ?int):
+        i = index if index is not None else self.i - 1
+        raise ValueError("{message} at position {i} in pattern {self.input}")
+
+def try_parse_ncname(p: Parser) -> ?str:
+    return p.try_get_substr_re(r"[A-Z_a-z\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}][A-Z_a-z\x{C0}-\x{D6}\x{D8}-\x{F6}\x{F8}-\x{2FF}\x{370}-\x{37D}\x{37F}-\x{1FFF}\x{200C}-\x{200D}\x{2070}-\x{218F}\x{2C00}-\x{2FEF}\x{3001}-\x{D7FF}\x{F900}-\x{FDCF}\x{FDF0}-\x{FFFD}\x{10000}-\x{EFFFF}\-\.0-9\x{B7}\x{0300}-\x{036F}\x{203F}-\x{2040}]*")
+
+def try_parse_location_path(s):
+    return LocationPath.try_parse(Parser(s))
+
+def _test_simple_absolute_path():
+    path = try_parse_location_path("/foo:bar/baz[x=42]")
+    if isinstance(path, AbsoluteLocationPath):
+        s1 = path.steps[0]
+        if isinstance(s1, NodeTestStep):
+            testing.assertEqual(s1.prefix, "foo")
+            testing.assertEqual(s1.name, "bar")
+            testing.assertEqual(len(s1.predicates), 0)
+
+            s2 = path.steps[1]
+            if isinstance(s2, NodeTestStep):
+                testing.assertNone(s2.prefix)
+                testing.assertEqual(s2.name, "baz")
+                testing.assertEqual(len(s2.predicates), 1)
+                return
+    testing.error("Unexpected parse result")
+
+def _test_simple_relative_path():
+    path = try_parse_location_path("../foo:bar/baz[x=42]")
+    if isinstance(path, RelativeLocationPath):
+        s1 = path.steps[0]
+        if isinstance(s1, AbbreviatedStep):
+            testing.assertEqual(s1.step, "..")
+
+            s2 = path.steps[1]
+            if isinstance(s2, NodeTestStep):
+                testing.assertEqual(s2.prefix, "foo")
+                testing.assertEqual(s2.name, "bar")
+                testing.assertEqual(len(s2.predicates), 0)
+
+                s3 = path.steps[2]
+                if isinstance(s3, NodeTestStep):
+                    testing.assertNone(s3.prefix)
+                    testing.assertEqual(s3.name, "baz")
+                    testing.assertEqual(len(s3.predicates), 1)
+                    return
+    testing.error("Unexpected parse result")
