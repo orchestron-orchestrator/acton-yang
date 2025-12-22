@@ -370,7 +370,7 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns=set(), include_state=False) -> list[str]:
+    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns={}, include_state=False) -> list[str]:
         """Print the data class for this schema node
         """
         raise NotImplementedError('DNode pdc: {type(self)} - {get_path(spath)}')
@@ -493,20 +493,20 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns=set(), include_state=False) -> list[str]:
+    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns={}, include_state=False) -> list[str]:
         """Print the data class for this schema node
         """
         def path_with_child(c):
             return spath + [c]
 
-        if self.namespace != "":
-            schema_ns.add(self.namespace)
         res = []
 
         # Reorder children so that positional arguments, like list keys, come first
         new_children = []
         pos_child_idx = 0
         for child in self.children:
+            if child.namespace not in schema_ns:
+                schema_ns[child.namespace] = child.module
             if include_state == False and child.config == False:
                 continue
             elif isinstance(child, DRpc):
@@ -704,9 +704,9 @@ class DNodeInner(DNode):
         from_gdata_args_list = []
         for child in self.children:
             if isinstance(child, DNodeLeaf):
-                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id('{child.namespace}', '{child.name}'))")
+                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id(NS_{_safe_name(child.module)}, '{child.name}'))")
             else:
-                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id('{child.namespace}', '{child.name}')))")
+                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id(NS_{_safe_name(child.module)}, '{child.name}')))")
         from_gdata_args = ", ".join(from_gdata_args_list)
         res.append("    @staticmethod")
         if isinstance(self, DList):
@@ -1631,7 +1631,7 @@ class DRoot(DNodeInner):
         # the SRC_DNODE constant to have the same view of the schema as the
         # adata code generator ...
         spath = build_spath([self])
-        schema_ns = set()
+        schema_ns = {}
         inner = spath[-1]._prdaclass_rec(spath, loose=loose, top=top, set_ns=True, schema_ns=schema_ns, include_state=include_state)
 
         res = []
@@ -1675,10 +1675,13 @@ class DRoot(DNodeInner):
             res.append("")
             res.append("")
 
+        res.extend(["NS_{_safe_name(schema_ns[ns])} = {repr(ns)}" for ns in sorted(schema_ns.keys())])
+        res.append("")
+        res.append("")
         res.extend(inner)
 
         res.append("schema_namespaces: set[str] = {{")
-        for ns in sorted(schema_ns):
+        for ns in sorted(schema_ns.keys()):
             res.append("    '{ns}',")
         res.append("}}")
         res.append("")

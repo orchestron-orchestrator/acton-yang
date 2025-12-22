@@ -28,6 +28,9 @@ SRC_DNODE = DRoot(children=[
     ])
 ])
 
+NS_foo = 'http://example.com/foo'
+
+
 class foo__l1__bar(yang.adata.MNode):
     hi: ?str
 
@@ -48,7 +51,7 @@ class foo__l1__bar(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__l1__bar:
         if n is not None:
-            return foo__l1__bar(hi=n.get_opt_str(yang.gdata.Id('http://example.com/foo', 'hi')))
+            return foo__l1__bar(hi=n.get_opt_str(yang.gdata.Id(NS_foo, 'hi')))
         raise ValueError('Missing required subtree foo__l1__bar')
 
     def copy(self):
@@ -83,7 +86,7 @@ class foo__l1_entry(yang.adata.MNode):
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__l1_entry:
-        return foo__l1_entry(name=n.get_str(yang.gdata.Id('http://example.com/foo', 'name')), id=n.get_opt_str(yang.gdata.Id('http://example.com/foo', 'id')), bar=foo__l1__bar.from_gdata(n.get_opt_cnt(yang.gdata.Id('http://example.com/foo', 'bar'))))
+        return foo__l1_entry(name=n.get_str(yang.gdata.Id(NS_foo, 'name')), id=n.get_opt_str(yang.gdata.Id(NS_foo, 'id')), bar=foo__l1__bar.from_gdata(n.get_opt_cnt(yang.gdata.Id(NS_foo, 'bar'))))
 
     def copy(self):
         """Create a deep copy of this adata object"""
@@ -149,7 +152,7 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n is not None:
-            return root(l1=foo__l1.from_gdata(n.get_opt_list(yang.gdata.Id('http://example.com/foo', 'l1'))))
+            return root(l1=foo__l1.from_gdata(n.get_opt_list(yang.gdata.Id(NS_foo, 'l1'))))
         return root()
 
     def copy(self):

@@ -30,6 +30,10 @@ SRC_DNODE = DRoot(children=[
     ])
 ])
 
+NS_augmenter = 'http://example.com/augmenter'
+NS_base = 'http://example.com/base'
+
+
 class base__system_capabilities__per_node_capabilities_entry(yang.adata.MNode):
 
     mut def __init__(self):
@@ -110,7 +114,7 @@ class base__system_capabilities__subscription_capabilities(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> base__system_capabilities__subscription_capabilities:
         if n is not None:
-            return base__system_capabilities__subscription_capabilities(max_nodes=n.get_opt_bigint(yang.gdata.Id('http://example.com/augmenter', 'max-nodes')), supported_excluded_change_type=n.get_opt_strs(yang.gdata.Id('http://example.com/augmenter', 'supported-excluded-change-type')))
+            return base__system_capabilities__subscription_capabilities(max_nodes=n.get_opt_bigint(yang.gdata.Id(NS_augmenter, 'max-nodes')), supported_excluded_change_type=n.get_opt_strs(yang.gdata.Id(NS_augmenter, 'supported-excluded-change-type')))
         return base__system_capabilities__subscription_capabilities()
 
     def copy(self):
@@ -142,7 +146,7 @@ class base__system_capabilities(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> base__system_capabilities:
         if n is not None:
-            return base__system_capabilities(per_node_capabilities=base__system_capabilities__per_node_capabilities.from_gdata(n.get_opt_list(yang.gdata.Id('http://example.com/base', 'per-node-capabilities'))), subscription_capabilities=base__system_capabilities__subscription_capabilities.from_gdata(n.get_opt_cnt(yang.gdata.Id('http://example.com/augmenter', 'subscription-capabilities'))))
+            return base__system_capabilities(per_node_capabilities=base__system_capabilities__per_node_capabilities.from_gdata(n.get_opt_list(yang.gdata.Id(NS_base, 'per-node-capabilities'))), subscription_capabilities=base__system_capabilities__subscription_capabilities.from_gdata(n.get_opt_cnt(yang.gdata.Id(NS_augmenter, 'subscription-capabilities'))))
         return base__system_capabilities()
 
     def copy(self):
@@ -170,7 +174,7 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n is not None:
-            return root(system_capabilities=base__system_capabilities.from_gdata(n.get_opt_cnt(yang.gdata.Id('http://example.com/base', 'system-capabilities'))))
+            return root(system_capabilities=base__system_capabilities.from_gdata(n.get_opt_cnt(yang.gdata.Id(NS_base, 'system-capabilities'))))
         return root()
 
     def copy(self):
