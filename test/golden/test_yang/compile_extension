@@ -29,6 +29,9 @@ SRC_DNODE = DRoot(children=[
     ])
 ])
 
+NS_foo = 'http://example.com/foo'
+
+
 class foo__c1__things_entry(yang.adata.MNode):
     name: str
     id: ?str
@@ -52,7 +55,7 @@ class foo__c1__things_entry(yang.adata.MNode):
 
     @staticmethod
     mut def from_gdata(n: yang.gdata.Node) -> foo__c1__things_entry:
-        return foo__c1__things_entry(name=n.get_str('name'), id=n.get_opt_str('id'))
+        return foo__c1__things_entry(name=n.get_str(yang.gdata.Id(NS_foo, 'name')), id=n.get_opt_str(yang.gdata.Id(NS_foo, 'id')))
 
     def copy(self):
         """Create a deep copy of this adata object"""
@@ -118,7 +121,7 @@ class foo__c1(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
         if n is not None:
-            return foo__c1(things=foo__c1__things.from_gdata(n.get_opt_list('things')))
+            return foo__c1(things=foo__c1__things.from_gdata(n.get_opt_list(yang.gdata.Id(NS_foo, 'things'))))
         return foo__c1()
 
     def copy(self):
@@ -146,7 +149,7 @@ class root(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
         if n is not None:
-            return root(c1=foo__c1.from_gdata(n.get_opt_cnt('c1')))
+            return root(c1=foo__c1.from_gdata(n.get_opt_cnt(yang.gdata.Id(NS_foo, 'c1'))))
         return root()
 
     def copy(self):

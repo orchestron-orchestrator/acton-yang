@@ -120,6 +120,14 @@ def _test_get_nc_op_pref_ancestor():
     #testing.assertEqual(op, "create")
 
 
+def _fqname(n: yang.schema.DNode):
+    return yang.gdata.Id(n.namespace, n.name)
+
+
+def _fq_list_keys(l: yang.schema.DList):
+    return [yang.gdata.Id(l.namespace, k) for k in l.key]
+
+
 def unwrap_key[T](name: str, val: ?T, spath) -> T:
     if val is not None:
         return val
@@ -575,10 +583,6 @@ def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner
             raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
         else:   # len(path) > 0
             # More path to traverse - create a container with just the next child
-            unique_namer = yang.schema._UniqueNamer(s)
-            def uname(n):
-                return unique_namer.unique_name(n.name, n.prefix)
-
             point = path[0]
             rest_path = path[1:]
 
@@ -590,7 +594,7 @@ def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner
                 perhaps = True if (top or set_ns) and s.namespace != "" else False
                 cchild = _from_json_path_recursive(root, child, data, rest_path, op, loose, current_path + [PathElement(child)], False, s.namespace != child.namespace)
                 # Create a container with just this one child
-                return yang.gdata.Container({uname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
+                return yang.gdata.Container({_fqname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
 
             # Path tries to go through a leaf - this is an error
             raise ValueError("Invalid JSON path to non-inner node at {format_schema_path(current_path + [PathElement(child)])}: {point}")
@@ -614,11 +618,11 @@ def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner
             if op == "merge":
                 elements.append(element_gdata)
             elif op == "remove":
-                elements.append(yang.gdata.Absent(element_gdata.key_children(s.key)))
+                elements.append(yang.gdata.Absent(element_gdata.key_children(_fq_list_keys(s))))
             else:
                 raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
             perhaps = True if (top or set_ns) and s.namespace != "" else False
-            return yang.gdata.List(s.key, elements, _user_order(s.ordered_by), ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
+            return yang.gdata.List(_fq_list_keys(s), elements, _user_order(s.ordered_by), ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
         elif len(path) > 1:
             # The path crosses this list element and references another inner node
             point = path[0]
@@ -631,10 +635,6 @@ def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner
             # The return type must be a List, we just requested it
             if isinstance(slist, yang.gdata.List):
                 # Now process the rest of the path following the structural list keys
-                unique_namer = yang.schema._UniqueNamer(s)
-                def uname(n):
-                    return unique_namer.unique_name(n.name, n.prefix)
-
                 child_point = rest_path[0]
                 child_rest_path = rest_path[1:]
 
@@ -646,7 +646,7 @@ def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner
                     inner_result = _from_json_path_recursive(root, lchild, data, child_rest_path, op, loose, current_path + [PathElement(lchild)], False, False)
 
                     # Add it to the structural list element, next to the existing keys
-                    slist.elements[0].children[uname(lchild)] = inner_result
+                    slist.elements[0].children[_fqname(lchild)] = inner_result
                     return slist
                 else:
                     raise ValueError("Node at {format_schema_path(current_path + [PathElement(lchild)])} is not inner: {type(lchild)}")
@@ -709,11 +709,9 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
             return _from_data_recursive(root, child, data, loose, set_ns, root_path, spath + [PathElement(child)])
         raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
 
-    children: dict[str, yang.gdata.Node] = {}
+    children: dict[yang.gdata.Id, yang.gdata.Node] = {}
 
     unique_namer = yang.schema._UniqueNamer(s)
-    def uname(n) -> str:
-        return unique_namer.unique_name(n.name, n.prefix)
     def is_unique(n) -> bool:
         return unique_namer.is_unique(n.name)
 
@@ -763,9 +761,9 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
 
                 if wcchild is not None and not isinstance(wcchild, yang.gdata.Container):
                     # Absent, Delete, Create, Replace wrappers are not Container and may not have any children
-                    children[uname(child)] = wcchild
+                    children[_fqname(child)] = wcchild
                 elif isinstance(cchild, yang.gdata.Container) and (cchild.presence or len(cchild.children) > 0):
-                    children[uname(child)] = cchild
+                    children[_fqname(child)] = cchild
             else:
                 # Missing container: if this is a non-presence container and it has
                 # mandatory content, then raise an error in strict mode.
@@ -789,9 +787,9 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                 else:
                     raise ValueError("Unsupported type for list element at {format_schema_path(path_with_child())}: {type(element_data)}")
                 if element.op == OP_REMOVE:
-                    list_elements.append(yang.gdata.Absent(element_gdata.key_children(child.key)))
+                    list_elements.append(yang.gdata.Absent(element_gdata.key_children(_fq_list_keys(child))))
                 elif element.op == OP_DELETE:
-                    list_elements.append(yang.gdata.Delete(element_gdata.key_children(child.key)))
+                    list_elements.append(yang.gdata.Delete(element_gdata.key_children(_fq_list_keys(child))))
                 elif element.op == OP_CREATE:
                     list_elements.append(yang.gdata.Create(element_gdata.children))
                 elif element.op == OP_REPLACE:
@@ -799,8 +797,8 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                 else:
                     list_elements.append(element_gdata)
             if len(list_elements) > 0:
-                list_gdata = yang.gdata.List(child.key, list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
-                children[uname(child)] = list_gdata
+                list_gdata = yang.gdata.List(_fq_list_keys(child), list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+                children[_fqname(child)] = list_gdata
 
         elif isinstance(child, yang.schema.DLeafList):
             leaflist_val = data.take_leaflist(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
@@ -822,15 +820,15 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                     # Missing leaf-list value
                     raise ValueError("Error reading {format_schema_path(path_with_child())}: Missing non-optional leaf-list value")
                 if len(unwrapped_values) > 0:
-                    children[uname(child)] = yang.gdata.LeafList(unwrapped_values, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+                    children[_fqname(child)] = yang.gdata.LeafList(unwrapped_values, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
                 elif len(non_merge_ops) > 1:
                     raise ValueError("Error reading {format_schema_path(path_with_child())}: Mixed leaf-list operations - {non_merge_ops}")
                 elif len(non_merge_ops) == 1:
                     # All entries were remove/delete; map to absent/delete node
                     if non_merge_ops.pop() == OP_DELETE:
-                        children[uname(child)] = yang.gdata.Delete()
+                        children[_fqname(child)] = yang.gdata.Delete()
                     else:
-                        children[uname(child)] = yang.gdata.Absent()
+                        children[_fqname(child)] = yang.gdata.Absent()
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf-list value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Missing non-optional leaf-list value")
@@ -839,15 +837,15 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
             typed = data.take_leaf(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
             if typed is not None:
                 if typed.op == OP_REMOVE:
-                    children[uname(child)] = yang.gdata.Absent()
+                    children[_fqname(child)] = yang.gdata.Absent()
                     continue
                 elif typed.op == OP_DELETE:
-                    children[uname(child)] = yang.gdata.Delete()
+                    children[_fqname(child)] = yang.gdata.Delete()
                     continue
                 # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
                 av = typed.val
                 if av is not None:
-                    children[uname(child)] = yang.gdata.Leaf(av, ns=ns, module=mod)
+                    children[_fqname(child)] = yang.gdata.Leaf(av, ns=ns, module=mod)
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find child node with name {child.name}")
@@ -926,14 +924,14 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 # The list of children is already sorted so that key leaves
                 # come first in the correct order.
                 if not yang.schema.is_optional_arg_yang_leaf(cchild, yang.schema.list_keys(container), loose):
-                    leaf = node.get_leaf(unique_namer.unique_name(cchild.name, cchild.prefix))
+                    leaf = node.get_leaf(_fqname(cchild))
                     non_optional_args.append("{repr_adata(leaf.val)}")
             elif isinstance(cchild, yang.schema.DContainer):
                 if not (cchild.presence or loose or yang.schema.optional_subtree(cchild)):
                     cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
 
                     # Recursively build subtree for non-optional children
-                    sub_args, sub_containers = _find_non_optional_subtree(cchild, path_with_child(), node.get_cnt(cchild.name), path + [cchild_safe_name], local_prefix)
+                    sub_args, sub_containers = _find_non_optional_subtree(cchild, path_with_child(), node.get_cnt(_fqname(cchild)), path + [cchild_safe_name], local_prefix)
 
                     # Create variable declaration for this container
                     mcchild_var = "{'_'.join(path)}_{cchild_safe_name}"
@@ -954,8 +952,6 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
     unique_namer = yang.schema._UniqueNamer(s)
     def usname(n) -> str:
         return unique_namer.unique_safe_name(n.name, n.prefix)
-    def uname(n) -> str:
-        return unique_namer.unique_name(n.name, n.prefix)
     res = []
     if top:
         res.append('# Top node: {format_schema_path(spath)}')
@@ -985,7 +981,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 # Do not print non-optional leafs if not top level, because
                 # they are implicitly set with .create*()
                 continue
-            leaf = node.get_opt_leaf_or_absent(uname(child))
+            leaf = node.get_opt_leaf_or_absent(_fqname(child))
             if isinstance(leaf, yang.gdata.Leaf):
                 # DLeaf values are copied verbatim
                 leaves.append("{self_name}.{usname(child)} = {repr_adata(leaf.val)}")
@@ -993,12 +989,12 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 # "leaf": Absent() is a remove op on an empty leaf
                 leaves.append("{self_name}.{usname(child)} = False")
         elif isinstance(child, yang.schema.DLeafList):
-            leaflist = node.get_opt_leaflist(uname(child))
+            leaflist = node.get_opt_leaflist(_fqname(child))
             if leaflist is not None:
                 # DLeafList values are copied verbatim
                 leaves.append("{self_name}.{usname(child)} = {repr_adata(leaflist.vals)}")
         elif isinstance(child, yang.schema.DContainer):
-            container = node.get_opt_cnt(uname(child))
+            container = node.get_opt_cnt(_fqname(child))
             if container is not None:
                 if child.presence:
                     res.append("")
@@ -1017,11 +1013,11 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 else:
                     res.extend(_pradata_recursive(child, container, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child()).splitlines())
         elif isinstance(child, yang.schema.DList):
-            glist = node.get_opt_list(uname(child))
+            glist = node.get_opt_list(_fqname(child))
             if glist is not None:
                 for element in glist.elements:
                     res.append("")
-                    res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(child.key)}")
+                    res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(_fq_list_keys(child))}")
 
                     # Build the list of arguments for create() method
                     list_create_args = []
@@ -1034,7 +1030,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     create_args_str = ", ".join(list_create_args)
                     res.append("{usname(child)}_element = {self_name}.{usname(child)}.create({create_args_str})")
                     # Recursive call to pradata() for the list element
-                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(child.key))).splitlines())
+                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(_fq_list_keys(child)))).splitlines())
         else:
             raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
 
@@ -1435,9 +1431,9 @@ def _test_json_path_basic():
     # Test navigating to a leaf in a nested container
     gd = from_json_path(s, {"l2": "test value"}, ["y1:c1", "c2"])
     expected = yang.gdata.Container({
-        "c1": yang.gdata.Container({
-            "c2": yang.gdata.Container({
-                "l2": yang.gdata.Leaf("test value")
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "c2"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:y1", "l2"): yang.gdata.Leaf("test value")
             })
         }, ns='urn:example:y1', module='y1')
     })
@@ -1474,8 +1470,8 @@ def _test_json_path_qualified_names():
     # Test navigating with qualified name
     gd = from_json_path(s, {"mod2:l2": "augmented value"}, ["mod1:c1"])
     expected = yang.gdata.Container({
-        "c1": yang.gdata.Container({
-            "l2": yang.gdata.Leaf("augmented value", ns="urn:example:mod2", module="mod2")
+        yang.gdata.Id("urn:example:mod1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:mod2", "l2"): yang.gdata.Leaf("augmented value", ns="urn:example:mod2", module="mod2")
         }, ns="urn:example:mod1", module="mod1")
     })
     testing.assertEqual(gd.prsrc(), expected.prsrc())
@@ -1511,11 +1507,11 @@ def _test_json_path_list():
     gd = from_json_path(s, {"name": "test", "value": "data"}, ["y1:c1", "l1", "test"])
     # Should create a list with single element
     expected = yang.gdata.Container({
-      'c1': yang.gdata.Container({
-        'l1': yang.gdata.List(['name'], elements=[
+      yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "l1"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "name")], elements=[
           yang.gdata.Container({
-            'name': yang.gdata.Leaf('test'),
-            'value': yang.gdata.Leaf('data')
+            yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('test'),
+            yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf('data')
           })
         ])
       }, ns='urn:example:y1', module='y1')
@@ -1548,10 +1544,10 @@ def _test_json_path_remove():
     gd = from_json_path(s, {}, ["y1:c1", "l1", "test"], "remove")
     # Should contain an Absent node with the key
     expected = yang.gdata.Container({
-      'c1': yang.gdata.Container({
-        'l1': yang.gdata.List(['name'], elements=[
+      yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "l1"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "name")], elements=[
           yang.gdata.Absent({
-            'name': yang.gdata.Leaf('test')
+            yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('test')
           })
         ])
       }, ns='urn:example:y1', module='y1')
@@ -1635,14 +1631,14 @@ def _test_json_path_nested_lists():
     # Test navigating to a nested list element
     gd = from_json_path(s, {"value": "test-value"}, ["y1:c1", "outer", "key1", "inner", "key2"])
     expected = yang.gdata.Container({
-        'c1': yang.gdata.Container({
-            'outer': yang.gdata.List(['outer-key'], elements=[
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "outer"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "outer-key")], elements=[
                 yang.gdata.Container({
-                    'outer-key': yang.gdata.Leaf('key1'),
-                    'inner': yang.gdata.List(['inner-key'], elements=[
+                    yang.gdata.Id("urn:example:y1", "outer-key"): yang.gdata.Leaf('key1'),
+                    yang.gdata.Id("urn:example:y1", "inner"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "inner-key")], elements=[
                         yang.gdata.Container({
-                            'inner-key': yang.gdata.Leaf('key2'),
-                            'value': yang.gdata.Leaf('test-value')
+                            yang.gdata.Id("urn:example:y1", "inner-key"): yang.gdata.Leaf('key2'),
+                            yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf('test-value')
                         })
                     ])
                 })
@@ -1654,17 +1650,17 @@ def _test_json_path_nested_lists():
     # Test navigating to a deeply nested list element (3 levels)
     gd2 = from_json_path(s, {"data": 42}, ["y1:c1", "outer", "key1", "inner", "key2", "deep", "key3"])
     expected2 = yang.gdata.Container({
-        'c1': yang.gdata.Container({
-            'outer': yang.gdata.List(['outer-key'], elements=[
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "outer"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "outer-key")], elements=[
                 yang.gdata.Container({
-                    'outer-key': yang.gdata.Leaf('key1'),
-                    'inner': yang.gdata.List(['inner-key'], elements=[
+                    yang.gdata.Id("urn:example:y1", "outer-key"): yang.gdata.Leaf('key1'),
+                    yang.gdata.Id("urn:example:y1", "inner"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "inner-key")], elements=[
                         yang.gdata.Container({
-                            'inner-key': yang.gdata.Leaf('key2'),
-                            'deep': yang.gdata.List(['deep-key'], elements=[
+                            yang.gdata.Id("urn:example:y1", "inner-key"): yang.gdata.Leaf('key2'),
+                            yang.gdata.Id("urn:example:y1", "deep"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "deep-key")], elements=[
                                 yang.gdata.Container({
-                                    'deep-key': yang.gdata.Leaf('key3'),
-                                    'data': yang.gdata.Leaf(bigint(42))
+                                    yang.gdata.Id("urn:example:y1", "deep-key"): yang.gdata.Leaf('key3'),
+                                    yang.gdata.Id("urn:example:y1", "data"): yang.gdata.Leaf(bigint(42))
                                 })
                             ])
                         })
@@ -1883,8 +1879,8 @@ def _test_netconf_leaflist_merge_and_remove():
     s = yang.compile([y])
     gd = from_data(s, xml.decode(xml_in))
     expected = yang.gdata.Container({
-        'c1': yang.gdata.Container({
-            'll': yang.gdata.LeafList(['keep'])
+        yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.LeafList(['keep'])
         }, ns='urn:example:y', module='y')
     })
     testing.assertEqual(gd.prsrc(), expected.prsrc())
@@ -1911,8 +1907,8 @@ def _test_netconf_leaflist_all_delete():
     s = yang.compile([y])
     gd = from_data(s, xml.decode(xml_in))
     expected = yang.gdata.Container({
-        'c1': yang.gdata.Container({
-            'll': yang.gdata.Delete()
+        yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.Delete()
         }, ns='urn:example:y', module='y')
     })
     testing.assertEqual(gd.prsrc(), expected.prsrc())
@@ -1939,8 +1935,8 @@ def _test_netconf_leaflist_all_remove():
     s = yang.compile([y])
     gd = from_data(s, xml.decode(xml_in))
     expected = yang.gdata.Container({
-        'c1': yang.gdata.Container({
-            'll': yang.gdata.Absent()
+        yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.Absent()
         }, ns='urn:example:y', module='y')
     })
     testing.assertEqual(gd.prsrc(), expected.prsrc())
@@ -2014,8 +2010,7 @@ def _test_union_binary_xml():
 </data>"""
     s = yang.compile([y])
     gd = from_data(s, xml.decode(xml_in))
-    print(gd.get_bytes('u'))
-    testing.assertEqual(gd.get_bytes('u'), "hi".encode())
+    testing.assertEqual(gd.get_bytes(yang.gdata.Id("urn:example:y", "u")), "hi".encode())
     return gd.prsrc()
 
 def _test_union_binary_json():
@@ -2032,7 +2027,7 @@ def _test_union_binary_json():
     s = yang.compile([y])
     jd = {"y:u": "aGk="}
     gd = from_data(s, jd)
-    testing.assertEqual(gd.get_bytes('u'), "hi".encode())
+    testing.assertEqual(gd.get_bytes(yang.gdata.Id("urn:example:y", "u")), "hi".encode())
     return gd.prsrc()
 
 def _test_netconf_create_container():
@@ -2087,13 +2082,13 @@ def _test_netconf_delete_container():
     # Test remove operation on nested list element
     gd3 = from_json_path(s, {}, ["y1:c1", "outer", "key1", "inner", "key2"], "remove")
     expected3 = yang.gdata.Container({
-        'c1': yang.gdata.Container({
-            'outer': yang.gdata.List(['outer-key'], elements=[
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "outer"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "outer-key")], elements=[
                 yang.gdata.Container({
-                    'outer-key': yang.gdata.Leaf('key1'),
-                    'inner': yang.gdata.List(['inner-key'], elements=[
+                    yang.gdata.Id("urn:example:y1", "outer-key"): yang.gdata.Leaf('key1'),
+                    yang.gdata.Id("urn:example:y1", "inner"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "inner-key")], elements=[
                         yang.gdata.Absent({
-                            'inner-key': yang.gdata.Leaf('key2')
+                            yang.gdata.Id("urn:example:y1", "inner-key"): yang.gdata.Leaf('key2')
                         })
                     ])
                 })
@@ -2165,28 +2160,28 @@ def _test_pradata():
     s = yang.compile([schema_str])
 
     gdata_tree = yang.gdata.Container({
-        "top-level-leaf": yang.gdata.Leaf("root value"),
-        "c1": yang.gdata.Container({
-            "optional-leaf": yang.gdata.Leaf(bigint(42)),
-            "empty-yes": yang.gdata.Leaf(yang.gdata.Present()),
-            "empty-no": yang.gdata.Absent(),
-            "decimal": yang.gdata.Leaf(Decimal(314, -2)),
-            "c2": yang.gdata.Container({
-                "l1": yang.gdata.Leaf("inner value"),
-                "mandatory-leaf": yang.gdata.Leaf("required value")
+        yang.gdata.Id("urn:example:test", "top-level-leaf"): yang.gdata.Leaf("root value"),
+        yang.gdata.Id("urn:example:test", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:test", "optional-leaf"): yang.gdata.Leaf(bigint(42)),
+            yang.gdata.Id("urn:example:test", "empty-yes"): yang.gdata.Leaf(yang.gdata.Present()),
+            yang.gdata.Id("urn:example:test", "empty-no"): yang.gdata.Absent(),
+            yang.gdata.Id("urn:example:test", "decimal"): yang.gdata.Leaf(Decimal(314, -2)),
+            yang.gdata.Id("urn:example:test", "c2"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:test", "l1"): yang.gdata.Leaf("inner value"),
+                yang.gdata.Id("urn:example:test", "mandatory-leaf"): yang.gdata.Leaf("required value")
             }, presence=True),
-            "li1": yang.gdata.List(["name", "extra-key"], [
+            yang.gdata.Id("urn:example:test", "li1"): yang.gdata.List([yang.gdata.Id("urn:example:test", "name"), yang.gdata.Id("urn:example:test", "extra-key")], [
                 yang.gdata.Container({
-                    "name": yang.gdata.Leaf("item1"),
-                    "extra-key": yang.gdata.Leaf(bigint(1)),
-                    "value": yang.gdata.Leaf(bigint(100))
+                    yang.gdata.Id("urn:example:test", "name"): yang.gdata.Leaf("item1"),
+                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(bigint(1)),
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(bigint(100))
                 }),
                 yang.gdata.Container({
-                    "name": yang.gdata.Leaf("item2"),
-                    "extra-key": yang.gdata.Leaf(bigint(2)),
-                    "value": yang.gdata.Leaf(bigint(200)),
-                    "c3": yang.gdata.Container({
-                        "nested-leaf": yang.gdata.Leaf("birb")
+                    yang.gdata.Id("urn:example:test", "name"): yang.gdata.Leaf("item2"),
+                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(bigint(2)),
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(bigint(200)),
+                    yang.gdata.Id("urn:example:test", "c3"): yang.gdata.Container({
+                        yang.gdata.Id("urn:example:test", "nested-leaf"): yang.gdata.Leaf("birb")
                     })
                 })
             ])
@@ -2219,17 +2214,17 @@ def _test_pradata_root_path():
     s = yang.compile([schema_str])
 
     gdata_tree = yang.gdata.Container({
-        "outer": yang.gdata.Container({
-            "middle": yang.gdata.Container({
-                "value1": yang.gdata.Leaf("test value"),
-                "inner": yang.gdata.Container({
-                    "value2": yang.gdata.Leaf(bigint(42))
+        yang.gdata.Id("urn:example:test", "outer"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:test", "middle"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:test", "value1"): yang.gdata.Leaf("test value"),
+                yang.gdata.Id("urn:example:test", "inner"): yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "value2"): yang.gdata.Leaf(bigint(42))
                 })
             })
         })
     })
 
-    middle_node = gdata_tree.get_cnt("outer").get_cnt("middle")
+    middle_node = gdata_tree.get_cnt(yang.gdata.Id("urn:example:test", "outer")).get_cnt(yang.gdata.Id("urn:example:test", "middle"))
     result = pradata(s, middle_node, root_path=["test:outer", "middle"])
 
     return result
@@ -2264,13 +2259,13 @@ def _test_json_path_container_list_container():
     # Test navigating through container -> list -> container and setting data
     gd = from_json_path(s, {"data": "test", "value": 42}, ["y1:top", "middle", "item1", "bottom"])
     expected = yang.gdata.Container({
-        'top': yang.gdata.Container({
-            'middle': yang.gdata.List(['name'], elements=[
+        yang.gdata.Id("urn:example:y1", "top"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "middle"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "name")], elements=[
                 yang.gdata.Container({
-                    'name': yang.gdata.Leaf('item1'),
-                    'bottom': yang.gdata.Container({
-                        'data': yang.gdata.Leaf('test'),
-                        'value': yang.gdata.Leaf(bigint(42))
+                    yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('item1'),
+                    yang.gdata.Id("urn:example:y1", "bottom"): yang.gdata.Container({
+                        yang.gdata.Id("urn:example:y1", "data"): yang.gdata.Leaf('test'),
+                        yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf(bigint(42))
                     })
                 })
             ])
@@ -2281,11 +2276,11 @@ def _test_json_path_container_list_container():
     # Test remove operation on the inner container
     gd2 = from_json_path(s, {}, ["y1:top", "middle", "item1", "bottom"], "remove")
     expected2 = yang.gdata.Container({
-        'top': yang.gdata.Container({
-            'middle': yang.gdata.List(['name'], elements=[
+        yang.gdata.Id("urn:example:y1", "top"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "middle"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "name")], elements=[
                 yang.gdata.Container({
-                    'name': yang.gdata.Leaf('item1'),
-                    'bottom': yang.gdata.Absent()
+                    yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('item1'),
+                    yang.gdata.Id("urn:example:y1", "bottom"): yang.gdata.Absent()
                 })
             ])
         }, ns='urn:example:y1', module='y1')
@@ -2366,7 +2361,7 @@ def _test_identityref():
     xml_in = xml.decode("""<data><le2 xmlns="urn:cesent:mod1">id8</le2></data>""")
     gd = from_data(s, xml_in)
     exp = yang.gdata.Container({
-        "le2": yang.gdata.Leaf(Identityref('id8', ns='urn:cesent:mod1', mod='mod1', pfx='aa'), ns='urn:cesent:mod1', module='mod1')
+        yang.gdata.Id("urn:cesent:mod1", "le2"): yang.gdata.Leaf(Identityref('id8', ns='urn:cesent:mod1', mod='mod1', pfx='aa'), ns='urn:cesent:mod1', module='mod1')
     })
     testing.assertEqual(exp.prsrc(), gd.prsrc())
 
