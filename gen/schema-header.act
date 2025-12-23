@@ -94,6 +94,7 @@
 
 import base64
 import re
+import yang.xpath as xpath
 from yang.identityref import Identityref, PartialIdentityref
 from yang.pattern import YangPattern
 from yang.type import Decimal, Ranges, RangesBuilder
@@ -1642,6 +1643,7 @@ class DRoot(DNodeInner):
         res.append("import yang.adata")
         res.append("import yang.gdata")
         res.append("import yang.gen3")
+        res.append("import yang.xpath")
         res.append("from yang.identityref import Identityref, PartialIdentityref")
         res.append("from yang.pattern import YangPattern")
         res.append("from yang.schema import *")
@@ -1687,7 +1689,6 @@ class DRoot(DNodeInner):
         res.append("")
 
         return "\n".join(res)
-
 
 class DRpc(DNodeInner):
     if_feature: list[str]
@@ -2077,13 +2078,15 @@ class DTypeInteger(DType):
         return []
 
 class DTypeLeafref(DType):
-    path: str # TODO: XPath
+    path: xpath.AbsoluteLocationPath
     require_instance: bool # default: True
+    target_type: ?DType
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, path: str, require_instance: bool):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, path: xpath.AbsoluteLocationPath, require_instance: bool):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.path = path
         self.require_instance = require_instance
+        self.target_type = None
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeLeafref:
@@ -2092,24 +2095,45 @@ class DTypeLeafref(DType):
             t = resolver.type_
             _require_instance = resolver.require_instance
             return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _path, _require_instance is not None and _require_instance)
-        raise ValueError("Type {resolver.type_.name} of base-type leafref requires path restriction")
+        raise ValueError("Type {resolver.type_.name}{" of base-type leafref" if resolver.type_.name != "leafref" else ""} requires path restriction")
 
     def resolve_references(self, root: DRoot):
-        pass # TODO: Verify path expression
+        n: DNode = root
+        for step in self.path.steps:
+            if isinstance(step, xpath.NodeTestStep):
+                try:
+                    n = n.get(step.name, prefix=step.prefix)
+                except ValueError as ex:
+                    raise ValueError("Failed to resolve leafref path: {self.path}, {ex.error_message}")
+            else:
+                raise NotImplementedError("Leafref path: {self.path}, expected NodeTestStep only")
+        if isinstance(n, DNodeLeaf):
+            self.target_type = n.type_
+        else:
+            raise ValueError("Leafref path: {self.path}, does not refer to a leaf or leaf-list")
 
     def validate_value(self, val: value) -> bool:
-        return True # TODO
+        t = self.target_type
+        if t is not None:
+            return t.validate_value(val)
+        return False
 
     def prtyinst(self) -> str:
-        return "DTypeLeafref({self.format_common_params()}, path={repr(self.path)}, require_instance={repr(self.require_instance)})"
+        t = self.target_type
+        return "DTypeLeafref({self.format_common_params()}, path={repr(self.path)}, require_instance={repr(self.require_instance)}, target_type={t.prtyinst() if t is not None else repr(None)})"
 
     def format_hints(self) -> list[str]:
         hints = ["path: {self.path}"]
+        _target_type = self.target_type
         _require_instance = self.require_instance
         if _require_instance is not None and not _require_instance:
             # Pending https://github.com/actonlang/acton/issues/1125
             # hints.append("require-instance: false")
             hints += ["require-instance: false"]
+        if _target_type is not None:
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # hints.append("type: {_target_type.format_hints()}")
+            hints += ["type: {_target_type.format_hints()}"]
         return hints
 
 class DTypeString(DType):
@@ -2193,8 +2217,7 @@ class DTypeResolver(object):
     enum_val_to_name: dict[int, str]
     fraction_digits: ?bigint # Assume only allowed in the type "decimal64" statement with no further restrictions in base-type chain
     length: ?Ranges[int] # May be restricted to sub-ranges only
-    path: ?str # Assume only allowed in the type "leafref" statement, with no further restrictions in base-type chain
-              # TODO: XPath !!!
+    path: ?xpath.AbsoluteLocationPath # Assume only allowed in the type "leafref" statement, with no further restrictions in base-type chain
     patterns: list[YangPattern] # A value must match patterns in type and base-types chain
     integer_ranges: ?Ranges[bigint] # May be restricted to sub-ranges only
     decimal_ranges: ?Ranges[Decimal] # May be restricted to sub-ranges only
@@ -2360,11 +2383,11 @@ class DTypeResolver(object):
                 self.length = new_length
 
             # path
-            _path = t.path
+            _path = t.resolved_path
             if _path is not None:
                 if self.path is not None:
                     raise ValueError("The path of a base-type may not be redefined in sub-type \"{t.name}\"")
-                self.path = _path # TODO: XPath !!!
+                self.path = _path
 
             # pattern
             for pattern in t.pattern:
@@ -2921,6 +2944,9 @@ class SchemaNode(object):
         else:
             raise ValueError("expand_children() called on non-inner node {type(self)}")
 
+    mut def resolve_compiled_schema_path_dependencies(self):
+        pass
+
     mut def apply_refine(self, refine: Refine):
         raise NotImplementedError('SchemaNode apply_refine not implemented for {type(self)}')
 
@@ -3188,6 +3214,10 @@ class SchemaNode(object):
 
 class SchemaNodeInner(SchemaNode):
     children: list[SchemaNode]
+
+    mut def resolve_compiled_schema_path_dependencies(self):
+        for child in self.children:
+            child.resolve_compiled_schema_path_dependencies()
 
 class SchemaNodeOuter(SchemaNode):
     pass
@@ -3596,7 +3626,8 @@ def yang_typename_to_acton_type(type_name: str) -> str:
     elif type_name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
         return "bigint"
     elif type_name == "leafref":
-        return "str"
+        # You should use yang_type_to_acton_type which can expand the union type for you!
+        raise ValueError("Leafref type not supported")
     elif type_name == "string":
         return "str"
     elif type_name == "union":
@@ -3680,6 +3711,12 @@ def yang_type_to_acton_type(t: ?DType) -> str:
             # TODO: use atom when union consists of types that we represent with Acton built-in types
             # TODO: use Acton union
             return "value"
+        elif isinstance(t, DTypeLeafref):
+            target_type = t.target_type
+            if target_type is not None:
+                return yang_type_to_acton_type(target_type)
+            else:
+                raise ValueError("Missing target type of {t.name}")
         else:
             return yang_typename_to_acton_type(t.builtin_type)
     raise ValueError("type not defined")
