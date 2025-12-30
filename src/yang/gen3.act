@@ -63,7 +63,7 @@ def format_schema_path(path: list[PathElement]) -> str:
             if not isinstance(prev, yang.schema.DRoot):
                 path_str = path_str + "/"
             if isinstance(prev, yang.schema.DNodeInner):
-                un = yang.schema._UniqueNamer(prev)
+                un = yang.schema.UniqueNamer(prev)
                 path_str = path_str + un.unique_name(elem.node.name, elem.node.prefix)
                 keys_dict = elem.keys
                 if keys_dict is not None and len(keys_dict) > 0:
@@ -440,23 +440,23 @@ def try_parse_json_value(leaf_value: ?value, schema_node: yang.schema.DNodeLeaf,
 
 extension yang.adata.MNode (YangData):
     def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, val: ?value):
-        usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
+        usname = yang.schema.safe_name(name if is_unique else "{schema.prefix}_{name}")
         maybe_cnt = self._get_attr(usname)
         if maybe_cnt is not None:
             return (op=None, val=maybe_cnt)
 
     def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, key: dict[str, value], val: value)]:
         new_path = path + [PathElement(schema)]
-        usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
+        usname = yang.schema.safe_name(name if is_unique else "{schema.prefix}_{name}")
         maybe_list = self._get_attr(usname)
         if maybe_list is not None and isinstance(maybe_list, Iterator):
-            key_values = lambda element_data: {k: unwrap_key(k, element_data._get_attr(yang.schema._safe_name(k)), new_path) for k in schema.key}
+            key_values = lambda element_data: {k: unwrap_key(k, element_data._get_attr(yang.schema.safe_name(k)), new_path) for k in schema.key}
             return [(op=None, key=key_values(e), val=e) for e in maybe_list]
         return [] # ??
 
     def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, t: str, val: ?value):
         new_path = path + [PathElement(schema)]
-        usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
+        usname = yang.schema.safe_name(name if is_unique else "{schema.prefix}_{name}")
         maybe_attr = self._get_attr(usname)
         if maybe_attr is not None:
             schema_type = schema.type_
@@ -470,7 +470,7 @@ extension yang.adata.MNode (YangData):
     def take_leaflist(self, root: yang.schema.DRoot, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, t: str, val: ?value)]:
         new_path = path + [PathElement(schema)]
         values: list[(op: ?str, t: str, val: ?value)] = []
-        usname = yang.schema._safe_name(name if is_unique else "{schema.prefix}_{name}")
+        usname = yang.schema.safe_name(name if is_unique else "{schema.prefix}_{name}")
         children = self._get_attr(usname)
         if isinstance(children, list):
             schema_type = schema.type_
@@ -711,7 +711,7 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
 
     children: dict[yang.gdata.Id, yang.gdata.Node] = {}
 
-    unique_namer = yang.schema._UniqueNamer(s)
+    unique_namer = yang.schema.UniqueNamer(s)
     def is_unique(n) -> bool:
         return unique_namer.is_unique(n.name)
 
@@ -912,7 +912,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         """
         non_optional_args = []
         non_optional_containers = []
-        unique_namer = yang.schema._UniqueNamer(container)
+        unique_namer = yang.schema.UniqueNamer(container)
 
         for cchild in container.children:
             def path_with_child():
@@ -949,7 +949,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
 
         return non_optional_args, non_optional_containers
 
-    unique_namer = yang.schema._UniqueNamer(s)
+    unique_namer = yang.schema.UniqueNamer(s)
     def usname(n) -> str:
         return unique_namer.unique_safe_name(n.name, n.prefix)
     res = []
@@ -1005,7 +1005,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     # Add variable declarations in reverse order to ensure the prerequisites are met
                     res.extend(list(reversed(pc_var_declarations)))
 
-                    child_accessor = yang.schema._safe_name(child.name)
+                    child_accessor = yang.schema.safe_name(child.name)
                     pc_args_str = ", ".join(pc_args)
                     res.append("{child_accessor} = {self_name}.create_{usname(child)}({pc_args_str})")
                     # Recursive call to pradata() for the P-container, to fill in the rest of the optional children

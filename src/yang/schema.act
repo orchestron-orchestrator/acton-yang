@@ -518,7 +518,7 @@ class DNodeInner(DNode):
                 new_children.append(child)
         self.children = new_children
 
-        unique_namer = _UniqueNamer(self)
+        unique_namer = UniqueNamer(self)
 
         def usname(n) -> str:
             return unique_namer.unique_safe_name(n.name, n.prefix)
@@ -650,7 +650,7 @@ class DNodeInner(DNode):
         for child in self.children:
             if isinstance(child, DContainer) and child.presence:
                 # We must generate unique safe names for this node children too
-                child_unique_namer = _UniqueNamer(child)
+                child_unique_namer = UniqueNamer(child)
                 pc_args = ["self"]
                 for cchild in child.children:
                     if isinstance(cchild, DLeaf):
@@ -700,9 +700,9 @@ class DNodeInner(DNode):
         from_gdata_args_list = []
         for child in self.children:
             if isinstance(child, DNodeLeaf):
-                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id(NS_{_safe_name(child.module)}, '{child.name}'))")
+                from_gdata_args_list.append("{usname(child)}=n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id(NS_{safe_name(child.module)}, '{child.name}'))")
             else:
-                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id(NS_{_safe_name(child.module)}, '{child.name}')))")
+                from_gdata_args_list.append("{usname(child)}={pname(child)}.from_gdata(n.{taker_name(child, list_keys(self), loose=loose)}(yang.gdata.Id(NS_{safe_name(child.module)}, '{child.name}')))")
         from_gdata_args = ", ".join(from_gdata_args_list)
         res.append("    @staticmethod")
         if isinstance(self, DList):
@@ -864,16 +864,16 @@ class DNodeInner(DNode):
                 # - no output: no output adata parameter in the callback signature
                 if input_node is not None and output_node is not None:
                     # RPC with both input and output
-                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{get_path_name(spath + [rpc, output_node])}, ?Exception) -> None, inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(spath + [rpc, input_node])}):")
+                    res.append("    def {safe_name(rpc.name)}(cb: action(?{get_path_name(spath + [rpc, output_node])}, ?Exception) -> None, inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(spath + [rpc, input_node])}):")
                 elif input_node is not None and output_node is None:
                     # RPC with only input (no output)
-                    res.append("    def {_safe_name(rpc.name)}(cb: action(?Exception) -> None, inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(spath + [rpc, input_node])}):")
+                    res.append("    def {safe_name(rpc.name)}(cb: action(?Exception) -> None, inp: {'?' if optional_subtree(input_node) else ''}{get_path_name(spath + [rpc, input_node])}):")
                 elif input_node is None and output_node is not None:
                     # RPC with only output (no input)
-                    res.append("    def {_safe_name(rpc.name)}(cb: action(?{get_path_name(spath + [rpc, output_node])}, ?Exception) -> None):")
+                    res.append("    def {safe_name(rpc.name)}(cb: action(?{get_path_name(spath + [rpc, output_node])}, ?Exception) -> None):")
                 else:
                     # RPC with neither input nor output
-                    res.append("    def {_safe_name(rpc.name)}(cb: action(?Exception) -> None):")
+                    res.append("    def {safe_name(rpc.name)}(cb: action(?Exception) -> None):")
 
                 # Generate callback wrapper for parsing RPC output XML -> gdata -> adata
                 if output_node is not None:
@@ -1165,7 +1165,7 @@ class DIdentity(DNode):
         result.append("# Identityref constants")
 
         for identity in identities:
-            var_name = _safe_name("{identity.module}_{identity.name}", safe_kw=False)
+            var_name = safe_name("{identity.module}_{identity.name}", safe_kw=False)
             result.append("{var_name} = Identityref({repr(identity.name)}, ns={repr(identity.namespace)}, mod={repr(identity.module)}, pfx={repr(identity.prefix)})")
         result.append("")
         result.append("")
@@ -1177,7 +1177,7 @@ class DIdentity(DNode):
         return "[{", ".join([b.format_base_var_name() for b in identities])}]"
 
     def format_base_var_name(self):
-        return _safe_name("_base_{self.module}_{self.name}", safe_kw=False)
+        return safe_name("_base_{self.module}_{self.name}", safe_kw=False)
 
 class DInput(DNodeInner):
     must: list[DMust]
@@ -1671,7 +1671,7 @@ class DRoot(DNodeInner):
             res.append("")
             res.append("")
 
-        res.extend(["NS_{_safe_name(schema_ns[ns])} = {repr(ns)}" for ns in sorted(schema_ns.keys())])
+        res.extend(["NS_{safe_name(schema_ns[ns])} = {repr(ns)}" for ns in sorted(schema_ns.keys())])
         res.append("")
         res.append("")
         res.extend(inner)
@@ -3718,7 +3718,7 @@ def prsrc_literal(ytype: str, value: str) -> str:
         return '"' + value.replace('"', '\\"') + '"'
     raise ValueError("Unhandled prsrc literal of type {ytype}")
 
-def _safe_name(name: str, safe_kw=True) -> str:
+def safe_name(name: str, safe_kw=True) -> str:
     new = name.replace("-", "_").replace(".", "_")
     if safe_kw and new in {"action",
                            "actor",
@@ -3743,7 +3743,7 @@ def _safe_name(name: str, safe_kw=True) -> str:
 
 
 pure def _mut_avoider(node: DNodeInner):
-    # Even with "pure" comprehensions, the "mut" effect leaks out of _UniqueNamer.__init__ if this function is inlined?!
+    # Even with "pure" comprehensions, the "mut" effect leaks out of UniqueNamer.__init__ if this function is inlined?!
     names = [child.name for child in node.children]
     def count(n):
         # TODO: refactor this to use list.count() once implemented in Acton
@@ -3754,7 +3754,7 @@ pure def _mut_avoider(node: DNodeInner):
         return c
     return {name for name in names if count(name) > 1}
 
-class _UniqueNamer(object):
+class UniqueNamer(object):
 
     def __init__(self, node: DNodeInner):
         self._name_conflicts = _mut_avoider(node)
@@ -3766,7 +3766,7 @@ class _UniqueNamer(object):
 
     def unique_safe_name(self, name, prefix, safe_kw=True):
         unique_name = self.unique_name(name, prefix)
-        return _safe_name(unique_name, safe_kw).replace(":", "_")
+        return safe_name(unique_name, safe_kw).replace(":", "_")
 
     def is_unique(self, name):
         return name not in self._name_conflicts
@@ -3804,7 +3804,7 @@ def get_path_name(path: list[DNode]) -> str:
     - foo__bar__foo_baz
     - foo__bar__m2_baz
 
-    We do not rewrite the builtin keywords here (see _safe_name()) because it is
+    We do not rewrite the builtin keywords here (see safe_name()) because it is
     not necessary. An exception to this is if we are the top node without
     children - then the path is just our name.
     """
@@ -3813,22 +3813,22 @@ def get_path_name(path: list[DNode]) -> str:
 
 def get_path_usnames(path: list[DNode]) -> list[str]:
     if len(path) == 1:
-        return [_safe_name(path[0].name, safe_kw=False)]
+        return [safe_name(path[0].name, safe_kw=False)]
 
     res = []
     for i, node in enumerate(path):
         if i > 0:
             prev = path[i-1]
             if isinstance(prev, DRoot):
-                res.append(_safe_name(node.module, safe_kw=False))
+                res.append(safe_name(node.module, safe_kw=False))
             if isinstance(prev, DNodeInner):
-                un = _UniqueNamer(prev)
+                un = UniqueNamer(prev)
                 res.append(un.unique_safe_name(node.name, node.prefix, safe_kw=False))
         elif isinstance(node, DRoot):
             continue
         else:
             # Relative path
-            res.append(_safe_name(node.name, safe_kw=False))
+            res.append(safe_name(node.name, safe_kw=False))
     return res
 
 
@@ -3877,7 +3877,7 @@ def get_path_unames(path: list[DNode]) -> list[str]:
         if i > 0:
             prev = path[i-1]
             if isinstance(prev, DNodeInner):
-                un = _UniqueNamer(prev)
+                un = UniqueNamer(prev)
                 res.append(un.unique_name(node.name, node.prefix))
         elif isinstance(node, DRoot):
             res.append("")
