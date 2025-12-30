@@ -120,11 +120,11 @@ def _test_get_nc_op_pref_ancestor():
     #testing.assertEqual(op, "create")
 
 
-def _fqname(n: yang.schema.DNode):
+def fqname(n: yang.schema.DNode):
     return yang.gdata.Id(n.namespace, n.name)
 
 
-def _fq_list_keys(l: yang.schema.DList):
+def fq_list_keys(l: yang.schema.DList):
     return [yang.gdata.Id(l.namespace, k) for k in l.key]
 
 
@@ -594,7 +594,7 @@ def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner
                 perhaps = True if (top or set_ns) and s.namespace != "" else False
                 cchild = _from_json_path_recursive(root, child, data, rest_path, op, loose, current_path + [PathElement(child)], False, s.namespace != child.namespace)
                 # Create a container with just this one child
-                return yang.gdata.Container({_fqname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
+                return yang.gdata.Container({fqname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
 
             # Path tries to go through a leaf - this is an error
             raise ValueError("Invalid JSON path to non-inner node at {format_schema_path(current_path + [PathElement(child)])}: {point}")
@@ -618,11 +618,11 @@ def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner
             if op == "merge":
                 elements.append(element_gdata)
             elif op == "remove":
-                elements.append(yang.gdata.Absent(element_gdata.key_children(_fq_list_keys(s))))
+                elements.append(yang.gdata.Absent(element_gdata.key_children(fq_list_keys(s))))
             else:
                 raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
             perhaps = True if (top or set_ns) and s.namespace != "" else False
-            return yang.gdata.List(_fq_list_keys(s), elements, _user_order(s.ordered_by), ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
+            return yang.gdata.List(fq_list_keys(s), elements, _user_order(s.ordered_by), ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
         elif len(path) > 1:
             # The path crosses this list element and references another inner node
             point = path[0]
@@ -646,7 +646,7 @@ def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner
                     inner_result = _from_json_path_recursive(root, lchild, data, child_rest_path, op, loose, current_path + [PathElement(lchild)], False, False)
 
                     # Add it to the structural list element, next to the existing keys
-                    slist.elements[0].children[_fqname(lchild)] = inner_result
+                    slist.elements[0].children[fqname(lchild)] = inner_result
                     return slist
                 else:
                     raise ValueError("Node at {format_schema_path(current_path + [PathElement(lchild)])} is not inner: {type(lchild)}")
@@ -761,9 +761,9 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
 
                 if wcchild is not None and not isinstance(wcchild, yang.gdata.Container):
                     # Absent, Delete, Create, Replace wrappers are not Container and may not have any children
-                    children[_fqname(child)] = wcchild
+                    children[fqname(child)] = wcchild
                 elif isinstance(cchild, yang.gdata.Container) and (cchild.presence or len(cchild.children) > 0):
-                    children[_fqname(child)] = cchild
+                    children[fqname(child)] = cchild
             else:
                 # Missing container: if this is a non-presence container and it has
                 # mandatory content, then raise an error in strict mode.
@@ -787,9 +787,9 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                 else:
                     raise ValueError("Unsupported type for list element at {format_schema_path(path_with_child())}: {type(element_data)}")
                 if element.op == OP_REMOVE:
-                    list_elements.append(yang.gdata.Absent(element_gdata.key_children(_fq_list_keys(child))))
+                    list_elements.append(yang.gdata.Absent(element_gdata.key_children(fq_list_keys(child))))
                 elif element.op == OP_DELETE:
-                    list_elements.append(yang.gdata.Delete(element_gdata.key_children(_fq_list_keys(child))))
+                    list_elements.append(yang.gdata.Delete(element_gdata.key_children(fq_list_keys(child))))
                 elif element.op == OP_CREATE:
                     list_elements.append(yang.gdata.Create(element_gdata.children))
                 elif element.op == OP_REPLACE:
@@ -797,8 +797,8 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                 else:
                     list_elements.append(element_gdata)
             if len(list_elements) > 0:
-                list_gdata = yang.gdata.List(_fq_list_keys(child), list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
-                children[_fqname(child)] = list_gdata
+                list_gdata = yang.gdata.List(fq_list_keys(child), list_elements, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+                children[fqname(child)] = list_gdata
 
         elif isinstance(child, yang.schema.DLeafList):
             leaflist_val = data.take_leaflist(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
@@ -820,15 +820,15 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
                     # Missing leaf-list value
                     raise ValueError("Error reading {format_schema_path(path_with_child())}: Missing non-optional leaf-list value")
                 if len(unwrapped_values) > 0:
-                    children[_fqname(child)] = yang.gdata.LeafList(unwrapped_values, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
+                    children[fqname(child)] = yang.gdata.LeafList(unwrapped_values, user_order=_user_order(child.ordered_by), ns=ns, module=mod)
                 elif len(non_merge_ops) > 1:
                     raise ValueError("Error reading {format_schema_path(path_with_child())}: Mixed leaf-list operations - {non_merge_ops}")
                 elif len(non_merge_ops) == 1:
                     # All entries were remove/delete; map to absent/delete node
                     if non_merge_ops.pop() == OP_DELETE:
-                        children[_fqname(child)] = yang.gdata.Delete()
+                        children[fqname(child)] = yang.gdata.Delete()
                     else:
-                        children[_fqname(child)] = yang.gdata.Absent()
+                        children[fqname(child)] = yang.gdata.Absent()
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf-list value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Missing non-optional leaf-list value")
@@ -837,15 +837,15 @@ def _from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DN
             typed = data.take_leaf(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
             if typed is not None:
                 if typed.op == OP_REMOVE:
-                    children[_fqname(child)] = yang.gdata.Absent()
+                    children[fqname(child)] = yang.gdata.Absent()
                     continue
                 elif typed.op == OP_DELETE:
-                    children[_fqname(child)] = yang.gdata.Delete()
+                    children[fqname(child)] = yang.gdata.Delete()
                     continue
                 # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
                 av = typed.val
                 if av is not None:
-                    children[_fqname(child)] = yang.gdata.Leaf(av, ns=ns, module=mod)
+                    children[fqname(child)] = yang.gdata.Leaf(av, ns=ns, module=mod)
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find child node with name {child.name}")
@@ -924,14 +924,14 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 # The list of children is already sorted so that key leaves
                 # come first in the correct order.
                 if not yang.schema.is_optional_arg_yang_leaf(cchild, yang.schema.list_keys(container), loose):
-                    leaf = node.get_leaf(_fqname(cchild))
+                    leaf = node.get_leaf(fqname(cchild))
                     non_optional_args.append("{repr_adata(leaf.val)}")
             elif isinstance(cchild, yang.schema.DContainer):
                 if not (cchild.presence or loose or yang.schema.optional_subtree(cchild)):
                     cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
 
                     # Recursively build subtree for non-optional children
-                    sub_args, sub_containers = _find_non_optional_subtree(cchild, path_with_child(), node.get_cnt(_fqname(cchild)), path + [cchild_safe_name], local_prefix)
+                    sub_args, sub_containers = _find_non_optional_subtree(cchild, path_with_child(), node.get_cnt(fqname(cchild)), path + [cchild_safe_name], local_prefix)
 
                     # Create variable declaration for this container
                     mcchild_var = "{'_'.join(path)}_{cchild_safe_name}"
@@ -981,7 +981,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 # Do not print non-optional leafs if not top level, because
                 # they are implicitly set with .create*()
                 continue
-            leaf = node.get_opt_leaf_or_absent(_fqname(child))
+            leaf = node.get_opt_leaf_or_absent(fqname(child))
             if isinstance(leaf, yang.gdata.Leaf):
                 # DLeaf values are copied verbatim
                 leaves.append("{self_name}.{usname(child)} = {repr_adata(leaf.val)}")
@@ -989,12 +989,12 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 # "leaf": Absent() is a remove op on an empty leaf
                 leaves.append("{self_name}.{usname(child)} = False")
         elif isinstance(child, yang.schema.DLeafList):
-            leaflist = node.get_opt_leaflist(_fqname(child))
+            leaflist = node.get_opt_leaflist(fqname(child))
             if leaflist is not None:
                 # DLeafList values are copied verbatim
                 leaves.append("{self_name}.{usname(child)} = {repr_adata(leaflist.vals)}")
         elif isinstance(child, yang.schema.DContainer):
-            container = node.get_opt_cnt(_fqname(child))
+            container = node.get_opt_cnt(fqname(child))
             if container is not None:
                 if child.presence:
                     res.append("")
@@ -1013,11 +1013,11 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                 else:
                     res.extend(_pradata_recursive(child, container, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child()).splitlines())
         elif isinstance(child, yang.schema.DList):
-            glist = node.get_opt_list(_fqname(child))
+            glist = node.get_opt_list(fqname(child))
             if glist is not None:
                 for element in glist.elements:
                     res.append("")
-                    res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(_fq_list_keys(child))}")
+                    res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(fq_list_keys(child))}")
 
                     # Build the list of arguments for create() method
                     list_create_args = []
@@ -1030,7 +1030,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     create_args_str = ", ".join(list_create_args)
                     res.append("{usname(child)}_element = {self_name}.{usname(child)}.create({create_args_str})")
                     # Recursive call to pradata() for the list element
-                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(_fq_list_keys(child)))).splitlines())
+                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(fq_list_keys(child)))).splitlines())
         else:
             raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
 
