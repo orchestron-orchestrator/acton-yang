@@ -2872,6 +2872,54 @@ def _test_identity_base_resolution_import_prefix():
     src = root.prdaclass()
     return src
 
+def _test_leafref_resolve_defining_module():
+    """Test unprefixed absolute leafref resolves within defining module"""
+    ys_base = r"""module base-module {
+        yang-version "1.1";
+        namespace "http://example.com/base";
+        prefix "base";
+
+        container network-instances {
+            list network-instance {
+                key "name";
+                leaf name {
+                    type string;
+                }
+                container config {
+                    leaf name {
+                        type string;
+                    }
+                }
+            }
+        }
+
+        container uses-leafref {
+            leaf ni {
+                type leafref {
+                    path "/network-instances/network-instance/config/name";
+                }
+            }
+        }
+    }"""
+
+    ys_other = r"""module other-module {
+        yang-version "1.1";
+        namespace "http://example.com/other";
+        prefix "other";
+
+        container network-instances {
+            list network-instance {
+                key "name";
+                leaf name {
+                    type string;
+                }
+            }
+        }
+    }"""
+
+    root = yang.compile([ys_base, ys_other])
+    return root.prdaclass()
+
 def _test_fail_identity_missing_imported_base():
     """Test that compilation fails when identity references a missing base from imported module"""
     ys_base = r"""module base {

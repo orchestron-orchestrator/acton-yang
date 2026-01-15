@@ -2102,10 +2102,15 @@ class DTypeLeafref(DType):
 
     def resolve_references(self, root: DRoot, spath: list[DNode]):
         n: DNode = root
+        current_module = spath[-1].module
         for step in self.path.steps:
             if isinstance(step, xpath.NodeTestStep):
                 try:
-                    n = n.get(step.name, prefix=step.prefix)
+                    if step.prefix is not None:
+                        n = n.get(step.name, prefix=step.prefix)
+                    else:
+                        # Unqualified (no prefix) nodes belong the namespace of the current node
+                        n = n.get(step.name, module=current_module)
                 except ValueError as ex:
                     raise ValueError("{get_path(spath)}: Failed to resolve leafref path: {self.path}, {ex.error_message}")
             else:
