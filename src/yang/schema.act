@@ -2851,7 +2851,7 @@ class SchemaNode(object):
         """
         raise NotImplementedError('SchemaNode compile')
 
-    def expand_augments(self, context: Context, target_base: SchemaNode=self, in_uses=False):
+    def expand_augments(self, context: Context, target_base: SchemaNode=self, in_uses=False, remap_imports):
         """Expand augment node"""
         def get_target(target_base, target: str) -> SchemaNode:
 
@@ -2890,7 +2890,7 @@ class SchemaNode(object):
 
             return current_node
 
-        def expand_augment(augments: list[Augment], target_base, context: Context):
+        def expand_augment(augments: list[Augment], target_base, context: Context, remap_imports):
             # There can be multiple augments which might have dependencies on
             # each other, for example:
             # container c1 {}
@@ -2916,33 +2916,36 @@ class SchemaNode(object):
                     target = get_target(target_base, aug.target_node)
                     if isinstance(target, SchemaNodeInner):
                         # Just move the child to the target
-                        aug.expand_children(context, target, new_mod=aug.get_module_name(), new_ns=aug.get_namespace(), new_pfx=aug.get_prefix())
+                        aug.expand_children(context, target, new_mod=aug.get_module_name(), new_ns=aug.get_namespace(), new_pfx=aug.get_prefix(), remap_imports=remap_imports)
                         target.exts.extend(aug.exts)
                     else:
                         raise ValueError("Augment target {target} is not an inner node")
 
         # Look if node is of a type that has augment substatements
         if isinstance(self, Module):
-            expand_augment(self.augment, self, context)
+            expand_augment(self.augment, self, context, remap_imports)
         elif isinstance(self, Submodule):
-            expand_augment(self.augment, self, context)
+            expand_augment(self.augment, self, context, remap_imports)
         elif isinstance(self, Uses):
-            expand_augment(self.augment, target_base, context)
+            expand_augment(self.augment, target_base, context, remap_imports)
         else:
             raise ValueError("Node type does not have augment substatements")
 
-    def expand_children(self, context: Context, target: SchemaNodeInner, new_mod: ?str = None, new_ns: ?str = None, new_pfx: ?str = None):
+    def expand_children(self, context: Context, target: SchemaNodeInner, new_mod: ?str = None, new_ns: ?str = None, new_pfx: ?str = None, remap_imports: ?list[(orig: str, alias: str)] = None):
         """Expand abstract children into concrete nodes
         """
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
                 if isinstance(child, Uses):
                     grouping = child.get_grouping(child.name, context)
-                    grouping.expand_children(context, target, new_mod if new_mod is not None else target.mod, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx)
-                    child.expand_augments(context, target, in_uses=True)
+                    grouping.expand_children(context, target, new_mod if new_mod is not None else target.mod, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx, remap_imports=remap_imports)
+                    child.expand_augments(context, target, in_uses=True, remap_imports=remap_imports)
                     child.expand_refines(target)
                 else:
                     c_child = child.compile(context, new_mod, new_ns, new_pfx)
+                    if remap_imports is not None:
+                        for ri in remap_imports:
+                            c_child.remap_prefix_references(ri.alias, ri.orig)
                     c_child.parent = target
                     target.children.append(c_child)
         else:
@@ -7227,7 +7230,16 @@ class Module(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
+    def get_remap_imports(self, context: Context) -> ?list[(orig: str, alias: str)]:
+        remaps = []
+        for import_ in self.import_:
+            imported_module = context.get_module(import_.module, import_.revision_date)
+            if import_.prefix != imported_module.prefix:
+                remaps.append((orig=imported_module.prefix, alias=import_.prefix))
+        return remaps if len(remaps) > 0 else None
+
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        remap_imports = self.get_remap_imports(context)
         new = Module(self.name,
                      yang_version=self.yang_version,
                      namespace=self.namespace,
@@ -7244,22 +7256,8 @@ class Module(SchemaNodeInner):
                      extension_=self.extension_,
                      feature=self.feature,
                      exts=self.exts)
-        self.expand_children(context, new, new_mod, new_ns, new_pfx)
-        new.expand_augments(context)
-
-        # Normalize import prefixes at compile time
-        # When a module imports another module with a different prefix than its actual prefix,
-        # we need to normalize all references to use the actual prefix
-        for import_ in self.import_:
-            try:
-                imported_module = context.get_module(import_.module, import_.revision_date)
-            except ValueError as e:
-                # TODO: import a non-existant module? error!
-                print(e.error_message, err=True)
-            else:
-                if import_.prefix != imported_module.prefix:
-                    new.remap_prefix_references(import_.prefix, imported_module.prefix)
-
+        self.expand_children(context, new, new_mod, new_ns, new_pfx, remap_imports)
+        new.expand_augments(context, remap_imports=remap_imports)
         return new
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:

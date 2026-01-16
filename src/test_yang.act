@@ -179,10 +179,6 @@ test_yang_simple = r"""module test_yang {
     description "test revision";
     reference "ref1";
   }
-  import ietf-inet-types {
-    prefix "inet";
-    revision-date 2013-07-15;
-  }
   container c1 {
     description "container 1";
     leaf l1 {
@@ -2966,6 +2962,53 @@ def _test_leafref_resolve_defining_module():
     }"""
 
     root = yang.compile([ys_base, ys_other])
+    return root.prdaclass()
+
+def _test_leafref_augment_prefix_alias():
+    """Test leafref path remap when augmenting imported node with prefix alias"""
+    ys_base = r"""module base-module {
+        yang-version "1.1";
+        namespace "http://example.com/base";
+        prefix "base";
+
+        container network-instances {
+            list network-instance {
+                key "name";
+                leaf name {
+                    type string;
+                }
+                container state {
+                    leaf id {
+                        type string;
+                    }
+                }
+            }
+        }
+    }"""
+
+    ys_augment = r"""module augment-module {
+        yang-version "1.1";
+        namespace "http://example.com/augment";
+        prefix "aug";
+
+        import base-module {
+            prefix "bm";  // Different prefix than base-module's actual prefix
+        }
+
+        grouping ref-group {
+            leaf ref {
+                type leafref {
+                    path "/bm:network-instances/bm:network-instance/bm:state/bm:id";
+                }
+            }
+        }
+
+        augment "/bm:network-instances/bm:network-instance" {
+            uses ref-group;
+        }
+    }"""
+
+    root = yang.compile([ys_base, ys_augment])
     return root.prdaclass()
 
 def _test_fail_identity_missing_imported_base():
