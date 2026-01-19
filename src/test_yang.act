@@ -2872,6 +2872,54 @@ def _test_identity_base_resolution_import_prefix():
     src = root.prdaclass()
     return src
 
+def _test_leafref_typedef_prefix_alias():
+    """Test leafref path remap when using typedef from imported module with prefix alias"""
+    ys_base = r"""module base-module {
+        yang-version "1.1";
+        namespace "http://example.com/base";
+        prefix "base-pfx";
+
+        container network-instances {
+            list network-instance {
+                key "name";
+                leaf name {
+                    type string;
+                }
+                container config {
+                    leaf name {
+                        type string;
+                    }
+                }
+            }
+        }
+
+        typedef network-instance-ref {
+            type leafref {
+                path "/base-pfx:network-instances/base-pfx:network-instance/" +
+                     "base-pfx:config/base-pfx:name";
+            }
+        }
+    }"""
+
+    ys_consumer = r"""module consumer-module {
+        yang-version "1.1";
+        namespace "http://example.com/consumer";
+        prefix "consumer";
+
+        import base-module {
+            prefix "bm";  // Different prefix than base-module's actual prefix
+        }
+
+        container uses-typedef {
+            leaf ni {
+                type bm:network-instance-ref;
+            }
+        }
+    }"""
+
+    root = yang.compile([ys_base, ys_consumer])
+    return root.prdaclass()
+
 def _test_leafref_resolve_defining_module():
     """Test unprefixed absolute leafref resolves within defining module"""
     ys_base = r"""module base-module {
