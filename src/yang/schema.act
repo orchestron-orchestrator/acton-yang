@@ -484,7 +484,7 @@ class DNode(object):
 
         return "\n".join(print_node(self, ""))
 
-    def resolve_references(self, root: DRoot, spath: list[DNode]):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         pass
 
 class DNodeInner(DNode):
@@ -905,9 +905,9 @@ class DNodeInner(DNode):
 
         return res
 
-    def resolve_references(self, root: DRoot, spath: list[DNode]):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         for child in self.children:
-            child.resolve_references(root, spath + [self])
+            child.resolve_references(root, spath + [self], allow_failure)
 
 class DNodeLeaf(DNode):
     if_feature: list[str]
@@ -916,8 +916,8 @@ class DNodeLeaf(DNode):
     type_: DType
     when: ?str
 
-    def resolve_references(self, root: DRoot, spath: list[DNode]):
-        self.type_.resolve_references(root, spath + [self])
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
+        self.type_.resolve_references(root, spath + [self], allow_failure)
 
 class DAction(DNodeInner):
     if_feature: list[str]
@@ -1523,7 +1523,7 @@ class DRoot(DNodeInner):
         self.rpcs = rpcs
 
     @staticmethod
-    def from_modules(modules: list[DNode]=[]):
+    def from_modules(modules: list[DNode]=[], allow_failure: ?list[str]):
         # Build a global identity map from all modules
         children = []
         rpcs = []
@@ -1601,7 +1601,7 @@ class DRoot(DNodeInner):
         root = DRoot(children, identities, rpcs)
 
         # Resolve DType references, e.g. resolve base identities
-        root.resolve_references(root, [])
+        root.resolve_references(root, [], allow_failure)
 
         return root
 
@@ -1797,7 +1797,7 @@ class DType(object):
             return DTypeInstanceIdentifier.from_resolver(resolver)
         raise ValueError("Unable to resolve type ({resolver.type_}) into builtin base-type")
 
-    def resolve_references(self, root: DRoot, spath: list[DNode]):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         pass
 
     # Validate value type. NOT relations to other data i.e. leafref/instance-identifier targets.
@@ -1997,7 +1997,7 @@ class DTypeIdentityref(DType):
         t = resolver.type_
         return DTypeIdentityref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, identity_bases, [])
 
-    def resolve_references(self, root: DRoot, spath: list[DNode]):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         resolved_identity_bases = []
         for identity_base in self.identity_bases:
             resolved_identity_base = find_identity_by_ref(root.identities, identity_base.name, prefix=identity_base.prefix)
@@ -2096,7 +2096,7 @@ class DTypeLeafref(DType):
             return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, _target_type, resolver.default, _path, _require_instance is not None and _require_instance)
         raise ValueError("Type {resolver.type_.name}{" of base-type leafref" if resolver.type_.name != "leafref" else ""} requires path restriction")
 
-    def resolve_references(self, root: DRoot, spath: list[DNode]):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         n: DNode = root
         current_module = spath[-1].module
         for step in self.path.steps:
@@ -2108,6 +2108,10 @@ class DTypeLeafref(DType):
                         # Unqualified (no prefix) nodes belong the namespace of the current node
                         n = n.get(step.name, module=current_module)
                 except ValueError as ex:
+                    if allow_failure is not None and get_path(spath) in allow_failure:
+                        print("{get_path(spath)}: [SKIP] Failed to resolve leafref path: {self.path}, {ex.error_message}", err=True)
+                        self.target_type = DTypeString("string", self.description, self.reference, self.units, self.exts, "string", self.default, None, [])
+                        return
                     raise ValueError("{get_path(spath)}: Failed to resolve leafref path: {self.path}, {ex.error_message}")
             else:
                 raise NotImplementedError("{get_path(spath)}: Leafref path: {self.path}, expected NodeTestStep only")
@@ -2196,9 +2200,9 @@ class DTypeUnion(DType):
         t = resolver.type_
         return DTypeUnion(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.alt_types)
 
-    def resolve_references(self, root: DRoot, spath: list[DNode]):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         for t in self.types:
-            t.resolve_references(root, spath)
+            t.resolve_references(root, spath, allow_failure)
 
     def validate_value(self, val: value) -> bool:
         for t in self.types:
