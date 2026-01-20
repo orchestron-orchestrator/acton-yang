@@ -15,6 +15,7 @@ import yang.schema
 from yang.identityref import Identityref, PartialIdentityref
 from yang.gdata import repr_adata
 from yang.type import Decimal, Ranges
+from yang.type import SIGNED_INT_TYPES, UNSIGNED_INT_TYPES
 
 
 OP_MERGE = "merge"
@@ -134,6 +135,21 @@ def unwrap_key[T](name: str, val: ?T, spath) -> T:
     raise ValueError("Missing key value at {format_schema_path(spath)}: {name}")
 
 
+def _coerce_integer_value(raw_value: value, schema_type: yang.schema.DTypeInteger, path: list[PathElement]) -> ?value:
+    if isinstance(raw_value, atom):
+        builtin_type = schema_type.builtin_type
+        if builtin_type in SIGNED_INT_TYPES:
+            try:
+                return int(raw_value)
+            except ValueError:
+                pass
+        if builtin_type in UNSIGNED_INT_TYPES:
+            try:
+                return u64(raw_value)
+            except ValueError:
+                pass
+
+
 protocol YangData:
     """Protocol for YANG data nodes
 
@@ -236,10 +252,7 @@ def try_parse_xml_value(text_value: ?str, schema_node: yang.schema.DNodeLeaf, sc
         if isinstance(schema_type, yang.schema.DTypeString):
             val = text_value
         elif isinstance(schema_type, yang.schema.DTypeInteger):
-            try:
-                val = bigint(text_value)
-            except ValueError:
-                raise YangValidationError(path, schema_type, text_value)
+            val = _coerce_integer_value(text_value, schema_type, path)
         elif isinstance(schema_type, yang.schema.DTypeEnum):
             val = text_value
         elif isinstance(schema_type, yang.schema.DTypeDecimal64):
@@ -375,10 +388,7 @@ def try_parse_json_value(leaf_value: ?value, schema_node: yang.schema.DNodeLeaf,
             val = leaf_value
         elif isinstance(schema_type, yang.schema.DTypeInteger):
             if isinstance(leaf_value, atom):
-                try:
-                    val = bigint(leaf_value)
-                except ValueError:
-                    raise YangValidationError(path, schema_type, leaf_value)
+                val = _coerce_integer_value(leaf_value, schema_type, path)
             else:
                 raise YangValidationError(path, schema_type, leaf_value)
         elif isinstance(schema_type, yang.schema.DTypeEnum):
@@ -460,7 +470,7 @@ extension yang.adata.MNode (YangData):
         maybe_attr = self._get_attr(usname)
         if maybe_attr is not None:
             schema_type = schema.type_
-            tv = try_validate_mnode_value(maybe_attr, schema_type)
+            tv = try_validate_mnode_value(maybe_attr, schema_type, new_path)
             if tv is not None:
                 if tv.t == "empty":
                     return (op=None if tv.val else OP_REMOVE, t=tv.t, val=yang.gdata.Present() if tv.val else None)
@@ -475,7 +485,7 @@ extension yang.adata.MNode (YangData):
         if isinstance(children, list):
             schema_type = schema.type_
             for child in children:
-                tv = try_validate_mnode_value(child, schema_type)
+                tv = try_validate_mnode_value(child, schema_type, new_path)
                 if tv is not None:
                     values.append((op=None, t=tv.t, val=tv.val))
                 else:
@@ -483,18 +493,16 @@ extension yang.adata.MNode (YangData):
         return values
 
 
-def try_validate_mnode_value(val: value, schema_type: yang.schema.DType) -> ?(t: str, val: value):
+def try_validate_mnode_value(val: value, schema_type: yang.schema.DType, path: list[PathElement]) -> ?(t: str, val: value):
     if isinstance(schema_type, yang.schema.DTypeUnion):
-        if isinstance(val, int):
-            # Handle case where mnode leaf value type is 'value'
-            # where an assigned integer literal is by default interpreted as int rather than the bigint we want
-            _val = bigint(val)
-        else:
-            _val = val
         for alt_type in schema_type.types:
-            tv = try_validate_mnode_value(_val, alt_type)
+            tv = try_validate_mnode_value(val, alt_type, path)
             if tv is not None:
                 return tv
+    elif isinstance(schema_type, yang.schema.DTypeInteger):
+        intval = _coerce_integer_value(val, schema_type, path)
+        if intval is not None and schema_type.validate_value(intval):
+            return (t=schema_type.builtin_type, val=intval)
     else:
         if schema_type.validate_value(val):
             return (t=schema_type.builtin_type, val=val)
@@ -1672,7 +1680,7 @@ def _test_json_path_nested_lists():
                             yang.gdata.Id("urn:example:y1", "deep"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "deep-key")], elements=[
                                 yang.gdata.Container({
                                     yang.gdata.Id("urn:example:y1", "deep-key"): yang.gdata.Leaf('key3'),
-                                    yang.gdata.Id("urn:example:y1", "data"): yang.gdata.Leaf(bigint(42))
+                                    yang.gdata.Id("urn:example:y1", "data"): yang.gdata.Leaf(int(42))
                                 })
                             ])
                         })
@@ -2174,7 +2182,7 @@ def _test_pradata():
     gdata_tree = yang.gdata.Container({
         yang.gdata.Id("urn:example:test", "top-level-leaf"): yang.gdata.Leaf("root value"),
         yang.gdata.Id("urn:example:test", "c1"): yang.gdata.Container({
-            yang.gdata.Id("urn:example:test", "optional-leaf"): yang.gdata.Leaf(bigint(42)),
+            yang.gdata.Id("urn:example:test", "optional-leaf"): yang.gdata.Leaf(int(42)),
             yang.gdata.Id("urn:example:test", "empty-yes"): yang.gdata.Leaf(yang.gdata.Present()),
             yang.gdata.Id("urn:example:test", "empty-no"): yang.gdata.Absent(),
             yang.gdata.Id("urn:example:test", "decimal"): yang.gdata.Leaf(Decimal(314, -2)),
@@ -2185,13 +2193,13 @@ def _test_pradata():
             yang.gdata.Id("urn:example:test", "li1"): yang.gdata.List([yang.gdata.Id("urn:example:test", "name"), yang.gdata.Id("urn:example:test", "extra-key")], [
                 yang.gdata.Container({
                     yang.gdata.Id("urn:example:test", "name"): yang.gdata.Leaf("item1"),
-                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(bigint(1)),
-                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(bigint(100))
+                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(int(1)),
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(int(100))
                 }),
                 yang.gdata.Container({
                     yang.gdata.Id("urn:example:test", "name"): yang.gdata.Leaf("item2"),
-                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(bigint(2)),
-                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(bigint(200)),
+                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(int(2)),
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(int(200)),
                     yang.gdata.Id("urn:example:test", "c3"): yang.gdata.Container({
                         yang.gdata.Id("urn:example:test", "nested-leaf"): yang.gdata.Leaf("birb")
                     })
@@ -2230,7 +2238,7 @@ def _test_pradata_root_path():
             yang.gdata.Id("urn:example:test", "middle"): yang.gdata.Container({
                 yang.gdata.Id("urn:example:test", "value1"): yang.gdata.Leaf("test value"),
                 yang.gdata.Id("urn:example:test", "inner"): yang.gdata.Container({
-                    yang.gdata.Id("urn:example:test", "value2"): yang.gdata.Leaf(bigint(42))
+                    yang.gdata.Id("urn:example:test", "value2"): yang.gdata.Leaf(int(42))
                 })
             })
         })
@@ -2277,7 +2285,7 @@ def _test_json_path_container_list_container():
                     yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('item1'),
                     yang.gdata.Id("urn:example:y1", "bottom"): yang.gdata.Container({
                         yang.gdata.Id("urn:example:y1", "data"): yang.gdata.Leaf('test'),
-                        yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf(bigint(42))
+                        yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf(int(42))
                     })
                 })
             ])

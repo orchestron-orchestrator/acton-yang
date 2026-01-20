@@ -457,12 +457,12 @@ def _test_foo_from_gdata_int():
     xml_in = xml.decode(xml_text)
     gd2 = yang.gen3.from_data(yang_foo.SRC_DNODE, xml_in)
     l3 = gd2.get_cnt(yang.gdata.Id("http://example.com/foo", "c1")).get_leaf(yang.gdata.Id("http://example.com/foo", "l3")).val
-    if isinstance(l3, bigint):
-        testing.assertEqual(l3, 1337)
+    if isinstance(l3, u64):
+        testing.assertEqual(l3, u64(1337))
     else:
-        testing.error("l3 in gdata is not an int")
+        testing.error("l3 in gdata is not u64")
     nr = yang_foo_root.from_gdata(gd2)
-    testing.assertEqual(nr.c1.l3, 1337)
+    testing.assertEqual(nr.c1.l3, u64(1337))
 
 def _test_foo_from_gdata_empty():
     gd = yang.gdata.Container(children={})
@@ -504,7 +504,7 @@ def _test_empty_false():
 
 def basics_leaf_defaults(r):
     testing.assertEqual(r.c.l_str_def, "foo")
-    testing.assertEqual(r.c.l_uint64_def, 1234567890)
+    testing.assertEqual(r.c.l_uint64_def, u64(1234567890))
     testing.assertEqual(r.c.l_decimal64_def, Decimal(123, -2))
     testing.assertEqual(r.c.l_str_def_quoted, '"foo"')
     testing.assertEqual(r.c.l_binary_def, "Hello Acton 🫡".encode())
@@ -685,8 +685,7 @@ def _test_foo_from_json_full():
     json_out = gd2.to_jsonstr()
     # This is not entirely in line with RFC 7951, Section 6.1: A value of the
     # "int64", "uint64", or "decimal64" type is represented as a JSON string ...
-    # json.encode serializes bigint and other numeric types to numeric literals.
-    # TODO: can remove this once we start using fixed-size integers in gdata
+    # json.encode serializes fixed-size numeric types to numeric literals.
     jdiff = r"""@@ -1,7 +1,7 @@
  {
      "foo:c1": {
@@ -780,8 +779,7 @@ def _test_json_roundtrip():
     json_out = gd2.to_jsonstr()
     # This is not entirely in line with RFC 7951, Section 6.1: A value of the
     # "int64", "uint64", or "decimal64" type is represented as a JSON string ...
-    # json.encode serializes bigint and other numeric types to numeric literals.
-    # TODO: can remove this once we start using fixed-size integers in gdata
+    # json.encode serializes fixed-size numeric types to numeric literals.
     jdiff = r"""@@ -1,7 +1,7 @@
  {
      "foo:c1": {
