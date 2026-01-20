@@ -7233,9 +7233,14 @@ class Module(SchemaNodeInner):
     def get_remap_imports(self, context: Context) -> ?list[(orig: str, alias: str)]:
         remaps = []
         for import_ in self.import_:
-            imported_module = context.get_module(import_.module, import_.revision_date)
-            if import_.prefix != imported_module.prefix:
-                remaps.append((orig=imported_module.prefix, alias=import_.prefix))
+            try:
+                imported_module = context.get_module(import_.module, import_.revision_date)
+            except ValueError as e:
+                # TODO: missing module is an error
+                print(e.error_message, err=True)
+            else:
+                if import_.prefix != imported_module.prefix:
+                    remaps.append((orig=imported_module.prefix, alias=import_.prefix))
         return remaps if len(remaps) > 0 else None
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
