@@ -90,6 +90,7 @@
 
 import base64
 import re
+import yang.xpath as xpath
 from yang.identityref import Identityref, PartialIdentityref
 from yang.pattern import YangPattern
 from yang.type import Decimal, Ranges, RangesBuilder
@@ -483,7 +484,7 @@ class DNode(object):
 
         return "\n".join(print_node(self, ""))
 
-    def resolve_references(self, root: DRoot):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         pass
 
 class DNodeInner(DNode):
@@ -904,9 +905,9 @@ class DNodeInner(DNode):
 
         return res
 
-    def resolve_references(self, root: DRoot):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         for child in self.children:
-            child.resolve_references(root)
+            child.resolve_references(root, spath + [self], allow_failure)
 
 class DNodeLeaf(DNode):
     if_feature: list[str]
@@ -915,8 +916,8 @@ class DNodeLeaf(DNode):
     type_: DType
     when: ?str
 
-    def resolve_references(self, root: DRoot):
-        self.type_.resolve_references(root)
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
+        self.type_.resolve_references(root, spath + [self], allow_failure)
 
 class DAction(DNodeInner):
     if_feature: list[str]
@@ -1522,7 +1523,7 @@ class DRoot(DNodeInner):
         self.rpcs = rpcs
 
     @staticmethod
-    def from_modules(modules: list[DNode]=[]):
+    def from_modules(modules: list[DNode]=[], allow_failure: ?list[str]):
         # Build a global identity map from all modules
         children = []
         rpcs = []
@@ -1600,7 +1601,7 @@ class DRoot(DNodeInner):
         root = DRoot(children, identities, rpcs)
 
         # Resolve DType references, e.g. resolve base identities
-        root.resolve_references(root)
+        root.resolve_references(root, [], allow_failure)
 
         return root
 
@@ -1638,6 +1639,7 @@ class DRoot(DNodeInner):
         res.append("import yang.adata")
         res.append("import yang.gdata")
         res.append("import yang.gen3")
+        res.append("import yang.xpath")
         res.append("from yang.identityref import Identityref, PartialIdentityref")
         res.append("from yang.pattern import YangPattern")
         res.append("from yang.schema import *")
@@ -1683,7 +1685,6 @@ class DRoot(DNodeInner):
         res.append("")
 
         return "\n".join(res)
-
 
 class DRpc(DNodeInner):
     if_feature: list[str]
@@ -1796,7 +1797,7 @@ class DType(object):
             return DTypeInstanceIdentifier.from_resolver(resolver)
         raise ValueError("Unable to resolve type ({resolver.type_}) into builtin base-type")
 
-    def resolve_references(self, root: DRoot):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         pass
 
     # Validate value type. NOT relations to other data i.e. leafref/instance-identifier targets.
@@ -1996,14 +1997,14 @@ class DTypeIdentityref(DType):
         t = resolver.type_
         return DTypeIdentityref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, identity_bases, [])
 
-    def resolve_references(self, root: DRoot):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         resolved_identity_bases = []
         for identity_base in self.identity_bases:
             resolved_identity_base = find_identity_by_ref(root.identities, identity_base.name, prefix=identity_base.prefix)
             if resolved_identity_base is not None:
                 resolved_identity_bases.append(resolved_identity_base)
             else:
-                raise ValueError("Unknown base identity \"{identity_base.prefix}:{identity_base.name}\" in type \"{self.name}\"")
+                raise ValueError("{get_path(spath)}: Unknown base identity \"{identity_base.prefix}:{identity_base.name}\" in type \"{self.name}\"")
         self.identity_bases = resolved_identity_bases
         self.identities = root.identities
 
@@ -2073,13 +2074,15 @@ class DTypeInteger(DType):
         return []
 
 class DTypeLeafref(DType):
-    path: str # TODO: XPath
+    path: xpath.AbsoluteLocationPath
     require_instance: bool # default: True
+    target_type: ?DType
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, path: str, require_instance: bool):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, target_type: ?DType, default: ?value, path: xpath.AbsoluteLocationPath, require_instance: bool):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.path = path
         self.require_instance = require_instance
+        self.target_type = target_type
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeLeafref:
@@ -2087,25 +2090,58 @@ class DTypeLeafref(DType):
         if _path is not None:
             t = resolver.type_
             _require_instance = resolver.require_instance
-            return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _path, _require_instance is not None and _require_instance)
-        raise ValueError("Type {resolver.type_.name} of base-type leafref requires path restriction")
+            # target_type is either passed to __init__ if we're restoring an
+            # already resolved leafref, or it is set in resolve_references.
+            _target_type = None
+            return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, _target_type, resolver.default, _path, _require_instance is not None and _require_instance)
+        raise ValueError("Type {resolver.type_.name}{" of base-type leafref" if resolver.type_.name != "leafref" else ""} requires path restriction")
 
-    def resolve_references(self, root: DRoot):
-        pass # TODO: Verify path expression
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
+        n: DNode = root
+        current_module = spath[-1].module
+        for step in self.path.steps:
+            if isinstance(step, xpath.NodeTestStep):
+                try:
+                    if step.prefix is not None:
+                        n = n.get(step.name, prefix=step.prefix)
+                    else:
+                        # Unqualified (no prefix) nodes belong the namespace of the current node
+                        n = n.get(step.name, module=current_module)
+                except ValueError as ex:
+                    if allow_failure is not None and get_path(spath) in allow_failure:
+                        print("{get_path(spath)}: [SKIP] Failed to resolve leafref path: {self.path}, {ex.error_message}", err=True)
+                        self.target_type = DTypeString("string", self.description, self.reference, self.units, self.exts, "string", self.default, None, [])
+                        return
+                    raise ValueError("{get_path(spath)}: Failed to resolve leafref path: {self.path}, {ex.error_message}")
+            else:
+                raise NotImplementedError("{get_path(spath)}: Leafref path: {self.path}, expected NodeTestStep only")
+        if isinstance(n, DNodeLeaf):
+            self.target_type = n.type_
+        else:
+            raise ValueError("{get_path(spath)}: Leafref path: {self.path}, does not refer to a leaf or leaf-list")
 
     def validate_value(self, val: value) -> bool:
-        return True # TODO
+        t = self.target_type
+        if t is not None:
+            return t.validate_value(val)
+        return False
 
     def prtyinst(self) -> str:
-        return "DTypeLeafref({self.format_common_params()}, path={repr(self.path)}, require_instance={repr(self.require_instance)})"
+        t = self.target_type
+        return "DTypeLeafref({self.format_common_params()}, path={repr(self.path)}, require_instance={repr(self.require_instance)}, target_type={t.prtyinst() if t is not None else repr(None)})"
 
     def format_hints(self) -> list[str]:
         hints = ["path: {self.path}"]
+        _target_type = self.target_type
         _require_instance = self.require_instance
         if _require_instance is not None and not _require_instance:
             # Pending https://github.com/actonlang/acton/issues/1125
             # hints.append("require-instance: false")
             hints += ["require-instance: false"]
+        if _target_type is not None:
+            # Pending https://github.com/actonlang/acton/issues/1125
+            # hints.append("type: {_target_type.format_hints()}")
+            hints += ["type: {_target_type.format_hints()}"]
         return hints
 
 class DTypeString(DType):
@@ -2164,9 +2200,9 @@ class DTypeUnion(DType):
         t = resolver.type_
         return DTypeUnion(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.alt_types)
 
-    def resolve_references(self, root: DRoot):
+    def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         for t in self.types:
-            t.resolve_references(root)
+            t.resolve_references(root, spath, allow_failure)
 
     def validate_value(self, val: value) -> bool:
         for t in self.types:
@@ -2189,8 +2225,7 @@ class DTypeResolver(object):
     enum_val_to_name: dict[int, str]
     fraction_digits: ?bigint # Assume only allowed in the type "decimal64" statement with no further restrictions in base-type chain
     length: ?Ranges[int] # May be restricted to sub-ranges only
-    path: ?str # Assume only allowed in the type "leafref" statement, with no further restrictions in base-type chain
-              # TODO: XPath !!!
+    path: ?xpath.AbsoluteLocationPath # Assume only allowed in the type "leafref" statement, with no further restrictions in base-type chain
     patterns: list[YangPattern] # A value must match patterns in type and base-types chain
     integer_ranges: ?Ranges[bigint] # May be restricted to sub-ranges only
     decimal_ranges: ?Ranges[Decimal] # May be restricted to sub-ranges only
@@ -2356,11 +2391,11 @@ class DTypeResolver(object):
                 self.length = new_length
 
             # path
-            _path = t.path
+            _path = t.resolved_path
             if _path is not None:
                 if self.path is not None:
                     raise ValueError("The path of a base-type may not be redefined in sub-type \"{t.name}\"")
-                self.path = _path # TODO: XPath !!!
+                self.path = _path
 
             # pattern
             for pattern in t.pattern:
@@ -2820,7 +2855,7 @@ class SchemaNode(object):
         """
         raise NotImplementedError('SchemaNode compile')
 
-    def expand_augments(self, context: Context, target_base: SchemaNode=self, in_uses=False):
+    def expand_augments(self, context: Context, target_base: SchemaNode=self, in_uses=False, remap_imports):
         """Expand augment node"""
         def get_target(target_base, target: str) -> SchemaNode:
 
@@ -2859,7 +2894,7 @@ class SchemaNode(object):
 
             return current_node
 
-        def expand_augment(augments: list[Augment], target_base, context: Context):
+        def expand_augment(augments: list[Augment], target_base, context: Context, remap_imports):
             # There can be multiple augments which might have dependencies on
             # each other, for example:
             # container c1 {}
@@ -2885,37 +2920,43 @@ class SchemaNode(object):
                     target = get_target(target_base, aug.target_node)
                     if isinstance(target, SchemaNodeInner):
                         # Just move the child to the target
-                        aug.expand_children(context, target, new_mod=aug.get_module_name(), new_ns=aug.get_namespace(), new_pfx=aug.get_prefix())
+                        aug.expand_children(context, target, new_mod=aug.get_module_name(), new_ns=aug.get_namespace(), new_pfx=aug.get_prefix(), remap_imports=remap_imports)
                         target.exts.extend(aug.exts)
                     else:
                         raise ValueError("Augment target {target} is not an inner node")
 
         # Look if node is of a type that has augment substatements
         if isinstance(self, Module):
-            expand_augment(self.augment, self, context)
+            expand_augment(self.augment, self, context, remap_imports)
         elif isinstance(self, Submodule):
-            expand_augment(self.augment, self, context)
+            expand_augment(self.augment, self, context, remap_imports)
         elif isinstance(self, Uses):
-            expand_augment(self.augment, target_base, context)
+            expand_augment(self.augment, target_base, context, remap_imports)
         else:
             raise ValueError("Node type does not have augment substatements")
 
-    def expand_children(self, context: Context, target: SchemaNodeInner, new_mod: ?str = None, new_ns: ?str = None, new_pfx: ?str = None):
+    def expand_children(self, context: Context, target: SchemaNodeInner, new_mod: ?str = None, new_ns: ?str = None, new_pfx: ?str = None, remap_imports: ?list[(orig: str, alias: str)] = None):
         """Expand abstract children into concrete nodes
         """
         if isinstance(self, SchemaNodeInner):
             for child in self.children:
                 if isinstance(child, Uses):
                     grouping = child.get_grouping(child.name, context)
-                    grouping.expand_children(context, target, new_mod if new_mod is not None else target.mod, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx)
-                    child.expand_augments(context, target, in_uses=True)
+                    grouping.expand_children(context, target, new_mod if new_mod is not None else target.mod, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx, remap_imports=remap_imports)
+                    child.expand_augments(context, target, in_uses=True, remap_imports=remap_imports)
                     child.expand_refines(target)
                 else:
                     c_child = child.compile(context, new_mod, new_ns, new_pfx)
+                    if remap_imports is not None:
+                        for ri in remap_imports:
+                            c_child.remap_prefix_references(ri.alias, ri.orig)
                     c_child.parent = target
                     target.children.append(c_child)
         else:
             raise ValueError("expand_children() called on non-inner node {type(self)}")
+
+    mut def resolve_compiled_schema_path_dependencies(self):
+        pass
 
     mut def apply_refine(self, refine: Refine):
         raise NotImplementedError('SchemaNode apply_refine not implemented for {type(self)}')
@@ -3184,6 +3225,10 @@ class SchemaNode(object):
 
 class SchemaNodeInner(SchemaNode):
     children: list[SchemaNode]
+
+    mut def resolve_compiled_schema_path_dependencies(self):
+        for child in self.children:
+            child.resolve_compiled_schema_path_dependencies()
 
 class SchemaNodeOuter(SchemaNode):
     pass
@@ -3592,7 +3637,8 @@ def yang_typename_to_acton_type(type_name: str) -> str:
     elif type_name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
         return "bigint"
     elif type_name == "leafref":
-        return "str"
+        # You should use yang_type_to_acton_type which can expand the union type for you!
+        raise ValueError("Leafref type not supported")
     elif type_name == "string":
         return "str"
     elif type_name == "union":
@@ -3676,6 +3722,12 @@ def yang_type_to_acton_type(t: ?DType) -> str:
             # TODO: use atom when union consists of types that we represent with Acton built-in types
             # TODO: use Acton union
             return "value"
+        elif isinstance(t, DTypeLeafref):
+            target_type = t.target_type
+            if target_type is not None:
+                return yang_type_to_acton_type(target_type)
+            else:
+                raise ValueError("Missing target type of {t.name}")
         else:
             return yang_typename_to_acton_type(t.builtin_type)
     raise ValueError("type not defined")
@@ -4229,6 +4281,16 @@ class Action(SchemaNodeInner):
                      pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns, new_pfx)
         return new
+
+    mut def resolve_compiled_schema_path_dependencies(self):
+        self_input = self.input
+        if self_input is not None:
+            self_input.resolve_compiled_schema_path_dependencies()
+        self_output = self.output
+        if self_output is not None:
+            self_output.resolve_compiled_schema_path_dependencies()
+        for child in self.children:
+            child.resolve_compiled_schema_path_dependencies()
 
     def to_dnode(self, context: DTypeContext) -> DAction:
         dnode_children = []
@@ -6337,6 +6399,9 @@ class Leaf(SchemaNodeOuter):
 
         return new
 
+    mut def resolve_compiled_schema_path_dependencies(self):
+        self.type_.resolve_compiled_schema_path_dependencies()
+
     def to_dnode(self, context: DTypeContext) -> DLeaf:
         dtype = self.type_.to_dtype(context)
 
@@ -6554,6 +6619,9 @@ class LeafList(SchemaNodeOuter):
         resolved_type.parent = new
 
         return new
+
+    mut def resolve_compiled_schema_path_dependencies(self):
+        self.type_.resolve_compiled_schema_path_dependencies()
 
     def get_max_elements(self) -> ?int:
         selfmax_elements = self.max_elements
@@ -7166,7 +7234,21 @@ class Module(SchemaNodeInner):
     def is_config(self) -> bool:
         return False
 
+    def get_remap_imports(self, context: Context) -> ?list[(orig: str, alias: str)]:
+        remaps = []
+        for import_ in self.import_:
+            try:
+                imported_module = context.get_module(import_.module, import_.revision_date)
+            except ValueError as e:
+                # TODO: missing module is an error
+                print(e.error_message, err=True)
+            else:
+                if import_.prefix != imported_module.prefix:
+                    remaps.append((orig=imported_module.prefix, alias=import_.prefix))
+        return remaps if len(remaps) > 0 else None
+
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        remap_imports = self.get_remap_imports(context)
         new = Module(self.name,
                      yang_version=self.yang_version,
                      namespace=self.namespace,
@@ -7183,22 +7265,8 @@ class Module(SchemaNodeInner):
                      extension_=self.extension_,
                      feature=self.feature,
                      exts=self.exts)
-        self.expand_children(context, new, new_mod, new_ns, new_pfx)
-        new.expand_augments(context)
-
-        # Normalize import prefixes at compile time
-        # When a module imports another module with a different prefix than its actual prefix,
-        # we need to normalize all references to use the actual prefix
-        for import_ in self.import_:
-            try:
-                imported_module = context.get_module(import_.module, import_.revision_date)
-            except ValueError as e:
-                # TODO: import a non-existant module? error!
-                print(e.error_message, err=True)
-            else:
-                if import_.prefix != imported_module.prefix:
-                    new.remap_prefix_references(import_.prefix, imported_module.prefix)
-
+        self.expand_children(context, new, new_mod, new_ns, new_pfx, remap_imports)
+        new.expand_augments(context, remap_imports=remap_imports)
         return new
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
@@ -8208,6 +8276,16 @@ class Rpc(SchemaNodeInner):
         self.expand_children(context, new, new_ns, new_pfx)
         return new
 
+    mut def resolve_compiled_schema_path_dependencies(self):
+        self_input = self.input
+        if self_input is not None:
+            self_input.resolve_compiled_schema_path_dependencies()
+        self_output = self.output
+        if self_output is not None:
+            self_output.resolve_compiled_schema_path_dependencies()
+        for child in self.children:
+            child.resolve_compiled_schema_path_dependencies()
+
     def to_dnode(self, context: DTypeContext) -> DRpc:
         # Convert SchemaNode Rpc.input/output to DRpc.input/output and add to
         # its children, but only if Input and Output actually contain data
@@ -8731,11 +8809,14 @@ class Type(SchemaNodeOuter):
                 pfx=self.pfx,
                 resolved_base_typedef=resolved_typedef)
 
+    mut def resolve_compiled_schema_path_dependencies(self):
+        raise NotImplementedError("Type.resolve_compiled_schema_path_dependencies: expect call to ResolvedType.resolve_compiled_schema_path_dependencies instead")
+
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         return self.resolve_type(context, new_mod, new_ns, new_pfx)
 
     def to_dtype(self, context: DTypeContext) -> DType:
-        raise NotImplementedError("Type.to_dtype: expect call to ResolvedType instead")
+        raise NotImplementedError("Type.to_dtype: expect call to ResolvedType.to_dtype instead")
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
         """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
@@ -10286,10 +10367,13 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
 
 class ResolvedType(Type):
     resolved_base_typedef: ?Typedef
+    resolved_path: ?xpath.AbsoluteLocationPath
 
-    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None):
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None, resolved_path: ?xpath.AbsoluteLocationPath=None):
         Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, require_instance, type_, exts, parent, mod, ns, pfx)
         self.resolved_base_typedef = resolved_base_typedef
+        self.resolved_path = resolved_path
+        path = self.path
 
     def resolve_type(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
         new_name = self.name
@@ -10317,11 +10401,115 @@ class ResolvedType(Type):
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx,
-                   resolved_base_typedef=self.resolved_base_typedef)
+                   resolved_base_typedef=self.resolved_base_typedef,
+                   resolved_path=self.resolved_path)
         return new
 
+    def resolve_compiled_schema_path_dependencies(self):
+        xpath_context_node = self.parent
+        if xpath_context_node is not None:
+            self.resolve_leafref_path(xpath_context_node)
+        else:
+            raise ValueError("Unable to find ancestor path due to unset parent")
+
     def to_dtype(self, context: DTypeContext) -> DType:
-        return DType.from_resolved_type(self, context)
+        try:
+            return DType.from_resolved_type(self, context)
+        except ValueError as ex:
+            def get_path():
+                path = []
+                n = self.parent
+                while True:
+                    _n = n
+                    if _n is not None:
+                        if isinstance(_n, Module):
+                            break
+                        _argname = _n._get_argname()
+                        if _argname is not None and _argname == 'name':
+                            _name = _n._get_arg()
+                            if _name is not None:
+                                _prefix = _n.get_prefix()
+                                path.append("{_prefix}:{_name}" if _prefix is not None else _name)
+                        n = _n.parent
+                    else:
+                        break
+                return "".join(["/{s}" for s in reversed(path)])
+            raise ValueError("Failed to resolve type at {get_path()}: {ex.error_message}")
+
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+
+        Type.remap_prefix_references(self, old_pfx, new_pfx)
+        self_resolved_base_typedef = self.resolved_base_typedef
+        if self_resolved_base_typedef is not None:
+            self_resolved_base_typedef.remap_prefix_references(old_pfx, new_pfx)
+
+    def resolve_leafref_path(self, xpath_context_node):
+        # Resolve base
+        _resolved_base_typedef = self.resolved_base_typedef
+        if _resolved_base_typedef is not None:
+            _base_type = _resolved_base_typedef.type_
+            if isinstance(_base_type, ResolvedType):
+                _base_type.resolve_leafref_path(xpath_context_node)
+            else:
+                raise ValueError("Expected ResolvedType")
+
+        # Resolve union members
+        for alt_type in self.type_:
+            if isinstance(alt_type, ResolvedType):
+                alt_type.resolve_leafref_path(xpath_context_node)
+            else:
+                raise ValueError("Expected ResolvedType")
+
+        # Resolve self
+        path = self.path
+        if path is not None:
+            location_path = xpath.try_parse_location_path(path)
+            if location_path is not None:
+                if isinstance(location_path, xpath.AbsoluteLocationPath):
+                    absolute_path = location_path.steps
+                elif isinstance(location_path, xpath.RelativeLocationPath):
+                    reverse_base_path: list[xpath.Step] = []
+                    n = xpath_context_node
+                    while True:
+                        _n = n
+                        if _n is not None:
+                            unalias_pfx = _n.pfx if _n.pfx != xpath_context_node.pfx else None
+                            if isinstance(_n, Container):
+                                reverse_base_path.append(xpath.NodeTestStep(unalias_pfx, _n.name, []))
+                            elif isinstance(_n, List):
+                                reverse_base_path.append(xpath.NodeTestStep(unalias_pfx, _n.name, []))
+                            elif isinstance(_n, Leaf):
+                                reverse_base_path.append(xpath.NodeTestStep(unalias_pfx, _n.name, []))
+                            elif isinstance(_n, LeafList):
+                                reverse_base_path.append(xpath.NodeTestStep(unalias_pfx, _n.name, []))
+                            elif isinstance(_n, Module):
+                                break
+                            elif isinstance(_n, Grouping) or isinstance(_n, Augment) or isinstance(_n, Typedef):
+                                return # Only resolve compiled data-path instances!
+                            n = _n.parent
+                        else:
+                            break
+                    absolute_path = list(reversed(reverse_base_path))
+                    absolute_path.extend(location_path.steps)
+                else:
+                    raise NotImplementedError("Unhandled type {type(location_path)}")
+
+                resolved_path = []
+                for step in absolute_path:
+                    if isinstance(step, xpath.NodeTestStep):
+                        resolved_path.append(step)
+                    elif isinstance(step, xpath.AbbreviatedStep):
+                        if step.step == "..":
+                            try:
+                                resolved_path.pop()
+                            except Exception:
+                                raise ValueError("Unable to resolve leafref path: {path}")
+                self.resolved_path = xpath.AbsoluteLocationPath(resolved_path)
+            else:
+                raise ValueError("Unable to parse leafref path: {path}")
+
 
 extension ResolvedType(Hashable):
     def __eq__(self, other: ResolvedType) -> bool:
@@ -10338,7 +10526,8 @@ extension ResolvedType(Hashable):
             and self.pattern == other.pattern \
             and self.range_ == other.range_ \
             and self.require_instance == other.require_instance \
-            and self.type_ == other.type_
+            and self.type_ == other.type_ \
+            and self.resolved_path == other.resolved_path
 
     def hash(self, hasher):
         # TODO: Cache Hash calculation?
@@ -10389,6 +10578,9 @@ extension ResolvedType(Hashable):
         for alt_type in self.type_:
             if isinstance(alt_type, ResolvedType):
                 alt_type.hash(hasher)
+        _resolved_path = self.resolved_path
+        if _resolved_path is not None:
+            _resolved_path.hash(hasher)
 
 
 def find_identity_by_ref(identities: list[DIdentity], name: str, namespace: ?str=None, module: ?str=None, prefix: ?str=None) -> ?DIdentity:

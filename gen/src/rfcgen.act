@@ -330,6 +330,17 @@ snode_methods = {
         return new
 
 """,
+        "resolve_compiled_schema_path_dependencies": """    mut def resolve_compiled_schema_path_dependencies(self):
+        self_input = self.input
+        if self_input is not None:
+            self_input.resolve_compiled_schema_path_dependencies()
+        self_output = self.output
+        if self_output is not None:
+            self_output.resolve_compiled_schema_path_dependencies()
+        for child in self.children:
+            child.resolve_compiled_schema_path_dependencies()
+
+""",
         "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DAction:
         dnode_children = []
         self_input = self.input
@@ -532,7 +543,22 @@ snode_methods = {
         return False
 
 """,
+        "get_remap_imports": r"""    def get_remap_imports(self, context: Context) -> ?list[(orig: str, alias: str)]:
+        remaps = []
+        for import_ in self.import_:
+            try:
+                imported_module = context.get_module(import_.module, import_.revision_date)
+            except ValueError as e:
+                # TODO: missing module is an error
+                print(e.error_message, err=True)
+            else:
+                if import_.prefix != imported_module.prefix:
+                    remaps.append((orig=imported_module.prefix, alias=import_.prefix))
+        return remaps if len(remaps) > 0 else None
+
+""",
         "compile": r"""    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        remap_imports = self.get_remap_imports(context)
         new = Module(self.name,
                      yang_version=self.yang_version,
                      namespace=self.namespace,
@@ -549,22 +575,8 @@ snode_methods = {
                      extension_=self.extension_,
                      feature=self.feature,
                      exts=self.exts)
-        self.expand_children(context, new, new_mod, new_ns, new_pfx)
-        new.expand_augments(context)
-
-        # Normalize import prefixes at compile time
-        # When a module imports another module with a different prefix than its actual prefix,
-        # we need to normalize all references to use the actual prefix
-        for import_ in self.import_:
-            try:
-                imported_module = context.get_module(import_.module, import_.revision_date)
-            except ValueError as e:
-                # TODO: import a non-existant module? error!
-                print(e.error_message, err=True)
-            else:
-                if import_.prefix != imported_module.prefix:
-                    new.remap_prefix_references(import_.prefix, imported_module.prefix)
-
+        self.expand_children(context, new, new_mod, new_ns, new_pfx, remap_imports)
+        new.expand_augments(context, remap_imports=remap_imports)
         return new
 
 """
@@ -676,6 +688,10 @@ snode_methods = {
         return new
 
 """,
+        "resolve_compiled_schema_path_dependencies": """    mut def resolve_compiled_schema_path_dependencies(self):
+        self.type_.resolve_compiled_schema_path_dependencies()
+
+""",
         "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DLeaf:
         dtype = self.type_.to_dtype(context)
 
@@ -736,6 +752,10 @@ snode_methods = {
         resolved_type.parent = new
 
         return new
+
+""",
+        "resolve_compiled_schema_path_dependencies": """    mut def resolve_compiled_schema_path_dependencies(self):
+        self.type_.resolve_compiled_schema_path_dependencies()
 
 """,
         "get_max_elements": """    def get_max_elements(self) -> ?int:
@@ -840,6 +860,17 @@ snode_methods = {
                   pfx=new_pfx if new_pfx is not None else self.pfx)
         self.expand_children(context, new, new_ns, new_pfx)
         return new
+
+""",
+        "resolve_compiled_schema_path_dependencies": """    mut def resolve_compiled_schema_path_dependencies(self):
+        self_input = self.input
+        if self_input is not None:
+            self_input.resolve_compiled_schema_path_dependencies()
+        self_output = self.output
+        if self_output is not None:
+            self_output.resolve_compiled_schema_path_dependencies()
+        for child in self.children:
+            child.resolve_compiled_schema_path_dependencies()
 
 """,
         "to_dnode": """    def to_dnode(self, context: DTypeContext) -> DRpc:
@@ -980,12 +1011,16 @@ snode_methods = {
                 resolved_base_typedef=resolved_typedef)
 
 """,
+        "resolve_compiled_schema_path_dependencies": r"""    mut def resolve_compiled_schema_path_dependencies(self):
+        raise NotImplementedError("Type.resolve_compiled_schema_path_dependencies: expect call to ResolvedType.resolve_compiled_schema_path_dependencies instead")
+
+""",
         "compile": r"""    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         return self.resolve_type(context, new_mod, new_ns, new_pfx)
 
 """,
         "to_dtype": r"""    def to_dtype(self, context: DTypeContext) -> DType:
-        raise NotImplementedError("Type.to_dtype: expect call to ResolvedType instead")
+        raise NotImplementedError("Type.to_dtype: expect call to ResolvedType.to_dtype instead")
 
 """,
     },

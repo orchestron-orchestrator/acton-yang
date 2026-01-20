@@ -286,6 +286,7 @@ def compile_modules(modules: NameRevMap[yang.schema.Module]) -> list[yang.schema
         mod_rev_rev = mod_rev.rev
         if mod_rev_rev is None:
             no_rev_modules.append(m)
+        m.resolve_compiled_schema_path_dependencies()
     return no_rev_modules
 
 def compile_to_dmodules(modules: list[yang.schema.Module]) -> list[yang.schema.DModule]:
@@ -303,13 +304,13 @@ def compile_to_dmodules(modules: list[yang.schema.Module]) -> list[yang.schema.D
     return dmodules
 
 
-def compile_to_droot(dmodules: list[yang.schema.DModule]) -> yang.schema.DRoot:
+def compile_to_droot(dmodules: list[yang.schema.DModule], allow_failure: ?list[str]=None) -> yang.schema.DRoot:
     """Compile a list of DModules into a DRoot object
 
     This function is the final step in compiling the schema. It takes a list of
     DModules and combines them into a single DRoot object.
     """
-    return yang.schema.DRoot.from_modules(dmodules)
+    return yang.schema.DRoot.from_modules(dmodules, allow_failure)
 
 
 def _load_cached_statement(fc: file.FileCap, cache_file: str) -> ?yang.schema.Statement:
@@ -348,7 +349,7 @@ def _save_statement_to_cache(fc: file.FileCap, cache_file: str, stmt: yang.schem
     wf.close()
 
 
-def compile_with_cache(yang_sources: list[str], strict_quoting=True, fc: file.FileCap) -> yang.schema.DRoot:
+def compile_with_cache(yang_sources: list[str], strict_quoting=True, fc: file.FileCap, allow_failure: ?list[str]=None) -> yang.schema.DRoot:
     """Parse and compile a set of YANG modules and submodules into a derived schema tree, but with Statement caching.
 
     This function is equivalent to the compile function, except that it caches
@@ -375,14 +376,14 @@ def compile_with_cache(yang_sources: list[str], strict_quoting=True, fc: file.Fi
             _save_statement_to_cache(fc, cache_path, new_stmt)
             statements.append(new_stmt)
 
-    return compile_to_droot(compile_to_dmodules(compile_modules(parse_modules(statements))))
+    return compile_to_droot(compile_to_dmodules(compile_modules(parse_modules(statements))), allow_failure)
 
 
 def compile_from_stmt(yang_statements: list[yang.schema.Statement]):
     return compile_to_droot(compile_to_dmodules(compile_modules(parse_modules(yang_statements))))
 
 
-def compile(yang_sources: list[str], strict_quoting=True) -> yang.schema.DRoot:
+def compile(yang_sources: list[str], strict_quoting=True, allow_failure: ?list[str]=None) -> yang.schema.DRoot:
     """Parse and compile a set of YANG modules and submodules into a derived schema tree
 
     The derived schema tree combines all processed modules and submodules into
@@ -397,7 +398,7 @@ def compile(yang_sources: list[str], strict_quoting=True) -> yang.schema.DRoot:
                     parse_statements(yang_sources, strict_quoting)
                 )
             )
-        )
+        ), allow_failure
     )
 
 

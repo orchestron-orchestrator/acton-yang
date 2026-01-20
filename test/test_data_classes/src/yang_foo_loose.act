@@ -5,6 +5,7 @@ import yang
 import yang.adata
 import yang.gdata
 import yang.gen3
+import yang.xpath
 from yang.identityref import Identityref, PartialIdentityref
 from yang.pattern import YangPattern
 from yang.schema import *
@@ -60,7 +61,8 @@ SRC_DNODE = DRoot(identities=[
         DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l_identityref_noval', config=True, mandatory=False, type_=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_foo_fooy], identities=_identities)),
         DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l4', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
         DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-        DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l2', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+        DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l2', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+        DLeaf(module='bar', namespace='http://example.com/bar', prefix='bar', name='l_leafref', config=True, mandatory=False, type_=DTypeLeafref(name='leafref', description=None, reference=None, exts=[], builtin_type='leafref', default=None, path=yang.xpath.AbsoluteLocationPath([yang.xpath.NodeTestStep('f', 'c1', []), yang.xpath.NodeTestStep('f', 'li', []), yang.xpath.NodeTestStep('f', 'name', [])]), require_instance=False, target_type=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])))
     ]),
     DContainer(module='foo', namespace='http://example.com/foo', prefix='f', name='pc1', config=True, presence=True, children=[
         DContainer(module='foo', namespace='http://example.com/foo', prefix='f', name='foo', config=True, presence=False, children=[
@@ -424,6 +426,13 @@ def src_yang():
     augment /foo-local:c1 {
         // create a conflict with /foo-local:c1/l1
         uses foo-local:g1;
+
+        // add a leafref with path using a local prefix
+        leaf l_leafref {
+            type leafref {
+                path "/foo-local:c1/foo-local:li/foo-local:name";
+            }
+        }
     }
     augment /foo-local:c.dot {
         leaf l.dot2 {
@@ -580,8 +589,9 @@ class foo__c1(yang.adata.MNode):
     l4: ?str
     bar_l1: ?str
     l2: ?str
+    l_leafref: ?str
 
-    mut def __init__(self, f_l1: ?str, l3: ?bigint, l_empty: ?bool, l_empty_delete: ?bool, l_decimal64: ?Decimal, li: list[foo__c1__li_entry]=[], ll_uint64: ?list[bigint]=None, ll_str: ?list[str]=None, l_identityref: ?Identityref, ll_identityref: ?list[Identityref]=None, l_identityref_noval: ?Identityref, l4: ?str, bar_l1: ?str, l2: ?str):
+    mut def __init__(self, f_l1: ?str, l3: ?bigint, l_empty: ?bool, l_empty_delete: ?bool, l_decimal64: ?Decimal, li: list[foo__c1__li_entry]=[], ll_uint64: ?list[bigint]=None, ll_str: ?list[str]=None, l_identityref: ?Identityref, ll_identityref: ?list[Identityref]=None, l_identityref_noval: ?Identityref, l4: ?str, bar_l1: ?str, l2: ?str, l_leafref: ?str):
         self._ns = 'http://example.com/foo'
         self.f_l1 = f_l1
         self.l3 = l3
@@ -597,6 +607,7 @@ class foo__c1(yang.adata.MNode):
         self.l4 = l4
         self.bar_l1 = bar_l1
         self.l2 = l2
+        self.l_leafref = l_leafref
 
     def _get_attr(self, name: str) -> ?value:
         if name == 'f_l1':
@@ -627,6 +638,8 @@ class foo__c1(yang.adata.MNode):
             return self.bar_l1
         if name == 'l2':
             return self.l2
+        if name == 'l_leafref':
+            return self.l_leafref
         raise ValueError('Attribute {name} not found in foo__c1')
 
     mut def to_gdata(self) -> yang.gdata.Node:
@@ -637,7 +650,7 @@ class foo__c1(yang.adata.MNode):
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
         if n is not None:
-            return foo__c1(f_l1=n.get_opt_str(yang.gdata.Id(NS_foo, 'l1')), l3=n.get_opt_bigint(yang.gdata.Id(NS_foo, 'l3')), l_empty=n.get_opt_empty(yang.gdata.Id(NS_foo, 'l_empty')), l_empty_delete=n.get_opt_empty(yang.gdata.Id(NS_foo, 'l_empty_delete')), l_decimal64=n.get_opt_Decimal(yang.gdata.Id(NS_foo, 'l_decimal64')), li=foo__c1__li.from_gdata(n.get_opt_list(yang.gdata.Id(NS_foo, 'li'))), ll_uint64=n.get_opt_bigints(yang.gdata.Id(NS_foo, 'll_uint64')), ll_str=n.get_opt_strs(yang.gdata.Id(NS_foo, 'll_str')), l_identityref=n.get_opt_Identityref(yang.gdata.Id(NS_foo, 'l_identityref')), ll_identityref=n.get_opt_Identityrefs(yang.gdata.Id(NS_foo, 'll_identityref')), l_identityref_noval=n.get_opt_Identityref(yang.gdata.Id(NS_foo, 'l_identityref_noval')), l4=n.get_opt_str(yang.gdata.Id(NS_foo, 'l4')), bar_l1=n.get_opt_str(yang.gdata.Id(NS_bar, 'l1')), l2=n.get_opt_str(yang.gdata.Id(NS_bar, 'l2')))
+            return foo__c1(f_l1=n.get_opt_str(yang.gdata.Id(NS_foo, 'l1')), l3=n.get_opt_bigint(yang.gdata.Id(NS_foo, 'l3')), l_empty=n.get_opt_empty(yang.gdata.Id(NS_foo, 'l_empty')), l_empty_delete=n.get_opt_empty(yang.gdata.Id(NS_foo, 'l_empty_delete')), l_decimal64=n.get_opt_Decimal(yang.gdata.Id(NS_foo, 'l_decimal64')), li=foo__c1__li.from_gdata(n.get_opt_list(yang.gdata.Id(NS_foo, 'li'))), ll_uint64=n.get_opt_bigints(yang.gdata.Id(NS_foo, 'll_uint64')), ll_str=n.get_opt_strs(yang.gdata.Id(NS_foo, 'll_str')), l_identityref=n.get_opt_Identityref(yang.gdata.Id(NS_foo, 'l_identityref')), ll_identityref=n.get_opt_Identityrefs(yang.gdata.Id(NS_foo, 'll_identityref')), l_identityref_noval=n.get_opt_Identityref(yang.gdata.Id(NS_foo, 'l_identityref_noval')), l4=n.get_opt_str(yang.gdata.Id(NS_foo, 'l4')), bar_l1=n.get_opt_str(yang.gdata.Id(NS_bar, 'l1')), l2=n.get_opt_str(yang.gdata.Id(NS_bar, 'l2')), l_leafref=n.get_opt_str(yang.gdata.Id(NS_bar, 'l_leafref')))
         return foo__c1()
 
     def copy(self):
@@ -1958,7 +1971,8 @@ def src_schema():
         Import('foo', prefix='foo-local')
     ], augment=[
         Augment('/foo-local:c1', children=[
-            Uses('foo-local:g1')
+            Uses('foo-local:g1'),
+            Leaf('l_leafref', type_=Type('leafref', path='/foo-local:c1/foo-local:li/foo-local:name'))
         ]),
         Augment('/foo-local:c.dot', children=[
             Leaf('l.dot2', type_=Type('string'))
