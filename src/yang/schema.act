@@ -94,6 +94,7 @@ import yang.xpath as xpath
 from yang.identityref import Identityref, PartialIdentityref
 from yang.pattern import YangPattern
 from yang.type import Decimal, Ranges, RangesBuilder
+from yang.type import SIGNED_INT_TYPES, UNSIGNED_INT_TYPES
 
 RECURSION_LIMIT = 512
 
@@ -2060,11 +2061,17 @@ class DTypeInteger(DType):
         return DTypeInteger(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.integer_ranges)
 
     def validate_value(self, val: value) -> bool:
-        if isinstance(val, bigint):
-            ranges = self.ranges
-            if ranges is not None:
-                return Ranges.match(ranges, val)
-            return True
+        ranges = self.ranges
+        if self.builtin_type in SIGNED_INT_TYPES:
+            if isinstance(val, int):
+                if ranges is not None:
+                    return Ranges.match(ranges, bigint(val))
+                return True
+        if self.builtin_type in UNSIGNED_INT_TYPES:
+            if isinstance(val, u64):
+                if ranges is not None:
+                    return Ranges.match(ranges, bigint(val))
+                return True
         return False
 
     def format_hints(self) -> list[str]:
@@ -3634,8 +3641,10 @@ def yang_typename_to_acton_type(type_name: str) -> str:
         return "Identityref"
     elif type_name == "instance-identifier":
         return "str"
-    elif type_name in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
-        return "bigint"
+    elif type_name in SIGNED_INT_TYPES:
+        return "int"
+    elif type_name in UNSIGNED_INT_TYPES:
+        return "u64"
     elif type_name == "leafref":
         # You should use yang_type_to_acton_type which can expand the union type for you!
         raise ValueError("Leafref type not supported")
@@ -3688,36 +3697,12 @@ def yang_type_to_acton_type(t: ?DType) -> str:
             if len(unique_base_types) == 1:
                 return yang_typename_to_acton_type(unique_base_types[0])
 
-            # TODO: should we map in union of say u32 and i32 into i64?
-            if all(map(lambda x: x in {"int8", "int16", "int32", "int64"}, unique_base_types)):
-                max_size = max(list(map(lambda x: int(x[3:]), unique_base_types)))
-                # TODO: once we have integer subtyping, return largest necessary iXX type
-                #return "i{max_size}"
-                return "bigint"
-            elif all(map(lambda x: x in {"uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
-                max_size = max(list(map(lambda x: int(x[4:]), unique_base_types)))
-                # TODO: once we have integer subtyping, return largest necessary uXX type
-                #return "u{max_size}"
-                return "bigint"
-            elif all(map(lambda x: x in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}, unique_base_types)):
-                # We have a union of a mix of signed and unsigned integers, so let's find the largest
-                int_sizes = filter(lambda x: x in {"int8", "int16", "int32", "int64"}, unique_base_types)
-                max_int_size = max(list(map(lambda x: int(x[3:]), int_sizes)))
-                uint_sizes = filter(lambda x: x in {"uint8", "uint16", "uint32", "uint64"}, unique_base_types)
-                max_uint_size = max(list(map(lambda x: int(x[4:]), uint_sizes)))
-                # To map a uint into an signed int, we need twice the number of
-                # bits, i.e. uint8 fits in int16 or uint32 fits in int64, so
-                # just double the max size...
-                max_int_mapped_uint_size = max_uint_size * 2
-                # Total max size is the max between signed int and
-                # integer-mapped-uint (which is already 2*uint max)
-                max_size = max([max_int_size, max_int_mapped_uint_size])
-                if max_size > 64:
-                    # Need to use our int (a.k.a. "bigint")
-                    return "bigint"
-                # TODO: once we have integer subtyping, return largest necessary iXX type
-                #return "i{max_size}"
-                return "bigint"
+            # Normalize to int or u64 Acton type, but only if the union consists
+            # of base integer types on the same side of 0
+            if all(map(lambda x: x in SIGNED_INT_TYPES, unique_base_types)):
+                return "int"
+            elif all(map(lambda x: x in UNSIGNED_INT_TYPES, unique_base_types)):
+                return "u64"
 
             # TODO: use atom when union consists of types that we represent with Acton built-in types
             # TODO: use Acton union
@@ -3741,8 +3726,10 @@ def prsrc_literal(ytype: str, value: str) -> str:
         return '"' + value + '"'
     elif ytype == "identityref":
         return value
-    elif ytype in {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"}:
-        return "bigint(" + value + ")"
+    elif ytype in SIGNED_INT_TYPES:
+        return str(value)
+    elif ytype in UNSIGNED_INT_TYPES:
+        return "u64(" + value + ")"
     elif ytype == "decimal64":
         a = Decimal.parse(value)
         return repr(a)
