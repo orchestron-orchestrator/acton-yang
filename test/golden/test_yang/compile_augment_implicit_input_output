@@ -4,7 +4,7 @@ import xml
 import yang
 import yang.adata
 import yang.gdata
-import yang.gen3
+import yang.xml
 import yang.xpath
 from yang.identityref import Identityref, PartialIdentityref
 from yang.pattern import YangPattern
@@ -50,9 +50,7 @@ class foo__c1(yang.adata.MNode):
         pass
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:c1'])
-        raise ValueError('unreachable')
+        return yang.adata.from_adata(SRC_DNODE, self, loose=False, root_path=['foo:c1'])
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__c1:
@@ -78,9 +76,7 @@ class root(yang.adata.MNode):
         raise ValueError('Attribute {name} not found in root')
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(SRC_DNODE, self, loose=False)
-        raise ValueError('unreachable')
+        return yang.adata.from_adata(SRC_DNODE, self, loose=False)
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> root:
@@ -106,9 +102,7 @@ class foo__r1__input__c3(yang.adata.MNode):
         raise ValueError('Attribute {name} not found in foo__r1__input__c3')
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'input', 'c3'])
-        raise ValueError('unreachable')
+        return yang.adata.from_adata(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'input', 'c3'])
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__r1__input__c3:
@@ -134,9 +128,7 @@ class foo__r1__input(yang.adata.MNode):
         raise ValueError('Attribute {name} not found in foo__r1__input')
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'input'])
-        raise ValueError('unreachable')
+        return yang.adata.from_adata(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'input'])
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__r1__input:
@@ -162,9 +154,7 @@ class foo__r1__output(yang.adata.MNode):
         raise ValueError('Attribute {name} not found in foo__r1__output')
 
     mut def to_gdata(self) -> yang.gdata.Node:
-        if isinstance(self, yang.adata.MNode):
-            return yang.gen3.from_data(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'output'])
-        raise ValueError('unreachable')
+        return yang.adata.from_adata(SRC_DNODE, self, loose=False, root_path=['foo:r1', 'output'])
 
     @staticmethod
     mut def from_gdata(n: ?yang.gdata.Node) -> foo__r1__output:
@@ -181,7 +171,7 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
     def r1(cb: action(?foo__r1__output, ?Exception) -> None, inp: ?foo__r1__input):
         def cb_wrap(res: ?xml.Node, err: ?Exception):
             if res is not None:
-                gdata_res = yang.gen3.from_data(SRC_DNODE, res, False, ["foo:r1", "output"])
+                gdata_res = yang.xml.from_xml(SRC_DNODE, res, False, ["foo:r1", "output"])
                 adata_res = foo__r1__output.from_gdata(gdata_res)
                 cb(adata_res, err)
             else:
@@ -189,7 +179,7 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
 
         rpc_xml = xml.Node('r1', nsdefs=[(None, 'http://example.com/foo')])
         if inp is not None:
-            gdata_inp = yang.gen3.from_data(SRC_DNODE, inp, False, ["foo:r1", "input"])
+            gdata_inp = yang.adata.from_adata(SRC_DNODE, inp, False, ["foo:r1", "input"])
             rpc_xml.children.extend(gdata_inp.to_xml())
         tp.rpc_xml(cb_wrap, rpc_xml)
 

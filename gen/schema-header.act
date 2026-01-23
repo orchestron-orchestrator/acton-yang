@@ -689,16 +689,11 @@ class DNodeInner(DNode):
 
         # .to_gdata()
         res.append("    mut def to_gdata(self) -> yang.gdata.Node:")
-        # TODO: we do an isinstance check to give a hint to the compiler that
-        # this class implements the YangData protocol. But the compiler should
-        # know self inherits from MNode?!
-        res.append("        if isinstance(self, yang.adata.MNode):")
         if isinstance(self, DRoot):
-            res.append("            return yang.gen3.from_data(SRC_DNODE, self, loose={loose})")
+            res.append("        return yang.adata.from_adata(SRC_DNODE, self, loose={loose})")
         else:
             root_path = ["{'{node.module}:' if prev.module != node.module else ''}{node.name}" if node is not None else None for prev, node in zip(spath, spath[1:] + [None])]
-            res.append("            return yang.gen3.from_data(SRC_DNODE, self, loose={loose}, root_path={repr(root_path[:-1])})")
-        res.append("        raise ValueError('unreachable')")
+            res.append("        return yang.adata.from_adata(SRC_DNODE, self, loose={loose}, root_path={repr(root_path[:-1])})")
         res.append("")
 
         # .from_gdata()
@@ -885,7 +880,7 @@ class DNodeInner(DNode):
                 if output_node is not None:
                     res.append("        def cb_wrap(res: ?xml.Node, err: ?Exception):")
                     res.append("            if res is not None:")
-                    res.append('                gdata_res = yang.gen3.from_data(SRC_DNODE, res, {loose}, ["{rpc.module}:{rpc.name}", "output"])')
+                    res.append('                gdata_res = yang.xml.from_xml(SRC_DNODE, res, {loose}, ["{rpc.module}:{rpc.name}", "output"])')
                     res.append("                adata_res = {get_path_name(spath + [rpc, output_node])}.from_gdata(gdata_res)")
                     res.append("                cb(adata_res, err)")
                     res.append("            else:")
@@ -896,7 +891,7 @@ class DNodeInner(DNode):
                 res.append("        rpc_xml = xml.Node({repr(rpc.name)}, nsdefs=[(None, {repr(rpc.namespace)})])")
                 if input_node is not None:
                     res.append("        if inp is not None:")
-                    res.append('            gdata_inp = yang.gen3.from_data(SRC_DNODE, inp, {loose}, ["{rpc.module}:{rpc.name}", "input"])')
+                    res.append('            gdata_inp = yang.adata.from_adata(SRC_DNODE, inp, {loose}, ["{rpc.module}:{rpc.name}", "input"])')
                     res.append('            rpc_xml.children.extend(gdata_inp.to_xml())')
 
                 # Call tp.rpc_xml with appropriate callback
@@ -1643,7 +1638,7 @@ class DRoot(DNodeInner):
         res.append("import yang")
         res.append("import yang.adata")
         res.append("import yang.gdata")
-        res.append("import yang.gen3")
+        res.append("import yang.xml")
         res.append("import yang.xpath")
         res.append("from yang.identityref import Identityref, PartialIdentityref")
         res.append("from yang.pattern import YangPattern")
