@@ -1,0 +1,702 @@
+"""Generic YANG data parser implementation
+
+This module provides a generic algorithm for parsing YANG data from different
+sources (XML, JSON) using the YangData protocol.
+"""
+
+import testing
+import base64
+import xml
+
+import yang
+import yang.gdata
+import yang.schema
+from yang.identityref import Identityref, PartialIdentityref
+from yang.gdata import repr_adata
+from yang.type import Decimal, Ranges
+from yang.type import SIGNED_INT_TYPES, UNSIGNED_INT_TYPES
+
+
+OP_MERGE = "merge"
+OP_CREATE = "create"
+OP_DELETE = "delete"
+OP_REMOVE = "remove"
+OP_REPLACE = "replace"
+
+
+class PathElement:
+    """Represents an element in a schema path, with optional key values for lists"""
+    node: yang.schema.DNode
+    keys: ?dict[str, value]
+
+    def __init__(self, node: yang.schema.DNode, keys: ?dict[str, value]=None):
+        self.node = node
+        self.keys = keys
+
+
+class YangValidationError(ValueError):
+    schema_path: list[PathElement]
+    expected_type: yang.schema.DType
+    actual_value: ?value
+
+    def __init__(self, schema_path: list[PathElement], expected_type: yang.schema.DType, actual_value: ?value):
+        self.error_message = ""
+        self.schema_path = schema_path
+        self.expected_type = expected_type
+        self.actual_value = actual_value
+
+    def __str__(self) -> str:
+        path_str = format_schema_path(self.schema_path)
+        type_str = self.expected_type.format_hint()
+        return "Invalid value at {path_str}: '{self.actual_value}' - expected {type_str}"
+
+
+
+def format_schema_path(path: list[PathElement]) -> str:
+    path_str = ""
+
+    for i, elem in enumerate(path):
+        if i > 0:
+            prev = path[i-1].node
+            if not isinstance(prev, yang.schema.DRoot):
+                path_str = path_str + "/"
+            if isinstance(prev, yang.schema.DNodeInner):
+                un = yang.schema.UniqueNamer(prev)
+                path_str = path_str + un.unique_name(elem.node.name, elem.node.prefix)
+                keys_dict = elem.keys
+                if keys_dict is not None and len(keys_dict) > 0:
+                    predicates = ["{k}='{(v if isinstance(v, str) else str(v)).replace("'", "\\'")}'" for k, v in keys_dict.items()]
+                    path_str = path_str + "[" + ",".join(predicates) + "]"
+        elif isinstance(elem.node, yang.schema.DRoot):
+            path_str = "/"
+        else:
+            # Relative path
+            path_str = elem.node.name
+    return path_str
+
+
+
+def fqname(n: yang.schema.DNode):
+    return yang.gdata.Id(n.namespace, n.name)
+
+
+def fq_list_keys(l: yang.schema.DList):
+    return [yang.gdata.Id(l.namespace, k) for k in l.key]
+
+
+def unwrap_key[T](name: str, val: ?T, spath) -> T:
+    if val is not None:
+        return val
+    raise ValueError("Missing key value at {format_schema_path(spath)}: {name}")
+
+
+def coerce_integer_value(raw_value: value, schema_type: yang.schema.DTypeInteger, path: list[PathElement]) -> ?value:
+    if isinstance(raw_value, atom):
+        builtin_type = schema_type.builtin_type
+        if builtin_type in SIGNED_INT_TYPES:
+            try:
+                return int(raw_value)
+            except ValueError:
+                pass
+        if builtin_type in UNSIGNED_INT_TYPES:
+            try:
+                return u64(raw_value)
+            except ValueError:
+                pass
+
+
+protocol YangData:
+    """Protocol for YANG data nodes
+
+    Provides a uniform interface for extracting data from different data formats
+    that can carry YANG-modeled data, like XML and JSON
+    """
+    # TODO: can value implement YangData? Yes, once Acton supports recursive protocol definitions ...
+    take_container: mut(yang.schema.DContainer, str, bool, bool, list[PathElement]) -> ?(op: ?str, val: ?value)
+    take_list: mut(yang.schema.DList, str, bool, bool, list[PathElement]) -> list[(op: ?str, key: dict[str, value], val: value)]
+    # Return a typed tuple for leaves. The tuple carries the concrete type name
+    # and the parsed value. Missing leaves return None.
+    take_leaf: mut(yang.schema.DRoot, yang.schema.DLeaf, str, bool, bool, list[PathElement]) -> ?(op: ?str, t: str, val: ?value)
+    # For leaf-lists, return a list of typed tuples (op, t, val).
+    # For identityref items, val holds a PartialIdentityref.
+    take_leaflist: mut(yang.schema.DRoot, yang.schema.DLeafList, str, bool, bool, list[PathElement]) -> list[(op: ?str, t: str, val: ?value)]
+
+
+def user_order(ordered_by):
+    return True if ordered_by == "user" else False
+
+
+def parse_qualified_name(name: str) -> (str, ?str):
+    if ":" in name:
+        parts = name.split(":", 1)
+        return (parts[1], parts[0])
+    return (name, None)
+
+
+def has_mandatory_content(container: yang.schema.DContainer) -> bool:
+    """Return True if a non-presence container has any mandatory content.
+
+    A container has mandatory content if it contains any mandatory leaf, or
+    any non-presence child container that itself has mandatory content.
+    """
+    for c in container.children:
+        if isinstance(c, yang.schema.DLeaf):
+            if c.mandatory:
+                return True
+        elif isinstance(c, yang.schema.DContainer):
+            if not c.presence and has_mandatory_content(c):
+                return True
+    return False
+
+
+
+def from_data[A(YangData)](root: yang.schema.DRoot, data: A, type_narrower: (?value) -> A, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
+    """Generic function to convert data to gdata tree based on schema
+
+    Args:
+        root: Root schema node (must be the actual root, not an inner node)
+        data: Data wrapped in a YangData protocol implementation (XML or JSON)
+        loose: Whether to use loose parsing (allows optional fields to be missing)
+        root_path: Path from s to the actual data location in the input. This enables
+                  partial parsing where the data doesn't start at the schema root but
+                  at some inner node. For example, if root_path=["mod:c1", "c2"],
+                  the function will navigate from s through c1 and c2 before starting
+                  to parse the actual data.
+
+    Returns:
+        A yang.gdata.Container containing the parsed data tree
+    """
+    return from_data_recursive(root, root, data, type_narrower, loose, root_path=root_path, spath=[PathElement(root)])
+
+def from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DNodeInner, data: A, type_narrower: (?value) -> A, loose: bool=False, set_ns: bool=True, root_path: list[str]=[], spath: list[PathElement]=[], skip_nonkeys: bool=False) -> yang.gdata.Container:
+    """Internal function with additional recursion accumulators
+
+    Args:
+        root: Root schema node (must be the actual root, not an inner node), e.g. for resolving identityref values
+        s: Schema node (container or list) - the root of the schema tree to start parsing from
+        data: Data wrapped in a YangData protocol implementation (XML or JSON)
+        loose: Whether to use loose parsing (allows optional fields to be missing)
+        set_ns: Whether to set namespace information on generated nodes
+        root_path: Path from s to the actual data location in the input. This enables
+                  partial parsing where the data doesn't start at the schema root but
+                  at some inner node. For example, if root_path=["mod:c1", "c2"],
+                  the function will navigate from s through c1 and c2 before starting
+                  to parse the actual data.
+        spath: Accumulated schema path as list[PathElement], including list key
+               predicates when descending into list elements. This is passed to
+               YangData.take_* so that any validation errors can render full,
+               human-friendly paths (e.g., /c1/l2[k1='A']/v1).
+
+    Returns:
+        A yang.gdata.Container containing the parsed data tree
+    """
+
+    # Navigate to root path if specified
+    if root_path != [] and len(spath) -1 < len(root_path):
+        next = root_path[len(spath) - 1]
+
+        local_name, module = parse_qualified_name(next)
+        child = s.get(local_name, module=module, allow_unqualified=False)
+        if isinstance(child, yang.schema.DNodeInner):
+            return from_data_recursive(root, child, data, type_narrower, loose, set_ns, root_path, spath + [PathElement(child)])
+        raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
+
+    children: dict[yang.gdata.Id, yang.gdata.Node] = {}
+
+    unique_namer = yang.schema.UniqueNamer(s)
+    def is_unique(n) -> bool:
+        return unique_namer.is_unique(n.name)
+
+    source_is_xml = isinstance(data, xml.Node)
+    for child in s.children:
+        if skip_nonkeys and isinstance(s, yang.schema.DList) and child.name not in s.key:
+            continue
+
+        # Only process data nodes
+        if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
+            continue
+
+        def path_with_child(k=None):
+            return spath + [PathElement(child, k)]
+
+        # Determine namespace (only include if different from parent)
+        ns = None
+        mod = None
+        if child.namespace != s.namespace:
+            ns = child.namespace
+            mod = child.module
+
+        if isinstance(child, yang.schema.DContainer):
+            opval = data.take_container(child, child.name, s.namespace != child.namespace, is_unique(child), spath)
+            if opval is not None:
+                val = type_narrower(opval.val)
+                cchild = from_data_recursive(root, child, val, type_narrower, loose, set_ns=s.namespace != child.namespace, root_path=root_path, spath=path_with_child())
+                cns = child.namespace if set_ns and child.namespace != "" else None
+                cmod = child.module if set_ns and child.module != "" else None
+                wcchild = None
+                if opval.op == OP_REMOVE:
+                    wcchild = yang.gdata.Absent(cchild.children, ns=cns, module=cmod)
+                elif opval.op == OP_DELETE:
+                    wcchild = yang.gdata.Delete(cchild.children, ns=cns, module=cmod)
+                elif opval.op == OP_CREATE:
+                    wcchild = yang.gdata.Create(cchild.children, ns=cns, module=cmod)
+                elif opval.op == OP_REPLACE:
+                    wcchild = yang.gdata.Replace(cchild.children, ns=cns, module=cmod)
+
+                if wcchild is not None and not isinstance(wcchild, yang.gdata.Container):
+                    # Absent, Delete, Create, Replace wrappers are not Container and may not have any children
+                    children[fqname(child)] = wcchild
+                elif isinstance(cchild, yang.gdata.Container) and (cchild.presence or len(cchild.children) > 0):
+                    children[fqname(child)] = cchild
+            else:
+                # Missing container: if this is a non-presence container and it has
+                # mandatory content, then raise an error in strict mode.
+                if not loose and isinstance(child, yang.schema.DContainer) and not child.presence:
+                    if has_mandatory_content(child):
+                        raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find child node with name {child.name}")
+
+        elif isinstance(child, yang.schema.DList):
+            list_val = data.take_list(child, child.name, s.namespace != child.namespace, is_unique(child), spath)
+            list_elements = []
+
+            for element in list_val:
+                do_skip = True if element.op == OP_REMOVE or element.op == OP_DELETE else False
+                element_data = type_narrower(element.val)
+                element_gdata = from_data_recursive(root, child, element_data, type_narrower, loose, set_ns=False, root_path=root_path, spath=path_with_child(element.key), skip_nonkeys=do_skip)
+                if element.op == OP_REMOVE:
+                    list_elements.append(yang.gdata.Absent(element_gdata.key_children(fq_list_keys(child))))
+                elif element.op == OP_DELETE:
+                    list_elements.append(yang.gdata.Delete(element_gdata.key_children(fq_list_keys(child))))
+                elif element.op == OP_CREATE:
+                    list_elements.append(yang.gdata.Create(element_gdata.children))
+                elif element.op == OP_REPLACE:
+                    list_elements.append(yang.gdata.Replace(element_gdata.children))
+                else:
+                    list_elements.append(element_gdata)
+            if len(list_elements) > 0:
+                list_gdata = yang.gdata.List(fq_list_keys(child), list_elements, user_order=user_order(child.ordered_by), ns=ns, module=mod)
+                children[fqname(child)] = list_gdata
+
+        elif isinstance(child, yang.schema.DLeafList):
+            leaflist_val = data.take_leaflist(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
+            if len(leaflist_val) > 0:
+                non_merge_ops = set()
+                # Unwrap typed tuples, dropping values marked for remove/delete.
+                unwrapped_values: list[value] = []
+                for item in leaflist_val:
+                    # TODO: we can't really handle create/replace without refactoring leaf-list to be more list-like
+                    op = item.op
+                    if op is not None and op != OP_MERGE and op != OP_CREATE and op != OP_REPLACE:
+                        non_merge_ops.add(op)
+                    if item.op == OP_REMOVE or item.op == OP_DELETE:
+                        continue
+                    iv = item.val
+                    if iv is not None:
+                        unwrapped_values.append(iv)
+                if len(unwrapped_values) == 0 and not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
+                    # Missing leaf-list value
+                    raise ValueError("Error reading {format_schema_path(path_with_child())}: Missing non-optional leaf-list value")
+                if len(unwrapped_values) > 0:
+                    children[fqname(child)] = yang.gdata.LeafList(unwrapped_values, user_order=user_order(child.ordered_by), ns=ns, module=mod)
+                elif len(non_merge_ops) > 1:
+                    raise ValueError("Error reading {format_schema_path(path_with_child())}: Mixed leaf-list operations - {non_merge_ops}")
+                elif len(non_merge_ops) == 1:
+                    # All entries were remove/delete; map to absent/delete node
+                    if non_merge_ops.pop() == OP_DELETE:
+                        children[fqname(child)] = yang.gdata.Delete()
+                    else:
+                        children[fqname(child)] = yang.gdata.Absent()
+            elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
+                # Missing leaf-list value
+                raise ValueError("Error reading {format_schema_path(path_with_child())}: Missing non-optional leaf-list value")
+
+        elif isinstance(child, yang.schema.DLeaf):
+            typed = data.take_leaf(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
+            if typed is not None:
+                if typed.op == OP_REMOVE:
+                    children[fqname(child)] = yang.gdata.Absent()
+                    continue
+                elif typed.op == OP_DELETE:
+                    children[fqname(child)] = yang.gdata.Delete()
+                    continue
+                # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
+                av = typed.val
+                if av is not None:
+                    children[fqname(child)] = yang.gdata.Leaf(av, ns=ns, module=mod)
+            elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
+                # Missing leaf value
+                raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find child node with name {child.name}")
+        else:
+            raise ValueError(f"Unknown schema node type at {format_schema_path(path_with_child())}: {child}")
+
+    if isinstance(s, yang.schema.DContainer):
+        return yang.gdata.Container(children, presence=s.presence, ns=s.namespace if set_ns and s.namespace != "" else None, module=s.module if set_ns and s.module != "" else None)
+    elif isinstance(s, yang.schema.DList) or isinstance(s, yang.schema.DRoot):
+        # When processing a list element, return it as a Container
+        # The List wrapper is created by the parent when processing all elements
+        return yang.gdata.Container(children)
+    elif isinstance(s, yang.schema.DOutput) or isinstance(s, yang.schema.DInput):
+        return yang.gdata.Container(children)
+    else:
+        raise ValueError("Unknown schema node type at {format_schema_path(spath)}: {type(s)}")
+
+
+def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
+    return _pradata_recursive(root, node, self_name, loose, top=True, root_path=root_path, spath=[PathElement(root)])
+
+
+def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False, root_path: list[str]=[], spath: list[PathElement]=[]):
+    # Navigate to root path if specified
+    if root_path != [] and len(spath) - 1 < len(root_path):
+        next = root_path[len(spath) - 1]
+        local_name, module = parse_qualified_name(next)
+        child = s.get(local_name, module=module, allow_unqualified=False)
+        if isinstance(child, yang.schema.DNodeInner):
+            return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, spath + [PathElement(child)])
+        raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
+
+    def pname(pe: list[PathElement]):
+        return yang.schema.get_path_name([e.node for e in pe])
+
+    def _find_non_optional_subtree(container: yang.schema.DNodeInner, spath: list[PathElement], node: yang.gdata.Node, path: list[str], local_prefix="_") -> (list[str], list[str]):
+        r"""Discover the non-optional descendants of a container
+
+        The container here is either a DContainer or a DList (representing
+        a list element). We recursively traverse the child nodes of the
+        container, looking for non-optional leaves and containers. A
+        container is non-optional if it is not a presence container and it
+        contains other non-optional nodes.
+
+        As we traverse the tree, we build intermediate container objects
+        using their non-optional arguments.
+
+        Args:
+            container: The container node to analyze
+            path: List of attribute names representing the path from the root
+                    to the current container (e.g. ['self', 'child1', 'child2'])
+            local_prefix: Prefix used for variable access in generated code,
+                            typically "_" for local variables or "" for self references
+
+        The function returns a tuple of two lists:
+        - non_optional_args: list of non-optional arguments for the outer container
+        - non_optional_containers: list of code lines that declare the
+        intermediate containers and their arguments
+
+        Note on f-string evaluation timing:
+        This function uses nested f-strings with two evaluation phases:
+        1. Generation-time: Outer f-strings resolve class names, paths, variable names
+        2. Runtime: Inner f-strings ({{...}}) become {...} and evaluate when pradata() executes.
+        """
+        non_optional_args = []
+        non_optional_containers = []
+        unique_namer = yang.schema.UniqueNamer(container)
+
+        for cchild in container.children:
+            def path_with_child():
+                return spath + [PathElement(cchild)]
+
+            if not (isinstance(cchild, yang.schema.DNodeLeaf) or isinstance(cchild, yang.schema.DContainer) or isinstance(cchild, yang.schema.DList)):
+                continue
+            if isinstance(cchild, yang.schema.DLeaf):
+                # The list of children is already sorted so that key leaves
+                # come first in the correct order.
+                if not yang.schema.is_optional_arg_yang_leaf(cchild, yang.schema.list_keys(container), loose):
+                    leaf = node.get_leaf(fqname(cchild))
+                    non_optional_args.append("{repr_adata(leaf.val)}")
+            elif isinstance(cchild, yang.schema.DContainer):
+                if not (cchild.presence or loose or yang.schema.optional_subtree(cchild)):
+                    cchild_safe_name = unique_namer.unique_safe_name(cchild.name, cchild.prefix)
+
+                    # Recursively build subtree for non-optional children
+                    sub_args, sub_containers = _find_non_optional_subtree(cchild, path_with_child(), node.get_cnt(fqname(cchild)), path + [cchild_safe_name], local_prefix)
+
+                    # Create variable declaration for this container
+                    mcchild_var = "{'_'.join(path)}_{cchild_safe_name}"
+
+                    if sub_args:
+                        sub_args_str = ", ".join(sub_args)
+                        non_optional_containers.append("{mcchild_var} = {pname(path_with_child())}({sub_args_str})")
+                    else:
+                        non_optional_containers.append("{mcchild_var} = {pname(path_with_child())}()")
+
+                    # Add nested variable declarations
+                    non_optional_containers.extend(sub_containers)
+
+                    non_optional_args.append(mcchild_var)
+
+        return non_optional_args, non_optional_containers
+
+    unique_namer = yang.schema.UniqueNamer(s)
+    def usname(n) -> str:
+        return unique_namer.unique_safe_name(n.name, n.prefix)
+    res = []
+    if top:
+        res.append('# Top node: {format_schema_path(spath)}')
+        # Build constructor arguments for non-optional children (same logic as in __init__)
+        constructor_args, constructor_containers = _find_non_optional_subtree(s, spath, node, ["self"], local_prefix="")
+        if constructor_args:
+            # Add variable declarations in reverse order to ensure dependencies are declared before use.
+            # For example, if container C needs argument from container B, which needs argument from A,
+            # we must generate: A_var = ..., B_var = ..., C_var = ... in that order.
+            # Since find_non_optional_subtree() builds the list depth-first, we reverse it.
+            res.extend(list(reversed(constructor_containers)))
+            args_str = ", ".join(constructor_args)
+            res.append("{self_name} = {pname(spath)}({args_str})")
+        else:
+            res.append("{self_name} = {pname(spath)}()")
+    leaves = []
+    for child in s.children:
+        # Only process data nodes
+        if not (isinstance(child, yang.schema.DNodeLeaf) or isinstance(child, yang.schema.DContainer) or isinstance(child, yang.schema.DList)):
+            continue
+
+        def path_with_child(k=None):
+            return spath + [PathElement(child, k)]
+
+        if isinstance(child, yang.schema.DLeaf):
+            if not top and not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
+                # Do not print non-optional leafs if not top level, because
+                # they are implicitly set with .create*()
+                continue
+            leaf = node.get_opt_leaf_or_absent(fqname(child))
+            if isinstance(leaf, yang.gdata.Leaf):
+                # DLeaf values are copied verbatim
+                leaves.append("{self_name}.{usname(child)} = {repr_adata(leaf.val)}")
+            elif isinstance(leaf, yang.gdata.Absent):
+                # "leaf": Absent() is a remove op on an empty leaf
+                leaves.append("{self_name}.{usname(child)} = False")
+        elif isinstance(child, yang.schema.DLeafList):
+            leaflist = node.get_opt_leaflist(fqname(child))
+            if leaflist is not None:
+                # DLeafList values are copied verbatim
+                leaves.append("{self_name}.{usname(child)} = {repr_adata(leaflist.vals)}")
+        elif isinstance(child, yang.schema.DContainer):
+            container = node.get_opt_cnt(fqname(child))
+            if container is not None:
+                if child.presence:
+                    res.append("")
+                    res.append("# P-container: {format_schema_path(path_with_child())}")
+                    # Build .pradata() code for this P-container
+                    pc_args, pc_var_declarations = _find_non_optional_subtree(child, path_with_child(), container, [usname(child)])
+
+                    # Add variable declarations in reverse order to ensure the prerequisites are met
+                    res.extend(list(reversed(pc_var_declarations)))
+
+                    child_accessor = yang.schema.safe_name(child.name)
+                    pc_args_str = ", ".join(pc_args)
+                    res.append("{child_accessor} = {self_name}.create_{usname(child)}({pc_args_str})")
+                    # Recursive call to pradata() for the P-container, to fill in the rest of the optional children
+                    res.extend(_pradata_recursive(child, container, usname(child), loose, root_path=root_path, spath=path_with_child()).splitlines())
+                else:
+                    res.extend(_pradata_recursive(child, container, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child()).splitlines())
+        elif isinstance(child, yang.schema.DList):
+            glist = node.get_opt_list(fqname(child))
+            if glist is not None:
+                for element in glist.elements:
+                    res.append("")
+                    res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(fq_list_keys(child))}")
+
+                    # Build the list of arguments for create() method
+                    list_create_args = []
+
+                    non_optional_args, non_optional_containers = _find_non_optional_subtree(child, path_with_child(), element, ["element"])
+
+                    res.extend(list(reversed(non_optional_containers)))
+                    list_create_args.extend(non_optional_args)
+
+                    create_args_str = ", ".join(list_create_args)
+                    res.append("{usname(child)}_element = {self_name}.{usname(child)}.create({create_args_str})")
+                    # Recursive call to pradata() for the list element
+                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(fq_list_keys(child)))).splitlines())
+        else:
+            raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
+
+    # Add the leaves as a single group at the beginning of the section,
+    # optionally add container header if we're not printing a list element
+    if leaves:
+        if top:
+            res = res + leaves
+        elif not list_element:
+            res = ["", "# Container: {format_schema_path(spath)}"] + leaves + res
+        else:
+            res = leaves + res
+    return "\n".join(res)
+
+
+def _test_format_schema_path_empty():
+    """format_schema_path renders empty as ''"""
+    path: list[PathElement] = []
+    out = format_schema_path(path)
+    if out != "":
+        testing.error("Unexpected path: {out}")
+
+
+def _test_format_schema_path_root():
+    """format_schema_path renders root as '/'"""
+    path: list[PathElement] = [PathElement(yang.schema.DRoot())]
+    out = format_schema_path(path)
+    if out != "/":
+        testing.error("Unexpected path: {out}")
+
+
+def _test_format_schema_path_list_predicate():
+    """format_schema_path renders list key predicate"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c {
+    list l {
+      key "k1 k2";
+      leaf k1 { type string; }
+      leaf k2 { type int32; }
+      leaf v { type string; }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+    # Locate nodes using schema get()
+    cnode = s.get("c")
+    lnode = cnode.get("l")
+    vnode = lnode.get("v")
+
+    path = [PathElement(s), PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1", "k2": 1}), PathElement(vnode)]
+    out = format_schema_path(path)
+    testing.assertEqual("/c/l[k1='Key 1',k2='1']/v", out)
+
+    path = [PathElement(s), PathElement(cnode), PathElement(lnode, keys={"k1": "Key 1, with extra's", "k2": 1}), PathElement(vnode)]
+    out = format_schema_path(path)
+    testing.assertEqual(r"""/c/l[k1='Key 1, with extra\'s',k2='1']/v""", out)
+
+
+def _test_pradata():
+    schema_str = r"""module test {
+      namespace "urn:example:test";
+      prefix test;
+
+      leaf top-level-leaf {
+        type string;
+        description "A leaf at the module root level";
+      }
+
+      container c1 {
+        leaf optional-leaf {
+          type int32;
+        }
+        leaf empty-yes {
+          type empty;
+        }
+        leaf empty-no {
+          type empty;
+        }
+        leaf decimal {
+          type decimal64 {
+            fraction-digits 2;
+          }
+        }
+        container c2 {
+          presence "This is a presence container";
+          leaf l1 {
+            type string;
+          }
+          leaf mandatory-leaf {
+            type string;
+            mandatory true;
+          }
+        }
+        list li1 {
+          key "name extra-key";
+          leaf name {
+            type string;
+          }
+          leaf extra-key {
+            type int32;
+          }
+          leaf value {
+            type int32;
+          }
+          container c3 {
+            leaf nested-leaf {
+              type string;
+            }
+          }
+        }
+        leaf-list always-empty {
+          // Leave this empty, we check that empty leaf-list is not printed
+          type string;
+        }
+      }
+    }"""
+
+    s = yang.compile([schema_str])
+
+    gdata_tree = yang.gdata.Container({
+        yang.gdata.Id("urn:example:test", "top-level-leaf"): yang.gdata.Leaf("root value"),
+        yang.gdata.Id("urn:example:test", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:test", "optional-leaf"): yang.gdata.Leaf(int(42)),
+            yang.gdata.Id("urn:example:test", "empty-yes"): yang.gdata.Leaf(yang.gdata.Present()),
+            yang.gdata.Id("urn:example:test", "empty-no"): yang.gdata.Absent(),
+            yang.gdata.Id("urn:example:test", "decimal"): yang.gdata.Leaf(Decimal(314, -2)),
+            yang.gdata.Id("urn:example:test", "c2"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:test", "l1"): yang.gdata.Leaf("inner value"),
+                yang.gdata.Id("urn:example:test", "mandatory-leaf"): yang.gdata.Leaf("required value")
+            }, presence=True),
+            yang.gdata.Id("urn:example:test", "li1"): yang.gdata.List([yang.gdata.Id("urn:example:test", "name"), yang.gdata.Id("urn:example:test", "extra-key")], [
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "name"): yang.gdata.Leaf("item1"),
+                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(int(1)),
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(int(100))
+                }),
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "name"): yang.gdata.Leaf("item2"),
+                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(int(2)),
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(int(200)),
+                    yang.gdata.Id("urn:example:test", "c3"): yang.gdata.Container({
+                        yang.gdata.Id("urn:example:test", "nested-leaf"): yang.gdata.Leaf("birb")
+                    })
+                })
+            ])
+        })
+    })
+
+    result = pradata(s, gdata_tree)
+    return result
+
+
+def _test_pradata_root_path():
+    schema_str = r"""module test {
+      namespace "urn:example:test";
+      prefix test;
+
+      container outer {
+        container middle {
+          leaf value1 {
+            type string;
+          }
+          container inner {
+            leaf value2 {
+              type int32;
+            }
+          }
+        }
+      }
+    }"""
+
+    s = yang.compile([schema_str])
+
+    gdata_tree = yang.gdata.Container({
+        yang.gdata.Id("urn:example:test", "outer"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:test", "middle"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:test", "value1"): yang.gdata.Leaf("test value"),
+                yang.gdata.Id("urn:example:test", "inner"): yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "value2"): yang.gdata.Leaf(int(42))
+                })
+            })
+        })
+    })
+
+    middle_node = gdata_tree.get_cnt(yang.gdata.Id("urn:example:test", "outer")).get_cnt(yang.gdata.Id("urn:example:test", "middle"))
+    result = pradata(s, middle_node, root_path=["test:outer", "middle"])
+
+    return result
