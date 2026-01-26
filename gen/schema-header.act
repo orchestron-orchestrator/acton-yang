@@ -2045,38 +2045,48 @@ class DTypeInstanceIdentifier(DType):
         return []
 
 class DTypeInteger(DType):
-    ranges: ?Ranges[bigint]
+    int_ranges: ?Ranges[int]
+    u64_ranges: ?Ranges[u64]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[bigint]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, int_ranges: ?Ranges[int], u64_ranges: ?Ranges[u64]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
-        self.ranges = ranges
+        self.int_ranges = int_ranges
+        self.u64_ranges = u64_ranges
 
     def prtyinst(self) -> str:
-        return "DTypeInteger({self.format_common_params()}, ranges={repr(self.ranges)})"
+        return "DTypeInteger({self.format_common_params()}, int_ranges={repr(self.int_ranges)}, u64_ranges={repr(self.u64_ranges)})"
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeInteger:
         t = resolver.type_
-        return DTypeInteger(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.integer_ranges)
+        return DTypeInteger(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.int_ranges, resolver.u64_ranges)
 
     def validate_value(self, val: value) -> bool:
-        ranges = self.ranges
         if self.builtin_type in SIGNED_INT_TYPES:
             if isinstance(val, int):
+                ranges = self.int_ranges
                 if ranges is not None:
-                    return Ranges.match(ranges, bigint(val))
+                    return Ranges.match(ranges, val)
                 return True
         if self.builtin_type in UNSIGNED_INT_TYPES:
             if isinstance(val, u64):
+                ranges = self.u64_ranges
                 if ranges is not None:
-                    return Ranges.match(ranges, bigint(val))
+                    return Ranges.match(ranges, val)
                 return True
         return False
 
     def format_hints(self) -> list[str]:
-        _ranges = self.ranges
-        if _ranges is not None:
-            return ["range {str(_ranges)}"]
+        if self.builtin_type in SIGNED_INT_TYPES:
+            ranges = self.int_ranges
+            if ranges is not None:
+                return ["range {str(ranges)}"]
+            return []
+        if self.builtin_type in UNSIGNED_INT_TYPES:
+            ranges = self.u64_ranges
+            if ranges is not None:
+                return ["range {str(ranges)}"]
+            return []
         return []
 
 class DTypeLeafref(DType):
@@ -2233,7 +2243,8 @@ class DTypeResolver(object):
     length: ?Ranges[int] # May be restricted to sub-ranges only
     path: ?xpath.AbsoluteLocationPath # Assume only allowed in the type "leafref" statement, with no further restrictions in base-type chain
     patterns: list[YangPattern] # A value must match patterns in type and base-types chain
-    integer_ranges: ?Ranges[bigint] # May be restricted to sub-ranges only
+    int_ranges: ?Ranges[int] # May be restricted to sub-ranges only
+    u64_ranges: ?Ranges[u64] # May be restricted to sub-ranges only
     decimal_ranges: ?Ranges[Decimal] # May be restricted to sub-ranges only
     require_instance: ?bool # Assuming 'True' unless explicitly 'False' in base-type chain, disallowing redefinition from explicit 'True'
     alt_types: list[DType] # Merge base type union sets
@@ -2253,7 +2264,8 @@ class DTypeResolver(object):
         self.length = None
         self.path = None
         self.patterns = []
-        self.integer_ranges = None
+        self.int_ranges = None
+        self.u64_ranges = None
         self.decimal_ranges = None
         self.require_instance = None
         self.alt_types = []
@@ -2415,23 +2427,21 @@ class DTypeResolver(object):
 
             # builtin restrictions
             if t.name == "int8":
-                self.integer_ranges = Ranges([(-128, 127)])
+                self.int_ranges = Ranges([(-128, 127)])
             elif t.name == "int16":
-                self.integer_ranges = Ranges([(-32768, 32767)])
+                self.int_ranges = Ranges([(-32768, 32767)])
             elif t.name == "int32":
-                self.integer_ranges = Ranges([(-2147483648, 2147483647)])
+                self.int_ranges = Ranges([(-2147483648, 2147483647)])
             elif t.name == "int64":
-                # self.integer_ranges = Ranges([(-9223372036854775808, 9223372036854775807)])
-                # Workaround https://github.com/actonlang/acton/issues/2545
-                self.integer_ranges = Ranges([(-92233720368547758080//10, 9223372036854775807)])
+                self.int_ranges = Ranges([(-9223372036854775808, 9223372036854775807)])
             elif t.name == "uint8":
-                self.integer_ranges = Ranges([(0, 255)])
+                self.u64_ranges = Ranges([(0, 255)])
             elif t.name == "uint16":
-                self.integer_ranges = Ranges([(0, 65535)])
+                self.u64_ranges = Ranges([(0, 65535)])
             elif t.name == "uint32":
-                self.integer_ranges = Ranges([(0, 4294967295)])
+                self.u64_ranges = Ranges([(0, 4294967295)])
             elif t.name == "uint64":
-                self.integer_ranges = Ranges([(0, bigint(18446744073709551615))])
+                self.u64_ranges = Ranges([(0, u64(18446744073709551615))])
             elif t.name == "decimal64":
                 fraction_digits = self.fraction_digits
                 if fraction_digits is not None:
@@ -2453,16 +2463,26 @@ class DTypeResolver(object):
                     else:
                         raise ValueError("Internal error: missing builtin ({self.builtin_type}) base range for {t.name}")
                     self.decimal_ranges = new_decimal_ranges
-                else:
-                    base_integer_ranges = self.integer_ranges
+                elif self.builtin_type in SIGNED_INT_TYPES:
+                    base_integer_ranges = self.int_ranges
                     if base_integer_ranges is not None:
                         try:
-                            new_integer_ranges = parse_bigint_range_stmt(_range.value, base_integer_ranges)
+                            new_integer_ranges = parse_int_range_stmt(_range.value, base_integer_ranges)
                         except ValueError as ex:
                             raise ValueError("Invalid range in type \"{t.name}\": {ex.error_message}")
                     else:
                         raise ValueError("Internal error: missing builtin ({self.builtin_type}) base range for {t.name}")
-                    self.integer_ranges = new_integer_ranges
+                    self.int_ranges = new_integer_ranges
+                elif self.builtin_type in UNSIGNED_INT_TYPES:
+                    base_integer_ranges = self.u64_ranges
+                    if base_integer_ranges is not None:
+                        try:
+                            new_integer_ranges = parse_u64_range_stmt(_range.value, base_integer_ranges)
+                        except ValueError as ex:
+                            raise ValueError("Invalid range in type \"{t.name}\": {ex.error_message}")
+                    else:
+                        raise ValueError("Internal error: missing builtin ({self.builtin_type}) base range for {t.name}")
+                    self.u64_ranges = new_integer_ranges
 
             # require_instance
             _require_instance = t.require_instance
@@ -3325,14 +3345,14 @@ def parse_int_range_stmt(range_str: str, base_ranges: Ranges[int]) -> Ranges[int
         RangesBuilder.append_range_restriction_of(builder, l, u, base_ranges)
     return RangesBuilder.into_ranges(builder)
 
-def parse_bigint_range_stmt(range_str: str, base_ranges: Ranges[bigint]) -> Ranges[bigint]:
+def parse_u64_range_stmt(range_str: str, base_ranges: Ranges[u64]) -> Ranges[u64]:
     builder = RangesBuilder()
     for r in parse_range_constraint(range_str):
         ls = r.min_str
         us = r.max_str
 
-        l = None if ls == "min" else bigint(ls)
-        u = None if us == "max" else bigint(us)
+        l = None if ls == "min" else u64(ls)
+        u = None if us == "max" else u64(us)
 
         RangesBuilder.append_range_restriction_of(builder, l, u, base_ranges)
     return RangesBuilder.into_ranges(builder)
