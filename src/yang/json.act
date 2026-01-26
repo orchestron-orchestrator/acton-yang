@@ -1,0 +1,307 @@
+import base64
+
+from yang.identityref import Identityref, PartialIdentityref
+from yang.type import Decimal
+from yang.data import from_data, from_data_recursive, YangData, PathElement, YangValidationError, format_schema_path
+from yang.data import unwrap_key, coerce_integer_value, fqname, fq_list_keys, parse_qualified_name, user_order
+import yang.gdata
+import yang.schema
+
+
+extension dict[A(Hashable), B] (YangData):
+    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, val: ?value):
+        if isinstance(self, dict):
+            maybe = None
+            # For cross-namespace children, only accept module-qualified keys
+            if ns_qualified and schema.module is not None and schema.module != "":
+                maybe = self.get(f"{schema.module}:{name}")
+            else:
+                maybe = self.get(name)
+            if isinstance(maybe, dict):
+                return (op=None, val=maybe)
+        return None
+
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, key: dict[str, value], val: value)]:
+        new_path = path + [PathElement(schema)]
+        if isinstance(self, dict):
+            lv = None
+            if ns_qualified and schema.module is not None and schema.module != "":
+                lv = self.get(f"{schema.module}:{name}")
+            else:
+                lv = self.get(name)
+            if isinstance(lv, list):
+                key_values: (dict[str, ?value]) -> dict[str, value] = lambda element_data: {k: unwrap_key(k, element_data.get(k), new_path) for k in schema.key}
+                return [(op=None, key=key_values(le), val=le) for le in lv]
+        return []
+
+    def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, t: str, val: ?value):
+        new_path = path + [PathElement(schema)]
+        if isinstance(self, dict):
+            leaf_value = None
+            if ns_qualified and schema.module is not None and schema.module != "":
+                leaf_value = self.get(f"{schema.module}:{name}")
+            else:
+                leaf_value = self.get(name)
+            if leaf_value is not None:
+                tv = try_parse_json_value(leaf_value, schema, schema.type_, new_path, root)
+                if tv is not None:
+                    return (op=None, t=tv.t, val=tv.val)
+            else:
+                return None
+        else:
+            return None
+
+    def take_leaflist(self, root: yang.schema.DRoot, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, t: str, val: ?value)]:
+        values: list[(op: ?str, t: str, val: ?value)] = []
+        if isinstance(self, dict):
+            leaflist_data = None
+            if ns_qualified and schema.module is not None and schema.module != "":
+                leaflist_data = self.get(f"{schema.module}:{name}")
+            else:
+                leaflist_data = self.get(name)
+            if isinstance(leaflist_data, list):
+                new_path = path + [PathElement(schema)]
+                for item in leaflist_data:
+                    tv = try_parse_json_value(item, schema, schema.type_, new_path, root)
+                    if tv is not None:
+                        values.append((op=None, t=tv.t, val=tv.val))
+        return values
+
+
+def try_parse_json_value(leaf_value: ?value, schema_node: yang.schema.DNodeLeaf, schema_type: yang.schema.DType, path: list[PathElement], root: yang.schema.DRoot) -> ?(t: str, val: value):
+    """Parse a textual value according to the provided schema type.
+
+    Returns:
+        (t, val): A typed tuple with the concrete type name and native value
+                  (e.g. ("uint8", 42)). For unions, returns the successful
+                  member type and parsed value.
+
+    Errors:
+        Raises YangValidationError with a message including the formatted
+        schema path (from the path parameter) and a textual description of the
+        expected type (including range constraints if present).
+    """
+    type_name = schema_type.builtin_type
+
+    if isinstance(schema_type, yang.schema.DTypeUnion):
+        for alt_type in schema_type.types:
+            try:
+                return try_parse_json_value(leaf_value, schema_node, alt_type, path, root)
+            except YangValidationError:
+                continue
+        if leaf_value is not None:
+            raise YangValidationError(path, schema_type, leaf_value)
+        return None
+    elif isinstance(schema_type, yang.schema.DTypeEmpty):
+        # Empty leaf JSON encoding: [null]
+        if isinstance(leaf_value, list) and len(leaf_value) == 1 and leaf_value[0] is None:
+            return (t=type_name, val=yang.gdata.Present())
+        raise YangValidationError(path, schema_type, leaf_value)
+
+    if leaf_value is not None:
+        val: ?value = None
+        if isinstance(schema_type, yang.schema.DTypeString):
+            val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeInteger):
+            if isinstance(leaf_value, atom):
+                val = coerce_integer_value(leaf_value, schema_type, path)
+            else:
+                raise YangValidationError(path, schema_type, leaf_value)
+        elif isinstance(schema_type, yang.schema.DTypeEnum):
+            val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeDecimal64):
+            if isinstance(leaf_value, str):
+                val = Decimal.try_parse(leaf_value)
+            elif isinstance(leaf_value, float):
+                # TODO: Make sure we won't receive floats as those may lose precision
+                val = Decimal.try_parse(str(leaf_value))
+            else:
+                val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeBoolean):
+            if isinstance(leaf_value, str):
+                if leaf_value == "true":
+                    val = True
+                elif leaf_value == "false":
+                    val = False
+            else:
+                val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeBinary):
+            if isinstance(leaf_value, str):
+                try:
+                    val = base64.decode(leaf_value.encode())
+                except ValueError:
+                    pass
+            else:
+                val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeIdentityref):
+            if isinstance(leaf_value, str):
+                partial = Identityref.from_json(leaf_value)
+                res = yang.schema.complete_identityref(partial, root.identities, schema_node.module)
+                val = res.0
+            else:
+                val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeLeafref):
+            val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeInstanceIdentifier):
+            val = leaf_value
+        elif isinstance(schema_type, yang.schema.DTypeBits):
+            if isinstance(leaf_value, str):
+                bits_val = set(None)
+                for bit in leaf_value.split(" "):
+                    if bit in schema_type.name_to_pos:
+                        bits_val.add(bit)
+                    else:
+                        raise YangValidationError(path, schema_type, leaf_value)
+                val = bits_val
+            else:
+                val = leaf_value
+
+        if val is not None and schema_type.validate_value(val):
+            return (t=type_name, val=val)
+
+        raise YangValidationError(path, schema_type, leaf_value)
+
+    return None
+
+
+def from_json(root: yang.schema.DRoot, data: dict[str, ?value], loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
+    def type_narrower(v):
+        if isinstance(v, dict):
+            return v
+        raise ValueError("Value is not a dict: {type(v)}")
+
+    return from_data(root, data, type_narrower, loose, root_path)
+
+
+def from_json_path(root: yang.schema.DRoot, data: dict[str, ?value], path: list[str], op: str="merge", loose: bool=False) -> yang.gdata.Container:
+    r"""Convert JSON to a gdata tree rooted at the schema root, with data applied
+    at the specified path.
+
+    Unlike from_data which can create partial trees starting at any schema node,
+    this function ALWAYS creates a sparse tree from the root of the schema,
+    meaning that it  only creates containers and list entries required to hold
+    the data at the specified path location. This is useful for NETCONF/RESTCONF
+    operations where the payload is a subtree rooted in the provided query path.
+
+    Args:
+        root: Root schema node (must be the actual root, not an inner node)
+        data: JSON data to apply at the target path location
+        path: List of path elements to navigate from root, e.g. ["mod1:c1", "list1", "key1", "inner"]
+              - Container/List names "name" or "module:name"
+              - List entries: comma-separated key values, e.g. "key1,key2"
+        op: Operation to perform - "merge" (default) or "remove"
+        loose: Whether to allow missing mandatory fields
+
+    Returns:
+        A sparse gdata tree from root with data only at the specified path
+
+    Examples:
+        # Creates: root -> c1 -> c2 -> {leaf1: "value"}
+        from_json_path(schema, {"leaf1": "value"}, ["mod:c1", "c2"])
+
+        # Creates: root -> list1[key1] -> container -> {field: "value"}
+        from_json_path(schema, {"field": "value"}, ["mod:list1", "key1", "container"])
+
+        # Creates: root -> list1[key1] as Absent (for removal)
+        from_json_path(schema, {}, ["mod:list1", "key1"], "remove")
+    """
+    def type_narrower(v):
+        if isinstance(v, dict):
+            return v
+        raise ValueError("Value is not a dict: {type(v)}")
+
+    result = _from_json_path_recursive(root, root, data, type_narrower, path, op, loose, [PathElement(root)], True, True)
+    # The top-level call always returns a Container because:
+    # - If path is empty, from_data returns Container
+    # - If path is non-empty, we wrap in Container
+    if isinstance(result, yang.gdata.Container):
+        return result
+    else:
+        raise ValueError("Internal error: expected Container at root level")
+
+
+def _from_json_path_recursive(root: yang.schema.DRoot, s: yang.schema.DNodeInner, data: dict[str, ?value], type_narrower: (?value) -> dict[str, ?value], path: list[str], op: str, loose: bool, current_path: list[PathElement], top: bool, set_ns: bool) -> yang.gdata.Node:
+    if isinstance(s, yang.schema.DRoot) or isinstance(s, yang.schema.DContainer):
+        if len(path) == 0:
+            # Base case: no more path elements, process the data
+            if op == "merge":
+                # TODO: set_ns??
+                return from_data_recursive(root, s, data, type_narrower, loose=loose, set_ns=set_ns, spath=current_path)
+            elif op == "remove":
+                return yang.gdata.Absent()
+            raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
+        else:   # len(path) > 0
+            # More path to traverse - create a container with just the next child
+            point = path[0]
+            rest_path = path[1:]
+
+            local_name, module = parse_qualified_name(point)
+            child = s.get(local_name, module=module, allow_unqualified=False)
+
+            if isinstance(child, yang.schema.DNodeInner):
+                # Recursively process the child node
+                perhaps = True if (top or set_ns) and s.namespace != "" else False
+                cchild = _from_json_path_recursive(root, child, data, type_narrower, rest_path, op, loose, current_path + [PathElement(child)], False, s.namespace != child.namespace)
+                # Create a container with just this one child
+                return yang.gdata.Container({fqname(child): cchild}, ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
+
+            # Path tries to go through a leaf - this is an error
+            raise ValueError("Invalid JSON path to non-inner node at {format_schema_path(current_path + [PathElement(child)])}: {point}")
+    elif isinstance(s, yang.schema.DList):
+        if len(path) == 1:
+            # Base case: keys are the last path element
+            point = path[0]
+            keys = point.split(",")
+            # Check that all keys are present in payload.
+            # If present, they must equal the keys in the path
+            # If not present, fill in from path
+            data_with_keys = dict(data.items())
+            for key in s.key:
+                if key not in data_with_keys:
+                    data_with_keys[key] = keys.pop(0)
+                else:
+                    if str(data_with_keys[key]) != keys.pop(0):
+                        raise ValueError("Key value mismatch between path and payload at {format_schema_path(current_path)}")
+            element_gdata = from_data_recursive(root, s, data_with_keys, type_narrower, loose, set_ns=False, spath=current_path + [PathElement(s, {k: v for k, v in data_with_keys.items() if k in s.key and v is not None})])
+            elements = []
+            if op == "merge":
+                elements.append(element_gdata)
+            elif op == "remove":
+                elements.append(yang.gdata.Absent(element_gdata.key_children(fq_list_keys(s))))
+            else:
+                raise ValueError("Invalid operation at {format_schema_path(current_path)}: {op}")
+            perhaps = True if (top or set_ns) and s.namespace != "" else False
+            return yang.gdata.List(fq_list_keys(s), elements, user_order(s.ordered_by), ns=s.namespace if perhaps else None, module=s.module if perhaps else None)
+        elif len(path) > 1:
+            # The path crosses this list element and references another inner node
+            point = path[0]
+            rest_path = path[1:]
+
+            # First create this list with a single element with only key children.
+            # For nested lists, we always use "merge" for intermediate elements.
+            slist = _from_json_path_recursive(root, s, {}, type_narrower, [point], "merge", loose, current_path, top, set_ns)
+
+            # The return type must be a List, we just requested it
+            if isinstance(slist, yang.gdata.List):
+                # Now process the rest of the path following the structural list keys
+                child_point = rest_path[0]
+                child_rest_path = rest_path[1:]
+
+                local_name, module = parse_qualified_name(child_point)
+
+                lchild = s.get(local_name, module=module, allow_unqualified=False)
+                if isinstance(lchild, yang.schema.DNodeInner):
+                    # Now extract gdata for the rest of the path, from the child point
+                    inner_result = _from_json_path_recursive(root, lchild, data, type_narrower, child_rest_path, op, loose, current_path + [PathElement(lchild)], False, False)
+
+                    # Add it to the structural list element, next to the existing keys
+                    slist.elements[0].children[fqname(lchild)] = inner_result
+                    return slist
+                else:
+                    raise ValueError("Node at {format_schema_path(current_path + [PathElement(lchild)])} is not inner: {type(lchild)}")
+
+            raise ValueError("unreachable")
+        raise ValueError("Unable to resolve path at {format_schema_path(current_path)}: no keys provided")
+
+
+    raise ValueError("Unknown schema node type at {format_schema_path(current_path)}: {type(s)}")

@@ -2,8 +2,13 @@ import testing
 import xml
 
 import yang
-import yang.gen3
 import yang.gdata
+
+from yang.data import YangValidationError
+from yang.xml import from_xml
+from yang.json import from_json, from_json_path
+from yang.identityref import Identityref, PartialIdentityref
+from yang.type import Decimal, Ranges
 
 
 def _unwrap_node(n: ?yang.gdata.Node) -> yang.gdata.Node:
@@ -60,8 +65,8 @@ def _test_remove_list_roundtrip():
 
     s = yang.compile([y])
 
-    gd_a = yang.gen3.from_data(s, xml.decode(xml_a))
-    gd_b = yang.gen3.from_data(s, xml.decode(xml_b))
+    gd_a = from_xml(s, xml.decode(xml_a))
+    gd_b = from_xml(s, xml.decode(xml_b))
 
     # Compute diff: expect Absent list element for key B
     d = _unwrap_node(yang.gdata.diff(gd_a, gd_b))
@@ -72,7 +77,7 @@ def _test_remove_list_roundtrip():
     # we also exercise the NETCONF ops attribute encoding/decoding, so let's
     # keep it like that ...
     xml_ops = d.to_xmlstr()
-    gd_ops = yang.gen3.from_data(s, xml.decode("<data>{xml_ops}</data>"))
+    gd_ops = from_xml(s, xml.decode("<data>{xml_ops}</data>"))
 
     # Check idempotent roundtrip of operations, gdata -> XML -> gdata
     testing.assertEqual(d.prsrc(deterministic=True), gd_ops.prsrc(deterministic=True))
@@ -84,5 +89,1168 @@ def _test_remove_list_roundtrip():
 
     # Also check that XML serialization of the patched state parses back to B
     xml_patched = pnode.to_xmlstr()
-    gd_from_xml_patched = yang.gen3.from_data(s, xml.decode("<data>{xml_patched}</data>"))
+    gd_from_xml_patched = from_xml(s, xml.decode("<data>{xml_patched}</data>"))
     testing.assertEqual(gd_from_xml_patched.prsrc(deterministic=True), gd_b.prsrc(deterministic=True))
+
+
+def _test_y1_xml():
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    description "Container 1";
+    leaf l1 {
+      type string;
+      description "Leaf 1";
+    }
+    list l2 {
+      key "k1";
+      leaf k1 {
+        type string;
+        description "Key 1";
+      }
+      leaf v1 {
+        type string;
+        description "Value 1";
+      }
+    }
+    leaf lrf2 {
+      type leafref {
+        path "/c1/l2/k1";
+      }
+    }
+    leaf-list ll1 {
+      type string;
+      description "Leaf List 1";
+    }
+    leaf-list ll3 {
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y1">
+  <l1>Value for l1</l1>
+  <l2>
+    <k1>Key 1</k1>
+    <v1>Value for v1</v1>
+  </l2>
+  <lrf2>Key 1</lrf2>
+  <ll1>Item 1</ll1>
+  <ll1>Item 2</ll1>
+  <ll3>3.14</ll3>
+  <ll3>2.72</ll3>
+</c1>
+</data>"""
+
+    s = yang.compile([y1])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_mandatory_leaf():
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+  container c1 {
+    leaf l1 {
+      type string;
+      mandatory true;
+    }
+  }
+}"""
+    s = yang.compile([y1])
+
+    try:
+        from_xml(s, xml.decode('<data><c1 xmlns="urn:example:y1"/></data>'))
+    except ValueError as err:
+        if err.error_message != "Error reading /c1/l1: Cannot find child node with name l1":
+            testing.error("Unexpected error: {err}")
+
+
+def _test_y1_json():
+    """Test JSON parsing with the same schema as XML test"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    description "Container 1";
+    leaf l1 {
+      type string;
+      description "Leaf 1";
+    }
+    list l2 {
+      key "k1";
+      leaf k1 {
+        type string;
+        description "Key 1";
+      }
+      leaf v1 {
+        type string;
+        description "Value 1";
+      }
+    }
+    leaf lrf2 {
+      type leafref {
+        path "/c1/l2/k1";
+      }
+    }
+    leaf-list ll1 {
+      type string;
+      description "Leaf List 1";
+    }
+    leaf-list ll3 {
+      type decimal64 {
+        fraction-digits 2;
+      }
+    }
+  }
+}"""
+
+    # According to RFC 7951, the decimal64 and uint64 YANG types must be encoded as
+    # a JSON string, but we test with both here ...
+    json_data = {
+        "y1:c1": {
+            "l1": "Value for l1",
+            "l2": [
+                {
+                    "k1": "Key 1",
+                    "v1": "Value for v1"
+                }
+            ],
+            "lrf2": "Key 1",
+            "ll1": ["Item 1", "Item 2"],
+            "ll3": [3.14, "2.72"]
+        }
+    }
+
+    s = yang.compile([y1])
+    gd = from_json(s, json_data)
+    return gd.prsrc()
+
+
+def _test_root_path():
+    """Test root_path argument for navigating to nested containers"""
+    y1 = r"""module acme-y1 {
+  namespace "urn:example:acme-y1";
+  prefix y1;
+
+  container top {
+    description "Top container";
+    container nested {
+      description "Nested container";
+      leaf value {
+        type string;
+        description "Test value";
+      }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+  <nested>
+    <value>test data</value>
+  </nested>
+</data>"""
+
+    s = yang.compile([y1])
+
+    # Start parsing at the /acme-y1:top container (acme-y1 is the module name, not prefix)
+    gd_nested = from_xml(s, xml.decode(xml_in), root_path=["acme-y1:top"])
+
+    return gd_nested.prsrc()
+
+def _test_error_path_json_list_range():
+    """Error path includes list key predicate for JSON payloads"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 {
+        type uint8 { range 1..10; }
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+    # v1 is out of range (100)
+    json_in = {"y1:c1": {"l2": [{"k1": "Key 1", "v1": "100"}]}}
+    try:
+        from_json(s, json_in)
+    except ValueError as err:
+        return str(err)
+    raise AssertionError("Expected error not raised")
+
+def _test_error_path_xml_leaf_range():
+    """Error path includes nested container for XML payloads"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container top {
+    container nested {
+      leaf value { type uint8 { range "0..5"; } }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<top xmlns="urn:example:y1">
+  <nested>
+    <value>42</value>
+  </nested>
+</top>
+</data>"""
+
+    s = yang.compile([y1])
+    try:
+        from_xml(s, xml.decode(xml_in))
+    except ValueError as err:
+        return str(err)
+    raise AssertionError("Expected error not raised")
+
+
+def _test_uint64_edge_json_ok_max_keyword():
+    """uint64 accepts max value when range uses 'max'"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c {
+    leaf u {
+      type uint64 { range "0..max"; }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+    # Use the maximum uint64 value
+    json_in = {"y1:c": {"u": "18446744073709551615"}}
+    # Should not raise
+    gd = from_json(s, json_in)
+
+
+def _test_uint64_edge_json_fail_overflow():
+    """uint64 rejects value above max with explicit bound"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c {
+    leaf u {
+      type uint64 { range "0..18446744073709551615"; }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+    # One above max
+    json_in = {"y1:c": {"u": "18446744073709551616"}}
+    try:
+        from_json(s, json_in)
+    except ValueError as err:
+        return str(err)
+    raise AssertionError("Expected error not raised")
+
+
+def _test_missing_list_key_json():
+    """Test error message when list key is missing in JSON"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l1 {
+      key "k1 k2";
+      leaf k1 { type string; }
+      leaf k2 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+    # Missing k2 key in the list element
+    json_in = {"y1:c1": {"l1": [{"k1": "key1", "v1": "value1"}]}}
+    try:
+        from_json(s, json_in)
+        testing.error("Expected ValueError not raised")
+    except ValueError as err:
+        testing.assertEqual("Missing key value at /c1/l1: k2", err.error_message)
+
+
+def _test_missing_list_key_xml():
+    """Test error message when list key is missing in XML"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l1 {
+      key "k1 k2";
+      leaf k1 { type string; }
+      leaf k2 { type int32; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y1">
+  <l1>
+    <k1>key1</k1>
+    <v1>value1</v1>
+  </l1>
+</c1>
+</data>"""
+
+    s = yang.compile([y1])
+    try:
+        from_xml(s, xml.decode(xml_in))
+        testing.error("Expected ValueError not raised")
+    except ValueError as err:
+        expected = "Missing key value at /c1/l1: k2"
+        testing.assertEqual(expected, err.error_message)
+
+
+def _test_json_path_basic():
+    """Test basic JSON path navigation"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    leaf l1 {
+      type string;
+    }
+    container c2 {
+      leaf l2 {
+        type string;
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test navigating to a leaf in a nested container
+    gd = from_json_path(s, {"l2": "test value"}, ["y1:c1", "c2"])
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "c2"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:y1", "l2"): yang.gdata.Leaf("test value")
+            })
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_json_path_qualified_names():
+    """Test JSON path with module-qualified names"""
+    mod1 = r"""module mod1 {
+  namespace "urn:example:mod1";
+  prefix m1;
+
+  container c1 {
+    leaf l1 {
+      type string;
+    }
+  }
+}"""
+
+    mod2 = r"""module mod2 {
+  namespace "urn:example:mod2";
+  prefix m2;
+  import mod1 { prefix m1; }
+
+  augment "/m1:c1" {
+    leaf l2 {
+      type string;
+    }
+  }
+}"""
+
+    s = yang.compile([mod1, mod2])
+
+    # Test navigating with qualified name
+    gd = from_json_path(s, {"mod2:l2": "augmented value"}, ["mod1:c1"])
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:mod1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:mod2", "l2"): yang.gdata.Leaf("augmented value", ns="urn:example:mod2", module="mod2")
+        }, ns="urn:example:mod1", module="mod1")
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_json_path_list():
+    """Test JSON path navigation to list elements"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l1 {
+      key name;
+      leaf name {
+        type string;
+      }
+      leaf value {
+        type string;
+      }
+      container inner {
+        leaf data {
+          type string;
+        }
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test navigating to a specific list element
+    gd = from_json_path(s, {"name": "test", "value": "data"}, ["y1:c1", "l1", "test"])
+    # Should create a list with single element
+    expected = yang.gdata.Container({
+      yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "l1"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "name")], elements=[
+          yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('test'),
+            yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf('data')
+          })
+        ])
+      }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_json_path_remove():
+    """Test JSON path with remove operation"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list l1 {
+      key name;
+      leaf name {
+        type string;
+      }
+      leaf value {
+        type string;
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test remove operation on a list element
+    gd = from_json_path(s, {}, ["y1:c1", "l1", "test"], "remove")
+    # Should contain an Absent node with the key
+    expected = yang.gdata.Container({
+      yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "l1"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "name")], elements=[
+          yang.gdata.Absent({
+            yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('test')
+          })
+        ])
+      }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_json_path_errors():
+    """Test error handling in JSON path navigation"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    leaf l1 {
+      type string;
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test missing namespace qualification
+    try:
+        from_json_path(s, {}, ["y1:c1", "nonexistent"])
+        testing.error("Should have raised ValueError for missing namespace qualification")
+    except ValueError as e:
+        testing.assertIn("Child 'nonexistent' not found", e.error_message)
+
+    # Test navigating beyond leaf
+    try:
+        from_json_path(s, {}, ["y1:c1", "l1", "beyond"])
+        testing.error("Should have raised ValueError for navigating beyond leaf")
+    except ValueError as e:
+        testing.assertIn("Invalid JSON path to non-inner node", e.error_message)
+
+    # Test invalid operation
+    try:
+        from_json_path(s, {}, ["y1:c1"], "invalid")
+        testing.error("Should have raised ValueError for invalid operation")
+    except ValueError as e:
+        testing.assertIn("Invalid operation", e.error_message)
+
+
+def _test_json_path_nested_lists():
+    """Test JSON path navigation through nested lists"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list outer {
+      key "outer-key";
+      leaf outer-key {
+        type string;
+      }
+      list inner {
+        key "inner-key";
+        leaf inner-key {
+          type string;
+        }
+        leaf value {
+          type string;
+        }
+        list deep {
+          key "deep-key";
+          leaf deep-key {
+            type string;
+          }
+          leaf data {
+            type int32;
+          }
+        }
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test navigating to a nested list element
+    gd = from_json_path(s, {"value": "test-value"}, ["y1:c1", "outer", "key1", "inner", "key2"])
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "outer"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "outer-key")], elements=[
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:y1", "outer-key"): yang.gdata.Leaf('key1'),
+                    yang.gdata.Id("urn:example:y1", "inner"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "inner-key")], elements=[
+                        yang.gdata.Container({
+                            yang.gdata.Id("urn:example:y1", "inner-key"): yang.gdata.Leaf('key2'),
+                            yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf('test-value')
+                        })
+                    ])
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+    # Test navigating to a deeply nested list element (3 levels)
+    gd2 = from_json_path(s, {"data": 42}, ["y1:c1", "outer", "key1", "inner", "key2", "deep", "key3"])
+    expected2 = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "outer"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "outer-key")], elements=[
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:y1", "outer-key"): yang.gdata.Leaf('key1'),
+                    yang.gdata.Id("urn:example:y1", "inner"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "inner-key")], elements=[
+                        yang.gdata.Container({
+                            yang.gdata.Id("urn:example:y1", "inner-key"): yang.gdata.Leaf('key2'),
+                            yang.gdata.Id("urn:example:y1", "deep"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "deep-key")], elements=[
+                                yang.gdata.Container({
+                                    yang.gdata.Id("urn:example:y1", "deep-key"): yang.gdata.Leaf('key3'),
+                                    yang.gdata.Id("urn:example:y1", "data"): yang.gdata.Leaf(int(42))
+                                })
+                            ])
+                        })
+                    ])
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd2.prsrc(), expected2.prsrc())
+
+def _test_netconf_remove_container():
+    """NETCONF remove on a container produces Absent"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    presence "p";
+    leaf l1 { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove"/>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_remove_list_element():
+    """NETCONF remove on a list element produces Absent with key children"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove">
+    <k1>Key 1</k1>
+  </l2>
+</c1>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_remove_leaf():
+    """NETCONF remove on a leaf produces Absent"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    leaf l1 { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l1 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove"/>
+</c1>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_replace_leaf_sets_value():
+    """NETCONF replace on a leaf is treated as a normal set"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    leaf l1 { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l1 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">VAL</l1>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_remove_mixed():
+    """Mixed normal and remove elements in the same list"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  list l {
+    key "k";
+    leaf k { type string; }
+    leaf v { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<l xmlns="urn:example:y">
+  <k>A</k>
+  <v>keep</v>
+</l>
+<l xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove">
+  <k>B</k>
+</l>
+</data>
+"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_create_list_element():
+    """NETCONF create on a list element renders operation and content"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="create">
+    <k1>X</k1>
+    <v1>Y</v1>
+  </l2>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_replace_list_element():
+    """NETCONF replace on a list element renders operation and content"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">
+    <k1>Z</k1>
+    <v1>W</v1>
+  </l2>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_delete_list_element():
+    """NETCONF delete on a list element renders operation with keys only"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    list l2 {
+      key "k1";
+      leaf k1 { type string; }
+      leaf v1 { type string; }
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l2 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="delete">
+    <k1>DEL</k1>
+  </l2>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+
+def _test_netconf_leaflist_merge_and_remove():
+    """NETCONF merge + remove on a leaf-list keeps merge values only"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    leaf-list ll {
+      type string;
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <ll>keep</ll>
+  <ll xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove">drop</ll>
+</c1>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.LeafList(['keep'])
+        }, ns='urn:example:y', module='y')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_netconf_leaflist_all_delete():
+    """NETCONF delete only on a leaf-list produces Delete node"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    leaf-list ll {
+      type string;
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <ll xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="delete">drop</ll>
+</c1>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.Delete()
+        }, ns='urn:example:y', module='y')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
+def _test_netconf_leaflist_all_remove():
+    """NETCONF remove only on a leaf-list produces Absent node"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    leaf-list ll {
+      type string;
+    }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <ll xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="remove">gone</ll>
+</c1>
+</data>"""
+
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.Absent()
+        }, ns='urn:example:y', module='y')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+def _test_union_int_json():
+    """Union(int8 range 1..10 | string): textual int within range resolves as int"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type int8 { range 1..10; }
+      type string;
+    }
+  }
+}"""
+    s = yang.compile([y])
+    jd = {"y:u": "7"}
+    gd = from_json(s, jd)
+    return gd.prsrc()
+
+def _test_union_str_json():
+    """Union(int8 range 1..10 | string): textual int out of range resolves as string"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type int8 { range 1..10; }
+      type string;
+    }
+  }
+}"""
+    s = yang.compile([y])
+    jd = {"y:u": "100"}
+    gd = from_json(s, jd)
+    return gd.prsrc()
+
+def _test_union_str_xml():
+    """Union(int8 range 1..10 | string): XML numeric text out of range resolves as string"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type int8 { range 1..10; }
+      type string;
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<u xmlns="urn:example:y">100</u>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_union_binary_xml():
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type enumeration { enum "unlimited"; }
+      type binary;
+    }
+  }
+}"""
+    xml_in = r"""<data>
+<u xmlns="urn:example:y">aGk=</u>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    testing.assertEqual(gd.get_bytes(yang.gdata.Id("urn:example:y", "u")), "hi".encode())
+    return gd.prsrc()
+
+def _test_union_binary_json():
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  leaf u {
+    type union {
+      type enumeration { enum "unlimited"; }
+      type binary;
+    }
+  }
+}"""
+    s = yang.compile([y])
+    jd = {"y:u": "aGk="}
+    gd = from_json(s, jd)
+    testing.assertEqual(gd.get_bytes(yang.gdata.Id("urn:example:y", "u")), "hi".encode())
+    return gd.prsrc()
+
+def _test_netconf_create_container():
+    """NETCONF create on a container produces Create wrapper and serializes op"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 { leaf l1 { type string; } }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="create">
+  <l1>v</l1>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_replace_container():
+    """NETCONF replace on a container produces Replace wrapper and serializes op"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 { leaf l1 { type string; } }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">
+  <l1>nv</l1>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_delete_container():
+    """NETCONF delete on a container produces Delete wrapper and serializes op"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 { leaf l1 { type string; } }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y" xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="delete"/>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+    # Test remove operation on nested list element
+    gd3 = from_json_path(s, {}, ["y1:c1", "outer", "key1", "inner", "key2"], "remove")
+    expected3 = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "outer"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "outer-key")], elements=[
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:y1", "outer-key"): yang.gdata.Leaf('key1'),
+                    yang.gdata.Id("urn:example:y1", "inner"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "inner-key")], elements=[
+                        yang.gdata.Absent({
+                            yang.gdata.Id("urn:example:y1", "inner-key"): yang.gdata.Leaf('key2')
+                        })
+                    ])
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd3.prsrc(), expected3.prsrc())
+
+
+def _test_json_path_container_list_container():
+    """Test JSON path navigation through container -> list -> container pattern"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container top {
+    list middle {
+      key "name";
+      leaf name {
+        type string;
+      }
+      container bottom {
+        leaf data {
+          type string;
+        }
+        leaf value {
+          type int32;
+        }
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    # Test navigating through container -> list -> container and setting data
+    gd = from_json_path(s, {"data": "test", "value": 42}, ["y1:top", "middle", "item1", "bottom"])
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "top"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "middle"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "name")], elements=[
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('item1'),
+                    yang.gdata.Id("urn:example:y1", "bottom"): yang.gdata.Container({
+                        yang.gdata.Id("urn:example:y1", "data"): yang.gdata.Leaf('test'),
+                        yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf(int(42))
+                    })
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+    # Test remove operation on the inner container
+    gd2 = from_json_path(s, {}, ["y1:top", "middle", "item1", "bottom"], "remove")
+    expected2 = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "top"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "middle"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "name")], elements=[
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:y1", "name"): yang.gdata.Leaf('item1'),
+                    yang.gdata.Id("urn:example:y1", "bottom"): yang.gdata.Absent()
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd2.prsrc(), expected2.prsrc())
+
+def _test_identityref():
+    # Extended test case from https://github.com/CESNET/libyang/issues/1009
+    _ys_identityref = r"""module mod1 {
+  yang-version 1.1;
+  namespace "urn:cesent:mod1";
+  prefix aa;
+
+  identity id1;
+
+  identity id4;
+
+  identity id7;
+
+  identity id2 {
+    base id1;
+  }
+
+  identity id3 {
+    base id2;
+  }
+
+  identity id5 {
+    base id4;
+  }
+
+  identity id6 {
+    base id5;
+  }
+
+  identity id8 {
+    base id7;
+    base id6;
+  }
+
+  leaf le1 {
+    // Valid value must be derived from both bases (intersect)
+    type identityref {
+      base id1;
+      base id4;
+    }
+    default "id8";  // "id8" is derived from "id4"
+  }
+  leaf le2 {
+    // Valid value must be derived from either base (union)
+    type union {
+      type identityref {
+        base id1;
+      }
+      type identityref {
+        base id4;
+      }
+    }
+  }
+  leaf le3 {
+    // Valid value must be derived from the base, and there are none!
+    type identityref {
+      base id8;
+    }
+  }
+}"""
+    s = yang.compile([_ys_identityref])
+
+    # Invalid value is not derived from all bases
+    xml_in = xml.decode("""<data><le1 xmlns="urn:cesent:mod1">id8</le1></data>""")
+    try:
+        gd = from_xml(s, xml_in)
+        testing.error("Expected validation error")
+    except YangValidationError as e:
+        testing.assertEqual(str(e), "Invalid value at /le1: 'id8' - expected identityref with bases: ['aa:id1', 'aa:id4']")
+
+    # A valid value is derived from one of the bases in the union
+    xml_in = xml.decode("""<data><le2 xmlns="urn:cesent:mod1">id8</le2></data>""")
+    gd = from_xml(s, xml_in)
+    exp = yang.gdata.Container({
+        yang.gdata.Id("urn:cesent:mod1", "le2"): yang.gdata.Leaf(Identityref('id8', ns='urn:cesent:mod1', mod='mod1', pfx='aa'), ns='urn:cesent:mod1', module='mod1')
+    })
+    testing.assertEqual(exp.prsrc(), gd.prsrc())
+
+    # A base is not derived from iteslf
+    xml_in = xml.decode("""<data><le3 xmlns="urn:cesent:mod1">id8</le3></data>""")
+    try:
+        gd = from_xml(s, xml_in)
+        testing.error("Expected validation error")
+    except YangValidationError as e:
+        testing.assertEqual(str(e), "Invalid value at /le3: 'id8' - expected identityref with bases: ['aa:id8']")

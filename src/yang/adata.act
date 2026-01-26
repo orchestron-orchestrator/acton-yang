@@ -1,6 +1,10 @@
 
 import yang.schema
 import yang.gdata
+from yang.data import from_data, YangData, PathElement, YangValidationError
+from yang.data import coerce_integer_value, unwrap_key
+from yang.data import OP_CREATE, OP_DELETE, OP_REMOVE, OP_REPLACE, OP_MERGE
+
 
 """Base classes for YANG-modeled data classes (MData)
 """
@@ -17,3 +21,73 @@ class MNode(object):
 
     def _get_attr(self, name: str) -> ?value:
         raise NotImplementedError("_get_attrs")
+
+
+extension MNode (YangData):
+    def take_container(self, schema: yang.schema.DContainer, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, val: ?value):
+        usname = yang.schema.safe_name(name if is_unique else "{schema.prefix}_{name}")
+        maybe_cnt = self._get_attr(usname)
+        if maybe_cnt is not None:
+            return (op=None, val=maybe_cnt)
+
+    def take_list(self, schema: yang.schema.DList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, key: dict[str, value], val: value)]:
+        new_path = path + [PathElement(schema)]
+        usname = yang.schema.safe_name(name if is_unique else "{schema.prefix}_{name}")
+        maybe_list = self._get_attr(usname)
+        if maybe_list is not None and isinstance(maybe_list, Iterator):
+            key_values = lambda element_data: {k: unwrap_key(k, element_data._get_attr(yang.schema.safe_name(k)), new_path) for k in schema.key}
+            return [(op=None, key=key_values(e), val=e) for e in maybe_list]
+        return [] # ??
+
+    def take_leaf(self, root: yang.schema.DRoot, schema: yang.schema.DLeaf, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> ?(op: ?str, t: str, val: ?value):
+        new_path = path + [PathElement(schema)]
+        usname = yang.schema.safe_name(name if is_unique else "{schema.prefix}_{name}")
+        maybe_attr = self._get_attr(usname)
+        if maybe_attr is not None:
+            schema_type = schema.type_
+            tv = try_validate_mnode_value(maybe_attr, schema_type, new_path)
+            if tv is not None:
+                if tv.t == "empty":
+                    return (op=None if tv.val else OP_REMOVE, t=tv.t, val=yang.gdata.Present() if tv.val else None)
+                return (op=None, t=tv.t, val=tv.val)
+            raise YangValidationError(path, schema_type, maybe_attr)
+
+    def take_leaflist(self, root: yang.schema.DRoot, schema: yang.schema.DLeafList, name: str, ns_qualified: bool, is_unique: bool, path: list[PathElement]=[]) -> list[(op: ?str, t: str, val: ?value)]:
+        new_path = path + [PathElement(schema)]
+        values: list[(op: ?str, t: str, val: ?value)] = []
+        usname = yang.schema.safe_name(name if is_unique else "{schema.prefix}_{name}")
+        children = self._get_attr(usname)
+        if isinstance(children, list):
+            schema_type = schema.type_
+            for child in children:
+                tv = try_validate_mnode_value(child, schema_type, new_path)
+                if tv is not None:
+                    values.append((op=None, t=tv.t, val=tv.val))
+                else:
+                    raise YangValidationError(path, schema_type, child)
+        return values
+
+
+def try_validate_mnode_value(val: value, schema_type: yang.schema.DType, path: list[PathElement]) -> ?(t: str, val: value):
+    if isinstance(schema_type, yang.schema.DTypeUnion):
+        for alt_type in schema_type.types:
+            tv = try_validate_mnode_value(val, alt_type, path)
+            if tv is not None:
+                return tv
+    elif isinstance(schema_type, yang.schema.DTypeInteger):
+        intval = coerce_integer_value(val, schema_type, path)
+        if intval is not None and schema_type.validate_value(intval):
+            return (t=schema_type.builtin_type, val=intval)
+    else:
+        if schema_type.validate_value(val):
+            return (t=schema_type.builtin_type, val=val)
+    return None
+
+
+def from_adata(root: yang.schema.DRoot, data: MNode, loose: bool=False, root_path: list[str]=[]) -> yang.gdata.Container:
+    def type_narrower(v):
+        if isinstance(v, MNode):
+            return v
+        raise ValueError("Value is not an yang.adata.MNode: {type(v)}")
+
+    return from_data(root, data, type_narrower, loose, root_path)
