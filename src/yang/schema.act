@@ -2045,30 +2045,23 @@ class DTypeInstanceIdentifier(DType):
 class DTypeInteger[T(Ord)](DType):
     ranges: ?Ranges[T]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[T]):
-        DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
-        self.ranges = ranges
-
-    def prtyinst(self) -> str:
-        return "DTypeInteger({self.format_common_params()}, ranges={repr(self.ranges)})"
-
-    def validate_value(self, val: value) -> bool:
-        return False
+    # New method name because we can't override DType.validate_value where "val: value" is non-generic
+    def validate_value_gen(self, val: T) -> bool:
+        ranges = self.ranges
+        if ranges is not None:
+            return Ranges.match(ranges, val)
+        return True
 
     def format_hints(self) -> list[str]:
-        if self.builtin_type in SIGNED_INT_TYPES:
-            ranges = self.ranges
-            if ranges is not None:
-                return ["range {str(ranges)}"]
-            return []
-        if self.builtin_type in UNSIGNED_INT_TYPES:
-            ranges = self.ranges
-            if ranges is not None:
-                return ["range {str(ranges)}"]
-            return []
+        if self.ranges is not None:
+            return ["range {str(self.ranges)}"]
         return []
 
 class DTypeIntegerSigned(DTypeInteger[int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[int]):
+        DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
+        self.ranges = ranges
+
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerSigned:
         t = resolver.type_
@@ -2076,13 +2069,17 @@ class DTypeIntegerSigned(DTypeInteger[int]):
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, int):
-            ranges = self.ranges
-            if ranges is not None:
-                return Ranges.match(ranges, val)
-            return True
+            return DTypeInteger.validate_value_gen(self, val)
         return False
 
+    def prtyinst(self) -> str:
+        return "DTypeIntegerSigned({self.format_common_params()}, ranges={repr(self.ranges)})"
+
 class DTypeIntegerUnsigned(DTypeInteger[u64]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[u64]):
+        DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
+        self.ranges = ranges
+
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerUnsigned:
         t = resolver.type_
@@ -2090,11 +2087,11 @@ class DTypeIntegerUnsigned(DTypeInteger[u64]):
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, u64):
-            ranges = self.ranges
-            if ranges is not None:
-                return Ranges.match(ranges, val)
-            return True
+            return DTypeInteger.validate_value_gen(self, val)
         return False
+
+    def prtyinst(self) -> str:
+        return "DTypeIntegerUnsigned({self.format_common_params()}, ranges={repr(self.ranges)})"
 
 class DTypeLeafref(DType):
     path: xpath.AbsoluteLocationPath
