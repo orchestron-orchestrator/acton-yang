@@ -277,32 +277,26 @@ def from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DNo
         elif isinstance(child, yang.schema.DLeafList):
             leaflist_val = data.take_leaflist(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
             if len(leaflist_val) > 0:
-                non_merge_ops = set()
-                # Unwrap typed tuples, dropping values marked for remove/delete.
-                unwrapped_values: list[value] = []
+                entries: list[yang.gdata.LeafListEntry] = []
                 for item in leaflist_val:
-                    # TODO: we can't really handle create/replace without refactoring leaf-list to be more list-like
-                    op = item.op
-                    if op is not None and op != OP_MERGE and op != OP_CREATE and op != OP_REPLACE:
-                        non_merge_ops.add(op)
-                    if item.op == OP_REMOVE or item.op == OP_DELETE:
-                        continue
                     iv = item.val
                     if iv is not None:
-                        unwrapped_values.append(iv)
-                if len(unwrapped_values) == 0 and not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
+                        op = item.op
+                        if op == OP_REMOVE:
+                            entries.append(yang.gdata.LeafListEntryRemove(iv))
+                        elif op == OP_DELETE:
+                            entries.append(yang.gdata.LeafListEntryDelete(iv))
+                        elif op == OP_CREATE:
+                            entries.append(yang.gdata.LeafListEntryCreate(iv))
+                        elif op == OP_REPLACE:
+                            entries.append(yang.gdata.LeafListEntryReplace(iv))
+                        else:
+                            entries.append(yang.gdata.LeafListEntryMerge(iv))
+                if len(entries) == 0 and not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                     # Missing leaf-list value
                     raise ValueError("Error reading {format_schema_path(path_with_child())}: Missing non-optional leaf-list value")
-                if len(unwrapped_values) > 0:
-                    children[fqname(child)] = yang.gdata.LeafList(unwrapped_values, user_order=user_order(child.ordered_by), ns=ns, module=mod)
-                elif len(non_merge_ops) > 1:
-                    raise ValueError("Error reading {format_schema_path(path_with_child())}: Mixed leaf-list operations - {non_merge_ops}")
-                elif len(non_merge_ops) == 1:
-                    # All entries were remove/delete; map to absent/delete node
-                    if non_merge_ops.pop() == OP_DELETE:
-                        children[fqname(child)] = yang.gdata.Delete()
-                    else:
-                        children[fqname(child)] = yang.gdata.Absent()
+                if len(entries) > 0:
+                    children[fqname(child)] = yang.gdata.LeafList(entries, user_order=user_order(child.ordered_by), ns=ns, module=mod)
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf-list value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Missing non-optional leaf-list value")
@@ -475,7 +469,8 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
             leaflist = node.get_opt_leaflist(fqname(child))
             if leaflist is not None:
                 # DLeafList values are copied verbatim
-                leaves.append("{self_name}.{usname(child)} = {repr_adata(leaflist.vals)}")
+                vals = [e.val for e in leaflist.entries if isinstance(e, yang.gdata.LeafListEntryMerge)]
+                leaves.append("{self_name}.{usname(child)} = {repr_adata(vals)}")
         elif isinstance(child, yang.schema.DContainer):
             container = node.get_opt_cnt(fqname(child))
             if container is not None:

@@ -36,12 +36,12 @@ test-data-source-roundtrip:
 test-yang-compile:
 	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1
 
-.PHONY: test-golden-update
-test-golden-update:
-	acton test --golden-update
+.PHONY: test-accept
+test-accept:
+	acton test --accept
 	cd test/test_data_classes_gen && acton build && out/bin/gen
-	cd test/test_data_classes && acton test --golden-update
-	cd test/test_data_source_roundtrip && acton test --golden-update
+	cd test/test_data_classes && acton test --accept
+	cd test/test_data_source_roundtrip && acton test --accept
 
-test-yang-compile-golden-update:
-	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1 --golden-update
+test-yang-compile-accept:
+	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1 --accept
