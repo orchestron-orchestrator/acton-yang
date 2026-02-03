@@ -1061,6 +1061,120 @@ class Replace(Node):
         self.children = children
         self.txid = None
 
+
+class ValueMatch(value):
+    pass
+
+
+class VWildcard(ValueMatch):
+    pattern: str
+
+    def __init__(self, pattern: str):
+        self.pattern = pattern
+
+    def __repr__(self):
+        return "VWildcard({repr(self.pattern)})"
+
+
+class FNode(value):
+    name: ?Id
+    value_match: ?value
+    children: list[FNode]
+
+    def __init__(self, name: ?Id=None, value_match: ?value=None, children: list[FNode]=[]):
+        self.name = name
+        self.value_match = value_match
+        self.children = children
+
+    def __repr__(self):
+        return self.prsrc(deterministic=False)
+
+    pure def prsrc(self, deterministic=False, indent=0) -> str:
+        child_list = self.children
+        parts: list[str] = []
+        if self.name is not None:
+            parts = parts + [repr(self.name)]
+        if self.value_match is not None:
+            if isinstance(self.value_match, ValueMatch):
+                parts = parts + [repr(self.value_match)]
+            else:
+                parts = parts + [repr_gdata(self.value_match)]
+        if len(child_list) > 0:
+            child_strs = [c.prsrc(deterministic, indent+1) for c in child_list]
+            parts = parts + ["[" + ", ".join(child_strs) + "]"]
+        return "FNode({", ".join(parts)})"
+
+    def _to_filter_xml_rec(self, parent_ns: ?str=None, deterministic=False) -> xml.Node:
+        name = expect(self.name, "filter node")
+        node_ns = name.q if name.q != "" and name.q != parent_ns else None
+        xml_children = [c._to_filter_xml_rec(name.q, deterministic) for c in self.children]
+        text_value: ?str = None
+        v = None
+        vm = self.value_match
+        if vm is not None:
+            if isinstance(vm, ValueMatch):
+                if isinstance(vm, VWildcard):
+                    text_value = vm.pattern
+                else:
+                    raise ValueError("Unknown value match type: {type(vm)}")
+            else:
+                v = vm
+                text_value = yang_str(vm)
+        return xml.Node(name.name, nsdefs=_nsq(node_ns, v), children=xml_children, text=text_value)
+
+    def to_filter_xml(self, deterministic=False) -> list[xml.Node]:
+        if self.name is None:
+            return [c._to_filter_xml_rec(None, deterministic) for c in self.children]
+        return [self._to_filter_xml_rec(None, deterministic)]
+
+    def to_filter_xmlstr(self, pretty=True, deterministic=False) -> str:
+        return xml.encode_nodes(self.to_filter_xml(deterministic), pretty)
+
+
+def expect[T](a: ?T, ctx: str) -> T:
+    if a is not None:
+        return a
+    raise ValueError("expected value (not None) for: {ctx}")
+
+def _value_match_equal(a: value, b: value) -> bool:
+    """Compare filter value matches (plain values vs match operators)."""
+    if isinstance(a, ValueMatch):
+        if isinstance(a, VWildcard):
+            if isinstance(b, VWildcard):
+                return a.pattern == b.pattern
+            return False
+        raise ValueError("Unknown value match type: {type(a)}")
+    if isinstance(b, ValueMatch):
+        return False
+    return vals_equal(a, b)
+
+extension ValueMatch(Eq):
+    def __eq__(self, other: ValueMatch) -> bool:
+        if isinstance(self, VWildcard) and isinstance(other, VWildcard):
+            return self.pattern == other.pattern
+        return False
+
+
+extension FNode(Eq):
+    def __eq__(self, other: FNode) -> bool:
+        if self.name != other.name:
+            return False
+        if self.value_match is None and other.value_match is not None:
+            return False
+        if self.value_match is not None and other.value_match is None:
+            return False
+        if self.value_match is not None and other.value_match is not None:
+            a = expect(self.value_match, "filter value")
+            b = expect(other.value_match, "filter value")
+            if not _value_match_equal(a, b):
+                return False
+        if len(self.children) != len(other.children):
+            return False
+        for i in range(len(self.children)):
+            if self.children[i] != other.children[i]:
+                return False
+        return True
+
 def sorted_elements(elements, key_names: list[Id]):
     keys = list(map(lambda elem: elem.key_str(key_names), elements))
     key_map = dict(zip(keys, elements))
@@ -1554,6 +1668,226 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
 
 def diff(old: ?Node, new: Node) -> ?Node:
     return _diff_rec(old, new, [])
+
+
+def _wildcard_match(pattern: str, s: str) -> bool:
+    pi = 0
+    si = 0
+    star = -1
+    match = 0
+    while si < len(s):
+        if pi < len(pattern) and pattern[pi] == "*":
+            star = pi
+            match = si
+            pi += 1
+        elif pi < len(pattern) and pattern[pi] == s[si]:
+            pi += 1
+            si += 1
+        elif star != -1:
+            pi = star + 1
+            match += 1
+            si = match
+        else:
+            return False
+    while pi < len(pattern) and pattern[pi] == "*":
+        pi += 1
+    return pi == len(pattern)
+
+
+def _match_value(vm: value, v: value) -> bool:
+    """Return True when value v matches filter value vm."""
+    if isinstance(vm, ValueMatch):
+        if isinstance(vm, VWildcard):
+            return _wildcard_match(vm.pattern, yang_str(v))
+        raise ValueError("Unknown value match type: {type(vm)}")
+    return vals_equal(v, vm)
+
+
+def _group_filter_children(children: list[FNode]) -> dict[Id, list[FNode]]:
+    """Group filter children by name for per-child evaluation."""
+    groups: dict[Id, list[FNode]] = {}
+    for child in children:
+        name = expect(child.name, "filter child")
+        if name in groups:
+            groups[name].append(child)
+        else:
+            groups[name] = [child]
+    return groups
+
+
+def _filter_container_result(data: Node, children: dict[Id, Node]) -> Node:
+    """Rebuild a container-like node with filtered children."""
+    if isinstance(data, Absent):
+        return Absent(children, ns=data.ns, module=data.module)
+    if isinstance(data, Delete):
+        return Delete(children, ns=data.ns, module=data.module)
+    if isinstance(data, Create):
+        return Create(children, ns=data.ns, module=data.module)
+    if isinstance(data, Replace):
+        return Replace(children, ns=data.ns, module=data.module)
+    if isinstance(data, Container):
+        return Container(children, presence=data.presence, ns=data.ns, module=data.module)
+    return Container(children)
+
+
+def _filter_leaf(data: Leaf, flist: list[FNode]) -> (node: ?Node, select: bool):
+    """Apply leaf filters and determine selection status."""
+    matched = False
+    select = False
+    for f in flist:
+        if len(f.children) > 0:
+            raise ValueError("Leaf filter cannot have children")
+        if f.value_match is None:
+            matched = True
+            select = True
+        else:
+            vm = expect(f.value_match, "leaf")
+            if _match_value(vm, data.val):
+                matched = True
+    if not matched:
+        return (node=None, select=False)
+    return (node=data, select=select)
+
+
+def _filter_leaflist(data: LeafList, flist: list[FNode]) -> (node: ?Node, select: bool):
+    """Apply leaf-list filters and determine selection status."""
+    if len(flist) == 0:
+        return (node=data, select=True)
+    select_all = False
+    matches: list[value] = []
+    for f in flist:
+        if len(f.children) > 0:
+            raise ValueError("Leaf-list filter cannot have children")
+        if f.value_match is None:
+            select_all = True
+        else:
+            vm = expect(f.value_match, "leaf-list")
+            matches.append(vm)
+    if select_all:
+        return (node=data, select=True)
+    new_vals: list[value] = []
+    for v in data.vals:
+        for m in matches:
+            if _match_value(m, v):
+                new_vals.append(v)
+                break
+    if len(new_vals) == 0:
+        return (node=None, select=False)
+    return (node=LeafList(new_vals, user_order=data.user_order, ns=data.ns, module=data.module), select=True)
+
+
+def _filter_list_element(elem: Node, fnode: FNode, keys: list[Id]) -> ?Node:
+    """Filter a single list element against a list element predicate."""
+    if not (isinstance(elem, Container) or isinstance(elem, Absent)):
+        return None
+    if fnode.value_match is not None:
+        raise ValueError("List element filter cannot have value match")
+    if len(fnode.children) == 0:
+        return elem
+
+    groups = _group_filter_children(fnode.children)
+    selected_children: dict[Id, Node] = {}
+    has_selection = False
+    for name, flist in groups.items():
+        if name not in elem.children:
+            return None
+        res = _filter_child(elem.children[name], flist)
+        if res.node is None:
+            return None
+        if res.select:
+            selected_children[name] = expect(res.node, "list element selection")
+            has_selection = True
+
+    if not has_selection:
+        return elem
+
+    for key in keys:
+        if key in elem.children and key not in selected_children:
+            selected_children[key] = elem.children[key]
+
+    return _filter_container_result(elem, selected_children)
+
+
+def _filter_list(data: List, flist: list[FNode]) -> (node: ?Node, select: bool):
+    """Apply list predicates to produce a filtered list result."""
+    if len(flist) == 0:
+        return (node=data, select=True)
+    for f in flist:
+        if f.value_match is not None:
+            raise ValueError("List filter cannot have value match")
+    for f in flist:
+        if len(f.children) == 0:
+            return (node=data, select=True)
+    new_elements: list[Node] = []
+    seen = {}
+    for elem in data.elements:
+        for f in flist:
+            res = _filter_list_element(elem, f, data.keys)
+            if res is not None:
+                k = elem.key_str(data.keys)
+                if k not in seen:
+                    new_elements.append(res)
+                    seen[k] = True
+                break
+    if len(new_elements) == 0:
+        return (node=None, select=False)
+    return (node=List(data.keys, elements=new_elements, user_order=data.user_order, ns=data.ns, module=data.module), select=True)
+
+
+def _filter_container_children(data: Node, fchildren: list[FNode]) -> ?Node:
+    """Filter container children and select requested subtrees."""
+    if len(fchildren) == 0:
+        return data
+    if not (isinstance(data, Container) or isinstance(data, Absent) or isinstance(data, Create) or isinstance(data, Delete) or isinstance(data, Replace)):
+        raise ValueError("Filter root expects a container-like node")
+
+    groups = _group_filter_children(fchildren)
+    selected_children: dict[Id, Node] = {}
+    has_selection = False
+    for name, flist in groups.items():
+        if name not in data.children:
+            return None
+        res = _filter_child(data.children[name], flist)
+        if res.node is None:
+            return None
+        if res.select:
+            selected_children[name] = expect(res.node, "container selection")
+            has_selection = True
+
+    if not has_selection:
+        return data
+    return _filter_container_result(data, selected_children)
+
+
+def _filter_child(data: Node, flist: list[FNode]) -> (node: ?Node, select: bool):
+    """Dispatch filter evaluation based on child node type."""
+    if isinstance(data, Container) or isinstance(data, Absent) or isinstance(data, Create) or isinstance(data, Delete) or isinstance(data, Replace):
+        if len(flist) != 1:
+            raise ValueError("Multiple filter nodes for container child")
+        fnode = flist[0]
+        if fnode.value_match is not None:
+            raise ValueError("Container filter cannot have value match")
+        res = _filter_container_children(data, fnode.children)
+        if res is None:
+            return (node=None, select=False)
+        return (node=res, select=True)
+    if isinstance(data, List):
+        return _filter_list(data, flist)
+    if isinstance(data, LeafList):
+        return _filter_leaflist(data, flist)
+    if isinstance(data, Leaf):
+        return _filter_leaf(data, flist)
+    return (node=None, select=False)
+
+
+def filter(data: ?Node, filt: FNode) -> ?Node:
+    if data is None:
+        return None
+    d = expect(data, "filter root")
+    if filt.name is None:
+        return _filter_container_children(d, filt.children)
+    res = _filter_child(d, [filt])
+    return res.node
 
 
 # TODO: Can we make patch return a Node instead of ?Node?
@@ -2766,3 +3100,306 @@ def _test_to_xmlstr_list_removal():
     })
 
     return y1.to_xmlstr()
+
+################################################################################
+# Filter tests
+def _test_filter_container_wildcard():
+    """Select a container without child predicates returns the full subtree."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo")),
+    ])
+    res = expect(filter(data, filt), "filter result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l1"): Leaf(u64(1)),
+                Id(NS_acme, "l2"): Leaf(u64(2)),
+            }, ns=NS_acme, module="acme"),
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_filter_container_leaf_content_match():
+    """Content-match leaf predicates filter by value but do not restrict selected leaves."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l1"), value_match=u64(1)),
+        ]),
+    ])
+    res = expect(filter(data, filt), "filter result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l1"): Leaf(u64(1)),
+                Id(NS_acme, "l2"): Leaf(u64(2)),
+            }, ns=NS_acme, module="acme"),
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_filter_container_leaf_select():
+    """Leaf selection predicate limits output to requested leaves."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l1")),
+        ]),
+    ])
+    res = expect(filter(data, filt), "filter result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l1"): Leaf(u64(1)),
+            }, ns=NS_acme, module="acme"),
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_filter_container_leaf_no_match():
+    """Non-matching content predicate yields no result."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme")
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l1"), value_match=u64(3)),
+        ]),
+    ])
+    res = filter(data, filt)
+    testing.assertEqual(res, None)
+
+
+def _test_filter_list_wildcard():
+    """List selection without element predicates returns all list elements."""
+    k = Id(NS_acme, "name")
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("b"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                }),
+            ], ns=NS_acme, module="acme"),
+            Id(NS_acme, "extra"): Leaf(u64(9)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l")),
+        ]),
+    ])
+    res = expect(filter(data, filt), "filter result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Container({
+                        Id(NS_acme, "name"): Leaf("a"),
+                        Id(NS_acme, "v"): Leaf(u64(1)),
+                    }),
+                    Container({
+                        Id(NS_acme, "name"): Leaf("b"),
+                        Id(NS_acme, "v"): Leaf(u64(2)),
+                    }),
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_filter_list_keyed_child():
+    """List element predicate on key selects matching element, returns full element subtree."""
+    k = Id(NS_acme, "name")
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                    Id(NS_acme, "x"): Leaf(u64(9)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("b"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l"), children=[
+                FNode(Id(NS_acme, "name"), value_match="a"),
+            ]),
+        ]),
+    ])
+    res = expect(filter(data, filt), "filter result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Container({
+                        Id(NS_acme, "name"): Leaf("a"),
+                        Id(NS_acme, "v"): Leaf(u64(1)),
+                        Id(NS_acme, "x"): Leaf(u64(9)),
+                    }),
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_filter_list_select_leaf():
+    """List element predicate plus leaf selection limits fields in matched element."""
+    k = Id(NS_acme, "name")
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                    Id(NS_acme, "x"): Leaf(u64(9)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("b"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                    Id(NS_acme, "x"): Leaf(u64(8)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l"), children=[
+                FNode(Id(NS_acme, "name"), value_match="a"),
+                FNode(Id(NS_acme, "v")),
+            ]),
+        ]),
+    ])
+    res = expect(filter(data, filt), "filter result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Container({
+                        Id(NS_acme, "name"): Leaf("a"),
+                        Id(NS_acme, "v"): Leaf(u64(1)),
+                    }),
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_filter_leaflist_values():
+    """Leaf-list content predicates return only matching values."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "ll"): LeafList([u64(1), u64(2), u64(3)]),
+            Id(NS_acme, "x"): Leaf(u64(9)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "ll"), value_match=u64(2)),
+            FNode(Id(NS_acme, "ll"), value_match=u64(3)),
+        ]),
+    ])
+    res = expect(filter(data, filt), "filter result")
+    # NOTE: Hmm, not entirely sure whether the expected LeafList should contain
+    # all elements or just the content-matched ones!? RFC is not super clear...
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "ll"): LeafList([u64(2), u64(3)]),
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_filter_wildcard_value_match():
+    """Wildcard value match selects list elements by key pattern."""
+    k = Id(NS_acme, "name")
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("alpha"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("beta"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l"), children=[
+                FNode(Id(NS_acme, "name"), value_match=VWildcard("a*")),
+            ]),
+        ]),
+    ])
+    res = expect(filter(data, filt), "filter result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Container({
+                        Id(NS_acme, "name"): Leaf("alpha"),
+                        Id(NS_acme, "v"): Leaf(u64(1)),
+                    }),
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
