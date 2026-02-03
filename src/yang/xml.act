@@ -2,6 +2,8 @@ import base64
 import testing
 import xml
 
+import yang
+import yang.data
 from yang.identityref import Identityref, PartialIdentityref
 from yang.type import Decimal
 from yang.data import from_data, YangData, PathElement, YangValidationError
@@ -13,6 +15,11 @@ import yang.schema
 
 NETCONF_OPS = {OP_CREATE, OP_DELETE, OP_REMOVE, OP_REPLACE, OP_MERGE}
 NETCONF_NS = "urn:ietf:params:xml:ns:netconf:base:1.0"
+
+def expect[T](a: ?T, ctx: str) -> T:
+    if a is not None:
+        return a
+    raise ValueError("expected value (not None) for: {ctx}")
 
 
 def _get_netconf_operation(node: xml.Node) -> str:
@@ -191,3 +198,336 @@ def from_xml(root: yang.schema.DRoot, data: xml.Node, loose: bool=False, root_pa
 
     return from_data(root, data, type_narrower, loose, root_path)
 
+
+def _xml_node_ns(n: xml.Node) -> ?str:
+    for nsdef in n.nsdefs:
+        n0 = nsdef.0
+        n1 = nsdef.1
+        if (n.prefix is None and n0 is None) or (n.prefix is not None and n0 == n.prefix):
+            return n1
+    return None
+
+
+def _filter_is_wrapper(n: xml.Node) -> bool:
+    """Return True if node is a NETCONF <filter> wrapper element."""
+    if n.tag != "filter":
+        return False
+    ns = _xml_node_ns(n)
+    return ns is None or ns == NETCONF_NS
+
+
+def _filter_value_match(root: yang.schema.DRoot, schema_leaf: yang.schema.DNodeLeaf, xml_leaf: xml.Node, spath: list[PathElement]) -> ?value:
+    """Parse a leaf/leaf-list text value into a filter value match."""
+    text = xml_leaf.text
+    if text is None or text == "":
+        return None
+    text_val = expect(text, "filter value")
+    if "*" in text_val:
+        return yang.gdata.VWildcard(text_val)
+    tv = try_parse_xml_value(text_val, schema_leaf, schema_leaf.type_, spath, xml_leaf.nsdefs, root)
+    if tv is not None:
+        return tv.val
+    return None
+
+
+def _filter_schema_child(s: yang.schema.DNodeInner, n: xml.Node) -> yang.schema.DNode:
+    """Resolve the schema child that matches the XML node name/namespace."""
+    ns = _xml_node_ns(n)
+    return s.get(n.tag, namespace=ns, allow_unqualified=True)
+
+
+def _filter_parse_children(root: yang.schema.DRoot, s: yang.schema.DNodeInner, data: xml.Node, spath: list[PathElement]) -> list[yang.gdata.FNode]:
+    """Parse XML element children into filter nodes using schema context."""
+    res: list[yang.gdata.FNode] = []
+    for child in data.children:
+        if not isinstance(child, xml.Node):
+            continue
+        schema_child = _filter_schema_child(s, child)
+        res.append(_filter_parse_node(root, schema_child, child, spath + [PathElement(schema_child)]))
+    return res
+
+
+def _filter_parse_node(root: yang.schema.DRoot, s: yang.schema.DNode, data: xml.Node, spath: list[PathElement]) -> yang.gdata.FNode:
+    """Parse a single XML element into a filter node based on schema type."""
+    name_id = yang.gdata.Id(s.namespace, s.name)
+    if isinstance(s, yang.schema.DContainer) or isinstance(s, yang.schema.DList):
+        s_inner = _unwrap_dnode_inner(s, spath)
+        children = _filter_parse_children(root, s_inner, data, spath)
+        return yang.gdata.FNode(name_id, children=children)
+    if isinstance(s, yang.schema.DLeaf):
+        vm = _filter_value_match(root, s, data, spath)
+        return yang.gdata.FNode(name_id, value_match=vm)
+    if isinstance(s, yang.schema.DLeafList):
+        vm = _filter_value_match(root, s, data, spath)
+        return yang.gdata.FNode(name_id, value_match=vm)
+    raise ValueError("Unsupported schema node in filter at {yang.data.format_schema_path(spath)}: {type(s)}")
+
+
+def _unwrap_dnode_leaf(s: yang.schema.DNode, spath: list[PathElement]) -> yang.schema.DNodeLeaf:
+    if isinstance(s, yang.schema.DLeaf):
+        return s
+    if isinstance(s, yang.schema.DLeafList):
+        return s
+    raise ValueError("Expected leaf node at {yang.data.format_schema_path(spath)}: {type(s)}")
+
+
+def _unwrap_dnode_inner(s: yang.schema.DNode, spath: list[PathElement]) -> yang.schema.DNodeInner:
+    if isinstance(s, yang.schema.DNodeInner):
+        inner: yang.schema.DNodeInner = s
+        return inner
+    raise ValueError("Expected inner node at {yang.data.format_schema_path(spath)}: {type(s)}")
+
+
+def from_filter_xml(root: yang.schema.DRoot, data: xml.Node, root_path: list[str]=[]) -> yang.gdata.FNode:
+    """Parse a NETCONF subtree filter XML node into a filter tree."""
+    s: yang.schema.DNodeInner = root
+    spath = [PathElement(root)]
+    while root_path != [] and len(spath) - 1 < len(root_path):
+        next = root_path[len(spath) - 1]
+        local_name, module = yang.data.parse_qualified_name(next)
+        child = s.get(local_name, module=module, allow_unqualified=False)
+        if isinstance(child, yang.schema.DNodeInner):
+            s = child
+            spath = spath + [PathElement(child)]
+        else:
+            raise ValueError("Node at {yang.data.format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
+
+    xml_children: list[xml.Node] = []
+    if _filter_is_wrapper(data):
+        for child in data.children:
+            if isinstance(child, xml.Node):
+                xml_children.append(child)
+    else:
+        xml_children = [data]
+
+    children: list[yang.gdata.FNode] = []
+    for child in xml_children:
+        schema_child = _filter_schema_child(s, child)
+        children.append(_filter_parse_node(root, schema_child, child, spath + [PathElement(schema_child)]))
+
+    return yang.gdata.FNode(None, None, children)
+
+
+def from_filter_xmlstr(root: yang.schema.DRoot, data: str, root_path: list[str]=[]) -> yang.gdata.FNode:
+    """Parse a NETCONF subtree filter XML string into a filter tree."""
+    return from_filter_xml(root, xml.decode(data), root_path)
+
+
+def _filter_test_schema() -> yang.schema.DRoot:
+    """Return a small schema used by filter XML parsing tests."""
+    ys = r"""
+module acme {
+  namespace "http://example.com/acme";
+  prefix a;
+  container foo {
+    leaf l1 { type uint64; }
+    leaf l2 { type uint64; }
+    leaf empty { type empty; }
+    leaf-list ll { type uint64; }
+    list l {
+      key "name";
+      leaf name { type string; }
+      leaf v { type uint64; }
+      leaf x { type uint64; }
+    }
+  }
+}
+"""
+    return yang.compile([ys])
+
+
+def _filter_sorted_indices(keys: list[str]) -> list[int]:
+    """Return stable indices that sort the provided keys."""
+    idxs: list[int] = []
+    for i in range(len(keys)):
+        k = keys[i]
+        inserted = False
+        for j in range(len(idxs)):
+            if k < keys[idxs[j]]:
+                idxs.insert(j, i)
+                inserted = True
+                break
+        if not inserted:
+            idxs.append(i)
+    return idxs
+
+
+def _filter_sort_nsdefs(nsdefs: list[(?str, str)]) -> list[(?str, str)]:
+    """Sort XML namespace definitions to keep canonical output stable."""
+    if len(nsdefs) <= 1:
+        return nsdefs
+    keys: list[str] = []
+    for i in range(len(nsdefs)):
+        pfx = nsdefs[i].0
+        key_pfx = "" if pfx is None else pfx
+        keys.append("{key_pfx}:{nsdefs[i].1}")
+    idxs = _filter_sorted_indices(keys)
+    res: list[(?str, str)] = []
+    for idx in idxs:
+        res.append(nsdefs[idx])
+    return res
+
+
+def _filter_sort_attrs(attrs: list[(str, str)]) -> list[(str, str)]:
+    """Sort XML attributes by name for canonicalization."""
+    if len(attrs) <= 1:
+        return attrs
+    keys: list[str] = []
+    for i in range(len(attrs)):
+        keys.append(attrs[i].0)
+    idxs = _filter_sorted_indices(keys)
+    res: list[(str, str)] = []
+    for idx in idxs:
+        res.append(attrs[idx])
+    return res
+
+
+def _filter_sort_children(children: list[xml.Node]) -> list[xml.Node]:
+    """Sort XML children deterministically for canonicalization."""
+    if len(children) <= 1:
+        return children
+    keys: list[str] = []
+    for i in range(len(children)):
+        c = children[i]
+        text = c.text if c.text is not None else ""
+        enc = xml.encode_nodes([c], pretty=False)
+        keys.append("{c.tag}|{text}|{enc}")
+    idxs = _filter_sorted_indices(keys)
+    res: list[xml.Node] = []
+    for idx in idxs:
+        res.append(children[idx])
+    return res
+
+
+def _filter_canon_node(n: xml.Node) -> xml.Node:
+    """Produce a canonicalized XML node with sorted metadata."""
+    children: list[xml.Node] = []
+    for child in n.children:
+        if isinstance(child, xml.Node):
+            children.append(_filter_canon_node(child))
+    nsdefs = _filter_sort_nsdefs(n.nsdefs)
+    attrs = _filter_sort_attrs(n.attributes)
+    children = _filter_sort_children(children)
+    return xml.Node(n.tag, nsdefs=nsdefs, attributes=attrs, children=children, text=n.text)
+
+
+def _filter_norm_xml(s: str) -> str:
+    """Normalize an XML string into canonical form for comparisons."""
+    return xml.encode_nodes([_filter_canon_node(xml.decode(s))], pretty=False)
+
+
+def _test_from_filter_xml_container_select():
+    """Parse container filter with mixed content match and selection leaves."""
+    root = _filter_test_schema()
+    xml_in = xml.decode('<foo xmlns="http://example.com/acme"><l1>1</l1><l2/></foo>')
+    res = from_filter_xml(root, xml_in)
+    exp = yang.gdata.FNode(None, None, [
+        yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "foo"), children=[
+            yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "l1"), value_match=u64(1)),
+            yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "l2")),
+        ]),
+    ])
+    testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
+
+
+def _test_from_filter_xml_list_select_leaf():
+    """Parse list filter with key predicate and a selected leaf."""
+    root = _filter_test_schema()
+    xml_in = xml.decode('<foo xmlns="http://example.com/acme"><l><name>a</name><v/></l></foo>')
+    res = from_filter_xml(root, xml_in)
+    exp = yang.gdata.FNode(None, None, [
+        yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "foo"), children=[
+            yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "l"), children=[
+                yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "name"), value_match="a"),
+                yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "v")),
+            ]),
+        ]),
+    ])
+    testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
+
+
+def _test_from_filter_xml_leaflist_values():
+    """Parse leaf-list filter with multiple value predicates."""
+    root = _filter_test_schema()
+    xml_in = xml.decode('<foo xmlns="http://example.com/acme"><ll>2</ll><ll>3</ll></foo>')
+    res = from_filter_xml(root, xml_in)
+    exp = yang.gdata.FNode(None, None, [
+        yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "foo"), children=[
+            yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "ll"), value_match=u64(2)),
+            yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "ll"), value_match=u64(3)),
+        ]),
+    ])
+    testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
+
+
+def _test_from_filter_xml_wrapper():
+    """Parse NETCONF <filter> wrapper around subtree content."""
+    root = _filter_test_schema()
+    xml_in = xml.decode('<filter xmlns="urn:ietf:params:xml:ns:netconf:base:1.0"><foo xmlns="http://example.com/acme"><l2/></foo></filter>')
+    res = from_filter_xml(root, xml_in)
+    exp = yang.gdata.FNode(None, None, [
+        yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "foo"), children=[
+            yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "l2")),
+        ]),
+    ])
+    testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
+
+
+def _test_from_filter_xml_wildcard():
+    """Parse wildcard value predicate from XML into VWildcard."""
+    root = _filter_test_schema()
+    xml_in = xml.decode('<foo xmlns="http://example.com/acme"><l><name>a*</name></l></foo>')
+    res = from_filter_xml(root, xml_in)
+    exp = yang.gdata.FNode(None, None, [
+        yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "foo"), children=[
+            yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "l"), children=[
+                yang.gdata.FNode(yang.gdata.Id("http://example.com/acme", "name"), value_match=yang.gdata.VWildcard("a*")),
+            ]),
+        ]),
+    ])
+    testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
+
+
+def _test_filter_roundtrip_xml():
+    """Round-trip XML -> gdata -> XML preserves subtree filter semantics."""
+    root = _filter_test_schema()
+    xml_in_str = '<foo xmlns="http://example.com/acme"><l1>1</l1><l2/><empty/><ll>2</ll><l><name>a</name><v/></l></foo>'
+    g1 = from_filter_xml(root, xml.decode(xml_in_str))
+    xml_out = g1.to_filter_xmlstr(pretty=False, deterministic=True)
+    testing.assertEqual(_filter_norm_xml(xml_out), _filter_norm_xml(xml_in_str))
+    g2 = from_filter_xml(root, xml.decode(xml_out))
+    testing.assertEqual(g1.prsrc(deterministic=True), g2.prsrc(deterministic=True))
+
+
+def _test_filter_roundtrip_gdata():
+    """Round-trip gdata -> XML -> gdata preserves filter structure."""
+    root = _filter_test_schema()
+    ns = "http://example.com/acme"
+    g1 = yang.gdata.FNode(None, None, [
+        yang.gdata.FNode(yang.gdata.Id(ns, "foo"), children=[
+            yang.gdata.FNode(yang.gdata.Id(ns, "l1"), value_match=u64(1)),
+            yang.gdata.FNode(yang.gdata.Id(ns, "l2")),
+            yang.gdata.FNode(yang.gdata.Id(ns, "empty")),
+            yang.gdata.FNode(yang.gdata.Id(ns, "ll"), value_match=u64(2)),
+            yang.gdata.FNode(yang.gdata.Id(ns, "l"), children=[
+                yang.gdata.FNode(yang.gdata.Id(ns, "name"), value_match="a"),
+                yang.gdata.FNode(yang.gdata.Id(ns, "v")),
+            ]),
+        ]),
+    ])
+    xml_out = g1.to_filter_xmlstr(pretty=False, deterministic=True)
+    expected = xml.encode_nodes([
+        xml.Node("foo", nsdefs=[(None, ns)], children=[
+            xml.Node("l1", nsdefs=[], text="1"),
+            xml.Node("l2", nsdefs=[]),
+            xml.Node("empty", nsdefs=[]),
+            xml.Node("ll", nsdefs=[], text="2"),
+            xml.Node("l", nsdefs=[], children=[
+                xml.Node("name", nsdefs=[], text="a"),
+                xml.Node("v", nsdefs=[]),
+            ]),
+        ])
+    ], pretty=False)
+    testing.assertEqual(_filter_norm_xml(xml_out), _filter_norm_xml(expected))
+    g2 = from_filter_xml(root, xml.decode(xml_out))
+    testing.assertEqual(g1.prsrc(deterministic=True), g2.prsrc(deterministic=True))
