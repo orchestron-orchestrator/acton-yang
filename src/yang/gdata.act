@@ -1948,7 +1948,10 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                 # Key not in old
                 if isinstance(cpatch, Absent):
                     # Trying to remove something not in old -> ignore
-                    pass
+                    if len(cpatch.children) == 0:
+                        # TODO: reconsider modeling empty leaf removal with something other than Absent?!
+                        # Preserve explicit remove of empty leaf / leaf-list (childless)
+                        new_children[key] = cpatch
                 elif isinstance(cpatch, Delete):
                     # TODO: structured error (error-tag, ...)
                     raise ValueError("data-missing: node does not exist at {_format_gdata_path(path + [_PathElement(key)])}")
@@ -2852,6 +2855,37 @@ def _test_patch_list_elem_create_replace():
             Id("", "v"): Leaf("new")
         })
     ])
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_preserve_empty_leaf():
+    """Remove (Absent) on empty leaf inside list element/container should be preserved."""
+    old = Container({})
+
+    p = Container({
+        Id("", "c"): Container({
+            Id("", "shutdown"): Absent()
+        }),
+        Id("", "l"): List([Id("", "name")], [
+            Container({
+                Id("", "name"): Leaf("a"),
+                Id("", "shutdown"): Absent()
+            })
+        ])
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "c"): Container({
+            Id("", "shutdown"): Absent()
+        }),
+        Id("", "l"): List([Id("", "name")], [
+            Container({
+                Id("", "name"): Leaf("a"),
+                Id("", "shutdown"): Absent()
+            })
+        ])
+    })
 
     testing.assertEqual(res, exp)
 
