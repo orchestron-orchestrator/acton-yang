@@ -1904,6 +1904,30 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                 raise ValueError("Absent keys differ in patch at {_format_gdata_path(path)}: {str(old.children)} != {str(p.children)}")
         return None
 
+    if isinstance(p, Delete):
+        # Delete requires the node to exist
+        if isinstance(old, Absent):
+            # TODO: structured error (error-tag, ...)
+            raise ValueError("data-missing: node does not exist at {_format_gdata_path(path)}")
+        return None
+
+    if isinstance(p, Create):
+        # Create requires the node to NOT exist
+        # TODO: structured error (error-tag, ...)
+        raise ValueError("data-exists: node already exists at {_format_gdata_path(path)}")
+
+    if isinstance(p, Replace):
+        # Replace ignores old contents and applies patch to an empty base
+        if isinstance(old, Container):
+            empty_cnt = Container({}, presence=old.presence, ns=old.ns, module=old.module)
+            patch_cnt = Container(p.children, ns=p.ns, module=p.module)
+            res = _patch_rec(empty_cnt, patch_cnt, path)
+            if res is None and old.presence:
+                return Container({}, presence=old.presence, ns=old.ns, module=old.module)
+            return res
+        # Replace on other node types is not expected at this point
+        raise ValueError("Unhandled node type in patch at {_format_gdata_path(path)}: {type(p)}")
+
     elif isinstance(old, Container) and isinstance(p, Container):
         # Start with old children
         new_children: dict[Id, Node] = {}
@@ -1925,8 +1949,31 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                 if isinstance(cpatch, Absent):
                     # Trying to remove something not in old -> ignore
                     pass
+                elif isinstance(cpatch, Delete):
+                    # TODO: structured error (error-tag, ...)
+                    raise ValueError("data-missing: node does not exist at {_format_gdata_path(path + [_PathElement(key)])}")
+                # Apply patch against an empty node so nested ops are sanitized (remove->noop, create->merge, delete->data-missing)
+                elif isinstance(cpatch, List):
+                    empty_list = List(cpatch.keys, elements=[], user_order=cpatch.user_order, ns=cpatch.ns, module=cpatch.module)
+                    res = _patch_rec(empty_list, cpatch, path + [_PathElement(key)])
+                    if res is not None:
+                        new_children[key] = res
+                elif isinstance(cpatch, Container):
+                    empty_cnt = Container({}, presence=cpatch.presence, ns=cpatch.ns, module=cpatch.module)
+                    res = _patch_rec(empty_cnt, cpatch, path + [_PathElement(key)])
+                    if res is not None:
+                        new_children[key] = res
+                    elif cpatch.presence:
+                        # Preserve presence containers even when empty
+                        new_children[key] = Container({}, presence=True, ns=cpatch.ns, module=cpatch.module)
+                elif isinstance(cpatch, Create) or isinstance(cpatch, Replace):
+                    empty_cnt = Container({}, ns=cpatch.ns, module=cpatch.module)
+                    patch_cnt = Container(cpatch.children, ns=cpatch.ns, module=cpatch.module)
+                    res = _patch_rec(empty_cnt, patch_cnt, path + [_PathElement(key)])
+                    if res is not None:
+                        new_children[key] = res
                 else:
-                    # New child
+                    # New leaf / leaf-list child
                     new_children[key] = cpatch
 
         # No need to remove unchanged nodes; they are already in new_children
@@ -1948,6 +1995,15 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                 k = pelem.key_str(p.keys)
                 if k in old_map:
                     del old_map[k]
+            elif isinstance(pelem, Delete):
+                # Delete this element if it exists, otherwise error
+                k = pelem.key_str(p.keys)
+                if k in old_map:
+                    del old_map[k]
+                else:
+                    # TODO: structured error (error-tag, ...)
+                    pelem_path = path + [_PathElement(keys=pelem.key_values(p.keys))]
+                    raise ValueError("data-missing: list element does not exist at {_format_gdata_path(pelem_path)}")
             else:
                 # pelem is a ListElement
                 k = pelem.key_str(p.keys)
@@ -1961,8 +2017,16 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                         # Remove the element
                         del old_map[k]
                 else:
-                    # New element
-                    old_map[k] = pelem
+                    # New element: apply patch against an empty node so nested ops are sanitized (remove->noop, create->merge, delete->data-missing)
+                    if isinstance(pelem, Create):
+                        # Bypass data-exists error check for create op
+                        patch_elem = Container(pelem.children)
+                    else:
+                        patch_elem = pelem
+                    elem_path = path + [_PathElement(keys=pelem.key_values(p.keys))]
+                    res = _patch_rec(Container(), patch_elem, elem_path)
+                    if res is not None and isinstance(res, Container):
+                        old_map[k] = res
 
         # Rebuild elements in final order
         # Start with old's original order for unchanged and patched elements
@@ -2678,6 +2742,159 @@ def _test_patch_union_type():
 
     res = patch(old, p)
     testing.assertEqual(res, p)
+
+def _test_patch_create_container_missing():
+    old = Container({
+        Id("", "a"): Leaf(u64(1))
+    })
+
+    p = Container({
+        Id("", "c"): Create({
+            Id("", "x"): Leaf(u64(9))
+        })
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "a"): Leaf(u64(1)),
+        Id("", "c"): Container({
+            Id("", "x"): Leaf(u64(9))
+        })
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_create_container_existing_error():
+    old = Container({
+        Id("", "c"): Container({
+            Id("", "x"): Leaf(u64(1))
+        })
+    })
+
+    p = Container({
+        Id("", "c"): Create({
+            Id("", "x"): Leaf(u64(2))
+        })
+    })
+
+    try:
+        patch(old, p)
+        testing.assertFalse(True, "Expected ValueError for data-exists but patch succeeded")
+    except ValueError as e:
+        testing.assertIn("data-exists", e.error_message)
+
+def _test_patch_replace_container_existing():
+    old = Container({
+        Id("", "c"): Container({
+            Id("", "x"): Leaf(u64(1)),
+            Id("", "y"): Leaf(u64(2))
+        })
+    })
+
+    p = Container({
+        Id("", "c"): Replace({
+            Id("", "x"): Leaf(u64(9))
+        })
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "c"): Container({
+            Id("", "x"): Leaf(u64(9))
+        })
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_delete_container_missing_error():
+    old = Container({
+        Id("", "a"): Leaf(u64(1))
+    })
+
+    p = Container({
+        Id("", "c"): Delete()
+    })
+
+    try:
+        patch(old, p)
+        testing.assertFalse(True, "Expected ValueError for data-missing but patch succeeded")
+    except ValueError as e:
+        testing.assertIn("data-missing", e.error_message)
+
+def _test_patch_list_elem_create_replace():
+    old = List([Id("", "k")], [
+        Container({
+            Id("", "k"): Leaf("a"),
+            Id("", "v"): Leaf("old"),
+            Id("", "x"): Leaf("keep")
+        })
+    ])
+
+    p = List([Id("", "k")], [
+        Replace({
+            Id("", "k"): Leaf("a"),
+            Id("", "v"): Leaf("rep")
+        }),
+        Create({
+            Id("", "k"): Leaf("b"),
+            Id("", "v"): Leaf("new")
+        })
+    ])
+
+    res = patch(old, p)
+    exp = List([Id("", "k")], [
+        Container({
+            Id("", "k"): Leaf("a"),
+            Id("", "v"): Leaf("rep")
+        }),
+        Container({
+            Id("", "k"): Leaf("b"),
+            Id("", "v"): Leaf("new")
+        })
+    ])
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_list_elem_create_existing_error():
+    old = List([Id("", "k")], [
+        Container({
+            Id("", "k"): Leaf("a"),
+            Id("", "v"): Leaf("old")
+        })
+    ])
+
+    p = List([Id("", "k")], [
+        Create({
+            Id("", "k"): Leaf("a"),
+            Id("", "v"): Leaf("new")
+        })
+    ])
+
+    try:
+        patch(old, p)
+        testing.assertFalse(True, "Expected ValueError for data-exists but patch succeeded")
+    except ValueError as e:
+        testing.assertIn("data-exists", e.error_message)
+
+def _test_patch_list_elem_delete_missing_error():
+    old = List([Id("", "k")], [
+        Container({
+            Id("", "k"): Leaf("a"),
+            Id("", "v"): Leaf("old")
+        })
+    ])
+
+    p = List([Id("", "k")], [
+        Delete({
+            Id("", "k"): Leaf("b")
+        })
+    ])
+
+    try:
+        patch(old, p)
+        testing.assertFalse(True, "Expected ValueError for data-missing but patch succeeded")
+    except ValueError as e:
+        testing.assertIn("data-missing", e.error_message)
 
 def _test_diff_system_ordered_list_no_diff():
     """Test that diff returns None for reordered elements in system-ordered lists.
