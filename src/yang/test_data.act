@@ -751,7 +751,7 @@ def _test_netconf_remove_leaf():
     return gd.prsrc()
 
 def _test_netconf_replace_leaf_sets_value():
-    """NETCONF replace on a leaf is treated as a normal set"""
+    """NETCONF replace on a leaf produces ReplaceLeaf wrapper"""
     y = r"""module y {
   namespace "urn:example:y";
   prefix y;
@@ -763,6 +763,25 @@ def _test_netconf_replace_leaf_sets_value():
     xml_in = r"""<data>
 <c1 xmlns="urn:example:y">
   <l1 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="replace">VAL</l1>
+</c1>
+</data>"""
+    s = yang.compile([y])
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+def _test_netconf_create_leaf_sets_value():
+    """NETCONF create on a leaf produces CreateLeaf wrapper"""
+    y = r"""module y {
+  namespace "urn:example:y";
+  prefix y;
+  container c1 {
+    leaf l1 { type string; }
+  }
+}"""
+
+    xml_in = r"""<data>
+<c1 xmlns="urn:example:y">
+  <l1 xmlns:nc="urn:ietf:params:xml:ns:netconf:base:1.0" nc:operation="create">VAL</l1>
 </c1>
 </data>"""
     s = yang.compile([y])
