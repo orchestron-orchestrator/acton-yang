@@ -310,16 +310,25 @@ def from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DNo
         elif isinstance(child, yang.schema.DLeaf):
             typed = data.take_leaf(root, child, child.name, s.namespace != child.namespace, is_unique(child), spath)
             if typed is not None:
+                wleaf = None
                 if typed.op == OP_REMOVE:
-                    children[fqname(child)] = yang.gdata.Absent()
-                    continue
+                    wleaf = yang.gdata.Absent()
                 elif typed.op == OP_DELETE:
-                    children[fqname(child)] = yang.gdata.Delete()
-                    continue
-                # create/replace for leaf are treated as normal set; a scalar set replaces any prior value
-                av = typed.val
-                if av is not None:
-                    children[fqname(child)] = yang.gdata.Leaf(av, ns=ns, module=mod)
+                    wleaf = yang.gdata.Delete()
+                elif typed.op == OP_CREATE:
+                    av = typed.val
+                    if av is not None:
+                        wleaf = yang.gdata.CreateLeaf(av, ns=ns, module=mod)
+                elif typed.op == OP_REPLACE:
+                    av = typed.val
+                    if av is not None:
+                        wleaf = yang.gdata.ReplaceLeaf(av, ns=ns, module=mod)
+                else:
+                    av = typed.val
+                    if av is not None:
+                        wleaf = yang.gdata.Leaf(av, ns=ns, module=mod)
+                if wleaf is not None:
+                    children[fqname(child)] = wleaf
             elif not yang.schema.is_optional_arg_yang_leaf(child, yang.schema.list_keys(s), loose):
                 # Missing leaf value
                 raise ValueError("Error reading {format_schema_path(path_with_child())}: Cannot find child node with name {child.name}")

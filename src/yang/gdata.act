@@ -390,6 +390,10 @@ class Node(value):
                     ",\n".join(child_strs),
                     "{_ind(indent)}}}{args_str})"
                 ])
+        elif isinstance(self, CreateLeaf):
+            sname = "CreateLeaf"
+            args = [repr_gdata(self.val)] + base_args
+            return "{sname}({", ".join(args)})"
         elif isinstance(self, Create):
             sname = "Create"
             args = base_args
@@ -404,6 +408,10 @@ class Node(value):
                     ",\n".join(child_strs),
                     "{_ind(indent)}}}{args_str})"
                 ])
+        elif isinstance(self, ReplaceLeaf):
+            sname = "ReplaceLeaf"
+            args = [repr_gdata(self.val)] + base_args
+            return "{sname}({", ".join(args)})"
         elif isinstance(self, Replace):
             sname = "Replace"
             args = base_args
@@ -533,6 +541,18 @@ class Node(value):
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, child.val), text=yang_str(v)))
                     else:
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + remove_op.nsdefs, attributes=remove_op.attrs))
+                elif isinstance(child, CreateLeaf):
+                    v = child.val
+                    if isinstance(v, Present):
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + create_op.nsdefs, attributes=create_op.attrs))
+                    else:
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, v) + create_op.nsdefs, attributes=create_op.attrs, text=yang_str(v)))
+                elif isinstance(child, ReplaceLeaf):
+                    v = child.val
+                    if isinstance(v, Present):
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + replace_op.nsdefs, attributes=replace_op.attrs))
+                    else:
+                        children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, v) + replace_op.nsdefs, attributes=replace_op.attrs, text=yang_str(v)))
                 elif isinstance(child, LeafList):
                     vals = []
                     for val in child.vals if child.user_order or not deterministic else vals_list_sorted(child.vals):
@@ -905,6 +925,12 @@ extension Node(Eq):
         if isinstance(self, Leaf) and isinstance(other, Leaf):
             return vals_equal(self.val, other.val)
 
+        if isinstance(self, CreateLeaf) and isinstance(other, CreateLeaf):
+            return True
+
+        if isinstance(self, ReplaceLeaf) and isinstance(other, ReplaceLeaf):
+            return True
+
         if isinstance(self, LeafList) and isinstance(other, LeafList):
             return vals_list_equal(self.vals, other.vals)
 
@@ -921,6 +947,30 @@ extension Node(Eq):
                         if e1.key_str(self.keys) == e2.key_str(other.keys):
                             break
                 if e1 != e2:
+                    return False
+            return True
+
+        if isinstance(self, Create) and isinstance(other, Create):
+            if set(self.children.keys()) != set(other.children.keys()):
+                return False
+            for key in self.children.keys():
+                if self.children[key] != other.children[key]:
+                    return False
+            return True
+
+        if isinstance(self, Replace) and isinstance(other, Replace):
+            if set(self.children.keys()) != set(other.children.keys()):
+                return False
+            for key in self.children.keys():
+                if self.children[key] != other.children[key]:
+                    return False
+            return True
+
+        if isinstance(self, Delete) and isinstance(other, Delete):
+            if set(self.children.keys()) != set(other.children.keys()):
+                return False
+            for key in self.children.keys():
+                if self.children[key] != other.children[key]:
                     return False
             return True
 
@@ -1051,6 +1101,15 @@ class Create(Node):
         self.children = children
         self.txid = None
 
+class CreateLeaf(Create):
+    """Imperative create of a leaf (has val)
+    NETCONF create operation maps to Create
+    """
+    val: value
+    def __init__(self, val: value, ns: ?str=None, module: ?str=None):
+        Create.__init__(self, {}, ns, module)
+        self.val = val
+
 class Replace(Node):
     """Imperative replace of a node
     NETCONF replace operation maps to Replace
@@ -1060,6 +1119,15 @@ class Replace(Node):
         self.module = module
         self.children = children
         self.txid = None
+
+class ReplaceLeaf(Replace):
+    """Imperative replace of a leaf (has val)
+    NETCONF replace operation maps to Replace
+    """
+    val: value
+    def __init__(self, val: value, ns: ?str=None, module: ?str=None):
+        Replace.__init__(self, {}, ns, module)
+        self.val = val
 
 
 class ValueMatch(value):
@@ -1916,6 +1984,9 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
         # TODO: structured error (error-tag, ...)
         raise ValueError("data-exists: node already exists at {_format_gdata_path(path)}")
 
+    if isinstance(p, ReplaceLeaf):
+        return Leaf(p.val, ns=p.ns, module=p.module)
+
     if isinstance(p, Replace):
         # Replace ignores old contents and applies patch to an empty base
         if isinstance(old, Container):
@@ -1955,7 +2026,13 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                 elif isinstance(cpatch, Delete):
                     # TODO: structured error (error-tag, ...)
                     raise ValueError("data-missing: node does not exist at {_format_gdata_path(path + [_PathElement(key)])}")
-                # Apply patch against an empty node so nested ops are sanitized (remove->noop, create->merge, delete->data-missing)
+                elif isinstance(cpatch, CreateLeaf):
+                    new_children[key] = Leaf(cpatch.val, ns=cpatch.ns, module=cpatch.module)
+                elif isinstance(cpatch, ReplaceLeaf):
+                    new_children[key] = Leaf(cpatch.val, ns=cpatch.ns, module=cpatch.module)
+                # Apply patch against an empty node so nested ops are sanitized
+                # (remove->noop, create->merge, delete->data-missing). We end up
+                # with a "declarative" gdata tree without imperative operations.
                 elif isinstance(cpatch, List):
                     empty_list = List(cpatch.keys, elements=[], user_order=cpatch.user_order, ns=cpatch.ns, module=cpatch.module)
                     res = _patch_rec(empty_list, cpatch, path + [_PathElement(key)])
@@ -2020,7 +2097,9 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                         # Remove the element
                         del old_map[k]
                 else:
-                    # New element: apply patch against an empty node so nested ops are sanitized (remove->noop, create->merge, delete->data-missing)
+                    # New element: Apply patch against an empty node so nested ops are sanitized
+                    # (remove->noop, create->merge, delete->data-missing). We end up
+                    # with a "declarative" gdata tree without imperative operations.
                     if isinstance(pelem, Create):
                         # Bypass data-exists error check for create op
                         patch_elem = Container(pelem.children)
@@ -2689,6 +2768,52 @@ def _test_patch_node_addition():
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res, exp)
+
+def _test_patch_create_leaf_wrapper_to_leaf():
+    old = Container({})
+
+    p = Container({
+        Id("", "a"): CreateLeaf(u64(9))
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "a"): Leaf(u64(9))
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_replace_leaf_wrapper_to_leaf():
+    old = Container({
+        Id("", "a"): Leaf(u64(1))
+    })
+
+    p = Container({
+        Id("", "a"): ReplaceLeaf(u64(2))
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "a"): Leaf(u64(2))
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_create_leaf_existing_error():
+    old = Container({
+        Id("", "a"): Leaf(u64(1))
+    })
+
+    p = Container({
+        Id("", "a"): CreateLeaf(u64(2))
+    })
+
+    try:
+        patch(old, p)
+        testing.assertFalse(True, "Expected ValueError for data-exists but patch succeeded")
+    except ValueError as e:
+        testing.assertIn("data-exists", e.error_message)
+
 
 def _test_patch_complex_ordering():
     # old: a, b, c
