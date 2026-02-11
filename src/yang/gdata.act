@@ -183,6 +183,91 @@ delete_op = (nsdefs=[("xc", "urn:ietf:params:xml:ns:netconf:base:1.0")], attrs=[
 replace_op = (nsdefs=[("xc", "urn:ietf:params:xml:ns:netconf:base:1.0")], attrs=[("xc:operation", "replace")])
 
 
+class LeafListEntry(value):
+    # Abstract base type for leaf-list entries.
+    val: value
+
+    def __repr__(self):
+        return "{self.hash_tag()}({repr_gdata(self.val)})"
+
+    def op_attrs(self):
+        return (nsdefs=[], attrs=[])
+
+    def hash_tag(self) -> str:
+        return "LeafListEntry"
+
+class LeafListEntryMerge(LeafListEntry):
+    def __init__(self, val: value):
+        self.val = val
+
+    def __repr__(self):
+        return "{self.hash_tag()}({repr_gdata(self.val)})"
+
+    def hash_tag(self) -> str:
+        return "LeafListEntryMerge"
+
+class LeafListEntryRemove(LeafListEntry):
+    def __init__(self, val: value):
+        self.val = val
+
+    def __repr__(self):
+        return "{self.hash_tag()}({repr_gdata(self.val)})"
+
+    def op_attrs(self):
+        return remove_op
+
+    def hash_tag(self) -> str:
+        return "LeafListEntryRemove"
+
+class LeafListEntryCreate(LeafListEntry):
+    def __init__(self, val: value):
+        self.val = val
+
+    def __repr__(self):
+        return "{self.hash_tag()}({repr_gdata(self.val)})"
+
+    def op_attrs(self):
+        return create_op
+
+    def hash_tag(self) -> str:
+        return "LeafListEntryCreate"
+
+class LeafListEntryDelete(LeafListEntry):
+    def __init__(self, val: value):
+        self.val = val
+
+    def __repr__(self):
+        return "{self.hash_tag()}({repr_gdata(self.val)})"
+
+    def op_attrs(self):
+        return delete_op
+
+    def hash_tag(self) -> str:
+        return "LeafListEntryDelete"
+
+class LeafListEntryReplace(LeafListEntry):
+    def __init__(self, val: value):
+        self.val = val
+
+    def __repr__(self):
+        return "LeafListEntryReplace({repr_gdata(self.val)})"
+
+    def op_attrs(self):
+        return replace_op
+
+    def hash_tag(self) -> str:
+        return "LeafListEntryReplace"
+
+extension LeafListEntry(Ord):
+    def __eq__(self, other):
+        if not isinstance(other, LeafListEntry):
+            return False
+        return self.hash_tag() == other.hash_tag() and vals_equal(self.val, other.val)
+
+    def __lt__(self, other):
+        return vals_less_than(self.val, other.val)
+
+
 def _nsq(node_ns, v: ?value=None):
     r = []
     if node_ns is not None:
@@ -328,10 +413,10 @@ class Node(value):
             args = [repr_gdata(self.val)] + base_args
             return "Leaf({", ".join(args)})"
         elif isinstance(self, LeafList):
-            # Only sort if deterministic=True and not user_order
-            vals_str = repr_gdata(self.vals if (self.user_order or not deterministic) else vals_list_sorted(self.vals))
             order_args = ["user_order=True"] if self.user_order else []
-            args = [vals_str] + base_args + order_args
+            # Only sort if deterministic=True and not user_order
+            entries = self.entries if (self.user_order or not deterministic) else sorted(self.entries)
+            args = [repr_gdata(entries)] + base_args + order_args
             return "LeafList({", ".join(args)})"
         elif isinstance(self, Absent):
             sname = "Absent"
@@ -465,8 +550,11 @@ class Node(value):
                         child_dict[fmt_json_name(nm, child.module)] = json_val(v)
                 elif isinstance(child, LeafList):
                     vals = []
-                    for v in child.vals if child.user_order or not deterministic else vals_list_sorted(child.vals):
-                        vals.append(json_val(v))
+                    for entry in child.entries if (child.user_order or not deterministic) else sorted(child.entries):
+                        if isinstance(entry, LeafListEntryMerge):
+                            vals.append(json_val(entry.val))
+                        else:
+                            raise ValueError("Unsupported leaf-list {nm} ({entry.val}) operation: {type(entry)}")
                     child_dict[fmt_json_name(nm, child.module)] = vals
                 elif isinstance(child, List):
                     elems = []
@@ -554,11 +642,14 @@ class Node(value):
                     else:
                         children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, v) + replace_op.nsdefs, attributes=replace_op.attrs, text=yang_str(v)))
                 elif isinstance(child, LeafList):
-                    vals = []
-                    for val in child.vals if child.user_order or not deterministic else vals_list_sorted(child.vals):
-                        v = yang_str(val)
-                        vals.append(xml.Node(local_name, nsdefs=_nsq(child.ns, val), text=v))
-                    children.extend(vals)
+                    for entry in child.entries if (child.user_order or not deterministic) else sorted(child.entries):
+                        val = entry.val
+                        attrs = entry.op_attrs()
+                        if isinstance(val, Present):
+                            children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, val) + attrs.nsdefs, attributes=attrs.attrs))
+                        else:
+                            v = yang_str(val)
+                            children.append(xml.Node(local_name, nsdefs=_nsq(child.ns, val) + attrs.nsdefs, attributes=attrs.attrs, text=v))
                 elif isinstance(child, Create):
                     # Render as element with create op, include children
                     children.append(xml.Node(local_name, nsdefs=_nsq(child.ns) + create_op.nsdefs, attributes=create_op.attrs, children=child._to_xml_rec(deterministic=deterministic)))
@@ -710,7 +801,9 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
-                    for v in child.vals:
+                    # TODO: filter out imperative ops?!
+                    for entry in child.entries:
+                        v = entry.val
                         if isinstance(v, int):
                             cvals.append(v)
                     return cvals
@@ -741,7 +834,8 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
-                    for v in child.vals:
+                    for entry in child.entries:
+                        v = entry.val
                         if isinstance(v, u64):
                             cvals.append(v)
                     return cvals
@@ -779,7 +873,8 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
-                    for v in child.vals:
+                    for entry in child.entries:
+                        v = entry.val
                         if isinstance(v, str):
                             cvals.append(v)
                     return cvals
@@ -810,7 +905,8 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
-                    for v in child.vals:
+                    for entry in child.entries:
+                        v = entry.val
                         if isinstance(v, bytes):
                             cvals.append(v)
                     return cvals
@@ -827,7 +923,8 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
-                    for v in child.vals:
+                    for entry in child.entries:
+                        v = entry.val
                         if isinstance(v, Decimal):
                             cvals.append(v)
                     return cvals
@@ -844,7 +941,8 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
-                    for v in child.vals:
+                    for entry in child.entries:
+                        v = entry.val
                         if isinstance(v, bool):
                             cvals.append(v)
                     return cvals
@@ -869,7 +967,7 @@ class Node(value):
         if isinstance(self, Container):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
-                    return child.vals
+                    return [e.val for e in child.entries]
         raise ValueError("Cannot find leaf-list child with name {name}")
 
     def get_opt_values(self, name) -> list[value]:
@@ -897,7 +995,8 @@ class Node(value):
             for nm,child in self.children.items():
                 if isinstance(child, LeafList) and nm == name:
                     cvals = []
-                    for v in child.vals:
+                    for entry in child.entries:
+                        v = entry.val
                         if isinstance(v, Identityref):
                             cvals.append(v)
                     return cvals
@@ -932,7 +1031,21 @@ extension Node(Eq):
             return True
 
         if isinstance(self, LeafList) and isinstance(other, LeafList):
-            return vals_list_equal(self.vals, other.vals)
+            if len(self.entries) != len(other.entries):
+                return False
+            if self.user_order != other.user_order:
+                return False
+            if self.user_order:
+                for i in range(len(self.entries)):
+                    if self.entries[i] != other.entries[i]:
+                        return False
+                return True
+
+            # System-ordered: compare as multisets to avoid ordering issues
+            for entry in _leaflist_unique_entries(self.entries):
+                if self.entries.count(entry) != other.entries.count(entry):
+                    return False
+            return True
 
         if isinstance(self, List) and isinstance(other, List):
             if not hack_eq(self.keys, other.keys):
@@ -1038,16 +1151,16 @@ class Leaf(Node):
         self.children = {}
 
 class LeafList(Node):
-    vals: list[value]
+    entries: list[LeafListEntry]
     user_order: bool
 
-    def __init__(self, vals: list[value], user_order=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
+    def __init__(self, entries: list[LeafListEntry], user_order=False, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
-        self.vals = vals
         self.user_order = user_order
         self.txid = txid
         self.children = {}
+        self.entries = entries
 
 class Present:
     """Named type for empty leaf value
@@ -1275,15 +1388,6 @@ def vals_equal(a: value, b: value) -> bool:
         return False
     raise ValueError("Unsupported value type in eq comparison")
 
-# For leaf-lists we need to compare a list of values
-def vals_list_equal(a: list[value], b: list[value]) -> bool:
-    if len(a) != len(b):
-        return False
-    for i in range(len(a)):
-        if not vals_equal(a[i], b[i]):
-            return False
-    return True
-
 def vals_less_than(a: value, b: value) -> bool:
     # Compare known leaf value types
     if isinstance(a, bool) and isinstance(b, bool):
@@ -1306,34 +1410,31 @@ def vals_less_than(a: value, b: value) -> bool:
         return False
     raise ValueError("Unsupported value type or mismatch in lt comparison: {type(a)}, {type(b)}")
 
-pure def vals_list_sorted(a: list[value]) -> list[value]:
-    """Sort a list of values, comparing only values of the same type
 
-    Uses a functional approach to avoid mutations so that we can be called
-    from pure functions. Perhaps this can be made more efficient by mutation -
-    look into later once we can contain scope local mutation from leaking
-    https://github.com/actonlang/acton/issues/1632
+pure def _leaflist_unique_entries(entries: list[LeafListEntry]) -> list[LeafListEntry]:
+    """Create a "set" of unique LeafListEntry objects
+
+    TODO: This is a workaround for a compiler error where codegen is incorrect
+    for a type implementing multiple protocol extensions (Ord, Hashable):
+    https://github.com/actonlang/acton/issues/1126
     """
-    n = len(a)
-    if n <= 1:
-        return a
 
-    # Functional bubble sort: recursively sort by finding minimum and building result
-    # Find the minimum element
-    min_val = a[0]
-    min_idx = 0
-    for i in range(1, n):
-        if vals_less_than(a[i], min_val):
-            min_val = a[i]
-            min_idx = i
+    if len(entries) == 0:
+        return []
+    head = entries[0]
+    tail = entries[1:]
+    for entry in tail:
+        if entry == head:
+            return _leaflist_unique_entries(tail)
+    return [head] + _leaflist_unique_entries(tail)
 
-    # Build new list with minimum at front and recursively sort the rest
-    remaining = a[:min_idx] + a[min_idx+1:]
-    if len(remaining) == 0:
-        return [min_val]
-    else:
-        return [min_val] + vals_list_sorted(remaining)
 
+def _list_value_index(vals: list[LeafListEntry], target: LeafListEntry, start: int=0) -> ?int:
+    """Find the index of a LeafListEntry wrapping the target value"""
+    for i in range(start, len(vals)):
+        if vals_equal(vals[i].val, target.val):
+            return i
+    return None
 
 
 class _PathElement:
@@ -1446,9 +1547,16 @@ def _merge_rec(a: Node, b: Node, path: list[_PathElement]) -> Node:
         raise ValueError("Cannot merge leaves with different values at {_format_gdata_path(path)}: {str(aval)} != {str(bval)}")
 
     elif isinstance(a, LeafList) and isinstance(b, LeafList):
-        if vals_list_equal(a.vals, b.vals):
-            return a
-        raise ValueError("Cannot merge leaf-lists with different values at {_format_gdata_path(path)}")
+        if a.user_order != b.user_order:
+            raise ValueError("Cannot merge leaf-lists with different user_order at {_format_gdata_path(path)}")
+
+        if a.user_order:
+            # Merge leaf-list values by union (preserve a's order, append new from b)
+            new_entries = a.entries + b.entries
+        else:
+            new_entries = sorted(a.entries + b.entries)
+
+        return LeafList(new_entries, user_order=a.user_order, ns=a.ns, module=a.module)
 
     elif isinstance(a, List) and isinstance(b, List):
         if not hack_eq(a.keys, b.keys):
@@ -1693,6 +1801,58 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
             return None
         return result
 
+    def diff_system_ordered_leaflist_values(old_entries: list[LeafListEntry], new_entries: list[LeafListEntry]) -> list[LeafListEntry]:
+        new_remaining = list(new_entries)
+        removed = []
+        for v in old_entries:
+            idx = _list_value_index(new_remaining, v)
+            if idx is not None:
+                del new_remaining[idx]
+            else:
+                removed.append(v)
+
+        result: list[LeafListEntry] = []
+        for v in removed:
+            result.append(LeafListEntryRemove(v.val))
+        for v in new_remaining:
+            result.append(LeafListEntryMerge(v.val))
+        return result
+
+    def diff_user_ordered_leaflist_values(old_entries: list[LeafListEntry], new_entries: list[LeafListEntry]) -> list[LeafListEntry]:
+        i = 0
+        j = 0
+        result: list[LeafListEntry] = []
+
+        while i < len(old_entries) and j < len(new_entries):
+            ov = old_entries[i]
+            nv = new_entries[j]
+
+            if ov == nv:
+                i += 1
+                j += 1
+            else:
+                ov_in_new = _list_value_index(new_entries, ov, j) is not None
+                nv_in_old = _list_value_index(old_entries, nv, i) is not None
+
+                if not ov_in_new:
+                    result.append(LeafListEntryRemove(ov.val))
+                    i += 1
+                elif not nv_in_old:
+                    result.append(LeafListEntryMerge(nv.val))
+                    j += 1
+                else:
+                    raise ValueError("Complex reordering scenario encountered in leaf-list elements at {_format_gdata_path(path)}")
+
+        while i < len(old_entries):
+            result.append(LeafListEntryRemove(old_entries[i].val))
+            i += 1
+
+        while j < len(new_entries):
+            result.append(LeafListEntryMerge(new_entries[j].val))
+            j += 1
+
+        return result
+
     # Diff logic for each node type
 
     if isinstance(old, Container) and isinstance(new, Container):
@@ -1719,9 +1879,18 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
         return new
 
     elif isinstance(old, LeafList) and isinstance(new, LeafList):
-        if vals_list_equal(old.vals, new.vals):
+        if old.user_order != new.user_order:
+            raise ValueError("Cannot diff leaf-lists with different ordering types at {_format_gdata_path(path)}")
+
+        if old.user_order:
+            new_entries = diff_user_ordered_leaflist_values(old.entries, new.entries)
+        else:
+            new_entries = diff_system_ordered_leaflist_values(old.entries, new.entries)
+
+        if len(new_entries) == 0:
             return None
-        return new
+
+        return LeafList(new_entries, user_order=new.user_order, ns=new.ns, module=new.module)
 
     elif isinstance(old, Absent) and isinstance(new, Absent):
         diff_children = diff_keyed_children(old.children, new.children)
@@ -1833,15 +2002,16 @@ def _filter_leaflist(data: LeafList, flist: list[FNode]) -> (node: ?Node, select
             matches.append(vm)
     if select_all:
         return (node=data, select=True)
-    new_vals: list[value] = []
-    for v in data.vals:
+    new_entries: list[LeafListEntry] = []
+    for entry in data.entries:
+        v = entry.val
         for m in matches:
             if _match_value(m, v):
-                new_vals.append(v)
+                new_entries.append(entry)
                 break
-    if len(new_vals) == 0:
+    if len(new_entries) == 0:
         return (node=None, select=False)
-    return (node=LeafList(new_vals, user_order=data.user_order, ns=data.ns, module=data.module), select=True)
+    return (node=LeafList(new_entries, user_order=data.user_order, ns=data.ns, module=data.module), select=True)
 
 
 def _filter_list_element(elem: Node, fnode: FNode, keys: list[Id]) -> ?Node:
@@ -2052,6 +2222,12 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                     res = _patch_rec(empty_cnt, patch_cnt, path + [_PathElement(key)])
                     if res is not None:
                         new_children[key] = res
+                elif isinstance(cpatch, LeafList):
+                    # Apply leaf-list ops against an empty leaf-list so removes are no-ops
+                    empty_ll = LeafList([], user_order=cpatch.user_order, ns=cpatch.ns, module=cpatch.module)
+                    res = _patch_rec(empty_ll, cpatch, path + [_PathElement(key)])
+                    if res is not None:
+                        new_children[key] = res
                 else:
                     # New leaf / leaf-list child
                     new_children[key] = cpatch
@@ -2143,8 +2319,47 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
         return p
 
     elif isinstance(old, LeafList) and isinstance(p, LeafList):
-        # Patch leaf-list replaces old leaf-list values
-        return p
+        if old.user_order != p.user_order:
+            raise ValueError("Leaf-list ordering differs in patch at {_format_gdata_path(path)}")
+
+        new_entries = old.entries.copy()
+
+        for entry in p.entries:
+            val = entry.val
+            idx = _list_value_index(new_entries, entry)
+            if isinstance(entry, LeafListEntryMerge):
+                # merge/add by default
+                if idx is None:
+                    new_entries.append(LeafListEntryMerge(val))
+            elif isinstance(entry, LeafListEntryCreate) or isinstance(entry, LeafListEntryReplace):
+                exists = idx is not None
+                if isinstance(entry, LeafListEntryCreate):
+                    if exists:
+                        # TODO: structured error (error-tag, ...)
+                        raise ValueError("data-exists: leaf-list entry already exists at {_format_gdata_path(path)}: {repr_gdata(val)}")
+                    new_entries.append(LeafListEntryMerge(val))
+                else:
+                    if old.user_order:
+                        # replace moves existing entries to the end (in patch order)
+                        if idx is not None:
+                            del new_entries[idx]
+                        new_entries.append(LeafListEntryMerge(val))
+                    else:
+                        # replace behaves like merge for system-ordered leaf-lists
+                        if not exists:
+                            new_entries.append(LeafListEntryMerge(val))
+            elif isinstance(entry, LeafListEntryRemove) or isinstance(entry, LeafListEntryDelete):
+                if idx is not None:
+                    del new_entries[idx]
+                elif isinstance(entry, LeafListEntryDelete):
+                    # TODO: structured error (error-tag, ...)
+                    raise ValueError("data-missing: leaf-list entry does not exist at {_format_gdata_path(path)}: {repr_gdata(val)}")
+            else:
+                raise ValueError("Unhandled leaf-list operation in patch at {_format_gdata_path(path)}: {type(entry)}")
+
+        if len(new_entries) == 0:
+            return None
+        return LeafList(new_entries, user_order=old.user_order, ns=old.ns, module=old.module)
 
     elif isinstance(old, Absent) and isinstance(p, Absent):
         # Both absent means node was removed
@@ -2240,7 +2455,7 @@ def _test_merge1():
                 Id(NS_acme, "n3"): Leaf(u64(3))
             }),
         ]),
-        Id(NS_acme, "d"): LeafList(["a", "b", "c"])
+        Id(NS_acme, "d"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")])
     }, ns="http://example.com/acme", module="acme")
 
     res = merge(y1, y2)
@@ -2265,7 +2480,7 @@ def _test_merge1():
                 Id(NS_acme, "n4"): Leaf(u64(4)),
             }),
         ]),
-        Id(NS_acme, "d"): LeafList(["a", "b", "c"])
+        Id(NS_acme, "d"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")])
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(res.prsrc(deterministic=True), exp.prsrc(deterministic=True))
@@ -2408,14 +2623,14 @@ def _test_eq_list_user_order():
     testing.assertNotEqual(l1, l2)
 
 def _test_vals_list_sorted():
-    l1 = LeafList(["a", "b", "c"])
-    l2 = LeafList(["c", "b", "a"])
+    l1 = LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")])
+    l2 = LeafList([LeafListEntryMerge("c"), LeafListEntryMerge("b"), LeafListEntryMerge("a")])
     testing.assertEqual(l1.prsrc(deterministic=True), l1.prsrc(deterministic=True))
     testing.assertEqual(l1.prsrc(deterministic=True), l2.prsrc(deterministic=True))
 
 def _test_eq_leaf_list_user_order():
-    l1 = LeafList(["a", "b", "c"], user_order=True)
-    l2 = LeafList(["c", "b", "a"], user_order=True)
+    l1 = LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")], user_order=True)
+    l2 = LeafList([LeafListEntryMerge("c"), LeafListEntryMerge("b"), LeafListEntryMerge("a")], user_order=True)
     testing.assertEqual(l1, l1)
     testing.assertNotEqual(l1, l2)
 
@@ -2585,17 +2800,17 @@ def _test_diff_leaflist():
     added.
     """
     old = Container({
-        Id(NS_acme, "l"): LeafList(["a", "b", "c"])
+        Id(NS_acme, "l"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")])
     }, ns="http://example.com/acme", module="acme")
 
     new = Container({
-        Id(NS_acme, "l"): LeafList(["a", "x", "c", "d"]) # "b" changed to "x" and "d" added
+        Id(NS_acme, "l"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("x"), LeafListEntryMerge("c"), LeafListEntryMerge("d")]) # "b" changed to "x" and "d" added
     }, ns="http://example.com/acme", module="acme")
 
     d = diff(old, new)
 
     exp = Container({
-        Id(NS_acme, "l"): LeafList(["a", "x", "c", "d"])
+        Id(NS_acme, "l"): LeafList([LeafListEntryRemove("b"), LeafListEntryMerge("x"), LeafListEntryMerge("d")])
     }, ns="http://example.com/acme", module="acme")
 
     testing.assertEqual(d, exp)
@@ -2632,16 +2847,20 @@ def _test_diff_complex_ordering():
 def _test_diff_union_type():
     old = Container({
         Id("", "l"): Leaf(u64(42)),
-        Id("", "ll"): LeafList([u64(42)])
+        Id("", "ll"): LeafList([LeafListEntryMerge(u64(42))])
     })
 
     new = Container({
         Id("", "l"): Leaf("forty-two"),
-        Id("", "ll"): LeafList(["forty-two"])
+        Id("", "ll"): LeafList([LeafListEntryMerge("forty-two")])
     })
 
     d = diff(old, new)
-    testing.assertEqual(d, new)
+    exp = Container({
+        Id("", "l"): Leaf("forty-two"),
+        Id("", "ll"): LeafList([LeafListEntryRemove(u64(42)), LeafListEntryMerge("forty-two")])
+    })
+    testing.assertEqual(d, exp)
 
 def _test_diff_empty_leaf_delete():
     old = Container({
@@ -2841,35 +3060,181 @@ def _test_patch_complex_ordering():
 
 def _test_patch_leaflist():
     old = Container({
-        Id(NS_acme, "l"): LeafList(["a", "b", "c"])
+        Id(NS_acme, "l"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")])
     }, ns="http://example.com/acme", module="acme")
 
     # new: l = [a, x, c, d]
-    # diff would be a leaflist replace:
+    # diff would remove "b" and add "x" and "d"
     p = Container({
-        Id(NS_acme, "l"): LeafList(["a", "x", "c", "d"])
+        Id(NS_acme, "l"): LeafList([LeafListEntryRemove("b"), LeafListEntryMerge("x"), LeafListEntryMerge("d")])
     }, ns="http://example.com/acme", module="acme")
 
     res = patch(old, p)
     exp = Container({
-        Id(NS_acme, "l"): LeafList(["a", "x", "c", "d"])
+        Id(NS_acme, "l"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("c"), LeafListEntryMerge("x"), LeafListEntryMerge("d")])
     }, ns="http://example.com/acme", module="acme")
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_leaflist_create_missing():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a")])
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryCreate("b")])
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b")])
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_leaflist_create_existing_error():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a")])
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryCreate("a")])
+    })
+
+    try:
+        patch(old, p)
+        testing.assertFalse(True, "Expected ValueError for data-exists but patch succeeded")
+    except ValueError as e:
+        testing.assertIn("data-exists", e.error_message)
+
+def _test_patch_leaflist_merge_missing():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a")])
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("b")])
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b")])
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_leaflist_replace_missing():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a")])
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryReplace("b")])
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b")])
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_leaflist_merge_no_move_user_order():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")], user_order=True)
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("b")], user_order=True)
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")], user_order=True)
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_leaflist_replace_moves_user_order():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")], user_order=True)
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryReplace("b")], user_order=True)
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("c"), LeafListEntryMerge("b")], user_order=True)
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_leaflist_delete_existing():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b")])
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryDelete("b")])
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a")])
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_leaflist_delete_missing_error():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a")])
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryDelete("b")])
+    })
+
+    try:
+        patch(old, p)
+        testing.assertFalse(True, "Expected ValueError for data-missing but patch succeeded")
+    except ValueError as e:
+        testing.assertIn("data-missing", e.error_message)
+
+def _test_patch_leaflist_remove_missing_idempotent():
+    old = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a")])
+    })
+
+    p = Container({
+        Id("", "ll"): LeafList([LeafListEntryRemove("b")])
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "ll"): LeafList([LeafListEntryMerge("a")])
+    })
 
     testing.assertEqual(res, exp)
 
 def _test_patch_union_type():
     old = Container({
         Id("", "l"): Leaf(u64(42)),
-        Id("", "ll"): LeafList([u64(42)])
+        Id("", "ll"): LeafList([LeafListEntryMerge(u64(42))])
     })
 
     p = Container({
         Id("", "l"): Leaf("forty-two"),
-        Id("", "ll"): LeafList(["forty-two"])
+        Id("", "ll"): LeafList([LeafListEntryMerge("forty-two")])
     })
 
     res = patch(old, p)
-    testing.assertEqual(res, p)
+    exp = Container({
+        Id("", "l"): Leaf("forty-two"),
+        Id("", "ll"): LeafList([LeafListEntryMerge(u64(42)), LeafListEntryMerge("forty-two")])
+    })
+    testing.assertEqual(res, exp)
 
 def _test_patch_create_container_missing():
     old = Container({
@@ -3149,7 +3514,7 @@ def _test_diff_and_patch_large_tree():
                 Id("http://example.com/yang/mod1", "settings"): Container(children={
                     Id("http://example.com/yang/mod1", "hostname"): Leaf("new-router"),
                     # motd removed
-                    Id("http://example.com/yang/mod1", "ntp-servers"): LeafList(["192.168.100.1", "192.168.100.2"])
+                    Id("http://example.com/yang/mod1", "ntp-servers"): LeafList([LeafListEntryMerge("192.168.100.1"), LeafListEntryMerge("192.168.100.2")])
                 }),
                 Id("http://example.com/yang/mod1", "interfaces"): List([Id("http://example.com/yang/mod1", "name")], elements=[
                     Container({
@@ -3253,7 +3618,7 @@ def _test_prsrc_root():
     y1 = Container({
         Id(NS_acme, "foo"): Container({
             Id(NS_acme, "a"): Leaf(u64(1)),
-            Id(NS_acme, "b"): LeafList(["a", "b", "c"]),
+            Id(NS_acme, "b"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3297,7 +3662,7 @@ def _test_to_jsonstr():
             ]),
             Id(NS_acme, "b"): Leaf(False),
             Id(NS_acme, "lb"): Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
-            Id(NS_acme, "llb"): LeafList([b"Hello Acton \xf0\x9f\xab\xa1"]),
+            Id(NS_acme, "llb"): LeafList([LeafListEntryMerge(b"Hello Acton \xf0\x9f\xab\xa1")]),
             Id(NS_acme, "c"): Leaf(u64(18446744073709551615)),
             Id(NS_acme, "d"): Leaf(Decimal(314, -2))
         }, ns="http://example.com/acme", module="acme"),
@@ -3344,7 +3709,7 @@ def _test_to_xmlstr():
             ]),
             Id(NS_acme, "b"): Leaf(False),
             Id(NS_acme, "lb"): Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
-            Id(NS_acme, "llb"): LeafList([b"Hello Acton \xf0\x9f\xab\xa1"]),
+            Id(NS_acme, "llb"): LeafList([LeafListEntryMerge(b"Hello Acton \xf0\x9f\xab\xa1")]),
             Id(NS_acme, "c"): Leaf(u64(18446744073709551615)),
             Id(NS_acme, "d"): Leaf(Decimal(314, -2))
         }, ns="http://example.com/acme", module="acme"),
@@ -3359,7 +3724,7 @@ def _test_to_xmlstr_root():
     y1 = Container({
         Id(NS_acme, "foo"): Container({
             Id(NS_acme, "a"): Leaf(u64(1)),
-            Id(NS_acme, "b"): LeafList(["a", "b", "c"]),
+            Id(NS_acme, "b"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3369,7 +3734,7 @@ def _test_to_xmlstr_module():
     y1 = Container({
         Id(NS_acme, "foo"): Container({
             Id(NS_acme, "a"): Leaf(u64(1)),
-            Id(NS_acme, "b"): LeafList(["a", "b", "c"]),
+            Id(NS_acme, "b"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")]),
         }, ns="http://example.com/acme", module="acme")
     })
 
@@ -3413,7 +3778,7 @@ def _test_to_xmlstr_root_merge():
     y1 = Container({
         Id(NS_acme, "foo"): Container({
             Id(NS_acme, "a"): Leaf(u64(1)),
-            Id(NS_acme, "b"): LeafList(["a", "b", "c"]),
+            Id(NS_acme, "b"): LeafList([LeafListEntryMerge("a"), LeafListEntryMerge("b"), LeafListEntryMerge("c")]),
         }, ns="http://example.com/acme", module="acme")
     })
     y2 = Container({
@@ -3715,7 +4080,7 @@ def _test_filter_leaflist_values():
     """Leaf-list content predicates return only matching values."""
     data = Container({
         Id(NS_acme, "foo"): Container({
-            Id(NS_acme, "ll"): LeafList([u64(1), u64(2), u64(3)]),
+            Id(NS_acme, "ll"): LeafList([LeafListEntryMerge(u64(1)), LeafListEntryMerge(u64(2)), LeafListEntryMerge(u64(3))]),
             Id(NS_acme, "x"): Leaf(u64(9)),
         }, ns=NS_acme, module="acme"),
         Id(NS_acme, "bar"): Container({
@@ -3735,7 +4100,7 @@ def _test_filter_leaflist_values():
         res.prsrc(deterministic=True),
         Container({
             Id(NS_acme, "foo"): Container({
-                Id(NS_acme, "ll"): LeafList([u64(2), u64(3)]),
+                Id(NS_acme, "ll"): LeafList([LeafListEntryMerge(u64(2)), LeafListEntryMerge(u64(3))]),
             }, ns=NS_acme, module="acme")
         }).prsrc(deterministic=True)
     )

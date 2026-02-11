@@ -891,7 +891,7 @@ def _test_netconf_delete_list_element():
 
 
 def _test_netconf_leaflist_merge_and_remove():
-    """NETCONF merge + remove on a leaf-list keeps merge values only"""
+    """NETCONF merge + remove on a leaf-list keeps per-item ops"""
     y = r"""module y {
   namespace "urn:example:y";
   prefix y;
@@ -913,14 +913,16 @@ def _test_netconf_leaflist_merge_and_remove():
     gd = from_xml(s, xml.decode(xml_in))
     expected = yang.gdata.Container({
         yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
-            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.LeafList(['keep'])
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.LeafList(
+                [yang.gdata.LeafListEntryMerge('keep'), yang.gdata.LeafListEntryRemove('drop')]
+            )
         }, ns='urn:example:y', module='y')
     })
     testing.assertEqual(gd.prsrc(), expected.prsrc())
 
 
 def _test_netconf_leaflist_all_delete():
-    """NETCONF delete only on a leaf-list produces Delete node"""
+    """NETCONF delete only on a leaf-list preserves per-item delete op"""
     y = r"""module y {
   namespace "urn:example:y";
   prefix y;
@@ -941,14 +943,16 @@ def _test_netconf_leaflist_all_delete():
     gd = from_xml(s, xml.decode(xml_in))
     expected = yang.gdata.Container({
         yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
-            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.Delete()
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.LeafList(
+                [yang.gdata.LeafListEntryDelete('drop')]
+            )
         }, ns='urn:example:y', module='y')
     })
     testing.assertEqual(gd.prsrc(), expected.prsrc())
 
 
 def _test_netconf_leaflist_all_remove():
-    """NETCONF remove only on a leaf-list produces Absent node"""
+    """NETCONF remove only on a leaf-list preserves per-item remove op"""
     y = r"""module y {
   namespace "urn:example:y";
   prefix y;
@@ -969,7 +973,9 @@ def _test_netconf_leaflist_all_remove():
     gd = from_xml(s, xml.decode(xml_in))
     expected = yang.gdata.Container({
         yang.gdata.Id("urn:example:y", "c1"): yang.gdata.Container({
-            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.Absent()
+            yang.gdata.Id("urn:example:y", "ll"): yang.gdata.LeafList(
+                [yang.gdata.LeafListEntryRemove('gone')]
+            )
         }, ns='urn:example:y', module='y')
     })
     testing.assertEqual(gd.prsrc(), expected.prsrc())
