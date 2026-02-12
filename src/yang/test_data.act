@@ -2,6 +2,7 @@ import testing
 import xml
 
 import yang
+import yang.adata
 import yang.gdata
 
 from yang.data import YangValidationError
@@ -230,6 +231,108 @@ def _test_y1_json():
 
     s = yang.compile([y1])
     gd = from_json(s, json_data)
+    return gd.prsrc()
+
+
+class _test_leafref_c(yang.adata.MNode):
+    n: ?u64
+    ref: ?u64
+    refs: ?list[u64]
+
+    mut def __init__(self, n: ?u64, ref: ?u64, refs: ?list[u64]):
+        self._ns = "urn:example:y1"
+        self.n = n
+        self.ref = ref
+        self.refs = refs
+
+    def _get_attr(self, name: str) -> ?value:
+        if name == "n":
+            return self.n
+        if name == "ref":
+            return self.ref
+        if name == "refs":
+            return self.refs
+        raise ValueError("Attribute {name} not found in _test_leafref_c")
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        raise NotImplementedError("to_gdata")
+
+    def copy(self):
+        return _test_leafref_c(self.n, self.ref, self.refs)
+
+
+class _test_leafref_root(yang.adata.MNode):
+    c: ?_test_leafref_c
+
+    mut def __init__(self, c: ?_test_leafref_c):
+        self._ns = "urn:example:y1"
+        self.c = c
+
+    def _get_attr(self, name: str) -> ?value:
+        if name == "c":
+            return self.c
+        raise ValueError("Attribute {name} not found in _test_leafref_root")
+
+    mut def to_gdata(self) -> yang.gdata.Node:
+        raise NotImplementedError("to_gdata")
+
+    def copy(self):
+        return _test_leafref_root(self.c)
+
+
+def _leafref_uint_schema() -> str:
+    return r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+  container c {
+    leaf n {
+      type uint8;
+    }
+    leaf ref {
+      type leafref {
+        path "/c/n";
+      }
+    }
+    leaf-list refs {
+      type leafref {
+        path "/c/n";
+      }
+    }
+  }
+}"""
+
+
+def _test_leafref_target_type_xml():
+    s = yang.compile([_leafref_uint_schema()])
+    xml_in = r"""<data>
+<c xmlns="urn:example:y1">
+  <n>7</n>
+  <ref>7</ref>
+  <refs>7</refs>
+  <refs>8</refs>
+</c>
+</data>"""
+    gd = from_xml(s, xml.decode(xml_in))
+    return gd.prsrc()
+
+
+def _test_leafref_target_type_json():
+    s = yang.compile([_leafref_uint_schema()])
+    json_in = {
+        "y1:c": {
+            "n": "7",
+            "ref": "7",
+            "refs": ["7", "8"]
+        }
+    }
+    gd = from_json(s, json_in)
+    return gd.prsrc()
+
+
+def _test_leafref_target_type_adata():
+    s = yang.compile([_leafref_uint_schema()])
+    ad = _test_leafref_root(_test_leafref_c(7, 7, [7, 8]))
+    gd = yang.adata.from_adata(s, ad)
     return gd.prsrc()
 
 

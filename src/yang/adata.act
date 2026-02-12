@@ -74,6 +74,10 @@ def try_validate_mnode_value(val: value, schema_type: yang.schema.DType, path: l
             tv = try_validate_mnode_value(val, alt_type, path)
             if tv is not None:
                 return tv
+    elif isinstance(schema_type, yang.schema.DTypeLeafref):
+        target_type = schema_type.target_type
+        if target_type is not None:
+            return try_validate_mnode_value(val, target_type, path)
     elif isinstance(schema_type, yang.schema.DTypeInteger):
         intval = coerce_integer_value(val, schema_type, path)
         if intval is not None and schema_type.validate_value(intval):
