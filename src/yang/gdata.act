@@ -2128,6 +2128,212 @@ def filter(data: ?Node, filt: FNode) -> ?Node:
     return res.node
 
 
+def _prune_leaf(data: Leaf, flist: list[FNode]) -> (node: ?Node, matched: bool, select: bool):
+    """Apply leaf filters and determine pruning."""
+    matched = False
+    select = False
+    for f in flist:
+        if len(f.children) > 0:
+            raise ValueError("Leaf filter cannot have children")
+        if f.value_match is None:
+            matched = True
+            select = True
+        else:
+            vm = expect(f.value_match, "leaf")
+            if _match_value(vm, data.val):
+                matched = True
+    if not matched:
+        return (node=data, matched=False, select=False)
+    if select:
+        return (node=None, matched=True, select=True)
+    # Predicate-only match, let parent decide removal
+    return (node=data, matched=True, select=False)
+
+
+def _prune_leaflist(data: LeafList, flist: list[FNode]) -> (node: ?Node, matched: bool, select: bool):
+    """Apply leaf-list filters and prune matching values."""
+    if len(flist) == 0:
+        return (node=data, matched=False, select=False)
+    select_all = False
+    matches: list[value] = []
+    for f in flist:
+        if len(f.children) > 0:
+            raise ValueError("Leaf-list filter cannot have children")
+        if f.value_match is None:
+            select_all = True
+        else:
+            vm = expect(f.value_match, "leaf-list")
+            matches.append(vm)
+    if select_all:
+        return (node=None, matched=True, select=True)
+    new_entries: list[LeafListEntry] = []
+    removed = False
+    for entry in data.entries:
+        v = entry.val
+        hit = False
+        for m in matches:
+            if _match_value(m, v):
+                hit = True
+                removed = True
+                break
+        if not hit:
+            new_entries.append(entry)
+    if not removed:
+        return (node=data, matched=False, select=False)
+    if len(new_entries) == 0:
+        return (node=None, matched=True, select=True)
+    return (node=LeafList(new_entries, user_order=data.user_order, ns=data.ns, module=data.module), matched=True, select=True)
+
+
+def _prune_list_element(elem: Node, fnode: FNode, keys: list[Id]) -> (node: ?Node, matched: bool, select: bool):
+    """Prune a single list element against a list element predicate."""
+    if not (isinstance(elem, Container) or isinstance(elem, Absent)):
+        return (node=elem, matched=False, select=False)
+    if fnode.value_match is not None:
+        raise ValueError("List element filter cannot have value match")
+    if len(fnode.children) == 0:
+        # Wildcard select element => prune entire element
+        return (node=None, matched=True, select=True)
+
+    groups = _group_filter_children(fnode.children)
+    pruned_children: dict[Id, Node] = {}
+    for key in elem.children:
+        pruned_children[key] = elem.children[key]
+    has_selection = False
+    for name, flist in groups.items():
+        if name not in elem.children:
+            return (node=elem, matched=False, select=False)
+        res = _prune_child(elem.children[name], flist)
+        if not res.matched:
+            return (node=elem, matched=False, select=False)
+        if res.select:
+            has_selection = True
+            if res.node is None:
+                if name in pruned_children:
+                    del pruned_children[name]
+            else:
+                pruned_children[name] = expect(res.node, "pruned list element child")
+
+    if not has_selection:
+        # Predicate-only match => prune entire element
+        return (node=None, matched=True, select=True)
+
+    # Preserve keys so list entries remain identifiable
+    for key in keys:
+        if key in elem.children and key not in pruned_children:
+            pruned_children[key] = elem.children[key]
+
+    if len(pruned_children) == 0:
+        return (node=None, matched=True, select=True)
+    return (node=_filter_container_result(elem, pruned_children), matched=True, select=True)
+
+
+def _prune_list(data: List, flist: list[FNode]) -> (node: ?Node, matched: bool, select: bool):
+    """Apply list predicates to prune matching list elements."""
+    if len(flist) == 0:
+        return (node=data, matched=False, select=False)
+    for f in flist:
+        if f.value_match is not None:
+            raise ValueError("List filter cannot have value match")
+    for f in flist:
+        if len(f.children) == 0:
+            # Wildcard select list => prune entire list
+            return (node=None, matched=True, select=True)
+    new_elements: list[Node] = []
+    matched_any = False
+    for elem in data.elements:
+        matched_elem = False
+        for f in flist:
+            res = _prune_list_element(elem, f, data.keys)
+            if res.matched:
+                matched_any = True
+                matched_elem = True
+                if res.node is not None:
+                    new_elements.append(expect(res.node, "pruned list element"))
+                # If res.node is None, element is pruned
+                break
+        if not matched_elem:
+            new_elements.append(elem)
+    if not matched_any:
+        return (node=data, matched=False, select=False)
+    if len(new_elements) == 0:
+        return (node=None, matched=True, select=True)
+    return (node=List(data.keys, elements=new_elements, user_order=data.user_order, ns=data.ns, module=data.module), matched=True, select=True)
+
+
+def _prune_container_children(data: Node, fchildren: list[FNode]) -> (node: ?Node, matched: bool, select: bool):
+    """Prune container children according to filter predicates."""
+    if len(fchildren) == 0:
+        return (node=None, matched=True, select=True)
+    if not (isinstance(data, Container) or isinstance(data, Absent) or isinstance(data, Create) or isinstance(data, Delete) or isinstance(data, Replace)):
+        raise ValueError("Prune root expects a container-like node")
+
+    groups = _group_filter_children(fchildren)
+    pruned_children: dict[Id, Node] = {}
+    for key in data.children:
+        pruned_children[key] = data.children[key]
+    has_selection = False
+    for name, flist in groups.items():
+        if name not in data.children:
+            return (node=data, matched=False, select=False)
+        res = _prune_child(data.children[name], flist)
+        if not res.matched:
+            return (node=data, matched=False, select=False)
+        if res.select:
+            has_selection = True
+            if res.node is None:
+                if name in pruned_children:
+                    del pruned_children[name]
+            else:
+                pruned_children[name] = expect(res.node, "pruned container child")
+
+    if not has_selection:
+        return (node=None, matched=True, select=True)
+    if len(pruned_children) == 0:
+        return (node=None, matched=True, select=True)
+    return (node=_filter_container_result(data, pruned_children), matched=True, select=True)
+
+
+def _prune_child(data: Node, flist: list[FNode]) -> (node: ?Node, matched: bool, select: bool):
+    """Dispatch prune evaluation based on child node type."""
+    if isinstance(data, Container) or isinstance(data, Absent) or isinstance(data, Create) or isinstance(data, Delete) or isinstance(data, Replace):
+        if len(flist) != 1:
+            raise ValueError("Multiple filter nodes for container child")
+        fnode = flist[0]
+        if fnode.value_match is not None:
+            raise ValueError("Container filter cannot have value match")
+        res = _prune_container_children(data, fnode.children)
+        if not res.matched:
+            return (node=data, matched=False, select=False)
+        return (node=res.node, matched=True, select=True)
+    if isinstance(data, List):
+        return _prune_list(data, flist)
+    if isinstance(data, LeafList):
+        return _prune_leaflist(data, flist)
+    if isinstance(data, Leaf):
+        return _prune_leaf(data, flist)
+    return (node=data, matched=False, select=False)
+
+
+def prune(data: ?Node, filt: FNode) -> ?Node:
+    """Prune a gdata tree by excluding nodes selected by the filter."""
+    if data is None:
+        return None
+    d = expect(data, "prune root")
+    if filt.name is None:
+        res = _prune_container_children(d, filt.children)
+        if not res.matched:
+            return d
+        return res.node
+    res = _prune_child(d, [filt])
+    if not res.matched:
+        return d
+    if res.select:
+        return res.node
+    # Predicate-only match at root prunes the node
+    return None
+
+
 # TODO: Can we make patch return a Node instead of ?Node?
 def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
     if p is None:
@@ -4109,4 +4315,325 @@ def _test_filter_wildcard_value_match():
                 ], ns=NS_acme, module="acme")
             }, ns=NS_acme, module="acme")
         }).prsrc(deterministic=True)
+    )
+
+
+################################################################################
+# Prune tests
+def _test_prune_container_leaf_select():
+    """Prune should remove selected leaf children."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l1")),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l2"): Leaf(u64(2)),
+            }, ns=NS_acme, module="acme"),
+            Id(NS_acme, "bar"): Container({
+                Id(NS_acme, "b1"): Leaf(u64(7)),
+            }, ns=NS_acme, module="acme"),
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_prune_container_predicate_only():
+    """Predicate-only match should prune the whole container."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l1"), value_match=u64(1)),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "bar"): Container({
+                Id(NS_acme, "b1"): Leaf(u64(7)),
+            }, ns=NS_acme, module="acme"),
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_prune_list_keyed():
+    """Predicate on list key should prune matching list element."""
+    k = Id(NS_acme, "name")
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                    Id(NS_acme, "x"): Leaf(u64(9)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("b"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l"), children=[
+                FNode(Id(NS_acme, "name"), value_match="a"),
+            ]),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Container({
+                        Id(NS_acme, "name"): Leaf("b"),
+                        Id(NS_acme, "v"): Leaf(u64(2)),
+                    }),
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_prune_list_select_leaf():
+    """List predicate plus leaf selection prunes fields in matched element."""
+    k = Id(NS_acme, "name")
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                    Id(NS_acme, "x"): Leaf(u64(9)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("b"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                    Id(NS_acme, "x"): Leaf(u64(8)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l"), children=[
+                FNode(Id(NS_acme, "name"), value_match="a"),
+                FNode(Id(NS_acme, "v")),
+            ]),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Container({
+                        Id(NS_acme, "name"): Leaf("a"),
+                        Id(NS_acme, "x"): Leaf(u64(9)),
+                    }),
+                    Container({
+                        Id(NS_acme, "name"): Leaf("b"),
+                        Id(NS_acme, "v"): Leaf(u64(2)),
+                        Id(NS_acme, "x"): Leaf(u64(8)),
+                    }),
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_prune_leaflist_values():
+    """Prune should remove matching leaf-list values."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "ll"): LeafList([LeafListEntryMerge(u64(1)), LeafListEntryMerge(u64(2)), LeafListEntryMerge(u64(3))]),
+            Id(NS_acme, "x"): Leaf(u64(9)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "ll"), value_match=u64(2)),
+            FNode(Id(NS_acme, "ll"), value_match=u64(3)),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "ll"): LeafList([LeafListEntryMerge(u64(1))]),
+                Id(NS_acme, "x"): Leaf(u64(9)),
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_prune_leaf_predicate_no_match_noop():
+    """Non-matching leaf predicate should leave tree unchanged."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l1"), value_match=u64(999)),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        data.prsrc(deterministic=True)
+    )
+
+
+def _test_prune_container_wildcard():
+    """Wildcard container filter should prune the whole container subtree."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo")),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "bar"): Container({
+                Id(NS_acme, "b1"): Leaf(u64(7)),
+            }, ns=NS_acme, module="acme"),
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_prune_list_wildcard():
+    """Wildcard list filter should prune the whole list node."""
+    k = Id(NS_acme, "name")
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("b"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                }),
+            ], ns=NS_acme, module="acme"),
+            Id(NS_acme, "x"): Leaf(u64(9)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l")),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "x"): Leaf(u64(9)),
+            }, ns=NS_acme, module="acme"),
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_prune_leaflist_all_values_removed():
+    """Pruning all leaf-list values should remove the leaf-list node."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "ll"): LeafList([LeafListEntryMerge(u64(1)), LeafListEntryMerge(u64(2))]),
+            Id(NS_acme, "x"): Leaf(u64(9)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "ll"), value_match=u64(1)),
+            FNode(Id(NS_acme, "ll"), value_match=u64(2)),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "x"): Leaf(u64(9)),
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_prune_missing_child_noop():
+    """Missing child in filter should not prune anything."""
+    data = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(7)),
+        }, ns=NS_acme, module="acme"),
+    })
+    filt = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "does-not-exist")),
+        ]),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        data.prsrc(deterministic=True)
+    )
+
+
+def _test_prune_named_root_filter():
+    """Named root filter should work when data is already rooted at that node."""
+    data = Container({
+        Id(NS_acme, "l1"): Leaf(u64(1)),
+        Id(NS_acme, "l2"): Leaf(u64(2)),
+    }, ns=NS_acme, module="acme")
+    filt = FNode(Id(NS_acme, "foo"), children=[
+        FNode(Id(NS_acme, "l1")),
+    ])
+    res = expect(prune(data, filt), "prune result")
+    testing.assertEqual(
+        res.prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "l2"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme").prsrc(deterministic=True)
     )
