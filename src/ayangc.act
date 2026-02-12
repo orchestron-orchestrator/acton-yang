@@ -143,6 +143,14 @@ proc def cmd_compile(env, file_cap, args):
             t1 = sw.elapsed()
             print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
             print(root.print_tree())
+        elif output == "dnode-src":
+            root = yang.compile(yang_sources, strict_quoting=strict_quoting)
+            t1 = sw.elapsed()
+            print("Compiled {len(yang_sources)} YANG modules in {t1.to_float()}s", err=True)
+            sw.reset()
+            print(root.prsrc())
+            t2 = sw.elapsed()
+            print("Generated SRC_DNODE in {t2.to_float()}s", err=True)
         elif output == "adata":
             root = yang.compile(yang_sources, strict_quoting=strict_quoting)
             t1 = sw.elapsed()
@@ -194,7 +202,7 @@ actor main(env):
     compile_cmd.add_option("infile", "strlist", "+", [], "input YANG file(s) or directory(s)")
     compile_cmd.add_bool("loose", "generate loose validation mode classes", short="l")
     compile_cmd.add_option("exclude", "strlist", "*", [], "glob pattern(s) to exclude files", short="e")
-    compile_cmd.add_option("output", "str", help="output format (adata, schema-tree, dnode-tree, default none)", short="o")
+    compile_cmd.add_option("output", "str", help="output format (adata, dnode-src, schema-tree, dnode-tree, default none)", short="o")
     compile_cmd.add_bool("no-strict-quoting", "disable strict quoting enforcement (enabled by default)")
 
     try:
