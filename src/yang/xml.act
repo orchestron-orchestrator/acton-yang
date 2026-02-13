@@ -170,7 +170,10 @@ def try_parse_xml_value(text_value: ?str, schema_node: yang.schema.DNodeLeaf, sc
             res = yang.schema.complete_identityref(partial, root.identities, schema_node.module)
             val = res.0
         elif isinstance(schema_type, yang.schema.DTypeLeafref):
-            val = text_value
+            target_type = schema_type.target_type
+            if target_type is not None:
+                return try_parse_xml_value(text_value, schema_node, target_type, path, nsdefs, root)
+            raise YangValidationError(path, schema_type, text_value)
         elif isinstance(schema_type, yang.schema.DTypeInstanceIdentifier):
             val = text_value
         elif isinstance(schema_type, yang.schema.DTypeBits):
