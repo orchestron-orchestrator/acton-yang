@@ -342,17 +342,33 @@ def from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DNo
 
 
 def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
-    return _pradata_recursive(root, node, self_name, loose, top=True, root_path=root_path, spath=[PathElement(root)])
+    return _pradata_recursive(root, node, self_name, loose, top=True, root_path=root_path, spath=[PathElement(root)], used_vars=set(), self_is_local_var=True)
 
 
-def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False, root_path: list[str]=[], spath: list[PathElement]=[]):
+def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False, root_path: list[str]=[], spath: list[PathElement]=[], used_vars: set[str], self_is_local_var: bool):
+
+    def unique_local_var(name: str) -> str:
+        if name not in used_vars:
+            used_vars.add(name)
+            return name
+        i = 2
+        candidate = "{name}_{i}"
+        while candidate in used_vars:
+            i += 1
+            candidate = "{name}_{i}"
+        used_vars.add(candidate)
+        return candidate
+
+    if self_is_local_var:
+        used_vars.add(self_name)
+
     # Navigate to root path if specified
     if root_path != [] and len(spath) - 1 < len(root_path):
         next = root_path[len(spath) - 1]
         local_name, module = parse_qualified_name(next)
         child = s.get(local_name, module=module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, spath + [PathElement(child)])
+            return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, spath + [PathElement(child)], used_vars, self_is_local_var)
         raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
 
     def pname(pe: list[PathElement]):
@@ -411,7 +427,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     sub_args, sub_containers = _find_non_optional_subtree(cchild, path_with_child(), node.get_cnt(fqname(cchild)), path + [cchild_safe_name], local_prefix)
 
                     # Create variable declaration for this container
-                    mcchild_var = "{'_'.join(path)}_{cchild_safe_name}"
+                    mcchild_var = unique_local_var("{'_'.join(path)}_{cchild_safe_name}")
 
                     if sub_args:
                         sub_args_str = ", ".join(sub_args)
@@ -483,16 +499,17 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     # Add variable declarations in reverse order to ensure the prerequisites are met
                     res.extend(list(reversed(pc_var_declarations)))
 
-                    child_accessor = yang.schema.safe_name(child.name)
+                    child_var = unique_local_var(usname(child))
                     pc_args_str = ", ".join(pc_args)
-                    res.append("{child_accessor} = {self_name}.create_{usname(child)}({pc_args_str})")
+                    res.append("{child_var} = {self_name}.create_{usname(child)}({pc_args_str})")
                     # Recursive call to pradata() for the P-container, to fill in the rest of the optional children
-                    res.extend(_pradata_recursive(child, container, usname(child), loose, root_path=root_path, spath=path_with_child()).splitlines())
+                    res.extend(_pradata_recursive(child, container, child_var, loose, root_path=root_path, spath=path_with_child(), used_vars=used_vars, self_is_local_var=True).splitlines())
                 else:
-                    res.extend(_pradata_recursive(child, container, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child()).splitlines())
+                    res.extend(_pradata_recursive(child, container, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child(), used_vars=used_vars, self_is_local_var=False).splitlines())
         elif isinstance(child, yang.schema.DList):
             glist = node.get_opt_list(fqname(child))
             if glist is not None:
+                list_element_var = unique_local_var("{usname(child)}_element")
                 for element in glist.elements:
                     res.append("")
                     res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(fq_list_keys(child))}")
@@ -506,9 +523,9 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     list_create_args.extend(non_optional_args)
 
                     create_args_str = ", ".join(list_create_args)
-                    res.append("{usname(child)}_element = {self_name}.{usname(child)}.create({create_args_str})")
+                    res.append("{list_element_var} = {self_name}.{usname(child)}.create({create_args_str})")
                     # Recursive call to pradata() for the list element
-                    res.extend(_pradata_recursive(child, element, "{usname(child)}_element", loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(fq_list_keys(child)))).splitlines())
+                    res.extend(_pradata_recursive(child, element, list_element_var, loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(fq_list_keys(child))), used_vars=used_vars, self_is_local_var=True).splitlines())
         else:
             raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
 
@@ -658,6 +675,81 @@ def _test_pradata():
                     })
                 })
             ])
+        })
+    })
+
+    result = pradata(s, gdata_tree)
+    return result
+
+def _test_pradata_overlap():
+    schema_str = r"""module test {
+  namespace "urn:example:test";
+  prefix test;
+
+  container c1 {
+    presence p;
+    list l1 {
+      key kl1;
+      leaf k1 {
+        type string;
+      }
+    }
+    container c1 {
+      presence p;
+      list l1 {
+        key kl1;
+        leaf k1 {
+          type string;
+        }
+      }
+    }
+    container a {
+      container b {
+        leaf value {
+          type string;
+          mandatory true;
+        }
+      }
+    }
+    container a-b {
+      leaf value {
+        type string;
+        mandatory true;
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([schema_str])
+
+    gdata_tree = yang.gdata.Container({
+        yang.gdata.Id("urn:example:test", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:test", "l1"): yang.gdata.List([yang.gdata.Id("urn:example:test", "kl1")], [
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "kl1"): yang.gdata.Leaf("outer-1"),
+                    yang.gdata.Id("urn:example:test", "k1"): yang.gdata.Leaf("outer-1")
+                }),
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "kl1"): yang.gdata.Leaf("outer-2"),
+                    yang.gdata.Id("urn:example:test", "k1"): yang.gdata.Leaf("outer-2")
+                })
+            ]),
+            yang.gdata.Id("urn:example:test", "c1"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:test", "l1"): yang.gdata.List([yang.gdata.Id("urn:example:test", "kl1")], [
+                    yang.gdata.Container({
+                        yang.gdata.Id("urn:example:test", "kl1"): yang.gdata.Leaf("inner-1"),
+                        yang.gdata.Id("urn:example:test", "k1"): yang.gdata.Leaf("inner-1")
+                    })
+                ])
+            }),
+            yang.gdata.Id("urn:example:test", "a"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:test", "b"): yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf("inner")
+                })
+            }),
+            yang.gdata.Id("urn:example:test", "a-b"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf("flat")
+            })
         })
     })
 
