@@ -853,6 +853,7 @@ class DNodeInner(DNode):
             # TODO: unique safe name for RPC function!
             # Generate rpc_root actor
             res.append("actor rpc_root(tp: yang.gdata.TreeProvider):")
+            res.append("    var tree: ?yang.gdata.Node = root().to_gdata()")
             for rpc in self.rpcs:
                 input_node = rpc.input
                 output_node = rpc.output
@@ -897,6 +898,30 @@ class DNodeInner(DNode):
                 else:
                     res.append("        tp.rpc_xml(lambda _, err: cb(err), rpc_xml)")
                 res.append("")
+
+            res.append("    def subscribe(cb: action(?root, ?Exception) -> None, filt: ?yang.gdata.FNode, opts: yang.gdata.SubscriptionOpts) -> yang.gdata.SubscriptionHandle:")
+            res.append("        def cb_wrap(n: ?yang.gdata.Node, err: ?Exception):")
+            res.append("            if n is not None:")
+            res.append("                prev = tree")
+            res.append("                # TODO: fix yang.gdata.patch() to accept None as old tree")
+            res.append("                base = prev if prev is not None else yang.gdata.Container({{}})")
+            res.append("                tree2 = yang.gdata.patch(base, n)")
+            res.append("")
+            res.append("                if tree2 is not None:")
+            res.append("                    d = yang.gdata.diff(prev, tree2)")
+            res.append("                    if d is not None:")
+            res.append("                        cb(root.from_gdata(tree2), err)")
+            res.append("                    tree = tree2")
+            res.append("                else:")
+            res.append("                    if prev is not None:")
+            res.append("                        cb(root.from_gdata(None), err)")
+            res.append("                    tree = None")
+            res.append("            else:")
+            res.append("                cb(None, err)")
+            res.append("")
+            res.append("        return tp.subscribe(cb_wrap, filt, opts)")
+            res.append("")
+
             res.append("")
             res.append("")
 

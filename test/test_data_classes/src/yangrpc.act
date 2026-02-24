@@ -169,6 +169,7 @@ class yangrpc__foo__output(yang.adata.MNode):
 
 
 actor rpc_root(tp: yang.gdata.TreeProvider):
+    var tree: ?yang.gdata.Node = root().to_gdata()
     def foo(cb: action(?yangrpc__foo__output, ?Exception) -> None, inp: ?yangrpc__foo__input):
         def cb_wrap(res: ?xml.Node, err: ?Exception):
             if res is not None:
@@ -187,6 +188,28 @@ actor rpc_root(tp: yang.gdata.TreeProvider):
     def silent(cb: action(?Exception) -> None):
         rpc_xml = xml.Node('silent', nsdefs=[(None, 'http://example.com/yangrpc')])
         tp.rpc_xml(lambda _, err: cb(err), rpc_xml)
+
+    def subscribe(cb: action(?root, ?Exception) -> None, filt: ?yang.gdata.FNode, opts: yang.gdata.SubscriptionOpts) -> yang.gdata.SubscriptionHandle:
+        def cb_wrap(n: ?yang.gdata.Node, err: ?Exception):
+            if n is not None:
+                prev = tree
+                # TODO: fix yang.gdata.patch() to accept None as old tree
+                base = prev if prev is not None else yang.gdata.Container({})
+                tree2 = yang.gdata.patch(base, n)
+
+                if tree2 is not None:
+                    d = yang.gdata.diff(prev, tree2)
+                    if d is not None:
+                        cb(root.from_gdata(tree2), err)
+                    tree = tree2
+                else:
+                    if prev is not None:
+                        cb(root.from_gdata(None), err)
+                    tree = None
+            else:
+                cb(None, err)
+
+        return tp.subscribe(cb_wrap, filt, opts)
 
 
 
