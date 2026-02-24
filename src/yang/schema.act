@@ -258,8 +258,9 @@ def optional_subtree(node: DNodeInner) -> bool:
                 return False
         elif isinstance(child, DContainer):
             if child.presence:
-                return True
-            return optional_subtree(child)
+                continue
+            if not optional_subtree(child):
+                return False
         elif isinstance(child, DList):
             if child.min_elements > 0:
                 return False
@@ -712,7 +713,7 @@ class DNodeInner(DNode):
             res.append("            return {pname()}({from_gdata_args})")
             if opt_cnt:
                 res.append("        return None")
-            elif optional_subtree(self):
+            elif loose or optional_subtree(self):
                 res.append("        return {pname()}()")
             else:
                 res.append("        raise ValueError('Missing required subtree {pname()}')")
