@@ -17,6 +17,7 @@ from yang.type import Decimal
 import yang_one
 import yang_foo
 import yang_foo_loose
+import yang_loose_required
 from yang_foo import root as yang_foo_root
 import yang_basics
 
@@ -210,6 +211,12 @@ def _test_adata_foo_pc2():
     pc2 = ad.create_pc2(foo)
     testing.assertEqual(pc2.foo.l_mandatory, "baz")
     return ad.to_gdata().prsrc()
+
+def _test_loose_required_container():
+    # In loose mode, missing non-presence containers with mandatory leaves should be allowed.
+    t = yang_loose_required.root.from_gdata(yang.gdata.Container({}))
+    testing.assertEqual(t.c2.l1, None)
+
 
 def _indent_lines(text, indent=4):
     """Indent each line of the given text with the specified indent."""
