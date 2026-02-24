@@ -23,9 +23,12 @@ test:
 	$(MAKE) test-daclass
 	$(MAKE) test-data-source-roundtrip
 
-.PHONY: test-daclass
-test-daclass:
+.PHONY: test-daclass-gen
+test-daclass-gen:
 	cd test/test_data_classes_gen && acton build && out/bin/gen
+
+.PHONY: test-daclass
+test-daclass: test-daclass-gen
 	cd test/test_data_classes && acton test
 
 .PHONY: test-data-source-roundtrip
