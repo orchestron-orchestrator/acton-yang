@@ -2577,9 +2577,44 @@ def patch(old: Node, p: ?Node) -> ?Node:
     return _patch_rec(old, p, [])
 
 
+SUB_ON_CHANGE = "on_change"
+SUB_PERIODIC = "periodic"
+
+class SubscriptionOpts(object):
+    """Subscription options for TreeProvider.subscribe."""
+    mode: str
+    period: ?u64 # nanoseconds; 0 means as fast as possible
+
+    def __init__(self, mode: str=SUB_PERIODIC, period: ?u64=None):
+        self.mode = mode
+        self.period = period
+        self._validate()
+
+    def _validate(self):
+        if self.mode not in {SUB_ON_CHANGE, SUB_PERIODIC}:
+            raise ValueError("Unknown subscription mode: {self.mode}")
+        if self.mode == SUB_PERIODIC:
+            if self.period is None:
+                raise ValueError("period (nanoseconds) is required for periodic subscriptions")
+        elif self.period is not None:
+            raise ValueError("period (nanoseconds) is only valid for periodic subscriptions")
+
+
+class SubscriptionHandle(object):
+    """Handle returned by subscribe() for cancellation."""
+    id: int
+    @property
+    cancel: proc() -> None
+
+    def __init__(self, id: int, cancel: proc() -> None):
+        self.id = id
+        self.cancel = cancel
+
+
 class TreeProvider(object):
     rpc: proc(action(?Node, ?Exception) -> None, Node) -> None
     rpc_xml: proc(action(?xml.Node, ?Exception) -> None, xml.Node) -> None
+    subscribe: proc(action(?Node, ?Exception) -> None, ?FNode, SubscriptionOpts) -> SubscriptionHandle
 
 
 def _node_match(n: xml.Node, name: str, ns: ?str) -> bool:
