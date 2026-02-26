@@ -3,33 +3,8 @@ import testing
 import yang
 import yang.schema
 import yang.parser
+from transform_utils import resolve_filter_paths
 
-
-# TODO: move this closer to yang.schema.DNode?
-def get_schema_nodeid(nodes: list[yang.schema.DNode]) -> str:
-    """Get the absolute-schema-nodeid path from a list of schema nodes.
-
-    The absolute-schema-nodeid is defined in RFC7950 as a "/" separated list of
-    schema nodes starting from the top. For example, /foo:c1/l1 refers to a
-    node called l1, child of c1 defined in the foo module.
-    """
-    path = [""]
-    no_root = list(filter(lambda n: not isinstance(n, yang.schema.DRoot), nodes))
-    for i, node in enumerate(no_root):
-        if i == 0:
-            prefix = "{node.prefix}:"
-        else:
-            parent = no_root[i-1]
-            if isinstance(parent, yang.schema.DNodeInner):
-                siblings = filter(lambda n: node.name == n.name, parent.children)
-                if len(list(siblings)) > 1:
-                    prefix = "{node.prefix}:"
-                else:
-                    prefix =""
-            else:
-                raise ValueError("Node {parent} is not a DNodeInner")
-        path.append("{prefix}{node.name}")
-    return "/".join(path)
 
 mut def remove_list_user_order(node: yang.schema.DNode, filter_paths=[]) -> None:
     """Remove "ordered-by user" from target (leaf-)list nodes in the schema tree.
@@ -41,16 +16,18 @@ mut def remove_list_user_order(node: yang.schema.DNode, filter_paths=[]) -> None
     configuration. This is a pain to deal with when the transforms write the
     data in a different order.
 
-    The second argument is an optional list of paths to filter on. If present
-    only the nodes listed will be modified. Each element is a string path to a
-    list node consisting of all preceeding named schema nodes, including the
-    module name.
+    The second argument is an optional list of absolute XPath location paths
+    to filter on (no predicates). If present only the nodes listed will be
+    modified. Unprefixed names resolve as unqualified names (preferring the
+    parent's module when possible, matching yang.schema.get_path()). Unresolvable
+    paths raise an error.
     """
+    resolved_filter_paths = resolve_filter_paths(node, filter_paths) if filter_paths else []
 
     def is_interesting(path_parts: list[yang.schema.DNode]) -> bool:
-        if not filter_paths:
+        if not resolved_filter_paths:
             return True
-        if get_schema_nodeid(path_parts) in filter_paths:
+        if yang.schema.get_path(path_parts) in resolved_filter_paths:
             return True
         return False
 
@@ -59,11 +36,11 @@ mut def remove_list_user_order(node: yang.schema.DNode, filter_paths=[]) -> None
         new_path = path + [node]
         if isinstance(node, yang.schema.DList):
             if is_interesting(new_path) and node.ordered_by == "user":
-                print('Removing "ordered-by user" from {get_schema_nodeid(new_path)}', err=True)
+                print('Removing "ordered-by user" from {yang.schema.get_path(new_path)}', err=True)
                 node.ordered_by = "system"
         elif isinstance(node, yang.schema.DLeafList):
             if is_interesting(new_path) and node.ordered_by == "user":
-                print('Removing "ordered-by user" from {get_schema_nodeid(new_path)}', err=True)
+                print('Removing "ordered-by user" from {yang.schema.get_path(new_path)}', err=True)
                 node.ordered_by = "system"
         if isinstance(node, yang.schema.DNodeInner):
             for child in node.children:

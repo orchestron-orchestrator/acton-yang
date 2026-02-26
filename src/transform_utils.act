@@ -1,0 +1,41 @@
+import yang
+import yang.schema
+import yang.xpath as xpath
+
+
+def resolve_filter_paths(root: yang.schema.DNode, filter_paths: list[str]) -> list[str]:
+    """Resolve absolute XPath filter paths to schema path strings.
+
+    Rules:
+    - Absolute location paths only
+    - Node tests only (no predicates)
+    - Unprefixed names resolve as unqualified names (preferring the parent's
+      module when possible) to match yang.schema.get_path() output
+    - Unresolvable paths raise an error
+    """
+    res = []
+    for path in filter_paths:
+        location_path = xpath.try_parse_location_path(path)
+        if location_path is not None:
+            if not isinstance(location_path, xpath.AbsoluteLocationPath):
+                raise ValueError("Filter path must be an absolute XPath location path: {path}")
+            try:
+                n: yang.schema.DNode = root
+                node_path = [root]
+                for step in location_path.steps:
+                    if isinstance(step, xpath.NodeTestStep):
+                        if len(step.predicates) > 0:
+                            raise ValueError("Filter path predicates are not supported: {path}")
+                        if step.prefix is not None:
+                            n = n.get(step.name, prefix=step.prefix)
+                        else:
+                            n = n.get(step.name, allow_unqualified=True)
+                        node_path.append(n)
+                    else:
+                        raise ValueError("Filter path must use node tests only: {path}")
+                res.append(yang.schema.get_path(node_path))
+            except ValueError as ex:
+                raise ValueError("Filter path not resolved: {path}: {ex.error_message}")
+        else:
+            raise ValueError("Filter path must be an absolute XPath location path: {path}")
+    return res
