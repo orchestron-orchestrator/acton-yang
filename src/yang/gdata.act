@@ -2576,6 +2576,48 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
 def patch(old: Node, p: ?Node) -> ?Node:
     return _patch_rec(old, p, [])
 
+def patch_sub[K(Hashable)](old: Node, p: ?Node, subs: dict[K, FNode]) -> (new: ?Node, subs: dict[K, Node]):
+    """Apply a patch and compute subscription updates.
+
+    Subscription ids can be any Hashable key type.
+
+    Returns the patched tree plus a map of subscription IDs to update
+    subtrees. Each update is the diff between the old and new data,
+    filtered by the corresponding FNode. Subscriptions with no matching
+    changes are omitted from the updates map.
+    """
+    def _delta_from(old: Node, new: ?Node) -> ?Node:
+        if new is not None:
+            return diff(old, new)
+        if isinstance(old, Container):
+            return diff(old, Container({}, presence=old.presence, ns=old.ns, module=old.module))
+        if isinstance(old, List):
+            return diff(old, List(old.keys, elements=[], user_order=old.user_order, ns=old.ns, module=old.module))
+        if isinstance(old, Leaf):
+            return diff(old, Absent(ns=old.ns, module=old.module))
+        if isinstance(old, LeafList):
+            return diff(old, LeafList([], user_order=old.user_order, ns=old.ns, module=old.module))
+        if isinstance(old, Absent):
+            return None
+        raise ValueError("Unhandled node type in delta at {_format_gdata_path([])}: {type(old)}")
+
+    def _require_node(n: ?Node) -> Node:
+        if n is not None:
+            return n
+        raise ValueError("Expected non-empty node")
+
+    res = _patch_rec(old, p, [])
+    delta = _delta_from(old, res)
+    updates: dict[K, Node] = {}
+    if delta is not None:
+        for sid, filt in subs.items():
+            filtered = filter(delta, filt)
+            if filtered is None:
+                continue
+            updates[sid] = _require_node(filtered)
+    return res, updates
+
+
 
 SUB_ON_CHANGE = "on_change"
 SUB_PERIODIC = "periodic"
@@ -4671,4 +4713,352 @@ def _test_prune_named_root_filter():
         Container({
             Id(NS_acme, "l2"): Leaf(u64(2)),
         }, ns=NS_acme, module="acme").prsrc(deterministic=True)
+    )
+
+def _test_sub():
+    """Test that a patch and subscription work together correctly."""
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(1)),
+            Id(NS_acme, "b2"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme")
+    })
+    # Now create a patch that modifies /foo/l1 only
+    p = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+    })
+    # We want a subscription on /foo
+    # The subscription should see the patch applied
+    sub_foo = FNode(None, None, [
+        FNode(Id(NS_acme, "foo")),
+    ])
+    res = patch_sub(y1, p, {"s1": sub_foo})
+
+    # Check that the new data has the updated value
+    # /foo/l1 should be 2
+    # /bar should be unchanged
+    # /bar/b should still be 1
+    res_new = res.new
+    if res_new is not None:
+        testing.assertEqual(
+            res_new.to_xmlstr(),
+            Container({
+                Id(NS_acme, "foo"): Container({
+                    Id(NS_acme, "l1"): Leaf(u64(2)),
+                    Id(NS_acme, "l2"): Leaf(u64(1)),
+                }, ns=NS_acme, module="acme"),
+                Id(NS_acme, "bar"): Container({
+                    Id(NS_acme, "b1"): Leaf(u64(1)),
+                    Id(NS_acme, "b2"): Leaf(u64(1)),
+                }, ns=NS_acme, module="acme")
+            }).to_xmlstr()
+        )
+    # Check that the subscription result has the updated value
+    # /foo/l1 should be 2
+    testing.assertEqual(
+        res.subs["s1"].to_xmlstr(),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l1"): Leaf(u64(2)),
+            }, ns=NS_acme, module="acme")
+        }).to_xmlstr()
+    )
+
+
+def _test_sub_no_hit():
+    """Subscription on unrelated subtree should produce no updates."""
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme")
+    })
+    p = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+    })
+    sub_bar = FNode(None, None, [
+        FNode(Id(NS_acme, "bar")),
+    ])
+    res = patch_sub(y1, p, {"sb": sub_bar})
+    testing.assertEqual(len(res.subs), 0)
+
+
+def _test_sub_list_element_keyed():
+    """Subscription filter on a list element (by key) should include only that element."""
+    k = Id(NS_acme, "name")
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                    Id(NS_acme, "x"): Leaf(u64(9)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("b"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme")
+    })
+    p = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme")
+    })
+    sub_list_a = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l"), children=[
+                FNode(Id(NS_acme, "name"), value_match="a"),
+                FNode(Id(NS_acme, "v")),
+            ]),
+        ]),
+    ])
+    res = patch_sub(y1, p, {"s1": sub_list_a})
+    testing.assertEqual(
+        res.subs["s1"].to_xmlstr(),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Container({
+                        Id(NS_acme, "name"): Leaf("a"),
+                        Id(NS_acme, "v"): Leaf(u64(2)),
+                    }),
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).to_xmlstr()
+    )
+
+
+def _test_sub_list_element_no_match():
+    """List element filter should not match a different key."""
+    k = Id(NS_acme, "name")
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme")
+    })
+    p = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme")
+    })
+    sub_list_b = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l"), children=[
+                FNode(Id(NS_acme, "name"), value_match="b"),
+                FNode(Id(NS_acme, "v")),
+            ]),
+        ]),
+    ])
+    res = patch_sub(y1, p, {"s1": sub_list_b})
+    testing.assertEqual(len(res.subs), 0)
+
+
+def _test_sub_leaflist_filter_value():
+    """Leaf-list filter with values should include only matching values."""
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "ll"): LeafList([LeafListEntryMerge(u64(1)), LeafListEntryMerge(u64(2))]),
+        }, ns=NS_acme, module="acme")
+    })
+    p = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "ll"): LeafList([LeafListEntryMerge(u64(1)), LeafListEntryMerge(u64(2)), LeafListEntryMerge(u64(3))]),
+        }, ns=NS_acme, module="acme")
+    })
+    sub_ll = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "ll"), value_match=u64(3)),
+        ]),
+    ])
+    res = patch_sub(y1, p, {"s1": sub_ll})
+    testing.assertEqual(
+        res.subs["s1"].prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "ll"): LeafList([LeafListEntryMerge(u64(3))]),
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_sub_list_element_removed_absent():
+    """Removed list elements should be represented as Absent in updates."""
+    k = Id(NS_acme, "name")
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("b"),
+                    Id(NS_acme, "v"): Leaf(u64(2)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme")
+    })
+    p = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Absent({
+                    Id(NS_acme, "name"): Leaf("a"),
+                })
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme")
+    })
+    sub_list_a = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l"), children=[
+                FNode(Id(NS_acme, "name"), value_match="a"),
+            ]),
+        ]),
+    ])
+    res = patch_sub(y1, p, {"s1": sub_list_a})
+    testing.assertEqual(
+        res.subs["s1"].prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Absent({
+                        Id(NS_acme, "name"): Leaf("a"),
+                    })
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_sub_list_element_added():
+    """Added list elements should appear in subscription updates."""
+    k = Id(NS_acme, "name")
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("a"),
+                    Id(NS_acme, "v"): Leaf(u64(1)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme")
+    })
+    p = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l"): List([k], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("c"),
+                    Id(NS_acme, "v"): Leaf(u64(3)),
+                }),
+            ], ns=NS_acme, module="acme")
+        }, ns=NS_acme, module="acme")
+    })
+    sub_list_all = FNode(None, None, [
+        FNode(Id(NS_acme, "foo"), children=[
+            FNode(Id(NS_acme, "l")),
+        ]),
+    ])
+    res = patch_sub(y1, p, {"s1": sub_list_all})
+    testing.assertEqual(
+        res.subs["s1"].prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l"): List([k], [
+                    Container({
+                        Id(NS_acme, "name"): Leaf("c"),
+                        Id(NS_acme, "v"): Leaf(u64(3)),
+                    }),
+                ], ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_sub_container_removed():
+    """Removed container should appear as Absent in subscription updates."""
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme")
+    })
+    p = Container({
+        Id(NS_acme, "foo"): Absent(),
+    })
+    sub_foo = FNode(None, None, [
+        FNode(Id(NS_acme, "foo")),
+    ])
+    res = patch_sub(y1, p, {"s1": sub_foo})
+    testing.assertEqual(
+        res.subs["s1"].prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Absent({
+                Id(NS_acme, "foo"): Container({
+                    Id(NS_acme, "l1"): Leaf(u64(1)),
+                }, ns=NS_acme, module="acme")
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
+    )
+
+
+def _test_sub_multi_mix():
+    """Multiple subscriptions: only matching subtrees should get updates."""
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(1)),
+            Id(NS_acme, "l2"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme"),
+        Id(NS_acme, "bar"): Container({
+            Id(NS_acme, "b1"): Leaf(u64(1)),
+        }, ns=NS_acme, module="acme")
+    })
+    p = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "l1"): Leaf(u64(2)),
+        }, ns=NS_acme, module="acme"),
+    })
+    sub_foo = FNode(None, None, [
+        FNode(Id(NS_acme, "foo")),
+    ])
+    sub_bar = FNode(None, None, [
+        FNode(Id(NS_acme, "bar")),
+    ])
+    res = patch_sub(y1, p, {"sfoo": sub_foo, "sbar": sub_bar})
+    testing.assertEqual(len(res.subs), 1)
+    testing.assertEqual(
+        res.subs["sfoo"].prsrc(deterministic=True),
+        Container({
+            Id(NS_acme, "foo"): Container({
+                Id(NS_acme, "l1"): Leaf(u64(2)),
+            }, ns=NS_acme, module="acme")
+        }).prsrc(deterministic=True)
     )
