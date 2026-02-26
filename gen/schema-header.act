@@ -134,9 +134,19 @@ _builtin_types = {
     "union"
 }
 
+# These are reserved keywords in the acton language, so we must avoidgenerating
+# identifiers with these names.
+_reserved_keywords = {
+    "False","None","NotImplemented","Self","True","action","actor","after","and","as",
+    "assert","async","await","break","class","continue","def","del","elif","else",
+    "except","extension","finally","for","from","if","import","in","is","isinstance",
+    "lambda","mut","not","or","pass","proc","protocol","pure","raise","return","try",
+    "var","while","with","yield","_"
+    }
+
 # We always quote the arguments to these keywords regardless of the content.
 # This is not a strict requirement but a preference of the authors, for example
-# the argument "foo" is perfectly valid with out quotes.
+# the argument "foo" is perfectly valid without quotes.
 _quoted_arg_keywords = set([
     "argument",
     "augment",
@@ -3812,24 +3822,7 @@ def prsrc_literal(ytype: str, value: str) -> str:
 
 def safe_name(name: str, safe_kw=True) -> str:
     new = name.replace("-", "_").replace(".", "_")
-    if safe_kw and new in {"action",
-                           "actor",
-                           "as",
-                           "class",
-                           "del",
-                           "except",
-                           "for",
-                           "from",
-                           "import",
-                           "in",
-                           "mut",
-                           "None",
-                           "proc",
-                           "protocol",
-                           "pure",
-                           "with",
-                           "yield",
-                           }:
+    if safe_kw and new in _reserved_keywords:
         new += "_"
     return new
 
