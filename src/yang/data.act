@@ -342,25 +342,28 @@ def from_data_recursive[A(YangData)](root: yang.schema.DRoot, s: yang.schema.DNo
 
 
 def pradata(root: yang.schema.DRoot, node: yang.gdata.Node, self_name: str="ad", loose: bool=False, root_path: list[str]=[]):
-    return _pradata_recursive(root, node, self_name, loose, top=True, root_path=root_path, spath=[PathElement(root)], used_vars=set(), self_is_local_var=True)
+    return _pradata_recursive(root, node, self_name, loose, top=True, root_path=root_path, spath=[PathElement(root)], path_var_names={}, reserved_names=set([self_name]))
 
 
-def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False, root_path: list[str]=[], spath: list[PathElement]=[], used_vars: set[str], self_is_local_var: bool):
+def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_name: str, loose: bool=False, top: bool=False, list_element: bool=False, root_path: list[str]=[], spath: list[PathElement]=[], path_var_names: dict[str, str], reserved_names: set[str]):
 
-    def unique_local_var(name: str) -> str:
-        if name not in used_vars:
-            used_vars.add(name)
-            return name
+    # `path_var_names` maps schema path -> local variable name.
+    # `reserved_names` is the set of names already taken in generated code.
+    # Same schema path reuses its name; new paths get the next free basename.
+    def path_local_var(path_key: str, base_name: str) -> str:
+        existing = path_var_names.get(path_key)
+        if existing is not None:
+            return existing
+        # Keep suffixing deterministic per basename and pick the first
+        # available candidate (foo, foo_2, foo_3, ...).
+        name = base_name
         i = 2
-        candidate = "{name}_{i}"
-        while candidate in used_vars:
+        while name in reserved_names:
+            name = "{base_name}_{i}"
             i += 1
-            candidate = "{name}_{i}"
-        used_vars.add(candidate)
-        return candidate
-
-    if self_is_local_var:
-        used_vars.add(self_name)
+        path_var_names[path_key] = name
+        reserved_names.add(name)
+        return name
 
     # Navigate to root path if specified
     if root_path != [] and len(spath) - 1 < len(root_path):
@@ -368,7 +371,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
         local_name, module = parse_qualified_name(next)
         child = s.get(local_name, module=module, allow_unqualified=False)
         if isinstance(child, yang.schema.DNodeInner):
-            return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, spath + [PathElement(child)], used_vars, self_is_local_var)
+            return _pradata_recursive(child, node, self_name, loose, top, list_element, root_path, spath + [PathElement(child)], path_var_names, reserved_names)
         raise ValueError("Node at {format_schema_path(spath + [PathElement(child)])} is not inner: {type(child)}")
 
     def pname(pe: list[PathElement]):
@@ -427,7 +430,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     sub_args, sub_containers = _find_non_optional_subtree(cchild, path_with_child(), node.get_cnt(fqname(cchild)), path + [cchild_safe_name], local_prefix)
 
                     # Create variable declaration for this container
-                    mcchild_var = unique_local_var("{'_'.join(path)}_{cchild_safe_name}")
+                    mcchild_var = path_local_var(pname(path_with_child()), "{'_'.join(path)}_{cchild_safe_name}")
 
                     if sub_args:
                         sub_args_str = ", ".join(sub_args)
@@ -499,17 +502,18 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     # Add variable declarations in reverse order to ensure the prerequisites are met
                     res.extend(list(reversed(pc_var_declarations)))
 
-                    child_var = unique_local_var(usname(child))
+                    child_var = path_local_var(pname(path_with_child()), usname(child))
                     pc_args_str = ", ".join(pc_args)
                     res.append("{child_var} = {self_name}.create_{usname(child)}({pc_args_str})")
                     # Recursive call to pradata() for the P-container, to fill in the rest of the optional children
-                    res.extend(_pradata_recursive(child, container, child_var, loose, root_path=root_path, spath=path_with_child(), used_vars=used_vars, self_is_local_var=True).splitlines())
+                    res.extend(_pradata_recursive(child, container, child_var, loose, root_path=root_path, spath=path_with_child(), path_var_names=path_var_names, reserved_names=reserved_names).splitlines())
                 else:
-                    res.extend(_pradata_recursive(child, container, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child(), used_vars=used_vars, self_is_local_var=False).splitlines())
+                    res.extend(_pradata_recursive(child, container, "{self_name}.{usname(child)}", loose, root_path=root_path, spath=path_with_child(), path_var_names=path_var_names, reserved_names=reserved_names).splitlines())
         elif isinstance(child, yang.schema.DList):
             glist = node.get_opt_list(fqname(child))
             if glist is not None:
-                list_element_var = unique_local_var("{usname(child)}_element")
+                list_path_key = pname(path_with_child())
+                list_element_var = path_local_var(list_path_key, "{usname(child)}_element")
                 for element in glist.elements:
                     res.append("")
                     res.append("# List {format_schema_path(path_with_child())} element: {element.key_str(fq_list_keys(child))}")
@@ -525,7 +529,7 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
                     create_args_str = ", ".join(list_create_args)
                     res.append("{list_element_var} = {self_name}.{usname(child)}.create({create_args_str})")
                     # Recursive call to pradata() for the list element
-                    res.extend(_pradata_recursive(child, element, list_element_var, loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(fq_list_keys(child))), used_vars=used_vars, self_is_local_var=True).splitlines())
+                    res.extend(_pradata_recursive(child, element, list_element_var, loose, list_element=True, root_path=root_path, spath=path_with_child(element.key_values(fq_list_keys(child))), path_var_names=path_var_names, reserved_names=reserved_names).splitlines())
         else:
             raise ValueError("Unhandled child type in .pradata() at {format_schema_path(path_with_child())}: {type(child)}")
 
