@@ -3,7 +3,8 @@ import testing
 import yang
 import yang.schema
 import yang.parser
-from transform_list_order import get_schema_nodeid
+from transform_utils import resolve_filter_paths
+
 
 
 mut def filter_schema(node: yang.schema.DNode, filter_paths: list[str]) -> None:
@@ -13,21 +14,23 @@ mut def filter_schema(node: yang.schema.DNode, filter_paths: list[str]) -> None:
     in the filter_paths list. This is useful when you want to work with only
     a subset of a large schema.
 
-    TODO: Current implementation is naive - filter paths must exactly match the
-    output of get_schema_nodeid:
-    - Filter paths with redundant prefixes (prefix:name where prefix is unnecessary) won't match
-    - get_schema_nodeid includes module prefix for root element even when not required
-    - No error raised when prefix required for disambiguation but not provided
+    Current implementation supports absolute XPath location paths (node tests
+    only) with no predicates.
 
-    In a proper implementation would:
-    - Accept paths with optional prefixes where unambiguous
-    - Require prefixes where needed to dismbiguate the nodes
-    - Validate the path to ensure the referenced node exists
+    Notes:
+    - These paths are rooted at schema DRoot, not an XPath context node.
+    - Unprefixed names resolve as unqualified names (preferring the parent's
+      module when possible). This is a deliberate deviation from XPath's fixed
+      default namespace model and allows paths produced by yang.schema.get_path().
 
     Args:
         node: The root DNode to filter (typically a DRoot)
-        filter_paths: List of absolute schema node paths to keep (e.g., ["/module:container", "/module:container/leaf"])
+        filter_paths: List of absolute XPath location paths to keep (e.g.,
+            ["/module:container/leaf"] or ["/container/leaf"] when unambiguous).
+            Unprefixed names resolve as unqualified names (preferring the
+            parent's module when possible). Unresolvable paths raise an error.
     """
+    resolved_filter_paths = resolve_filter_paths(node, filter_paths) if filter_paths else []
 
     def should_keep_node(path: str) -> bool:
         """Check if a node should be kept based on the filter.
@@ -37,14 +40,14 @@ mut def filter_schema(node: yang.schema.DNode, filter_paths: list[str]) -> None:
         2. It's an ancestor of a path in the filter (parent paths are implied)
         """
         # Direct match or ancestor of filtered path
-        return path in filter_paths or any([fp.startswith(path + "/") for fp in filter_paths])
+        return path in resolved_filter_paths or any([fp.startswith(path + "/") for fp in resolved_filter_paths])
 
     def filter_node_recursive(node: yang.schema.DNode, path: list[yang.schema.DNode]) -> bool:
         """Recursively filter the schema tree.
         Returns True if this node should be kept.
         """
         new_path = path + [node]
-        node_path = get_schema_nodeid(new_path)
+        node_path = yang.schema.get_path(new_path)
 
         if not should_keep_node(node_path):
             return False
@@ -52,8 +55,8 @@ mut def filter_schema(node: yang.schema.DNode, filter_paths: list[str]) -> None:
         # Filter children if this is an inner node
         if isinstance(node, yang.schema.DNodeInner):
             is_presence = isinstance(node, yang.schema.DContainer) and node.presence
-            is_listed = node_path in filter_paths
-            has_listed_children = any([fp.startswith(node_path + "/") for fp in filter_paths])
+            is_listed = node_path in resolved_filter_paths
+            has_listed_children = any([fp.startswith(node_path + "/") for fp in resolved_filter_paths])
 
             # Keep all children only if non-presence container is listed without specific children
             if not (is_listed and not is_presence and not has_listed_children):
@@ -194,6 +197,59 @@ def _test_filter_specific_children():
 
     # Check c3 and items are not present
     _assert_no_children(root, ["c3", "items"], "root")
+
+
+def _test_filter_get_path_output():
+    """Test filtering with paths produced by yang.schema.get_path"""
+    root0 = yang.compile([test_yang])
+    c1 = root0.get("c1")
+    l1 = c1.get("l1")
+    path = yang.schema.get_path([root0, c1, l1])
+
+    root = _compile_and_filter(test_yang, [path])
+
+    # Check c1 is present with only l1
+    c1_filtered = root.get("c1")
+    testing.assertNotNone(c1_filtered, "c1 should be present")
+    _assert_children(c1_filtered, ["l1"], "c1")
+    _assert_no_children(c1_filtered, ["l2", "c2"], "c1")
+
+    # Other containers should not be present
+    _assert_no_children(root, ["c3", "presence_container", "items"], "root")
+
+
+def _test_filter_unprefixed_augmented_child():
+    """Test filtering for augmented child with unprefixed step."""
+    base_yang = r"""module test_base {
+      yang-version "1.1";
+      namespace "http://example.com/test_base";
+      prefix b;
+
+      container c {
+        leaf base_leaf { type string; }
+      }
+    }
+    """
+
+    ext_yang = r"""module test_ext {
+      yang-version "1.1";
+      namespace "http://example.com/test_ext";
+      prefix e;
+      import test_base { prefix b; }
+
+      augment /b:c {
+        leaf aug { type string; }
+      }
+    }
+    """
+
+    root = yang.compile([base_yang, ext_yang])
+    filter_schema(root, ["/c/aug"])
+
+    c = root.get("c")
+    testing.assertNotNone(c, "c should be present")
+    _assert_children(c, ["aug"], "c")
+    _assert_no_children(c, ["base_leaf"], "c")
 
 
 def _test_filter_nested():
