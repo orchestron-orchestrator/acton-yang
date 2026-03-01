@@ -19,20 +19,26 @@ from yang.type import Decimal, Ranges
 _identities: list[DIdentity] = []
 
 
-SRC_DNODE = DRoot(children=[
-    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c1', config=True, presence=False, children=[
+SRC_DNODE_CHILD_0 = DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c1', config=True, presence=False, children=[
+    DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+])
+
+SRC_DNODE_CHILD_1 = DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='pc1', config=True, presence=True, children=[
+    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='foo', config=True, presence=False, children=[
         DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-    ]),
-    DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='pc1', config=True, presence=True, children=[
-        DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='foo', config=True, presence=False, children=[
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-        ])
     ])
 ])
+
+SRC_DNODE = DRoot(
+    children=[SRC_DNODE_CHILD_0, SRC_DNODE_CHILD_1],
+    identities=[],
+    rpcs=[],
+)
 
 NS_foo = 'http://example.com/foo'
 
 
+_breaker = 1
 class foo__c1(yang.adata.MNode):
     l1: ?str
 
@@ -59,6 +65,7 @@ class foo__c1(yang.adata.MNode):
         return foo__c1.from_gdata(self.to_gdata())
 
 
+_breaker = 1
 class foo__pc1__foo(yang.adata.MNode):
     l1: ?str
 
@@ -85,6 +92,7 @@ class foo__pc1__foo(yang.adata.MNode):
         return foo__pc1__foo.from_gdata(self.to_gdata())
 
 
+_breaker = 1
 class foo__pc1(yang.adata.MNode):
     foo: foo__pc1__foo
 
@@ -114,6 +122,7 @@ class foo__pc1(yang.adata.MNode):
         raise Exception('Unreachable in foo__pc1.copy()')
 
 
+_breaker = 1
 class root(yang.adata.MNode):
     c1: foo__c1
     pc1: ?foo__pc1
