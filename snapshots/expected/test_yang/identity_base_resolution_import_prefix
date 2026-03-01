@@ -35,27 +35,35 @@ derived_module_HTTP = Identityref('HTTP', ns='http://example.com/derived', mod='
 derived_module_HTTPS = Identityref('HTTPS', ns='http://example.com/derived', mod='derived-module', pfx='derived')
 
 
-SRC_DNODE = DRoot(identities=[
-        DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='PROTOCOL'),
+SRC_DNODE_IDENTITY_0 = DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='PROTOCOL')
+
+SRC_DNODE_IDENTITY_1 = DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='TCP', base=[
+        DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='PROTOCOL')
+    ])
+
+SRC_DNODE_IDENTITY_2 = DIdentity(module='derived-module', namespace='http://example.com/derived', prefix='derived', name='HTTP', base=[
         DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='TCP', base=[
                 DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='PROTOCOL')
-            ]),
+            ])
+    ])
+
+SRC_DNODE_IDENTITY_3 = DIdentity(module='derived-module', namespace='http://example.com/derived', prefix='derived', name='HTTPS', base=[
         DIdentity(module='derived-module', namespace='http://example.com/derived', prefix='derived', name='HTTP', base=[
                 DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='TCP', base=[
                         DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='PROTOCOL')
                     ])
-            ]),
-        DIdentity(module='derived-module', namespace='http://example.com/derived', prefix='derived', name='HTTPS', base=[
-                DIdentity(module='derived-module', namespace='http://example.com/derived', prefix='derived', name='HTTP', base=[
-                        DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='TCP', base=[
-                                DIdentity(module='base-module', namespace='http://example.com/base', prefix='base-pfx', name='PROTOCOL')
-                            ])
-                    ])
             ])
     ])
 
+SRC_DNODE = DRoot(
+    children=[],
+    identities=[SRC_DNODE_IDENTITY_0, SRC_DNODE_IDENTITY_1, SRC_DNODE_IDENTITY_2, SRC_DNODE_IDENTITY_3],
+    rpcs=[],
+)
 
 
+
+_breaker = 1
 class root(yang.adata.MNode):
 
     mut def __init__(self):

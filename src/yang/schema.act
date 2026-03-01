@@ -567,8 +567,10 @@ class DNodeInner(DNode):
             # - the list itself
             # - the list entry class
             # Here we create the list entry class, the list itself comes later
+            res.append("_breaker = 1")
             res.append("class {pname()}_entry(yang.adata.MNode):")
         else:
+            res.append("_breaker = 1")
             res.append("class {pname()}(yang.adata.MNode):")
 
         for child in self.children:
@@ -752,6 +754,7 @@ class DNodeInner(DNode):
             # - the list itself
             # - the list entry class
             # Here we create the list class, list entry class was created above
+            res.append("_breaker = 1")
             res.append("class {pname()}(yang.adata.MNode):")
             res.append("    elements: list[{pname()}_entry]")
 
@@ -1684,8 +1687,113 @@ class DRoot(DNodeInner):
         res.append("")
         res.extend(DIdentity.format_identity_list(self.identities))
         res.extend(DIdentity.format_identityref_constants(self.identities))
-        # TODO: reuse namespace qualifiers from schema_namespaces to avoid allocating many new string
-        res.append("SRC_DNODE = {self.prsrc()}")
+
+        const_counters = {}
+
+        def _next_const(prefix: str) -> str:
+            i = const_counters[prefix] if prefix in const_counters else 0
+            const_counters[prefix] = i + 1
+            return "{prefix}_{i}"
+
+        def _list_expr(item_consts: list[str]) -> str:
+            if len(item_consts) == 0:
+                return "[]"
+            return "[{', '.join(item_consts)}]"
+
+        def _dnode_size(node: DNode) -> int:
+            if isinstance(node, DNodeInner):
+                size = 1
+                for child in node.children:
+                    size += _dnode_size(child)
+                return size
+            return 1
+
+        def _emit_dnode(
+            node: DNode,
+            node_const_prefix: str,
+            list_const_prefix: str,
+            split_threshold=50,
+            force_const=False
+        ) -> str:
+            if isinstance(node, DNodeInner):
+                should_split = _dnode_size(node) > split_threshold
+                if not force_const and not should_split:
+                    return node.prsrc()
+
+                const_name = _next_const(node_const_prefix)
+                if not should_split:
+                    res.append("{const_name} = {node.prsrc()}")
+                    res.append("")
+                    return const_name
+
+                child_consts = []
+                for child in node.children:
+                    child_consts.append(_emit_dnode(
+                        child,
+                        node_const_prefix,
+                        list_const_prefix,
+                        split_threshold=split_threshold,
+                        force_const=True
+                    ))
+                children_expr = _list_expr(child_consts)
+
+                args = []
+                attrs_text = _prsrc_attrs(0, node._get_attrs())
+                if len(attrs_text) > 0:
+                    args.append(attrs_text)
+                args.append("children={children_expr}")
+                res.append("{const_name} = {node._get_class_name()}({', '.join(args)})")
+                res.append("")
+                return const_name
+
+            if not force_const:
+                return node.prsrc()
+
+            const_name = _next_const(node_const_prefix)
+            res.append("{const_name} = {node.prsrc()}")
+            res.append("")
+            return const_name
+
+        # Emit SRC_DNODE as top-level constants and split deep hierarchies
+        src_dnode_split_threshold = 20
+        src_dnode_child_consts = []
+        for child in self.children:
+            src_dnode_child_consts.append(_emit_dnode(
+                child,
+                "SRC_DNODE_CHILD",
+                "SRC_DNODE_CHILDREN",
+                split_threshold=src_dnode_split_threshold,
+                force_const=True
+            ))
+        src_dnode_children = _list_expr(src_dnode_child_consts)
+
+        src_dnode_identity_consts = []
+        for identity in self.identities:
+            src_dnode_identity_consts.append(_emit_dnode(
+                identity,
+                "SRC_DNODE_IDENTITY",
+                "SRC_DNODE_IDENTITIES",
+                split_threshold=src_dnode_split_threshold,
+                force_const=True
+            ))
+        src_dnode_identities = _list_expr(src_dnode_identity_consts)
+
+        src_dnode_rpc_consts = []
+        for rpc in self.rpcs:
+            src_dnode_rpc_consts.append(_emit_dnode(
+                rpc,
+                "SRC_DNODE_RPC",
+                "SRC_DNODE_RPCS",
+                split_threshold=src_dnode_split_threshold,
+                force_const=True
+            ))
+        src_dnode_rpcs = _list_expr(src_dnode_rpc_consts)
+
+        res.append("SRC_DNODE = DRoot(")
+        res.append("    children={src_dnode_children},")
+        res.append("    identities={src_dnode_identities},")
+        res.append("    rpcs={src_dnode_rpcs},")
+        res.append(")")
         res.append("")
 
         if schema_yang is not None:
@@ -10765,4 +10873,3 @@ def escape_as_fstr(s: str) -> str:
     copy_until(b, s_len)
 
     return "".join(parts)
-

@@ -38,32 +38,41 @@ foo_basey_1 = Identityref('basey-1', ns='http://example.com/foo', mod='foo', pfx
 foo_fooy = Identityref('fooy', ns='http://example.com/foo', mod='foo', pfx='f')
 
 
-SRC_DNODE = DRoot(identities=[
+SRC_DNODE_CHILD_0 = DContainer(module='foo', namespace='http://example.com/foo', prefix='f', name='tc1', config=True, presence=False, children=[
+    DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l1', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+    DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l2', config=True, mandatory=False, must=[
+DMust(condition='be cool', description=None, error_app_tag=None, error_message=None, reference=None)
+        ], type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+])
+
+SRC_DNODE_CHILD_1 = DList(module='foo', namespace='http://example.com/foo', prefix='f', name='li', key=['name'], config=True, min_elements=0, ordered_by='system', children=[
+    DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='name', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+    DContainer(module='foo', namespace='http://example.com/foo', prefix='f', name='c1', config=True, presence=False, children=[
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l1', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l2', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
+    ])
+])
+
+SRC_DNODE_IDENTITY_0 = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey')
+
+SRC_DNODE_IDENTITY_1 = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey.1')
+
+SRC_DNODE_IDENTITY_2 = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey_1')
+
+SRC_DNODE_IDENTITY_3 = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey-1')
+
+SRC_DNODE_IDENTITY_4 = DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='fooy', base=[
         DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey'),
         DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey.1'),
         DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey_1'),
-        DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey-1'),
-        DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='fooy', base=[
-                DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey'),
-                DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey.1'),
-                DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey_1'),
-                DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey-1')
-            ])
-    ], children=[
-    DContainer(module='foo', namespace='http://example.com/foo', prefix='f', name='tc1', config=True, presence=False, children=[
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l1', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l2', config=True, mandatory=False, must=[
-DMust(condition='be cool', description=None, error_app_tag=None, error_message=None, reference=None)
-            ], type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-    ]),
-    DList(module='foo', namespace='http://example.com/foo', prefix='f', name='li', key=['name'], config=True, min_elements=0, ordered_by='system', children=[
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='name', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-        DContainer(module='foo', namespace='http://example.com/foo', prefix='f', name='c1', config=True, presence=False, children=[
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l1', config=True, mandatory=True, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-            DLeaf(module='foo', namespace='http://example.com/foo', prefix='f', name='l2', config=True, mandatory=False, type_=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[]))
-        ])
+        DIdentity(module='foo', namespace='http://example.com/foo', prefix='f', name='basey-1')
     ])
-])
+
+SRC_DNODE = DRoot(
+    children=[SRC_DNODE_CHILD_0, SRC_DNODE_CHILD_1],
+    identities=[SRC_DNODE_IDENTITY_0, SRC_DNODE_IDENTITY_1, SRC_DNODE_IDENTITY_2, SRC_DNODE_IDENTITY_3, SRC_DNODE_IDENTITY_4],
+    rpcs=[],
+)
 
 def src_yang():
     res = []
@@ -115,6 +124,7 @@ def src_yang():
 NS_foo = 'http://example.com/foo'
 
 
+_breaker = 1
 class foo__tc1(yang.adata.MNode):
     l1: str
     l2: ?str
@@ -145,6 +155,7 @@ class foo__tc1(yang.adata.MNode):
         return foo__tc1.from_gdata(self.to_gdata())
 
 
+_breaker = 1
 class foo__li__c1(yang.adata.MNode):
     l1: str
     l2: ?str
@@ -175,6 +186,7 @@ class foo__li__c1(yang.adata.MNode):
         return foo__li__c1.from_gdata(self.to_gdata())
 
 
+_breaker = 1
 class foo__li_entry(yang.adata.MNode):
     name: str
     c1: foo__li__c1
@@ -202,6 +214,7 @@ class foo__li_entry(yang.adata.MNode):
         """Create a deep copy of this adata object"""
         return foo__li_entry.from_gdata(self.to_gdata())
 
+_breaker = 1
 class foo__li(yang.adata.MNode):
     elements: list[foo__li_entry]
     mut def __init__(self, elements=[]):
@@ -242,6 +255,7 @@ extension foo__li(Iterable[foo__li_entry]):
     def __iter__(self) -> Iterator[foo__li_entry]:
         return self.elements.__iter__()
 
+_breaker = 1
 class root(yang.adata.MNode):
     tc1: foo__tc1
     li: foo__li
