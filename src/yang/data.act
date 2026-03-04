@@ -545,6 +545,78 @@ def _pradata_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, self_na
     return "\n".join(res)
 
 
+def prpaths(root: yang.schema.DRoot, node: yang.gdata.Node) -> list[str]:
+    """Print value-holding schema paths in provided gdata
+
+    Paths are rendered with yang.schema.get_path() and include only:
+    - DLeaf
+    - DLeafList
+    - presence DContainer (only when no child value nodes are set)
+    """
+    out: list[str] = []
+    _prpaths_recursive(root, node, [root], set(), out)
+    return out
+
+
+def _prpaths_recursive(s: yang.schema.DNodeInner, node: yang.gdata.Node, spath: list[yang.schema.DNode], seen_paths: set[str], out: list[str]) -> bool:
+    """Recursive counterpart for prpaths using data-first traversal.
+
+    The main difference from the schema-first approach used in pradata is that
+    with data-first we fetch the schema nodes using the names from gdata. This
+    makes it more efficient for large, sparsely populated schemas.
+
+    Returns True if this subtree contains any emitted value path; callers use
+    this to emit a presence-container path only when no child value paths exist.
+    """
+    def emit_path(path: list[yang.schema.DNode]) -> None:
+        p = yang.schema.get_path(path)
+        if p not in seen_paths:
+            seen_paths.add(p)
+            out.append(p)
+
+    if not isinstance(node, yang.gdata.Container):
+        return False
+
+    has_value_nodes = False
+
+    for gname in yang.gdata.hack_sorted(node.children.keys()):
+        gchild = node.children[gname]
+        try:
+            if gname.q != "":
+                schild = s.get(gname.name, namespace=gname.q, allow_unqualified=False)
+            else:
+                schild = s.get(gname.name)
+        except ValueError:
+            # Ignore gdata children not found in this schema subtree?!
+            continue
+        else:
+            child_spath = spath + [schild]
+
+            if isinstance(schild, yang.schema.DLeaf):
+                if isinstance(gchild, yang.gdata.Leaf) or isinstance(gchild, yang.gdata.Absent):
+                    emit_path(child_spath)
+                    has_value_nodes = True
+            elif isinstance(schild, yang.schema.DLeafList):
+                if isinstance(gchild, yang.gdata.LeafList):
+                    emit_path(child_spath)
+                    has_value_nodes = True
+            elif isinstance(schild, yang.schema.DContainer):
+                if isinstance(gchild, yang.gdata.Container):
+                    child_has_values = _prpaths_recursive(schild, gchild, child_spath, seen_paths, out)
+                    if schild.presence and not child_has_values:
+                        emit_path(child_spath)
+                    has_value_nodes = True
+            elif isinstance(schild, yang.schema.DList):
+                if isinstance(gchild, yang.gdata.List):
+                    for element in gchild.elements:
+                        if isinstance(element, yang.gdata.Container):
+                            if _prpaths_recursive(schild, element, child_spath, seen_paths, out):
+                                has_value_nodes = True
+
+    return has_value_nodes
+
+
+
 def _test_format_schema_path_empty():
     """format_schema_path renders empty as ''"""
     path: list[PathElement] = []
@@ -592,8 +664,8 @@ def _test_format_schema_path_list_predicate():
     testing.assertEqual(r"""/c/l[k1='Key 1, with extra\'s',k2='1']/v""", out)
 
 
-def _test_pradata():
-    schema_str = r"""module test {
+def _src_yang():
+    return r"""module test {
       namespace "urn:example:test";
       prefix test;
 
@@ -627,6 +699,12 @@ def _test_pradata():
             mandatory true;
           }
         }
+        container c4 {
+          presence "This is an empty presence container";
+          leaf l4 {
+            type string;
+          }
+        }
         list li1 {
           key "name extra-key";
           leaf name {
@@ -651,7 +729,9 @@ def _test_pradata():
       }
     }"""
 
-    s = yang.compile([schema_str])
+
+def _test_pradata():
+    s = yang.compile([_src_yang()])
 
     gdata_tree = yang.gdata.Container({
         yang.gdata.Id("urn:example:test", "top-level-leaf"): yang.gdata.Leaf("root value"),
@@ -797,3 +877,35 @@ def _test_pradata_root_path():
     result = pradata(s, middle_node, root_path=["test:outer", "middle"])
 
     return result
+
+
+def _test_prpaths():
+    s = yang.compile([_src_yang()])
+
+    gdata_tree = yang.gdata.Container({
+        yang.gdata.Id("urn:example:test", "top-level-leaf"): yang.gdata.Leaf("root value"),
+        yang.gdata.Id("urn:example:test", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:test", "c2"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:test", "mandatory-leaf"): yang.gdata.Leaf("required value")
+            }, presence=True),
+            yang.gdata.Id("urn:example:test", "c4"): yang.gdata.Container({}, presence=True),
+            yang.gdata.Id("urn:example:test", "li1"): yang.gdata.List([yang.gdata.Id("urn:example:test", "name"), yang.gdata.Id("urn:example:test", "extra-key")], [
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "name"): yang.gdata.Leaf("item1"),
+                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(int(1)),
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(int(100))
+                }),
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:test", "name"): yang.gdata.Leaf("item2"),
+                    yang.gdata.Id("urn:example:test", "extra-key"): yang.gdata.Leaf(int(2)),
+                    yang.gdata.Id("urn:example:test", "value"): yang.gdata.Leaf(int(200)),
+                    yang.gdata.Id("urn:example:test", "c3"): yang.gdata.Container({
+                        yang.gdata.Id("urn:example:test", "nested-leaf"): yang.gdata.Leaf("birb")
+                    })
+                })
+            ])
+        })
+    })
+
+    result = prpaths(s, gdata_tree)
+    return "\n".join(result)
