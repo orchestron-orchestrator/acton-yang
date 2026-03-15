@@ -1184,11 +1184,11 @@ class Absent(Node):
     Absent is declarative / idempotent, meaning that if the target to be removed
     / made absent is not present, no error is raised.
     """
-    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
-        self.txid = None
+        self.txid = txid
 
 class Delete(Node):
     """Imperative delete of a node
@@ -1196,11 +1196,11 @@ class Delete(Node):
 
     Unlike Absent / remove, Delete of a non-existent node is a failure.
     """
-    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
-        self.txid = None
+        self.txid = txid
 
 class Create(Node):
     """Imperative create of a node
@@ -1208,38 +1208,38 @@ class Create(Node):
 
     Unlike the default implicit merge, Create of an existing node is a failure.
     """
-    def __init__(self, children={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
-        self.txid = None
+        self.txid = txid
 
 class CreateLeaf(Create):
     """Imperative create of a leaf (has val)
     NETCONF create operation maps to Create
     """
     val: value
-    def __init__(self, val: value, ns: ?str=None, module: ?str=None):
-        Create.__init__(self, {}, ns, module)
+    def __init__(self, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
+        Create.__init__(self, {}, ns, module, txid)
         self.val = val
 
 class Replace(Node):
     """Imperative replace of a node
     NETCONF replace operation maps to Replace
     """
-    def __init__(self, children={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
-        self.txid = None
+        self.txid = txid
 
 class ReplaceLeaf(Replace):
     """Imperative replace of a leaf (has val)
     NETCONF replace operation maps to Replace
     """
     val: value
-    def __init__(self, val: value, ns: ?str=None, module: ?str=None):
-        Replace.__init__(self, {}, ns, module)
+    def __init__(self, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
+        Replace.__init__(self, {}, ns, module, txid)
         self.val = val
 
 
