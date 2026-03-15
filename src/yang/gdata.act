@@ -514,17 +514,18 @@ class Node(value):
         else:
             raise ValueError("Unsupported node type in prsrc")
 
-    def to_jsonstr(self, pretty=True, deterministic=False) -> str:
-        """Convert gdata to JSON.
+    def to_yang_jsonstr(self, pretty=True, deterministic=False) -> str:
+        """Convert gdata to IETF RFC7951 JSON encoding of YANG-data
 
         When deterministic=True, node children are emitted in sorted order
         and system-ordered lists and leaf-lists elements are sorted. This makes
         the output stable for comparisons/tests.
         """
-        return json.encode(self.to_dict(pretty, deterministic), pretty=pretty)
+        return json.encode(self.to_yang_dict(pretty, deterministic), pretty=pretty)
 
-    def to_dict(self, pretty=True, deterministic=False) -> dict[str, ?value]:
-        """Convert gdata to a dict, suitable for JSON serialization.
+    def to_yang_dict(self, pretty=True, deterministic=False) -> dict[str, ?value]:
+        """Convert gdata to a dict, structured according to IETF RFC7951 JSON
+        encoding of YANG-data
 
         When deterministic=True, node children are emitted in sorted order
         and system-ordered lists and leaf-lists elements are sorted. This makes
@@ -539,7 +540,7 @@ class Node(value):
             child_dict = {}
             for nm,child in self_children.items():
                 if isinstance(child, Container):
-                    child_dict[fmt_json_name(nm, child.module)] = child.to_dict(pretty, deterministic)
+                    child_dict[fmt_json_name(nm, child.module)] = child.to_yang_dict(pretty, deterministic)
                 elif isinstance(child, Leaf):
                     v = child.val
                     # "empty" type is encoded as an array with a null element "[null]"
@@ -564,7 +565,7 @@ class Node(value):
                         iter_elems = sorted_elements(child.elements, child.keys)
                     for elem in iter_elems:
                         if isinstance(elem, Container):
-                            elems.append(elem.to_dict(pretty, deterministic))
+                            elems.append(elem.to_yang_dict(pretty, deterministic))
                         elif isinstance(elem, Absent):
                             continue
                         else:
@@ -573,9 +574,9 @@ class Node(value):
                 elif isinstance(child, Absent):
                     continue
                 else:
-                    raise ValueError("Unsupported child ({nm}) node type in to_dict: {type(child)}")
+                    raise ValueError("Unsupported child ({nm}) node type in to_yang_dict: {type(child)}")
             return child_dict
-        raise ValueError("Unsupported node type in to_dict: {type(self)}")
+        raise ValueError("Unsupported node type in to_yang_dict: {type(self)}")
 
     def _to_xml_rec(self, key_names: ?list[Id]=None, skip_nonkeys: bool=False, parent_absent: bool=False, deterministic=False) -> list[xml.Node]:
         if isinstance(self, Container) or isinstance(self, Absent) or isinstance(self, Create) or isinstance(self, Delete) or isinstance(self, Replace):
@@ -1184,11 +1185,11 @@ class Absent(Node):
     Absent is declarative / idempotent, meaning that if the target to be removed
     / made absent is not present, no error is raised.
     """
-    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
-        self.txid = None
+        self.txid = txid
 
 class Delete(Node):
     """Imperative delete of a node
@@ -1196,11 +1197,11 @@ class Delete(Node):
 
     Unlike Absent / remove, Delete of a non-existent node is a failure.
     """
-    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
-        self.txid = None
+        self.txid = txid
 
 class Create(Node):
     """Imperative create of a node
@@ -1208,38 +1209,38 @@ class Create(Node):
 
     Unlike the default implicit merge, Create of an existing node is a failure.
     """
-    def __init__(self, children={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
-        self.txid = None
+        self.txid = txid
 
 class CreateLeaf(Create):
     """Imperative create of a leaf (has val)
     NETCONF create operation maps to Create
     """
     val: value
-    def __init__(self, val: value, ns: ?str=None, module: ?str=None):
-        Create.__init__(self, {}, ns, module)
+    def __init__(self, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
+        Create.__init__(self, {}, ns, module, txid)
         self.val = val
 
 class Replace(Node):
     """Imperative replace of a node
     NETCONF replace operation maps to Replace
     """
-    def __init__(self, children={}, ns: ?str=None, module: ?str=None):
+    def __init__(self, children: dict[Id, Node]={}, ns: ?str=None, module: ?str=None, txid: ?str=None):
         self.ns = ns
         self.module = module
         self.children = children
-        self.txid = None
+        self.txid = txid
 
 class ReplaceLeaf(Replace):
     """Imperative replace of a leaf (has val)
     NETCONF replace operation maps to Replace
     """
     val: value
-    def __init__(self, val: value, ns: ?str=None, module: ?str=None):
-        Replace.__init__(self, {}, ns, module)
+    def __init__(self, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
+        Replace.__init__(self, {}, ns, module, txid)
         self.val = val
 
 
@@ -3878,7 +3879,7 @@ def _test_to_jsonstr():
         }, ns="http://example.com/beep", module="beep")
     })
 
-    return y1.to_jsonstr(pretty=True)
+    return y1.to_yang_jsonstr(pretty=True)
 
 def _test_to_jsonstr_empty_leaf():
     y1 = Container({
@@ -3886,7 +3887,7 @@ def _test_to_jsonstr_empty_leaf():
         Id("", "e2"): Absent()
     })
 
-    return y1.to_jsonstr(pretty=True)
+    return y1.to_yang_jsonstr(pretty=True)
 
 def _test_to_jsonstr_identityref():
     y1 = Container({
@@ -3895,7 +3896,7 @@ def _test_to_jsonstr_identityref():
         Id(NS_acme, "augmented-identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
     }, ns="http://example.com/acme", module="acme")
 
-    return y1.to_jsonstr(pretty=True)
+    return y1.to_yang_jsonstr(pretty=True)
 
 def _test_to_xmlstr():
     y1 = Container({
