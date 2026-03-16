@@ -670,21 +670,30 @@ class DNodeInner(DNode):
             if isinstance(child, DContainer) and child.presence:
                 # We must generate unique safe names for this node children too
                 child_unique_namer = UniqueNamer(child)
-                pc_args = ["self"]
+
+                pc_args_req = []
+                pc_args_opt = []
                 for cchild in child.children:
                     if isinstance(cchild, DLeaf):
-                        if cchild.mandatory:
-                            pc_args.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
+                        if is_optional_arg_yang_leaf(cchild, list_keys(self), loose):
+                            pc_args_opt.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
+                        else:
+                            pc_args_req.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
                     elif isinstance(cchild, DContainer):
                         if not (loose or optional_subtree(cchild) or cchild.presence):
-                            pc_args.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
-                pc_args_str = ", ".join(pc_args)
-                pc_args_str1 = ", ".join(pc_args[1:])
+                            pc_args_req.append(child_unique_namer.unique_safe_name(cchild.name, cchild.prefix))
+                pc_args_str = ", ".join(["self"] + pc_args_req + ["{arg}=None" for arg in pc_args_opt])
+                pc_params_str= ", ".join(["{arg}={arg}" for arg in pc_args_req + pc_args_opt])
                 res.append("    mut def create_{usname(child)}({pc_args_str}):")
                 res.append("        existing = self.{usname(child)}")
                 res.append("        if existing is not None:")
+                for req_arg in pc_args_req:
+                    res.append("            existing.{req_arg} = {req_arg}")
+                for opt_arg in pc_args_opt:
+                    res.append("            if {opt_arg} is not None:")
+                    res.append("                existing.{opt_arg} = {opt_arg}")
                 res.append("            return existing")
-                res.append("        res = {pname(child)}({pc_args_str1})")
+                res.append("        res = {pname(child)}({pc_params_str})")
                 res.append("        self.{usname(child)} = res")
                 res.append("        return res")
                 res.append("")
@@ -772,25 +781,31 @@ class DNodeInner(DNode):
             res.append("        self.elements = elements")
             res.append("")
 
-            # list_key_args contains the list keys names and also any
+            # list_args_req contains the list keys names and also any
             # non-optional children. We use unique safe names for both to avoid conflicts.
+
             list_key_args = us_list_key()
+            list_args_req = []
+            list_args_opt = []
             list_key_types = {}
             for child in self.children:
                 if isinstance(child, DLeaf):
                     if usname(child) in list_key_args:
                         list_key_types[usname(child)] = child.type_
+                        list_args_req.append(usname(child))
                         continue
-                    if child.mandatory:
-                        list_key_args.append(usname(child))
+                    if is_optional_arg_yang_leaf(child, list_keys(self), loose):
+                        list_args_opt.append(usname(child))
+                    else:
+                        list_args_req.append(usname(child))
                 elif isinstance(child, DContainer):
                     if not (loose or optional_subtree(child) or child.presence):
-                        list_key_args.append(usname(child))
-            list_create_args_str = ", ".join(["self"] + list_key_args)
-            res.append("    mut def create({list_create_args_str}):")
+                        list_args_req.append(usname(child))
+            list_args_str = ", ".join(["self"] + list_args_req + ["{arg}=None" for arg in list_args_opt])
+            res.append("    mut def create({list_args_str}):")
             res.append("        for e in self:")
             res.append("            match = True")
-            for us_key in us_list_key():
+            for us_key in list_key_args:
                 # Order-preserving deduplication
                 unique_base_types = []
                 key_dtype = list_key_types[us_key]
@@ -817,10 +832,17 @@ class DNodeInner(DNode):
                         res.append("                    match = False")
                         res.append("                    continue")
             res.append("            if match:")
+            for req_arg in list_args_req:
+                if req_arg in list_key_args:
+                    continue
+                res.append("                e.{req_arg} = {req_arg}")
+            for opt_arg in list_args_opt:
+                res.append("                if {opt_arg} is not None:")
+                res.append("                    e.{opt_arg} = {opt_arg}")
             res.append("                return e")
             res.append("")
-            list_key_args_str = ", ".join(list_key_args)
-            res.append("        res = {pname()}_entry({list_key_args_str})")
+            list_params_str = ", ".join(["{arg}={arg}" for arg in list_args_req + list_args_opt])
+            res.append("        res = {pname()}_entry({list_params_str})")
             res.append("        self.elements.append(res)")
             res.append("        return res")
             res.append("")
