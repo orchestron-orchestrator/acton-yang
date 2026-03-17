@@ -332,6 +332,18 @@ class Id:
     def __repr__(self):
         return "Id({repr(self.q)}, {repr(self.name)})"
 
+    def to_json(self) -> dict[str, ?value]:
+        return {"q": self.q, "name": self.name}
+
+    @staticmethod
+    def from_json(data: value) -> Id:
+        if isinstance(data, dict):
+            q = data.get("q")
+            name = data.get("name")
+            if isinstance(q, str) and isinstance(name, str):
+                return Id(q, name)
+        raise ValueError("Invalid gdata id encoding: {data}")
+
 
 # We can't implement both Ord and Hashable protocol?!
 # https://github.com/actonlang/acton/pull/2380#issuecomment-3092550729
@@ -366,6 +378,152 @@ extension Id (Hashable):
         self.name.hash(hasher)
 
 
+def value_to_json(v: value) -> dict[str, ?value]:
+    if isinstance(v, Present):
+        return {"type": "Present"}
+    if isinstance(v, bytes):
+        return {"type": "bytes", "value": base64.encode(v).decode()}
+    if isinstance(v, Identityref):
+        return {
+            "type": "Identityref",
+            "val": v.val,
+            "ns": v.ns,
+            "mod": v.mod,
+            "pfx": v.pfx,
+        }
+    if isinstance(v, Decimal):
+        return {"type": "Decimal", "value": str(v)}
+    if isinstance(v, u64):
+        return {"type": "u64", "value": str(v)}
+    if isinstance(v, bool):
+        return {"type": "bool", "value": v}
+    if isinstance(v, int):
+        return {"type": "int", "value": v}
+    if isinstance(v, float):
+        return {"type": "float", "value": v}
+    if isinstance(v, str):
+        return {"type": "str", "value": v}
+    raise ValueError("Unsupported gdata value in serialization: {type(v)}")
+
+
+def value_from_json(data: value) -> value:
+    if isinstance(data, dict):
+        value_type = data.get("type")
+        if isinstance(value_type, str):
+            if value_type == "Present":
+                return Present()
+            if value_type == "bytes":
+                encoded = data.get("value")
+                if isinstance(encoded, str):
+                    return base64.decode(encoded.encode())
+            if value_type == "Identityref":
+                val = data.get("val")
+                ns = data.get("ns")
+                mod = data.get("mod")
+                pfx = data.get("pfx")
+                if isinstance(val, str) and isinstance(ns, str) and isinstance(mod, str) and isinstance(pfx, str):
+                    return Identityref(val, ns, mod, pfx)
+            if value_type == "Decimal":
+                raw = data.get("value")
+                if isinstance(raw, str):
+                    return Decimal.parse(raw)
+            if value_type == "u64":
+                raw = data.get("value")
+                if isinstance(raw, str):
+                    return u64(raw)
+                if isinstance(raw, int):
+                    return u64(raw)
+            if value_type == "bool":
+                raw = data.get("value")
+                if isinstance(raw, bool):
+                    return raw
+            if value_type == "int":
+                raw = data.get("value")
+                if isinstance(raw, int):
+                    return raw
+            if value_type == "float":
+                raw = data.get("value")
+                if isinstance(raw, float):
+                    return raw
+                if isinstance(raw, int):
+                    return float(raw)
+            if value_type == "str":
+                raw = data.get("value")
+                if isinstance(raw, str):
+                    return raw
+    raise ValueError("Invalid gdata value encoding: {data}")
+
+
+def children_to_json(children: dict[Id, Node]) -> list[dict[str, ?value]]:
+    return [{"id": name.to_json(), "node": child.to_json()} for name, child in children.items()]
+
+
+def children_from_json(data: value) -> dict[Id, Node]:
+    if isinstance(data, list):
+        children: dict[Id, Node] = {}
+        for item in data:
+            if isinstance(item, dict):
+                id_data = item.get("id")
+                node_data = item.get("node")
+                if isinstance(id_data, dict) and isinstance(node_data, dict):
+                    name = Id.from_json(id_data)
+                    children[name] = Node.from_json(node_data)
+                else:
+                    raise ValueError("Invalid gdata child encoding: {item}")
+            else:
+                raise ValueError("Invalid gdata child encoding: {item}")
+        return children
+    raise ValueError("Invalid gdata children encoding: {data}")
+
+
+def node_meta_from_json(data):
+    ns = None
+    ns_data = data.get("ns")
+    if isinstance(ns_data, str):
+        ns = ns_data
+
+    module = None
+    module_data = data.get("module")
+    if isinstance(module_data, str):
+        module = module_data
+
+    txid = None
+    txid_data = data.get("txid")
+    if isinstance(txid_data, str):
+        txid = txid_data
+
+    return ns, module, txid
+
+
+def node_children_from_json(data):
+    children_data = data.get("children")
+    if isinstance(children_data, list):
+        return children_from_json(children_data)
+    if children_data is None:
+        return {}
+    raise ValueError("Invalid gdata children encoding: {children_data}")
+
+
+def node_value_from_json(data, node_type: str) -> value:
+    value_data = data.get("value")
+    if isinstance(value_data, dict):
+        return value_from_json(value_data)
+    if value_data is not None:
+        raise ValueError("Invalid serialized value for {node_type}: {value_data}")
+    raise ValueError("Missing serialized value for {node_type}")
+
+
+def base_node_json(node: Node, node_type: str) -> dict[str, ?value]:
+    result = {"type": node_type}
+    if node.ns is not None:
+        result["ns"] = node.ns
+    if node.module is not None:
+        result["module"] = node.module
+    if node.txid is not None:
+        result["txid"] = node.txid
+    return result
+
+
 class Node(value):
     ns: ?str
     module: ?str
@@ -374,6 +532,42 @@ class Node(value):
 
     def __repr__(self) -> str:
         return self.prsrc(deterministic=False)
+
+    @staticmethod
+    def from_json_str(json_str: str) -> Node:
+        """Parse schema-free JSON text produced by to_json_str()."""
+        return Node.from_json(json.decode(json_str))
+
+    @staticmethod
+    def from_json(data: value) -> Node:
+        """Reconstruct gdata from the schema-free JSON structure."""
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type == "Container":
+                return Container.from_json(data)
+            if node_type == "List":
+                return List.from_json(data)
+            if node_type == "Leaf":
+                return Leaf.from_json(data)
+            if node_type == "LeafList":
+                return LeafList.from_json(data)
+            if node_type == "Absent":
+                return Absent.from_json(data)
+            if node_type == "Delete":
+                return Delete.from_json(data)
+            if node_type == "Create":
+                return Create.from_json(data)
+            if node_type == "CreateLeaf":
+                return CreateLeaf.from_json(data)
+            if node_type == "Replace":
+                return Replace.from_json(data)
+            if node_type == "ReplaceLeaf":
+                return ReplaceLeaf.from_json(data)
+            if isinstance(node_type, str):
+                raise ValueError("Unsupported gdata node type in serialization: {node_type}")
+            raise ValueError("Missing gdata node type in serialization")
+
+        raise ValueError("Expected dict for gdata node, got {type(data)}")
 
     def key_str(self, key_names: list[Id]) -> str:
         return ",".join([str(self.get_leaf(kn).val).replace(",", "\\,") for kn in key_names])
@@ -404,10 +598,7 @@ class Node(value):
         module_args = ["module='{self.module}'"] if self.module is not None else []
         base_args = ns_args + module_args
 
-        if deterministic:
-            self_children = {k: self.children[k] for k in hack_sorted(self.children.keys())}
-        else:
-            self_children = self.children
+        self_children = self.children if not deterministic else {k: self.children[k] for k in hack_sorted(self.children.keys())}
 
         if isinstance(self, Leaf):
             args = [repr_gdata(self.val)] + base_args
@@ -514,6 +705,10 @@ class Node(value):
         else:
             raise ValueError("Unsupported node type in prsrc")
 
+    def to_json_str(self, pretty=True) -> str:
+        """Serialize gdata to schema-free JSON text for storage."""
+        return json.encode(self.to_json(), pretty=pretty)
+
     def to_yang_jsonstr(self, pretty=True, deterministic=False) -> str:
         """Convert gdata to IETF RFC7951 JSON encoding of YANG-data
 
@@ -577,6 +772,10 @@ class Node(value):
                     raise ValueError("Unsupported child ({nm}) node type in to_yang_dict: {type(child)}")
             return child_dict
         raise ValueError("Unsupported node type in to_yang_dict: {type(self)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        """Convert gdata to a schema-free JSON structure suitable for persistence."""
+        raise ValueError("Unsupported node type in to_json: {type(self)}")
 
     def _to_xml_rec(self, key_names: ?list[Id]=None, skip_nonkeys: bool=False, parent_absent: bool=False, deterministic=False) -> list[xml.Node]:
         if isinstance(self, Container) or isinstance(self, Absent) or isinstance(self, Create) or isinstance(self, Delete) or isinstance(self, Replace):
@@ -1113,6 +1312,48 @@ class List(Node):
         self.txid = txid
         self.children = {}
 
+    @staticmethod
+    def from_json(data: value) -> List:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "List":
+                raise ValueError("Invalid gdata node type for List: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            keys: list[Id] = []
+            keys_data = data.get("keys")
+            if isinstance(keys_data, list):
+                for key_data in keys_data:
+                    if isinstance(key_data, dict):
+                        keys.append(Id.from_json(key_data))
+                    else:
+                        raise ValueError("Invalid gdata list key encoding: {key_data}")
+            elif keys_data is not None:
+                raise ValueError("Invalid gdata list keys encoding: {keys_data}")
+            elements: list[Node] = []
+            elements_data = data.get("elements")
+            if isinstance(elements_data, list):
+                for element_data in elements_data:
+                    if isinstance(element_data, dict):
+                        elements.append(Node.from_json(element_data))
+                    else:
+                        raise ValueError("Invalid gdata list element encoding: {element_data}")
+            else:
+                raise ValueError("Invalid gdata list elements encoding: {elements_data}")
+            user_order = False
+            user_order_data = data.get("user_order")
+            if isinstance(user_order_data, bool):
+                user_order = user_order_data
+            return List(keys=keys, elements=elements, user_order=user_order, ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for List, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "List")
+        result["keys"] = [key.to_json() for key in self.keys]
+        if self.user_order:
+            result["user_order"] = True
+        result["elements"] = [element.to_json() for element in self.elements]
+        return result
+
     def get_opt_list_entry(self, key: str) -> ?Node:
         """Get a list entry by key value
 
@@ -1141,6 +1382,28 @@ class Container(Node):
         self.module = module
         self.txid = txid
 
+    @staticmethod
+    def from_json(data: value) -> Container:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "Container":
+                raise ValueError("Invalid gdata node type for Container: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            presence = False
+            presence_data = data.get("presence")
+            if isinstance(presence_data, bool):
+                presence = presence_data
+            return Container(children=node_children_from_json(data), presence=presence, ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for Container, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "Container")
+        if self.presence:
+            result["presence"] = True
+        if len(self.children) > 0:
+            result["children"] = children_to_json(self.children)
+        return result
+
 class Leaf(Node):
     val: value
 
@@ -1150,6 +1413,21 @@ class Leaf(Node):
         self.module = module
         self.txid = txid
         self.children = {}
+
+    @staticmethod
+    def from_json(data: value) -> Leaf:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "Leaf":
+                raise ValueError("Invalid gdata node type for Leaf: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            return Leaf(node_value_from_json(data, "Leaf"), ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for Leaf, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "Leaf")
+        result["value"] = value_to_json(self.val)
+        return result
 
 class LeafList(Node):
     entries: list[LeafListEntry]
@@ -1162,6 +1440,70 @@ class LeafList(Node):
         self.txid = txid
         self.children = {}
         self.entries = entries
+
+    @staticmethod
+    def from_json(data: value) -> LeafList:
+        def entry_from_json(data: value) -> LeafListEntry:
+            if isinstance(data, dict):
+                op = data.get("op")
+                value_data = data.get("value")
+                if isinstance(op, str) and isinstance(value_data, dict):
+                    value = value_from_json(value_data)
+                    if op == "merge":
+                        return LeafListEntryMerge(value)
+                    if op == "remove":
+                        return LeafListEntryRemove(value)
+                    if op == "create":
+                        return LeafListEntryCreate(value)
+                    if op == "delete":
+                        return LeafListEntryDelete(value)
+                    if op == "replace":
+                        return LeafListEntryReplace(value)
+            raise ValueError("Invalid gdata leaf-list entry encoding: {data}")
+
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "LeafList":
+                raise ValueError("Invalid gdata node type for LeafList: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            entries: list[LeafListEntry] = []
+            entries_data = data.get("entries")
+            if isinstance(entries_data, list):
+                for entry_data in entries_data:
+                    if isinstance(entry_data, dict):
+                        entries.append(entry_from_json(entry_data))
+                    else:
+                        raise ValueError("Invalid gdata leaf-list entry encoding: {entry_data}")
+            elif entries_data is not None:
+                raise ValueError("Invalid gdata leaf-list encoding: {entries_data}")
+            user_order = False
+            user_order_data = data.get("user_order")
+            if isinstance(user_order_data, bool):
+                user_order = user_order_data
+            return LeafList(entries=entries, user_order=user_order, ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for LeafList, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        def entry_to_json(entry: LeafListEntry) -> dict[str, ?value]:
+            if isinstance(entry, LeafListEntryMerge):
+                op = "merge"
+            elif isinstance(entry, LeafListEntryRemove):
+                op = "remove"
+            elif isinstance(entry, LeafListEntryCreate):
+                op = "create"
+            elif isinstance(entry, LeafListEntryDelete):
+                op = "delete"
+            elif isinstance(entry, LeafListEntryReplace):
+                op = "replace"
+            else:
+                raise ValueError("Unsupported leaf-list entry in serialization: {type(entry)}")
+            return {"op": op, "value": value_to_json(entry.val)}
+
+        result = base_node_json(self, "LeafList")
+        if self.user_order:
+            result["user_order"] = True
+        result["entries"] = [entry_to_json(entry) for entry in self.entries]
+        return result
 
 class Present:
     """Named type for empty leaf value
@@ -1191,6 +1533,22 @@ class Absent(Node):
         self.children = children
         self.txid = txid
 
+    @staticmethod
+    def from_json(data: value) -> Absent:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "Absent":
+                raise ValueError("Invalid gdata node type for Absent: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            return Absent(children=node_children_from_json(data), ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for Absent, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "Absent")
+        if len(self.children) > 0:
+            result["children"] = children_to_json(self.children)
+        return result
+
 class Delete(Node):
     """Imperative delete of a node
     NETCONF delete operation maps to Delete
@@ -1202,6 +1560,22 @@ class Delete(Node):
         self.module = module
         self.children = children
         self.txid = txid
+
+    @staticmethod
+    def from_json(data: value) -> Delete:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "Delete":
+                raise ValueError("Invalid gdata node type for Delete: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            return Delete(children=node_children_from_json(data), ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for Delete, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "Delete")
+        if len(self.children) > 0:
+            result["children"] = children_to_json(self.children)
+        return result
 
 class Create(Node):
     """Imperative create of a node
@@ -1215,6 +1589,22 @@ class Create(Node):
         self.children = children
         self.txid = txid
 
+    @staticmethod
+    def from_json(data: value) -> Create:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "Create":
+                raise ValueError("Invalid gdata node type for Create: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            return Create(children=node_children_from_json(data), ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for Create, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "Create")
+        if len(self.children) > 0:
+            result["children"] = children_to_json(self.children)
+        return result
+
 class CreateLeaf(Create):
     """Imperative create of a leaf (has val)
     NETCONF create operation maps to Create
@@ -1223,6 +1613,21 @@ class CreateLeaf(Create):
     def __init__(self, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
         Create.__init__(self, {}, ns, module, txid)
         self.val = val
+
+    @staticmethod
+    def from_json(data: value) -> CreateLeaf:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "CreateLeaf":
+                raise ValueError("Invalid gdata node type for CreateLeaf: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            return CreateLeaf(node_value_from_json(data, "CreateLeaf"), ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for CreateLeaf, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "CreateLeaf")
+        result["value"] = value_to_json(self.val)
+        return result
 
 class Replace(Node):
     """Imperative replace of a node
@@ -1234,6 +1639,22 @@ class Replace(Node):
         self.children = children
         self.txid = txid
 
+    @staticmethod
+    def from_json(data: value) -> Replace:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "Replace":
+                raise ValueError("Invalid gdata node type for Replace: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            return Replace(children=node_children_from_json(data), ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for Replace, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "Replace")
+        if len(self.children) > 0:
+            result["children"] = children_to_json(self.children)
+        return result
+
 class ReplaceLeaf(Replace):
     """Imperative replace of a leaf (has val)
     NETCONF replace operation maps to Replace
@@ -1242,6 +1663,21 @@ class ReplaceLeaf(Replace):
     def __init__(self, val: value, ns: ?str=None, module: ?str=None, txid: ?str=None):
         Replace.__init__(self, {}, ns, module, txid)
         self.val = val
+
+    @staticmethod
+    def from_json(data: value) -> ReplaceLeaf:
+        if isinstance(data, dict):
+            node_type = data.get("type")
+            if node_type != "ReplaceLeaf":
+                raise ValueError("Invalid gdata node type for ReplaceLeaf: {node_type}")
+            ns, module, txid = node_meta_from_json(data)
+            return ReplaceLeaf(node_value_from_json(data, "ReplaceLeaf"), ns=ns, module=module, txid=txid)
+        raise ValueError("Expected dict for ReplaceLeaf, got {type(data)}")
+
+    def to_json(self) -> dict[str, ?value]:
+        result = base_node_json(self, "ReplaceLeaf")
+        result["value"] = value_to_json(self.val)
+        return result
 
 
 class ValueMatch(value):
@@ -3851,6 +4287,36 @@ def _test_prsrc_identityref():
 
     return y1.prsrc()
 
+def _test_serialize_json():
+    y1 = Container({
+        Id(NS_acme, "foo"): Container({
+            Id(NS_acme, "a"): Leaf(u64(1)),
+            Id(NS_acme, "l1"): List([Id(NS_acme, "name"), Id(NS_acme, "name_two")], [
+                Container({
+                    Id(NS_acme, "name"): Leaf("k1"),
+                    Id(NS_acme, "name_two"): Leaf("k1a"),
+                    Id(NS_acme, "n1"): Leaf(u64(1)),
+                    Id(NS_acme, "n2"): Leaf(u64(2))
+                }),
+                Container({
+                    Id(NS_acme, "name"): Leaf("k4"),
+                    Id(NS_acme, "name_two"): Leaf("k4a"),
+                    Id(NS_acme, "n4"): Leaf(u64(4)),
+                }),
+            ]),
+            Id(NS_acme, "b"): Leaf(False),
+            Id(NS_acme, "lb"): Leaf(b"Hello Acton \xf0\x9f\xab\xa1"),
+            Id(NS_acme, "llb"): LeafList([LeafListEntryMerge(b"Hello Acton \xf0\x9f\xab\xa1")]),
+            Id(NS_acme, "c"): Leaf(u64(18446744073709551615)),
+            Id(NS_acme, "d"): Leaf(Decimal(314, -2))
+        }, ns="http://example.com/acme", module="acme"),
+        Id("http://example.com/beep", "foo"): Container({
+            Id("http://example.com/beep", "a"): Leaf(u64(1))
+        }, ns="http://example.com/beep", module="beep")
+    })
+
+    return y1.to_json_str(pretty=True)
+
 def _test_to_jsonstr():
     y1 = Container({
         Id(NS_acme, "foo"): Container({
@@ -3881,6 +4347,14 @@ def _test_to_jsonstr():
 
     return y1.to_yang_jsonstr(pretty=True)
 
+def _test_serialize_json_empty_leaf():
+    y1 = Container({
+        Id("", "e1"): Leaf(Present()),
+        Id("", "e2"): Absent()
+    })
+
+    return y1.to_json_str(pretty=True)
+
 def _test_to_jsonstr_empty_leaf():
     y1 = Container({
         Id("", "e1"): Leaf(Present()),
@@ -3888,6 +4362,15 @@ def _test_to_jsonstr_empty_leaf():
     })
 
     return y1.to_yang_jsonstr(pretty=True)
+
+def _test_serialize_json_identityref():
+    y1 = Container({
+        Id(NS_acme, "identity-local"): Leaf(Identityref("foo", "http://example.com/acme", "acme", "acme")),
+        Id(NS_acme, "identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar")),
+        Id(NS_acme, "augmented-identity-other"): Leaf(Identityref("bar", "http://example.com/bar", "bar", "bar"), "http://example.com/augmentor", "augmentor"),
+    }, ns="http://example.com/acme", module="acme")
+
+    return y1.to_json_str(pretty=True)
 
 def _test_to_jsonstr_identityref():
     y1 = Container({
@@ -4673,3 +5156,166 @@ def _test_prune_named_root_filter():
             Id(NS_acme, "l2"): Leaf(u64(2)),
         }, ns=NS_acme, module="acme").prsrc(deterministic=True)
     )
+
+
+def _serde_roundtrip_json(node: Node) -> str:
+    encoded = node.to_json_str(pretty=True)
+    testing.assertEqual(
+        node.prsrc(deterministic=True),
+        Node.from_json(node.to_json()).prsrc(deterministic=True)
+    )
+    testing.assertEqual(
+        node.prsrc(deterministic=True),
+        Node.from_json_str(encoded).prsrc(deterministic=True)
+    )
+    return encoded
+
+
+def _test_serialization_roundtrip_container():
+    ns_test = "http://example.com/test"
+    ns_nested = "http://example.com/nested"
+
+    original = Container({
+        Id(ns_test, "leaf1"): Leaf("test value"),
+        Id(ns_test, "leaf2"): Leaf(42),
+        Id(ns_test, "leaf3"): Leaf(True),
+        Id(ns_nested, "nested"): Container({
+            Id(ns_nested, "inner"): Leaf("nested value")
+        }, ns=ns_nested, module="nested"),
+    }, ns=ns_test, module="test")
+
+    return _serde_roundtrip_json(original)
+
+
+def _test_serialization_roundtrip_list():
+    ns_list = "http://example.com/list"
+    key_name = Id(ns_list, "key")
+
+    original = List([key_name], [
+        Container({
+            key_name: Leaf("item1"),
+            Id(ns_list, "value"): Leaf(100)
+        }),
+        Container({
+            key_name: Leaf("item2"),
+            Id(ns_list, "value"): Leaf(200)
+        })
+    ], ns=ns_list, module="list", user_order=True)
+
+    return _serde_roundtrip_json(original)
+
+
+def _test_serialization_roundtrip_leaflist():
+    ns_ll = "http://example.com/ll"
+
+    original = Container({
+        Id(ns_ll, "strings"): LeafList([
+            LeafListEntryMerge("a"),
+            LeafListEntryMerge("b"),
+            LeafListEntryMerge("c"),
+        ], user_order=True),
+        Id(ns_ll, "numbers"): LeafList([
+            LeafListEntryMerge(1),
+            LeafListEntryMerge(2),
+            LeafListEntryMerge(3),
+        ]),
+    }, ns=ns_ll, module="ll")
+
+    return _serde_roundtrip_json(original)
+
+
+def _test_serialization_roundtrip_special_types():
+    ns_special = "http://example.com/special"
+
+    original = Container({
+        Id(ns_special, "binary"): Leaf(b"binary data"),
+        Id(ns_special, "identity"): Leaf(Identityref("myval", "http://example.com/id", "idmod", "idpfx")),
+        Id(ns_special, "empty"): Leaf(Present()),
+        Id(ns_special, "counter"): Leaf(u64(18446744073709551615)),
+        Id(ns_special, "fraction"): Leaf(Decimal(314, -2)),
+    }, ns=ns_special, module="special")
+
+    return _serde_roundtrip_json(original)
+
+
+def _test_serialization_roundtrip_operations():
+    ns_ops = "http://example.com/ops"
+
+    original = Container({
+        Id(ns_ops, "create-leaf"): CreateLeaf(u64(7), ns=ns_ops, module="ops"),
+        Id(ns_ops, "replace-leaf"): ReplaceLeaf("new-value", ns=ns_ops, module="ops"),
+        Id(ns_ops, "entries"): LeafList([
+            LeafListEntryMerge("keep"),
+            LeafListEntryRemove("drop"),
+            LeafListEntryCreate("new"),
+            LeafListEntryDelete("gone"),
+            LeafListEntryReplace("updated"),
+        ], ns=ns_ops, module="ops"),
+        Id(ns_ops, "absent"): Absent({
+            Id(ns_ops, "child"): Leaf("gone"),
+        }, ns=ns_ops, module="ops"),
+        Id(ns_ops, "delete"): Delete({
+            Id(ns_ops, "child"): Leaf("deleted"),
+        }, ns=ns_ops, module="ops"),
+        Id(ns_ops, "create"): Create({
+            Id(ns_ops, "child"): Leaf(u64(1)),
+        }, ns=ns_ops, module="ops"),
+        Id(ns_ops, "replace"): Replace({
+            Id(ns_ops, "child"): Leaf(True),
+        }, ns=ns_ops, module="ops"),
+    }, ns=ns_ops, module="ops", txid="tx-ops")
+
+    encoded = _serde_roundtrip_json(original)
+    reconstructed = Node.from_json_str(encoded)
+    testing.assertTrue(isinstance(reconstructed.children[Id(ns_ops, "create-leaf")], CreateLeaf))
+    testing.assertTrue(isinstance(reconstructed.children[Id(ns_ops, "replace-leaf")], ReplaceLeaf))
+    entries = reconstructed.get_leaflist(Id(ns_ops, "entries")).entries
+    testing.assertTrue(isinstance(entries[0], LeafListEntryMerge))
+    testing.assertTrue(isinstance(entries[1], LeafListEntryRemove))
+    testing.assertTrue(isinstance(entries[2], LeafListEntryCreate))
+    testing.assertTrue(isinstance(entries[3], LeafListEntryDelete))
+    testing.assertTrue(isinstance(entries[4], LeafListEntryReplace))
+
+
+def _test_serialization_roundtrip_complex():
+    ns_system = "http://example.com/system"
+    ns_network = "http://example.com/network"
+    ns_meta = "http://example.com/meta"
+    iface_name = Id(ns_network, "name")
+    route_dest = Id(ns_network, "destination")
+
+    original = Container({
+        Id(ns_network, "config"): Container({
+            Id(ns_network, "interfaces"): List([iface_name], [
+                Container({
+                    iface_name: Leaf("eth0"),
+                    Id(ns_network, "ip"): Leaf("192.168.1.1"),
+                    Id(ns_network, "mtu"): Leaf(u64(1500)),
+                    Id(ns_network, "vlans"): LeafList([
+                        LeafListEntryMerge(u64(10)),
+                        LeafListEntryMerge(u64(20)),
+                        LeafListEntryMerge(u64(30)),
+                    ]),
+                }),
+                Container({
+                    iface_name: Leaf("eth1"),
+                    Id(ns_network, "ip"): Leaf("192.168.2.1"),
+                    Id(ns_network, "mtu"): Leaf(u64(9000)),
+                    Id(ns_network, "enabled"): Leaf(True),
+                })
+            ], user_order=True, ns=ns_network, module="network"),
+            Id(ns_network, "routes"): List([route_dest], [
+                Container({
+                    route_dest: Leaf("0.0.0.0/0"),
+                    Id(ns_network, "gateway"): Leaf("192.168.1.254"),
+                    Id(ns_network, "metric"): Leaf(100),
+                })
+            ], ns=ns_network, module="network"),
+        }, ns=ns_network, module="network"),
+        Id(ns_meta, "metadata"): Container({
+            Id(ns_meta, "created"): Leaf("2024-01-01"),
+            Id(ns_meta, "version"): Leaf(1),
+        }, ns=ns_meta, module="meta"),
+    }, ns=ns_system, module="system", txid="tx123")
+
+    return _serde_roundtrip_json(original)
