@@ -379,7 +379,7 @@ class DNode(object):
 
         raise ValueError("Unable to get child from non-inner node")
 
-    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns={}, include_state=False) -> list[str]:
+    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, include_state=False) -> list[str]:
         """Print the data class for this schema node
         """
         raise NotImplementedError('DNode pdc: {type(self)} - {get_path(spath)}')
@@ -502,7 +502,7 @@ class DNode(object):
 class DNodeInner(DNode):
     children: list[DNode]
 
-    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, schema_ns={}, include_state=False) -> list[str]:
+    def _prdaclass_rec(self, spath: list[DNode], loose=False, top=True, set_ns=True, include_state=False) -> list[str]:
         """Print the data class for this schema node
         """
         def path_with_child(c):
@@ -514,8 +514,6 @@ class DNodeInner(DNode):
         new_children = []
         pos_child_idx = 0
         for child in self.children:
-            if child.namespace not in schema_ns:
-                schema_ns[child.namespace] = child.module
             if include_state == False and child.config == False:
                 continue
             elif isinstance(child, DRpc):
@@ -560,7 +558,7 @@ class DNodeInner(DNode):
         for child in self.children:
             if isinstance(child, DNodeLeaf):
                 continue
-            res.extend(child._prdaclass_rec(path_with_child(child), loose=loose, top=False, set_ns=child.namespace!=self.namespace, schema_ns=schema_ns, include_state=include_state))
+            res.extend(child._prdaclass_rec(path_with_child(child), loose=loose, top=False, set_ns=child.namespace!=self.namespace, include_state=include_state))
 
         if isinstance(self, DList):
             # List has special handling as it actually results in two classes:
@@ -882,7 +880,7 @@ class DNodeInner(DNode):
                 # - set_ns: from DRpc (=True)
                 # - include_state=True
                 for child in rpc.children:
-                    child_class_src = child._prdaclass_rec(spath + [rpc, child], loose=loose, top=False, set_ns=set_ns, schema_ns=schema_ns, include_state=True)
+                    child_class_src = child._prdaclass_rec(spath + [rpc, child], loose=loose, top=False, set_ns=set_ns, include_state=True)
                     res.extend(child_class_src)
 
             # TODO: unique safe name for RPC function!
@@ -1564,8 +1562,9 @@ class DOutput(DNodeInner):
 class DRoot(DNodeInner):
     identities: list[DIdentity]
     rpcs: list[DRpc]
+    module_metadata: dict[str, (module: str, revision: ?str)]
 
-    def __init__(self, children=[], identities=[], rpcs=[]):
+    def __init__(self, children=[], identities=[], rpcs=[], module_metadata: dict[str, (module: str, revision: ?str)]={}):
         self.module = ""
         self.namespace = ""
         self.prefix = ""
@@ -1578,6 +1577,7 @@ class DRoot(DNodeInner):
         self.children = children + rpcs
         self.identities = identities
         self.rpcs = rpcs
+        self.module_metadata = module_metadata
 
     @staticmethod
     def from_modules(modules: list[DNode]=[], allow_failure: ?list[str]):
@@ -1585,8 +1585,14 @@ class DRoot(DNodeInner):
         children = []
         rpcs = []
         identity_map = {}  # Map from "prefix:name" to DIdentity instance
+        module_metadata = {}
         for module in modules:
             if isinstance(module, DModule):
+                latest_revision: ?str = None
+                if len(module.revision) > 0:
+                    latest_revision = module.revision[0].date
+                module_metadata[module.namespace] = (module=module.module, revision=latest_revision)
+
                 for child in module.children:
                     if isinstance(child, DRpc):
                         rpcs.append(child)
@@ -1655,7 +1661,7 @@ class DRoot(DNodeInner):
 
         identities = [v.identity for v in identity_map.values()]
 
-        root = DRoot(children, identities, rpcs)
+        root = DRoot(children, identities, rpcs, module_metadata)
 
         # Resolve DType references, e.g. resolve base identities
         root.resolve_references(root, [], allow_failure)
@@ -1666,6 +1672,7 @@ class DRoot(DNodeInner):
         return [
             ("rpcs", self.rpcs),
             ("identities", self.identities),
+            ("module_metadata", self.module_metadata),
         ]
 
     def prdaclass(self, schema_yang: ?list[str]=None, loose=False, include_state=False, top=True, root_path: list[str]=[]) -> str:
@@ -1685,8 +1692,7 @@ class DRoot(DNodeInner):
         # the SRC_DNODE constant to have the same view of the schema as the
         # adata code generator ...
         spath = build_spath([self])
-        schema_ns = {}
-        inner = spath[-1]._prdaclass_rec(spath, loose=loose, top=top, set_ns=True, schema_ns=schema_ns, include_state=include_state)
+        inner = spath[-1]._prdaclass_rec(spath, loose=loose, top=top, set_ns=True, include_state=include_state)
 
         res = []
         res.append("import base64")
@@ -1815,6 +1821,7 @@ class DRoot(DNodeInner):
         res.append("    children={src_dnode_children},")
         res.append("    identities={src_dnode_identities},")
         res.append("    rpcs={src_dnode_rpcs},")
+        res.append("    module_metadata={repr(self.module_metadata)},")
         res.append(")")
         res.append("")
 
@@ -1835,16 +1842,10 @@ class DRoot(DNodeInner):
             res.append("")
             res.append("")
 
-        res.extend(["NS_{safe_name(schema_ns[ns])} = {repr(ns)}" for ns in sorted(schema_ns.keys())])
+        res.extend(["NS_{safe_name(self.module_metadata[ns].module)} = {repr(ns)}" for ns in sorted(self.module_metadata.keys())])
         res.append("")
         res.append("")
         res.extend(inner)
-
-        res.append("schema_namespaces: set[str] = {{")
-        for ns in sorted(schema_ns.keys()):
-            res.append("    '{ns}',")
-        res.append("}}")
-        res.append("")
 
         return "\n".join(res)
 
@@ -2790,7 +2791,7 @@ class SchemaNode(object):
             res.append(_ind(indent) + "])")
         return "\n".join(res)
 
-    def prdaclass(self, loose=False, top=True, set_ns=True, schema_ns=set(), include_state=False) -> str:
+    def prdaclass(self, loose=False, top=True, set_ns=True, include_state=False) -> str:
         """Print the data class for this schema node
         """
         raise NotImplementedError('SchemaNode pdc')
@@ -7383,7 +7384,8 @@ class Module(SchemaNodeInner):
             name=self.name,
             description=self.description,
             identity=[c for c in self.children if isinstance(c, Identity)],
-            revision=self.revision,
+            # revisions SHOULD be sorted in reverse chronological order
+            revision=list(reversed(sorted(self.revision))),
             reference=self.reference,
             exts=self.exts,
             children=self.get_dnode_children(context)
