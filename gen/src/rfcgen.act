@@ -1058,7 +1058,7 @@ snode_methods = {
         raise ValueError("Cannot compile 'uses'")
 
 """,
-        "expand_refines": '''    mut def expand_refines(self, target_base: SchemaNode):
+        "expand_refines": '''    mut def expand_refines(self, context: Context, target_base: SchemaNode):
         """Expand refinements in the uses statement to the target nodes
 
         target_base is the SchemaNode where this uses statement is located
@@ -1082,7 +1082,7 @@ snode_methods = {
 
         for refine in self.refine:
             target = get_target(target_base, refine.target_node)
-            target.apply_refine(refine)
+            target.apply_refine(context, refine)
 
 ''',
     },
@@ -1359,7 +1359,7 @@ def gen(stmts: dict[str, Stmt]) -> list[str]:
         refine_substatements = set(stmts["refine"].substmts) - {"target-node"}
         refinable_substatements = refine_substatements & set(cattrs)
         if refinable_substatements:
-            res.append("    mut def apply_refine(self, refine: Refine):")
+            res.append("    mut def apply_refine(self, context: Context, refine: Refine):")
             for attr in sorted(refinable_substatements):
                 target_cardinality = stmt.substmts[attr].cardinality
                 refine_cardinality = stmts["refine"].substmts[attr].cardinality

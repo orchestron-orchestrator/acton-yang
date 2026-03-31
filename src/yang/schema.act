@@ -3175,7 +3175,7 @@ class SchemaNode(object):
                     grouping = child.get_grouping(child.name, context)
                     grouping.expand_children(context, target, new_mod if new_mod is not None else target.mod, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx, remap_imports=remap_imports)
                     child.expand_augments(context, target, in_uses=True, remap_imports=remap_imports)
-                    child.expand_refines(target)
+                    child.expand_refines(context, target)
                 else:
                     c_child = child.compile(context, new_mod, new_ns, new_pfx)
                     if remap_imports is not None:
@@ -3189,7 +3189,7 @@ class SchemaNode(object):
     mut def resolve_compiled_schema_path_dependencies(self):
         pass
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         raise NotImplementedError('SchemaNode apply_refine not implemented for {type(self)}')
 
     def get_module_by_prefix(self, prefix: str, context: Context) -> Module:
@@ -4473,7 +4473,7 @@ class Action(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -4670,7 +4670,7 @@ class Anydata(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -4831,7 +4831,7 @@ class Anyxml(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -4984,7 +4984,7 @@ class Augment(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5181,7 +5181,7 @@ class Bit(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5300,7 +5300,7 @@ class Case(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5439,7 +5439,7 @@ class Choice(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -5602,7 +5602,7 @@ class Container(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -5759,7 +5759,7 @@ class Enum(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5863,7 +5863,7 @@ class Extension(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5962,7 +5962,7 @@ class Feature(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -6074,7 +6074,7 @@ class Grouping(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -6183,7 +6183,7 @@ class Identity(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -6298,7 +6298,7 @@ class Import(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -6394,7 +6394,7 @@ class Include(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -6504,7 +6504,7 @@ class Input(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         for ref_must in refine.must:
             if ref_must not in self.must:
                 self.must.append(ref_must)
@@ -6659,7 +6659,7 @@ class Leaf(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -6880,7 +6880,7 @@ class LeafList(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -7065,7 +7065,7 @@ class Length(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -7211,7 +7211,7 @@ class List(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -7496,7 +7496,7 @@ class Module(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -7691,7 +7691,7 @@ class Must(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -7824,7 +7824,7 @@ class Notification(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -7971,7 +7971,7 @@ class Output(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         for ref_must in refine.must:
             if ref_must not in self.must:
                 self.must.append(ref_must)
@@ -8090,7 +8090,7 @@ class Pattern(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -8190,7 +8190,7 @@ class Range(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -8318,7 +8318,7 @@ class Refine(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -8445,7 +8445,7 @@ class Revision(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -8584,7 +8584,7 @@ class Rpc(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -8882,7 +8882,7 @@ class Submodule(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -9288,7 +9288,7 @@ class Typedef(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         if len(refine.default) == 1:
             self.default = refine.default[0]
         elif len(refine.default) > 1:
@@ -9439,7 +9439,7 @@ class Uses(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -9454,7 +9454,7 @@ class Uses(SchemaNodeOuter):
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
-    mut def expand_refines(self, target_base: SchemaNode):
+    mut def expand_refines(self, context: Context, target_base: SchemaNode):
         """Expand refinements in the uses statement to the target nodes
 
         target_base is the SchemaNode where this uses statement is located
@@ -9478,7 +9478,7 @@ class Uses(SchemaNodeOuter):
 
         for refine in self.refine:
             target = get_target(target_base, refine.target_node)
-            target.apply_refine(refine)
+            target.apply_refine(context, refine)
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
         """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
