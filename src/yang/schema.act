@@ -163,6 +163,11 @@ _quoted_arg_keywords = set([
     "yang-version",
 ])
 
+def _expect[T](a: ?T, ctx: ?str=None) -> T:
+    if a is not None:
+        return a
+    raise ValueError("expected value (not None){"for: {{ctx}}" if ctx is not None else ""}")
+
 class Statement(object):
     kw: str
     arg: ?str
@@ -289,7 +294,7 @@ class DNode(object):
     config: bool
     description: ?str
     reference: ?str
-    exts: list[Ext]
+    exts: list[DExt]
 
     def get(self, name: str, module: ?str=None, namespace: ?str=None, prefix: ?str=None, allow_unqualified=True) -> DNode:
         """Get child node by name with optional namespace qualifiers.
@@ -1497,6 +1502,22 @@ class DMust(object):
         return "DMust(condition={repr(self.condition)}, description={repr(self.description)}, error_app_tag={repr(self.error_app_tag)}, error_message={repr(self.error_message)}, reference={repr(self.reference)})"
 
 
+class DExt(object):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, arg: ?str=None, exts=[]):
+        self.module = module
+        self.namespace = namespace
+        self.prefix = prefix
+        self.name = name
+        self.arg = arg
+        self.exts = exts
+
+    def prsrc(self, indent=0):
+        return "{_ind(indent)}{repr(self)}"
+
+    def __repr__(self):
+        return "DExt(module={repr(self.module)}, namespace={repr(self.namespace)}, prefix={repr(self.prefix)}, name={repr(self.name)}, arg={repr(self.arg)}, exts={repr(self.exts)})"
+
+
 class DNotification(DNodeInner):
     if_feature: list[str]
     must: list[DMust]
@@ -1907,12 +1928,12 @@ class DType(object):
     config: bool
     description: ?str
     reference: ?str
-    exts: list[Ext]
+    exts: list[DExt]
     builtin_type: str
     default: ?value
     units: ?str
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value):
         self.name = name
         self.config = False
         self.description = description
@@ -1989,14 +2010,14 @@ class DType(object):
 class DTypeBinary(DType):
     length: ?Ranges[int]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, length: ?Ranges[int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, length: ?Ranges[int]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.length = length
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBinary:
         t = resolver.type_
-        return DTypeBinary(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.length)
+        return DTypeBinary(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.length)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, bytes):
@@ -2021,14 +2042,14 @@ class DTypeBinary(DType):
 class DTypeBits(DType):
     name_to_pos: dict[str, int]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, name_to_pos: dict[str, int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, name_to_pos: dict[str, int]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.name_to_pos = name_to_pos
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBits:
         t = resolver.type_
-        return DTypeBits(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.bits)
+        return DTypeBits(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.bits)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, set):
@@ -2047,13 +2068,13 @@ class DTypeBits(DType):
 class DTypeBoolean(DType):
     # No restrictions
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBoolean:
         t = resolver.type_
-        return DTypeBoolean(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default)
+        return DTypeBoolean(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default)
 
     def validate_value(self, val: value) -> bool:
         return isinstance(val, bool)
@@ -2065,7 +2086,7 @@ class DTypeDecimal64(DType):
     fraction_digits: bigint
     ranges: ?Ranges[Decimal]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, fraction_digits: bigint, ranges: ?Ranges[Decimal]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, fraction_digits: bigint, ranges: ?Ranges[Decimal]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.fraction_digits = fraction_digits
         self.ranges = ranges
@@ -2075,7 +2096,7 @@ class DTypeDecimal64(DType):
         _fraction_digits = resolver.fraction_digits
         if _fraction_digits is not None:
             t = resolver.type_
-            return DTypeDecimal64(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _fraction_digits, resolver.decimal_ranges)
+            return DTypeDecimal64(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, _fraction_digits, resolver.decimal_ranges)
         raise ValueError("Missing required fraction-digits for decimal64 type \"{resolver.type_.name}\"")
 
     def validate_value(self, val: value) -> bool:
@@ -2103,13 +2124,13 @@ class DTypeDecimal64(DType):
 class DTypeEmpty(DType):
     # No restrictions
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeEmpty:
         t = resolver.type_
-        return DTypeEmpty(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default)
+        return DTypeEmpty(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default)
 
     def validate_value(self, val: value) -> bool:
         return isinstance(val, bool)
@@ -2120,7 +2141,7 @@ class DTypeEmpty(DType):
 class DTypeEnum(DType):
     name_to_val: dict[str, int]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, name_to_val: dict[str, int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, name_to_val: dict[str, int]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.name_to_val = name_to_val
 
@@ -2130,7 +2151,7 @@ class DTypeEnum(DType):
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeEnum:
         t = resolver.type_
-        return DTypeEnum(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.enum_name_to_val)
+        return DTypeEnum(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.enum_name_to_val)
 
     def validate_value(self, val: value) -> bool:
         return isinstance(val, str) and val in self.name_to_val
@@ -2142,7 +2163,7 @@ class DTypeIdentityref(DType):
     identity_bases: list[DIdentity]
     identities: list[DIdentity]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, identity_bases: list[DIdentity], identities: list[DIdentity]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, identity_bases: list[DIdentity], identities: list[DIdentity]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.identity_bases = identity_bases
         self.identities = identities
@@ -2160,7 +2181,7 @@ class DTypeIdentityref(DType):
             identity_base = DIdentity("", "", prefix, name, [])
             identity_bases.append(identity_base)
         t = resolver.type_
-        return DTypeIdentityref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, identity_bases, [])
+        return DTypeIdentityref(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, identity_bases, [])
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         resolved_identity_bases = []
@@ -2187,7 +2208,7 @@ class DTypeIdentityref(DType):
 class DTypeInstanceIdentifier(DType):
     require_instance: bool
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, require_instance: bool):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, require_instance: bool):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.require_instance = require_instance
 
@@ -2198,7 +2219,7 @@ class DTypeInstanceIdentifier(DType):
     def from_resolver(resolver: DTypeResolver) -> DTypeInstanceIdentifier:
         t = resolver.type_
         _require_instance = resolver.require_instance
-        return DTypeInstanceIdentifier(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _require_instance is not None and _require_instance)
+        return DTypeInstanceIdentifier(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, _require_instance is not None and _require_instance)
 
     def validate_value(self, val: value) -> bool:
         return True # TODO
@@ -2225,14 +2246,14 @@ class DTypeInteger[T(Ord)](DType):
         return []
 
 class DTypeIntegerSigned(DTypeInteger[int]):
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, ranges: ?Ranges[int]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.ranges = ranges
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerSigned:
         t = resolver.type_
-        return DTypeIntegerSigned(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.int_ranges)
+        return DTypeIntegerSigned(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.int_ranges)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, int):
@@ -2243,14 +2264,14 @@ class DTypeIntegerSigned(DTypeInteger[int]):
         return "DTypeIntegerSigned({self.format_common_params()}, ranges={repr(self.ranges)})"
 
 class DTypeIntegerUnsigned(DTypeInteger[u64]):
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[u64]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, ranges: ?Ranges[u64]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.ranges = ranges
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerUnsigned:
         t = resolver.type_
-        return DTypeIntegerUnsigned(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.u64_ranges)
+        return DTypeIntegerUnsigned(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.u64_ranges)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, u64):
@@ -2265,7 +2286,7 @@ class DTypeLeafref(DType):
     require_instance: bool # default: True
     target_type: ?DType
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, target_type: ?DType, default: ?value, path: xpath.AbsoluteLocationPath, require_instance: bool):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, target_type: ?DType, default: ?value, path: xpath.AbsoluteLocationPath, require_instance: bool):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.path = path
         self.require_instance = require_instance
@@ -2280,7 +2301,7 @@ class DTypeLeafref(DType):
             # target_type is either passed to __init__ if we're restoring an
             # already resolved leafref, or it is set in resolve_references.
             _target_type = None
-            return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, _target_type, resolver.default, _path, _require_instance is not None and _require_instance)
+            return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, _target_type, resolver.default, _path, _require_instance is not None and _require_instance)
         raise ValueError("Type {resolver.type_.name}{" of base-type leafref" if resolver.type_.name != "leafref" else ""} requires path restriction")
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
@@ -2335,7 +2356,7 @@ class DTypeString(DType):
     length: ?Ranges[int]
     patterns: list[YangPattern]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, length: ?Ranges[int], patterns: list[YangPattern]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, length: ?Ranges[int], patterns: list[YangPattern]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.length = length
         self.patterns = patterns
@@ -2343,7 +2364,7 @@ class DTypeString(DType):
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeString:
         t = resolver.type_
-        return DTypeString(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.length, resolver.patterns)
+        return DTypeString(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.length, resolver.patterns)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, str):
@@ -2378,14 +2399,14 @@ class DTypeString(DType):
 class DTypeUnion(DType):
     types: list[DType]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, types: list[DType]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, types: list[DType]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.types = types
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeUnion:
         t = resolver.type_
-        return DTypeUnion(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.alt_types)
+        return DTypeUnion(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.alt_types)
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         for t in self.types:
@@ -3049,8 +3070,21 @@ class SchemaNode(object):
         - expand uses / groupings
         - handle augments
         - resolve types to base types
+        - resolve extension statements to look up namespace qualifiers of the module defining the extension
         """
         raise NotImplementedError('SchemaNode compile')
+
+    def compile_exts(self, context: Context) -> list[Ext]:
+        """Compile list[Ext] -> list[Ext] (preserving type)"""
+        if len(self.exts) == 0:
+            return self.exts
+
+        cexts = []
+        for ext in self.exts:
+            cext = ext.compile(context)
+            if isinstance(cext, Ext):
+                cexts.append(cext)
+        return cexts
 
     def expand_augments(self, context: Context, target_base: SchemaNode=self, in_uses=False, remap_imports):
         """Expand augment node"""
@@ -3118,7 +3152,7 @@ class SchemaNode(object):
                     if isinstance(target, SchemaNodeInner):
                         # Just move the child to the target
                         aug.expand_children(context, target, new_mod=aug.get_module_name(), new_ns=aug.get_namespace(), new_pfx=aug.get_prefix(), remap_imports=remap_imports)
-                        target.exts.extend(aug.exts)
+                        target.exts.extend(aug.compile_exts(context))
                     else:
                         raise ValueError("Augment target {target} is not an inner node")
 
@@ -3141,7 +3175,7 @@ class SchemaNode(object):
                     grouping = child.get_grouping(child.name, context)
                     grouping.expand_children(context, target, new_mod if new_mod is not None else target.mod, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx, remap_imports=remap_imports)
                     child.expand_augments(context, target, in_uses=True, remap_imports=remap_imports)
-                    child.expand_refines(target)
+                    child.expand_refines(context, target)
                 else:
                     c_child = child.compile(context, new_mod, new_ns, new_pfx)
                     if remap_imports is not None:
@@ -3155,7 +3189,7 @@ class SchemaNode(object):
     mut def resolve_compiled_schema_path_dependencies(self):
         pass
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         raise NotImplementedError('SchemaNode apply_refine not implemented for {type(self)}')
 
     def get_module_by_prefix(self, prefix: str, context: Context) -> Module:
@@ -3440,8 +3474,8 @@ class Ext(SchemaNode):
     name: str
     arg: ?str
 
-    def __init__(self, prefix: str, name: str, arg: ?str=None, exts=[]):
-        self.parent = None
+    def __init__(self, prefix: str, name: str, arg: ?str=None, exts=[], parent=None):
+        self.parent = parent
         self.mod = None
         self.ns = None
         self.pfx = None
@@ -3450,16 +3484,8 @@ class Ext(SchemaNode):
         self.name = name
         self.arg = arg
         self.exts = exts
-
-    def __repr__(self):
-        return "Ext(prefix={repr(self.prefix)}, name={repr(self.name)}, arg={repr(self.arg)}, exts={repr(self.exts)})"
-
-    @staticmethod
-    def from_fullname(fullname: str, arg: ?str=None, exts=[]) -> Ext:
-        parts = fullname.split(":", 1)
-        if len(parts) != 2:
-            raise ValueError("Invalid extension name {fullname}, extensions must always have a prefix like: foo:bar 'test';")
-        return Ext(parts[0], parts[1], None)
+        for n in self.exts:
+            n.parent = self
 
     def _get_class_name(self):
         return "Ext"
@@ -3470,6 +3496,9 @@ class Ext(SchemaNode):
         attrs: list[(str, ?value)] = [
             ("arg", self.arg),
             ("exts", self.exts),
+            ("mod", self.mod),
+            ("ns", self.ns),
+            ("pfx", self.pfx),
             ]
         prefix = self.prefix
         args = []
@@ -3491,9 +3520,57 @@ class Ext(SchemaNode):
             res.substatements.append(ext.to_statement())
         return res
 
-    def __str__(self):
-        self_arg = self.arg
-        return "Ext {self.name}{(' ' + self_arg if self_arg is not None else '')}"
+    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        ext_module = self.get_module_by_prefix(self.prefix, context)
+        for ext in ext_module.extension_:
+            if ext.name == self.name:
+                if ext.argument is not None and self.arg is None:
+                    raise ValueError("Extension {self.prefix}:{self.name} does not accept an argument")
+                elif ext.argument is None and self.arg is not None:
+                    raise ValueError("Extension {self.prefix}:{self.name} is missing an argument")
+                break
+        else:
+            raise ValueError("Extension {self.prefix}:{self.name} not found in module {ext_module.name}")
+        new = ResolvedExt(self.prefix,
+                  self.name,
+                  arg=self.arg,
+                  exts=self.compile_exts(context),
+                  parent=self.parent,
+                  mod=ext_module.name,
+                  ns=ext_module.get_namespace(),
+                  pfx=ext_module.get_prefix())
+        return new
+
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+        if self.prefix == old_pfx:
+            self.prefix = new_pfx
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
+
+    def to_dext(self) -> DExt:
+        raise ValueError("Extension {self.prefix}:{self.name} is not resolved")
+
+class ResolvedExt(Ext):
+    def __init__(self, prefix: str, name: str, arg: ?str=None, exts=[], parent=None, mod=None, ns=None, pfx=None):
+        Ext.__init__(self, prefix, name, arg, exts, parent)
+        self.mod = mod
+        self.ns = ns
+        self.pfx = pfx
+
+    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        return self
+
+    def to_dext(self) -> DExt:
+        return DExt(
+            module=_expect(self.mod, "ResolvedExt.mod"),
+            namespace=_expect(self.ns, "ResolvedExt.ns"),
+            prefix=_expect(self.pfx, "ResolvedExt.pfx"),
+            name=self.name,
+            arg=self.arg,
+            exts=[ext.to_dext() for ext in self.exts]
+        )
 
 extension Ext (Ord):
     def __eq__(self, other: Ext) -> bool:
@@ -3694,6 +3771,8 @@ def _prsrc_attrs(indent, attrs):
                         if isinstance(e, SchemaNode):
                             list_val.append(e.prsrc(indent+2))
                         elif isinstance(e, DNode):
+                            list_val.append(e.prsrc(indent+2))
+                        elif isinstance(e, DExt):
                             list_val.append(e.prsrc(indent+2))
                         else:
                             list_val.append(repr(e))
@@ -4345,6 +4424,8 @@ class Action(SchemaNodeInner):
         self.status = status
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         self_input = self.input
         if self_input is not None:
             self_input.parent = self
@@ -4392,7 +4473,7 @@ class Action(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -4402,7 +4483,7 @@ class Action(SchemaNodeInner):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def get(self, name: str, ns: ?str=None) -> SchemaNode:
         # TODO: support looking up qualified by namespace
@@ -4435,7 +4516,7 @@ class Action(SchemaNodeInner):
                      output=new_output if new_output is not None and isinstance(new_output, Output) else Output(),
                      reference=self.reference,
                      status=self.status,
-                     exts=self.exts,
+                     exts=self.compile_exts(context),
                      mod=new_mod if new_mod is not None else self.mod,
                      ns=new_ns if new_ns is not None else self.ns,
                      pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -4472,7 +4553,7 @@ class Action(SchemaNodeInner):
             if_feature=self.if_feature,
             reference=self.reference,
             status=self.status,
-            exts=self.exts,
+            exts=[ext.to_dext() for ext in self.exts],
             children=dnode_children
         )
         return new_dnode
@@ -4495,6 +4576,8 @@ class Action(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -4560,6 +4643,8 @@ class Anydata(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -4585,7 +4670,7 @@ class Anydata(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -4604,7 +4689,7 @@ class Anydata(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def to_dnode(self, context: DTypeContext) -> DAnydata:
         return DAnydata(
@@ -4620,7 +4705,7 @@ class Anydata(SchemaNodeOuter):
             reference=self.reference,
             status=self.status,
             when=self.when,
-            exts=self.exts
+            exts=[ext.to_dext() for ext in self.exts]
         )
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4633,7 +4718,7 @@ class Anydata(SchemaNodeOuter):
                       reference=self.reference,
                       status=self.status,
                       when=self.when,
-                      exts=self.exts,
+                      exts=self.compile_exts(context),
                       mod=new_mod if new_mod is not None else self.mod,
                       ns=new_ns if new_ns is not None else self.ns,
                       pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -4650,6 +4735,8 @@ class Anydata(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
@@ -4717,6 +4804,8 @@ class Anyxml(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -4742,7 +4831,7 @@ class Anyxml(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -4761,7 +4850,7 @@ class Anyxml(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def to_dnode(self, context: DTypeContext) -> DAnyxml:
         return DAnyxml(
@@ -4777,7 +4866,7 @@ class Anyxml(SchemaNodeOuter):
             reference=self.reference,
             status=self.status,
             when=self.when,
-            exts=self.exts
+            exts=[ext.to_dext() for ext in self.exts]
         )
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -4790,7 +4879,7 @@ class Anyxml(SchemaNodeOuter):
                      reference=self.reference,
                      status=self.status,
                      when=self.when,
-                     exts=self.exts,
+                     exts=self.compile_exts(context),
                      mod=new_mod if new_mod is not None else self.mod,
                      ns=new_ns if new_ns is not None else self.ns,
                      pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -4807,6 +4896,8 @@ class Anyxml(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
@@ -4869,6 +4960,8 @@ class Augment(SchemaNodeInner):
         self.when = when
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.children:
             n.parent = self
             n_mod = n.mod
@@ -4891,7 +4984,7 @@ class Augment(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -4901,7 +4994,7 @@ class Augment(SchemaNodeInner):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Augment(self.target_node,
@@ -4910,7 +5003,7 @@ class Augment(SchemaNodeInner):
                       reference=self.reference,
                       status=self.status,
                       when=self.when,
-                      exts=self.exts,
+                      exts=self.compile_exts(context),
                       mod=new_mod if new_mod is not None else self.mod,
                       ns=new_ns if new_ns is not None else self.ns,
                       pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -4932,6 +5025,8 @@ class Augment(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -4987,6 +5082,8 @@ class BelongsTo(SchemaNodeOuter):
         self.module = module
         self.prefix = prefix
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -4997,7 +5094,7 @@ class BelongsTo(SchemaNodeOuter):
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = BelongsTo(self.module,
                         prefix=self.prefix,
-                        exts=self.exts,
+                        exts=self.compile_exts(context),
                         mod=new_mod if new_mod is not None else self.mod,
                         ns=new_ns if new_ns is not None else self.ns,
                         pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5014,6 +5111,8 @@ class BelongsTo(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -5069,6 +5168,8 @@ class Bit(SchemaNodeOuter):
         self.reference = reference
         self.status = status
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -5080,7 +5181,7 @@ class Bit(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5090,7 +5191,7 @@ class Bit(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Bit(self.name,
@@ -5099,7 +5200,7 @@ class Bit(SchemaNodeOuter):
                   position=self.position,
                   reference=self.reference,
                   status=self.status,
-                  exts=self.exts,
+                  exts=self.compile_exts(context),
                   mod=new_mod if new_mod is not None else self.mod,
                   ns=new_ns if new_ns is not None else self.ns,
                   pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5116,6 +5217,8 @@ class Bit(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
@@ -5173,6 +5276,8 @@ class Case(SchemaNodeInner):
         self.when = when
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.children:
             n.parent = self
             n_mod = n.mod
@@ -5195,7 +5300,7 @@ class Case(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5205,7 +5310,7 @@ class Case(SchemaNodeInner):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Case(self.name,
@@ -5214,7 +5319,7 @@ class Case(SchemaNodeInner):
                    reference=self.reference,
                    status=self.status,
                    when=self.when,
-                   exts=self.exts,
+                   exts=self.compile_exts(context),
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5236,6 +5341,8 @@ class Case(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -5305,6 +5412,8 @@ class Choice(SchemaNodeInner):
         self.when = when
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.children:
             n.parent = self
             n_mod = n.mod
@@ -5330,7 +5439,7 @@ class Choice(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -5350,7 +5459,7 @@ class Choice(SchemaNodeInner):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Choice(self.name,
@@ -5362,7 +5471,7 @@ class Choice(SchemaNodeInner):
                      reference=self.reference,
                      status=self.status,
                      when=self.when,
-                     exts=self.exts,
+                     exts=self.compile_exts(context),
                      mod=new_mod if new_mod is not None else self.mod,
                      ns=new_ns if new_ns is not None else self.ns,
                      pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5384,6 +5493,8 @@ class Choice(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -5453,6 +5564,8 @@ class Container(SchemaNodeInner):
         self.when = when
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -5489,7 +5602,7 @@ class Container(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -5508,7 +5621,7 @@ class Container(SchemaNodeInner):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def is_presence(self) -> bool:
         selfpresence = self.presence
@@ -5530,7 +5643,7 @@ class Container(SchemaNodeInner):
             reference=self.reference,
             status=self.status,
             when=self.when,
-            exts=self.exts,
+            exts=[ext.to_dext() for ext in self.exts],
             children=self.get_dnode_children(context)
         )
         return new_dnode
@@ -5545,7 +5658,7 @@ class Container(SchemaNodeInner):
                         reference=self.reference,
                         status=self.status,
                         when=self.when,
-                        exts=self.exts,
+                        exts=self.compile_exts(context),
                         mod=new_mod if new_mod is not None else self.mod,
                         ns=new_ns if new_ns is not None else self.ns,
                         pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5567,6 +5680,8 @@ class Container(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -5631,6 +5746,8 @@ class Enum(SchemaNodeOuter):
         self.status = status
         self.value = value
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -5642,7 +5759,7 @@ class Enum(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5652,7 +5769,7 @@ class Enum(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Enum(self.name,
@@ -5661,7 +5778,7 @@ class Enum(SchemaNodeOuter):
                    reference=self.reference,
                    status=self.status,
                    value=self.value,
-                   exts=self.exts,
+                   exts=self.compile_exts(context),
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5678,6 +5795,8 @@ class Enum(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
@@ -5732,6 +5851,8 @@ class Extension(SchemaNodeOuter):
         self.reference = reference
         self.status = status
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -5742,14 +5863,14 @@ class Extension(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Extension(self.name,
@@ -5757,7 +5878,7 @@ class Extension(SchemaNodeOuter):
                         description=self.description,
                         reference=self.reference,
                         status=self.status,
-                        exts=self.exts,
+                        exts=self.compile_exts(context),
                         mod=new_mod if new_mod is not None else self.mod,
                         ns=new_ns if new_ns is not None else self.ns,
                         pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5774,6 +5895,8 @@ class Extension(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -5827,6 +5950,8 @@ class Feature(SchemaNodeOuter):
         self.reference = reference
         self.status = status
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -5837,7 +5962,7 @@ class Feature(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -5847,7 +5972,7 @@ class Feature(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Feature(self.name,
@@ -5855,7 +5980,7 @@ class Feature(SchemaNodeOuter):
                       if_feature=self.if_feature,
                       reference=self.reference,
                       status=self.status,
-                      exts=self.exts,
+                      exts=self.compile_exts(context),
                       mod=new_mod if new_mod is not None else self.mod,
                       ns=new_ns if new_ns is not None else self.ns,
                       pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5872,6 +5997,8 @@ class Feature(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
 
@@ -5925,6 +6052,8 @@ class Grouping(SchemaNodeInner):
         self.status = status
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.children:
             n.parent = self
             n_mod = n.mod
@@ -5945,21 +6074,21 @@ class Grouping(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Grouping(self.name,
                        description=self.description,
                        reference=self.reference,
                        status=self.status,
-                       exts=self.exts,
+                       exts=self.compile_exts(context),
                        mod=new_mod if new_mod is not None else self.mod,
                        ns=new_ns if new_ns is not None else self.ns,
                        pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -5981,6 +6110,8 @@ class Grouping(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -6039,6 +6170,8 @@ class Identity(SchemaNodeOuter):
         self.reference = reference
         self.status = status
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6050,7 +6183,7 @@ class Identity(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -6060,7 +6193,7 @@ class Identity(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         # Normalize identity base to always include the module prefix. In doing
@@ -6079,7 +6212,7 @@ class Identity(SchemaNodeOuter):
                        if_feature=self.if_feature,
                        reference=self.reference,
                        status=self.status,
-                       exts=self.exts,
+                       exts=self.compile_exts(context),
                        mod=new_mod if new_mod is not None else self.mod,
                        ns=new_ns if new_ns is not None else self.ns,
                        pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -6096,6 +6229,8 @@ class Identity(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.base = [remap_path_prefix(b, old_pfx, new_pfx) for b in self.base]
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
@@ -6151,6 +6286,8 @@ class Import(SchemaNodeOuter):
         self.reference = reference
         self.revision_date = revision_date
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6161,14 +6298,14 @@ class Import(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Import(self.module,
@@ -6176,7 +6313,7 @@ class Import(SchemaNodeOuter):
                      description=self.description,
                      reference=self.reference,
                      revision_date=self.revision_date,
-                     exts=self.exts,
+                     exts=self.compile_exts(context),
                      mod=new_mod if new_mod is not None else self.mod,
                      ns=new_ns if new_ns is not None else self.ns,
                      pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -6193,6 +6330,8 @@ class Import(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -6244,6 +6383,8 @@ class Include(SchemaNodeOuter):
         self.reference = reference
         self.revision_date = revision_date
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6253,21 +6394,21 @@ class Include(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Include(self.module,
                       description=self.description,
                       reference=self.reference,
                       revision_date=self.revision_date,
-                      exts=self.exts,
+                      exts=self.compile_exts(context),
                       mod=new_mod if new_mod is not None else self.mod,
                       ns=new_ns if new_ns is not None else self.ns,
                       pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -6284,6 +6425,8 @@ class Include(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -6330,6 +6473,8 @@ class Input(SchemaNodeInner):
         self.must = must
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -6359,11 +6504,11 @@ class Input(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         for ref_must in refine.must:
             if ref_must not in self.must:
                 self.must.append(ref_must)
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def to_dnode(self, context: DTypeContext) -> DInput:
         new_dnode = DInput(
@@ -6371,14 +6516,14 @@ class Input(SchemaNodeInner):
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             must=[m.to_dmust() for m in self.must],
-            exts=self.exts,
+            exts=[ext.to_dext() for ext in self.exts],
             children=self.get_dnode_children(context)
         )
         return new_dnode
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Input(must=self.must,
-                    exts=self.exts,
+                    exts=self.compile_exts(context),
                     mod=new_mod if new_mod is not None else self.mod,
                     ns=new_ns if new_ns is not None else self.ns,
                     pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -6400,6 +6545,8 @@ class Input(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -6472,6 +6619,8 @@ class Leaf(SchemaNodeOuter):
         self.units = units
         self.when = when
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -6510,7 +6659,7 @@ class Leaf(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -6533,7 +6682,7 @@ class Leaf(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         resolved_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
@@ -6550,7 +6699,7 @@ class Leaf(SchemaNodeOuter):
                    type_=resolved_type,
                    units=self.units,
                    when=self.when,
-                   exts=self.exts,
+                   exts=self.compile_exts(context),
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -6589,7 +6738,7 @@ class Leaf(SchemaNodeOuter):
             type_=dtype,
             units=self.units,
             when=self.when,
-            exts=self.exts
+            exts=[ext.to_dext() for ext in self.exts]
         )
         return new_dnode
 
@@ -6605,6 +6754,8 @@ class Leaf(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         if self.type_.name == 'identityref':
             self_default = self.default
@@ -6687,6 +6838,8 @@ class LeafList(SchemaNodeOuter):
         self.units = units
         self.when = when
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -6727,7 +6880,7 @@ class LeafList(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -6752,7 +6905,7 @@ class LeafList(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         resolved_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
@@ -6771,7 +6924,7 @@ class LeafList(SchemaNodeOuter):
                        type_=resolved_type,
                        units=self.units,
                        when=self.when,
-                       exts=self.exts,
+                       exts=self.compile_exts(context),
                        mod=new_mod if new_mod is not None else self.mod,
                        ns=new_ns if new_ns is not None else self.ns,
                        pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -6820,7 +6973,7 @@ class LeafList(SchemaNodeOuter):
             type_=dtype,
             units=self.units,
             when=self.when,
-            exts=self.exts
+            exts=[ext.to_dext() for ext in self.exts]
         )
         return new_dnode
 
@@ -6836,6 +6989,8 @@ class LeafList(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         if self.type_.name == 'identityref':
             self.default = [remap_path_prefix(d, old_pfx, new_pfx) for d in self.default]
@@ -6898,6 +7053,8 @@ class Length(SchemaNodeOuter):
         self.error_message = error_message
         self.reference = reference
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -6908,14 +7065,14 @@ class Length(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Length(self.value,
@@ -6923,7 +7080,7 @@ class Length(SchemaNodeOuter):
                      error_app_tag=self.error_app_tag,
                      error_message=self.error_message,
                      reference=self.reference,
-                     exts=self.exts,
+                     exts=self.compile_exts(context),
                      mod=new_mod if new_mod is not None else self.mod,
                      ns=new_ns if new_ns is not None else self.ns,
                      pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -6940,6 +7097,8 @@ class Length(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -7010,6 +7169,8 @@ class List(SchemaNodeInner):
         self.when = when
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -7050,7 +7211,7 @@ class List(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -7072,7 +7233,7 @@ class List(SchemaNodeInner):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def keys(self) -> list[str]:
         selfkey = self.key
@@ -7109,7 +7270,7 @@ class List(SchemaNodeInner):
             reference=self.reference,
             status=self.status,
             when=self.when,
-            exts=self.exts,
+            exts=[ext.to_dext() for ext in self.exts],
             children=self.get_dnode_children(context)
         )
         return new_dnode
@@ -7128,7 +7289,7 @@ class List(SchemaNodeInner):
                    status=self.status,
                    unique=self.unique,
                    when=self.when,
-                   exts=self.exts,
+                   exts=self.compile_exts(context),
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -7150,6 +7311,8 @@ class List(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -7234,6 +7397,8 @@ class Module(SchemaNodeInner):
         self.yang_version = yang_version
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.augment:
             n.parent = self
             n_mod = n.mod
@@ -7331,14 +7496,14 @@ class Module(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def get_import_by_prefix(self, prefix: str) -> Import:
         for imp in self.import_:
@@ -7387,7 +7552,7 @@ class Module(SchemaNodeInner):
             # revisions SHOULD be sorted in reverse chronological order
             revision=list(reversed(sorted(self.revision))),
             reference=self.reference,
-            exts=self.exts,
+            exts=[ext.to_dext() for ext in self.exts],
             children=self.get_dnode_children(context)
         )
         return new_dnode
@@ -7425,7 +7590,7 @@ class Module(SchemaNodeInner):
                      deviation=self.deviation,
                      extension_=self.extension_,
                      feature=self.feature,
-                     exts=self.exts)
+                     exts=self.compile_exts(context))
         self.expand_children(context, new, new_mod, new_ns, new_pfx, remap_imports)
         new.expand_augments(context, remap_imports=remap_imports)
         return new
@@ -7445,6 +7610,8 @@ class Module(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -7512,6 +7679,8 @@ class Must(SchemaNodeOuter):
         self.error_message = error_message
         self.reference = reference
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -7522,14 +7691,14 @@ class Must(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def to_dmust(self) -> DMust:
         return DMust(
@@ -7545,7 +7714,7 @@ class Must(SchemaNodeOuter):
                    error_app_tag=self.error_app_tag,
                    error_message=self.error_message,
                    reference=self.reference,
-                   exts=self.exts,
+                   exts=self.compile_exts(context),
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
                    pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -7562,6 +7731,8 @@ class Must(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -7618,6 +7789,8 @@ class Notification(SchemaNodeInner):
         self.status = status
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -7651,7 +7824,7 @@ class Notification(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -7664,7 +7837,7 @@ class Notification(SchemaNodeInner):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def to_dnode(self, context: DTypeContext) -> DNotification:
         new_dnode = DNotification(
@@ -7676,7 +7849,7 @@ class Notification(SchemaNodeInner):
             if_feature=self.if_feature,
             reference=self.reference,
             status=self.status,
-            exts=self.exts,
+            exts=[ext.to_dext() for ext in self.exts],
             children=self.get_dnode_children(context)
         )
         return new_dnode
@@ -7691,7 +7864,7 @@ class Notification(SchemaNodeInner):
                            must=self.must,
                            reference=self.reference,
                            status=self.status,
-                           exts=self.exts,
+                           exts=self.compile_exts(context),
                            mod=new_mod if new_mod is not None else self.mod,
                            ns=new_ns if new_ns is not None else self.ns,
                            pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -7713,6 +7886,8 @@ class Notification(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -7765,6 +7940,8 @@ class Output(SchemaNodeInner):
         self.must = must
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -7794,11 +7971,11 @@ class Output(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         for ref_must in refine.must:
             if ref_must not in self.must:
                 self.must.append(ref_must)
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def to_dnode(self, context: DTypeContext) -> DOutput:
         new_dnode = DOutput(
@@ -7806,7 +7983,7 @@ class Output(SchemaNodeInner):
             namespace=self.get_namespace(),
             prefix=self.get_prefix(),
             must=[m.to_dmust() for m in self.must],
-            exts=self.exts,
+            exts=[ext.to_dext() for ext in self.exts],
             children=self.get_dnode_children(context)
         )
         return new_dnode
@@ -7816,7 +7993,7 @@ class Output(SchemaNodeInner):
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Output(must=self.must,
-                     exts=self.exts,
+                     exts=self.compile_exts(context),
                      mod=new_mod if new_mod is not None else self.mod,
                      ns=new_ns if new_ns is not None else self.ns,
                      pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -7838,6 +8015,8 @@ class Output(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -7898,6 +8077,8 @@ class Pattern(SchemaNodeOuter):
         self.modifier = modifier
         self.reference = reference
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -7909,14 +8090,14 @@ class Pattern(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Pattern(self.value,
@@ -7925,7 +8106,7 @@ class Pattern(SchemaNodeOuter):
                       error_message=self.error_message,
                       modifier=self.modifier,
                       reference=self.reference,
-                      exts=self.exts,
+                      exts=self.compile_exts(context),
                       mod=new_mod if new_mod is not None else self.mod,
                       ns=new_ns if new_ns is not None else self.ns,
                       pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -7942,6 +8123,8 @@ class Pattern(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -7995,6 +8178,8 @@ class Range(SchemaNodeOuter):
         self.error_message = error_message
         self.reference = reference
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -8005,14 +8190,14 @@ class Range(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Range(self.value,
@@ -8020,7 +8205,7 @@ class Range(SchemaNodeOuter):
                     error_app_tag=self.error_app_tag,
                     error_message=self.error_message,
                     reference=self.reference,
-                    exts=self.exts,
+                    exts=self.compile_exts(context),
                     mod=new_mod if new_mod is not None else self.mod,
                     ns=new_ns if new_ns is not None else self.ns,
                     pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -8037,6 +8222,8 @@ class Range(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -8102,6 +8289,8 @@ class Refine(SchemaNodeOuter):
         self.presence = presence
         self.reference = reference
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
         for n in self.must:
             n.parent = self
             n_mod = n.mod
@@ -8129,7 +8318,7 @@ class Refine(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_config = refine.config
         if ref_config is not None:
             self.config = ref_config
@@ -8160,7 +8349,7 @@ class Refine(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Refine(self.target_node,
@@ -8174,7 +8363,7 @@ class Refine(SchemaNodeOuter):
                      must=self.must,
                      presence=self.presence,
                      reference=self.reference,
-                     exts=self.exts,
+                     exts=self.compile_exts(context),
                      mod=new_mod if new_mod is not None else self.mod,
                      ns=new_ns if new_ns is not None else self.ns,
                      pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -8191,6 +8380,8 @@ class Refine(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
@@ -8244,6 +8435,8 @@ class Revision(SchemaNodeOuter):
         self.description = description
         self.reference = reference
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
@@ -8252,20 +8445,20 @@ class Revision(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Revision(self.date,
                        description=self.description,
                        reference=self.reference,
-                       exts=self.exts,
+                       exts=self.compile_exts(context),
                        mod=new_mod if new_mod is not None else self.mod,
                        ns=new_ns if new_ns is not None else self.ns,
                        pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -8282,6 +8475,8 @@ class Revision(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
 
     def __str__(self):
@@ -8340,6 +8535,8 @@ class Rpc(SchemaNodeInner):
         self.status = status
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         self_input = self.input
         if self_input is not None:
             self_input.parent = self
@@ -8387,7 +8584,7 @@ class Rpc(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -8397,7 +8594,7 @@ class Rpc(SchemaNodeInner):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def get(self, name: str, ns: ?str=None) -> SchemaNode:
         # TODO: support looking up qualified by namespace
@@ -8430,7 +8627,7 @@ class Rpc(SchemaNodeInner):
                   output=new_output if new_output is not None and isinstance(new_output, Output) else Output(),
                   reference=self.reference,
                   status=self.status,
-                  exts=self.exts,
+                  exts=self.compile_exts(context),
                   mod=new_mod if new_mod is not None else self.mod,
                   ns=new_ns if new_ns is not None else self.ns,
                   pfx=new_pfx if new_pfx is not None else self.pfx)
@@ -8476,7 +8673,7 @@ class Rpc(SchemaNodeInner):
             output=output_dnode if isinstance(output_dnode, DOutput) else None,
             reference=self.reference,
             status=self.status,
-            exts=self.exts,
+            exts=[ext.to_dext() for ext in self.exts],
             children=dnode_children
         )
         return new_dnode
@@ -8499,6 +8696,8 @@ class Rpc(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -8575,6 +8774,8 @@ class Submodule(SchemaNodeInner):
         self.yang_version = yang_version
         self.exts = exts
         self.children = children
+        for n in self.exts:
+            n.parent = self
         for n in self.augment:
             n.parent = self
             n_mod = n.mod
@@ -8681,14 +8882,14 @@ class Submodule(SchemaNodeInner):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def get_modrev(self) -> ModRev:
         rev = self.get_revision()
@@ -8717,7 +8918,7 @@ class Submodule(SchemaNodeInner):
                         deviation=self.deviation,
                         extension_=self.extension_,
                         feature=self.feature,
-                        exts=self.exts)
+                        exts=self.compile_exts(context))
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
         new.expand_augments(context)
         return new
@@ -8737,6 +8938,8 @@ class Submodule(SchemaNodeInner):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         for child in self.children:
             child.remap_prefix_references(old_pfx, new_pfx)
@@ -8806,6 +9009,8 @@ class Type(SchemaNodeOuter):
         self.require_instance = require_instance
         self.type_ = type_
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
         for n in self.bit:
             n.parent = self
             n_mod = n.mod
@@ -8908,7 +9113,7 @@ class Type(SchemaNodeOuter):
                         self.name,
                         base=fq_base,
                         require_instance=self.require_instance,
-                        exts=self.exts,
+                        exts=self.compile_exts(context),
                         mod=self.mod,
                         ns=self.ns,
                         pfx=self.pfx)
@@ -8919,6 +9124,7 @@ class Type(SchemaNodeOuter):
                 return ResolvedType(self.name,
                         base=self.base,
                         type_=resolved_union_types,
+                        exts=self.compile_exts(context),
                         mod=self.mod,
                         ns=self.ns,
                         pfx=self.pfx)
@@ -8936,7 +9142,7 @@ class Type(SchemaNodeOuter):
                     range_=self.range_,
                     require_instance=self.require_instance,
                     type_=self.type_,
-                    exts=self.exts,
+                    exts=self.compile_exts(context),
                     mod=self.mod,
                     ns=self.ns,
                     pfx=self.pfx)
@@ -8964,7 +9170,7 @@ class Type(SchemaNodeOuter):
                 range_=self.range_,
                 require_instance=self.require_instance,
                 type_=self.type_,
-                exts=self.exts,
+                exts=self.compile_exts(context),
                 mod=self.mod,
                 ns=self.ns,
                 pfx=self.pfx,
@@ -8992,6 +9198,8 @@ class Type(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.base = [remap_path_prefix(b, old_pfx, new_pfx) for b in self.base]
         self_path = self.path
@@ -9056,6 +9264,8 @@ class Typedef(SchemaNodeOuter):
         self.type_ = type_
         self.units = units
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
         self.type_.parent = self
         n_mod = self.type_.mod
         if n_mod is None:
@@ -9078,7 +9288,7 @@ class Typedef(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         if len(refine.default) == 1:
             self.default = refine.default[0]
         elif len(refine.default) > 1:
@@ -9089,7 +9299,7 @@ class Typedef(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def resolve_typedef(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None, recursion_level=0, _top_name: ?str=None):
         top_name = _top_name if _top_name is not None else self.name
@@ -9105,7 +9315,7 @@ class Typedef(SchemaNodeOuter):
                       status=self.status,
                       type_=resolved_base_type,
                       units=self.units,
-                      exts=self.exts)
+                      exts=self.compile_exts(context))
 
         resolved_base_type.parent = new
 
@@ -9126,6 +9336,8 @@ class Typedef(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         if self.type_.name == 'identityref':
             self_default = self.default
@@ -9190,6 +9402,8 @@ class Uses(SchemaNodeOuter):
         self.status = status
         self.when = when
         self.exts = exts
+        for n in self.exts:
+            n.parent = self
         for n in self.augment:
             n.parent = self
             n_mod = n.mod
@@ -9225,7 +9439,7 @@ class Uses(SchemaNodeOuter):
             ("exts", self.exts),
         ]
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         ref_description = refine.description
         if ref_description is not None:
             self.description = ref_description
@@ -9235,12 +9449,12 @@ class Uses(SchemaNodeOuter):
         ref_reference = refine.reference
         if ref_reference is not None:
             self.reference = ref_reference
-        self.exts.extend(refine.exts)
+        self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         raise ValueError("Cannot compile 'uses'")
 
-    mut def expand_refines(self, target_base: SchemaNode):
+    mut def expand_refines(self, context: Context, target_base: SchemaNode):
         """Expand refinements in the uses statement to the target nodes
 
         target_base is the SchemaNode where this uses statement is located
@@ -9264,7 +9478,7 @@ class Uses(SchemaNodeOuter):
 
         for refine in self.refine:
             target = get_target(target_base, refine.target_node)
-            target.apply_refine(refine)
+            target.apply_refine(context, refine)
 
     def update_namespace_qualifiers(self, new_ns: str, new_pfx: str, new_mod: str) -> None:
         """Updates the ns (namespace), pfx (prefix), and mod (module) attributes.
@@ -9281,6 +9495,8 @@ class Uses(SchemaNodeOuter):
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
         """
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
 
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         self_when = self.when

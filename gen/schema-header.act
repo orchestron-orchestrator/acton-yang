@@ -167,6 +167,11 @@ _quoted_arg_keywords = set([
     "yang-version",
 ])
 
+def _expect[T](a: ?T, ctx: ?str=None) -> T:
+    if a is not None:
+        return a
+    raise ValueError("expected value (not None){"for: {{ctx}}" if ctx is not None else ""}")
+
 class Statement(object):
     kw: str
     arg: ?str
@@ -293,7 +298,7 @@ class DNode(object):
     config: bool
     description: ?str
     reference: ?str
-    exts: list[Ext]
+    exts: list[DExt]
 
     def get(self, name: str, module: ?str=None, namespace: ?str=None, prefix: ?str=None, allow_unqualified=True) -> DNode:
         """Get child node by name with optional namespace qualifiers.
@@ -1501,6 +1506,22 @@ class DMust(object):
         return "DMust(condition={repr(self.condition)}, description={repr(self.description)}, error_app_tag={repr(self.error_app_tag)}, error_message={repr(self.error_message)}, reference={repr(self.reference)})"
 
 
+class DExt(object):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, arg: ?str=None, exts=[]):
+        self.module = module
+        self.namespace = namespace
+        self.prefix = prefix
+        self.name = name
+        self.arg = arg
+        self.exts = exts
+
+    def prsrc(self, indent=0):
+        return "{_ind(indent)}{repr(self)}"
+
+    def __repr__(self):
+        return "DExt(module={repr(self.module)}, namespace={repr(self.namespace)}, prefix={repr(self.prefix)}, name={repr(self.name)}, arg={repr(self.arg)}, exts={repr(self.exts)})"
+
+
 class DNotification(DNodeInner):
     if_feature: list[str]
     must: list[DMust]
@@ -1911,12 +1932,12 @@ class DType(object):
     config: bool
     description: ?str
     reference: ?str
-    exts: list[Ext]
+    exts: list[DExt]
     builtin_type: str
     default: ?value
     units: ?str
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value):
         self.name = name
         self.config = False
         self.description = description
@@ -1993,14 +2014,14 @@ class DType(object):
 class DTypeBinary(DType):
     length: ?Ranges[int]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, length: ?Ranges[int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, length: ?Ranges[int]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.length = length
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBinary:
         t = resolver.type_
-        return DTypeBinary(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.length)
+        return DTypeBinary(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.length)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, bytes):
@@ -2025,14 +2046,14 @@ class DTypeBinary(DType):
 class DTypeBits(DType):
     name_to_pos: dict[str, int]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, name_to_pos: dict[str, int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, name_to_pos: dict[str, int]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.name_to_pos = name_to_pos
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBits:
         t = resolver.type_
-        return DTypeBits(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.bits)
+        return DTypeBits(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.bits)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, set):
@@ -2051,13 +2072,13 @@ class DTypeBits(DType):
 class DTypeBoolean(DType):
     # No restrictions
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBoolean:
         t = resolver.type_
-        return DTypeBoolean(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default)
+        return DTypeBoolean(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default)
 
     def validate_value(self, val: value) -> bool:
         return isinstance(val, bool)
@@ -2069,7 +2090,7 @@ class DTypeDecimal64(DType):
     fraction_digits: bigint
     ranges: ?Ranges[Decimal]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, fraction_digits: bigint, ranges: ?Ranges[Decimal]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, fraction_digits: bigint, ranges: ?Ranges[Decimal]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.fraction_digits = fraction_digits
         self.ranges = ranges
@@ -2079,7 +2100,7 @@ class DTypeDecimal64(DType):
         _fraction_digits = resolver.fraction_digits
         if _fraction_digits is not None:
             t = resolver.type_
-            return DTypeDecimal64(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _fraction_digits, resolver.decimal_ranges)
+            return DTypeDecimal64(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, _fraction_digits, resolver.decimal_ranges)
         raise ValueError("Missing required fraction-digits for decimal64 type \"{resolver.type_.name}\"")
 
     def validate_value(self, val: value) -> bool:
@@ -2107,13 +2128,13 @@ class DTypeDecimal64(DType):
 class DTypeEmpty(DType):
     # No restrictions
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeEmpty:
         t = resolver.type_
-        return DTypeEmpty(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default)
+        return DTypeEmpty(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default)
 
     def validate_value(self, val: value) -> bool:
         return isinstance(val, bool)
@@ -2124,7 +2145,7 @@ class DTypeEmpty(DType):
 class DTypeEnum(DType):
     name_to_val: dict[str, int]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, name_to_val: dict[str, int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, name_to_val: dict[str, int]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.name_to_val = name_to_val
 
@@ -2134,7 +2155,7 @@ class DTypeEnum(DType):
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeEnum:
         t = resolver.type_
-        return DTypeEnum(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.enum_name_to_val)
+        return DTypeEnum(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.enum_name_to_val)
 
     def validate_value(self, val: value) -> bool:
         return isinstance(val, str) and val in self.name_to_val
@@ -2146,7 +2167,7 @@ class DTypeIdentityref(DType):
     identity_bases: list[DIdentity]
     identities: list[DIdentity]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, identity_bases: list[DIdentity], identities: list[DIdentity]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, identity_bases: list[DIdentity], identities: list[DIdentity]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.identity_bases = identity_bases
         self.identities = identities
@@ -2164,7 +2185,7 @@ class DTypeIdentityref(DType):
             identity_base = DIdentity("", "", prefix, name, [])
             identity_bases.append(identity_base)
         t = resolver.type_
-        return DTypeIdentityref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, identity_bases, [])
+        return DTypeIdentityref(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, identity_bases, [])
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         resolved_identity_bases = []
@@ -2191,7 +2212,7 @@ class DTypeIdentityref(DType):
 class DTypeInstanceIdentifier(DType):
     require_instance: bool
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, require_instance: bool):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, require_instance: bool):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.require_instance = require_instance
 
@@ -2202,7 +2223,7 @@ class DTypeInstanceIdentifier(DType):
     def from_resolver(resolver: DTypeResolver) -> DTypeInstanceIdentifier:
         t = resolver.type_
         _require_instance = resolver.require_instance
-        return DTypeInstanceIdentifier(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, _require_instance is not None and _require_instance)
+        return DTypeInstanceIdentifier(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, _require_instance is not None and _require_instance)
 
     def validate_value(self, val: value) -> bool:
         return True # TODO
@@ -2229,14 +2250,14 @@ class DTypeInteger[T(Ord)](DType):
         return []
 
 class DTypeIntegerSigned(DTypeInteger[int]):
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[int]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, ranges: ?Ranges[int]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.ranges = ranges
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerSigned:
         t = resolver.type_
-        return DTypeIntegerSigned(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.int_ranges)
+        return DTypeIntegerSigned(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.int_ranges)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, int):
@@ -2247,14 +2268,14 @@ class DTypeIntegerSigned(DTypeInteger[int]):
         return "DTypeIntegerSigned({self.format_common_params()}, ranges={repr(self.ranges)})"
 
 class DTypeIntegerUnsigned(DTypeInteger[u64]):
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, ranges: ?Ranges[u64]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, ranges: ?Ranges[u64]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.ranges = ranges
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerUnsigned:
         t = resolver.type_
-        return DTypeIntegerUnsigned(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.u64_ranges)
+        return DTypeIntegerUnsigned(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.u64_ranges)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, u64):
@@ -2269,7 +2290,7 @@ class DTypeLeafref(DType):
     require_instance: bool # default: True
     target_type: ?DType
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, target_type: ?DType, default: ?value, path: xpath.AbsoluteLocationPath, require_instance: bool):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, target_type: ?DType, default: ?value, path: xpath.AbsoluteLocationPath, require_instance: bool):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.path = path
         self.require_instance = require_instance
@@ -2284,7 +2305,7 @@ class DTypeLeafref(DType):
             # target_type is either passed to __init__ if we're restoring an
             # already resolved leafref, or it is set in resolve_references.
             _target_type = None
-            return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, _target_type, resolver.default, _path, _require_instance is not None and _require_instance)
+            return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, _target_type, resolver.default, _path, _require_instance is not None and _require_instance)
         raise ValueError("Type {resolver.type_.name}{" of base-type leafref" if resolver.type_.name != "leafref" else ""} requires path restriction")
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
@@ -2339,7 +2360,7 @@ class DTypeString(DType):
     length: ?Ranges[int]
     patterns: list[YangPattern]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, length: ?Ranges[int], patterns: list[YangPattern]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, length: ?Ranges[int], patterns: list[YangPattern]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.length = length
         self.patterns = patterns
@@ -2347,7 +2368,7 @@ class DTypeString(DType):
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeString:
         t = resolver.type_
-        return DTypeString(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.length, resolver.patterns)
+        return DTypeString(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.length, resolver.patterns)
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, str):
@@ -2382,14 +2403,14 @@ class DTypeString(DType):
 class DTypeUnion(DType):
     types: list[DType]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[Ext], builtin_type: str, default: ?value, types: list[DType]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, types: list[DType]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.types = types
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeUnion:
         t = resolver.type_
-        return DTypeUnion(t.name, resolver.description, resolver.reference, resolver.units, t.exts, resolver.builtin_type, resolver.default, resolver.alt_types)
+        return DTypeUnion(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.alt_types)
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         for t in self.types:
@@ -3053,8 +3074,21 @@ class SchemaNode(object):
         - expand uses / groupings
         - handle augments
         - resolve types to base types
+        - resolve extension statements to look up namespace qualifiers of the module defining the extension
         """
         raise NotImplementedError('SchemaNode compile')
+
+    def compile_exts(self, context: Context) -> list[Ext]:
+        """Compile list[Ext] -> list[Ext] (preserving type)"""
+        if len(self.exts) == 0:
+            return self.exts
+
+        cexts = []
+        for ext in self.exts:
+            cext = ext.compile(context)
+            if isinstance(cext, Ext):
+                cexts.append(cext)
+        return cexts
 
     def expand_augments(self, context: Context, target_base: SchemaNode=self, in_uses=False, remap_imports):
         """Expand augment node"""
@@ -3122,7 +3156,7 @@ class SchemaNode(object):
                     if isinstance(target, SchemaNodeInner):
                         # Just move the child to the target
                         aug.expand_children(context, target, new_mod=aug.get_module_name(), new_ns=aug.get_namespace(), new_pfx=aug.get_prefix(), remap_imports=remap_imports)
-                        target.exts.extend(aug.exts)
+                        target.exts.extend(aug.compile_exts(context))
                     else:
                         raise ValueError("Augment target {target} is not an inner node")
 
@@ -3145,7 +3179,7 @@ class SchemaNode(object):
                     grouping = child.get_grouping(child.name, context)
                     grouping.expand_children(context, target, new_mod if new_mod is not None else target.mod, new_ns if new_ns is not None else target.ns, new_pfx if new_pfx is not None else target.pfx, remap_imports=remap_imports)
                     child.expand_augments(context, target, in_uses=True, remap_imports=remap_imports)
-                    child.expand_refines(target)
+                    child.expand_refines(context, target)
                 else:
                     c_child = child.compile(context, new_mod, new_ns, new_pfx)
                     if remap_imports is not None:
@@ -3159,7 +3193,7 @@ class SchemaNode(object):
     mut def resolve_compiled_schema_path_dependencies(self):
         pass
 
-    mut def apply_refine(self, refine: Refine):
+    mut def apply_refine(self, context: Context, refine: Refine):
         raise NotImplementedError('SchemaNode apply_refine not implemented for {type(self)}')
 
     def get_module_by_prefix(self, prefix: str, context: Context) -> Module:
@@ -3444,8 +3478,8 @@ class Ext(SchemaNode):
     name: str
     arg: ?str
 
-    def __init__(self, prefix: str, name: str, arg: ?str=None, exts=[]):
-        self.parent = None
+    def __init__(self, prefix: str, name: str, arg: ?str=None, exts=[], parent=None):
+        self.parent = parent
         self.mod = None
         self.ns = None
         self.pfx = None
@@ -3454,16 +3488,8 @@ class Ext(SchemaNode):
         self.name = name
         self.arg = arg
         self.exts = exts
-
-    def __repr__(self):
-        return "Ext(prefix={repr(self.prefix)}, name={repr(self.name)}, arg={repr(self.arg)}, exts={repr(self.exts)})"
-
-    @staticmethod
-    def from_fullname(fullname: str, arg: ?str=None, exts=[]) -> Ext:
-        parts = fullname.split(":", 1)
-        if len(parts) != 2:
-            raise ValueError("Invalid extension name {fullname}, extensions must always have a prefix like: foo:bar 'test';")
-        return Ext(parts[0], parts[1], None)
+        for n in self.exts:
+            n.parent = self
 
     def _get_class_name(self):
         return "Ext"
@@ -3474,6 +3500,9 @@ class Ext(SchemaNode):
         attrs: list[(str, ?value)] = [
             ("arg", self.arg),
             ("exts", self.exts),
+            ("mod", self.mod),
+            ("ns", self.ns),
+            ("pfx", self.pfx),
             ]
         prefix = self.prefix
         args = []
@@ -3495,9 +3524,57 @@ class Ext(SchemaNode):
             res.substatements.append(ext.to_statement())
         return res
 
-    def __str__(self):
-        self_arg = self.arg
-        return "Ext {self.name}{(' ' + self_arg if self_arg is not None else '')}"
+    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        ext_module = self.get_module_by_prefix(self.prefix, context)
+        for ext in ext_module.extension_:
+            if ext.name == self.name:
+                if ext.argument is not None and self.arg is None:
+                    raise ValueError("Extension {self.prefix}:{self.name} does not accept an argument")
+                elif ext.argument is None and self.arg is not None:
+                    raise ValueError("Extension {self.prefix}:{self.name} is missing an argument")
+                break
+        else:
+            raise ValueError("Extension {self.prefix}:{self.name} not found in module {ext_module.name}")
+        new = ResolvedExt(self.prefix,
+                  self.name,
+                  arg=self.arg,
+                  exts=self.compile_exts(context),
+                  parent=self.parent,
+                  mod=ext_module.name,
+                  ns=ext_module.get_namespace(),
+                  pfx=ext_module.get_prefix())
+        return new
+
+    def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
+        """Remaps prefix references (in paths, defaults, ...) to true module prefix.
+        """
+        if self.prefix == old_pfx:
+            self.prefix = new_pfx
+        for ext in self.exts:
+            ext.remap_prefix_references(old_pfx, new_pfx)
+
+    def to_dext(self) -> DExt:
+        raise ValueError("Extension {self.prefix}:{self.name} is not resolved")
+
+class ResolvedExt(Ext):
+    def __init__(self, prefix: str, name: str, arg: ?str=None, exts=[], parent=None, mod=None, ns=None, pfx=None):
+        Ext.__init__(self, prefix, name, arg, exts, parent)
+        self.mod = mod
+        self.ns = ns
+        self.pfx = pfx
+
+    def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
+        return self
+
+    def to_dext(self) -> DExt:
+        return DExt(
+            module=_expect(self.mod, "ResolvedExt.mod"),
+            namespace=_expect(self.ns, "ResolvedExt.ns"),
+            prefix=_expect(self.pfx, "ResolvedExt.pfx"),
+            name=self.name,
+            arg=self.arg,
+            exts=[ext.to_dext() for ext in self.exts]
+        )
 
 extension Ext (Ord):
     def __eq__(self, other: Ext) -> bool:
@@ -3698,6 +3775,8 @@ def _prsrc_attrs(indent, attrs):
                         if isinstance(e, SchemaNode):
                             list_val.append(e.prsrc(indent+2))
                         elif isinstance(e, DNode):
+                            list_val.append(e.prsrc(indent+2))
+                        elif isinstance(e, DExt):
                             list_val.append(e.prsrc(indent+2))
                         else:
                             list_val.append(repr(e))

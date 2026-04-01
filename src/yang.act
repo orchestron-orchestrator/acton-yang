@@ -232,6 +232,15 @@ def parse_modules(yang_sources: Iterable[yang.schema.Statement]) -> NameRevMap[y
 
                 m.feature.extend(submod.feature)
 
+                # Update extension statements
+                for ext in submod.exts:
+                    # Set parent attribute
+                    ext.parent = m
+
+                    # Apply all prefix remappings
+                    for old_pfx, new_pfx in prefix_remaps.items():
+                        ext.remap_prefix_references(old_pfx, new_pfx)
+
                 m.exts.extend(submod.exts)
 
         m.include = []
