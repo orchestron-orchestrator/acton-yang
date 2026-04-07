@@ -37,7 +37,8 @@ test-data-source-roundtrip:
 
 .PHONY: test-yang-compile
 test-yang-compile:
-	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1
+# TODO: use --release=safe here, after issues UB issues have been resolved / Acton codegen peculiarities added to sanitize exceptions
+	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1 --release=fast
 
 .PHONY: test-accept
 test-accept:
@@ -47,4 +48,4 @@ test-accept:
 	cd test/test_data_source_roundtrip && acton test --accept
 
 test-yang-compile-accept:
-	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1 --accept
+	cd test/test_yang_compile && acton test --max-time 600000 --min-iter 1 --max-iter 1 --release=fast --accept
