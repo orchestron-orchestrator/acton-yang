@@ -5,9 +5,9 @@ import yang
 import yang.adata
 import yang.gdata
 
-from yang.data import YangValidationError
+from yang.data import YangValidationError, format_schema_path
 from yang.xml import from_xml
-from yang.json import from_json, from_json_path
+from yang.json import from_json, from_json_path, resolve_json_path
 from yang.identityref import Identityref, PartialIdentityref
 from yang.type import Decimal, Ranges
 
@@ -557,6 +557,38 @@ def _test_json_path_basic():
     testing.assertEqual(gd.prsrc(), expected.prsrc())
 
 
+def _test_json_path_from_root():
+    """Test from_json_path with empty path queries from root"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    leaf l1 {
+      type string;
+    }
+    container c2 {
+      leaf l2 {
+        type string;
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    gd = from_json_path(s, {"y1:c1": {"l1": "hello", "c2": {"l2": "world"}}}, [])
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "l1"): yang.gdata.Leaf("hello"),
+            yang.gdata.Id("urn:example:y1", "c2"): yang.gdata.Container({
+                yang.gdata.Id("urn:example:y1", "l2"): yang.gdata.Leaf("world")
+            })
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
+
 def _test_json_path_qualified_names():
     """Test JSON path with module-qualified names"""
     mod1 = r"""module mod1 {
@@ -787,6 +819,41 @@ def _test_json_path_nested_lists():
         }, ns='urn:example:y1', module='y1')
     })
     testing.assertEqual(gd2.prsrc(), expected2.prsrc())
+
+
+def _test_json_path_coerces_list_keys_to_schema_types():
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list item {
+      key "id";
+      leaf id {
+        type uint32;
+      }
+      leaf value {
+        type string;
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    gd = from_json_path(s, {"id": 42, "value": "typed"}, ["y1:c1", "item", "42"])
+    expected = yang.gdata.Container({
+        yang.gdata.Id("urn:example:y1", "c1"): yang.gdata.Container({
+            yang.gdata.Id("urn:example:y1", "item"): yang.gdata.List([yang.gdata.Id("urn:example:y1", "id")], elements=[
+                yang.gdata.Container({
+                    yang.gdata.Id("urn:example:y1", "id"): yang.gdata.Leaf(u64(42)),
+                    yang.gdata.Id("urn:example:y1", "value"): yang.gdata.Leaf("typed")
+                })
+            ])
+        }, ns='urn:example:y1', module='y1')
+    })
+    testing.assertEqual(gd.prsrc(), expected.prsrc())
+
 
 def _test_netconf_remove_container():
     """NETCONF remove on a container produces Absent"""
@@ -1296,6 +1363,78 @@ def _test_json_path_container_list_container():
         }, ns='urn:example:y1', module='y1')
     })
     testing.assertEqual(gd2.prsrc(), expected2.prsrc())
+
+
+def _test_resolve_json_path_nested_lists():
+    """Test path resolution through nested lists"""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list outer {
+      key "outer-key";
+      leaf outer-key {
+        type string;
+      }
+      list inner {
+        key "inner-key";
+        leaf inner-key {
+          type string;
+        }
+        leaf value {
+          type string;
+        }
+      }
+    }
+  }
+}"""
+    s = yang.compile([y1])
+
+    elems = resolve_json_path(s, ["y1:c1", "outer", "k1", "inner", "k2", "value"])
+    path_str = format_schema_path(elems)
+    testing.assertEqual(path_str, "/c1/outer[outer-key='k1']/inner[inner-key='k2']/value")
+
+
+def _test_resolve_json_path_rejects_under_specified_list_instances():
+    """Reject keyed list paths unless the full key tuple is provided."""
+    y1 = r"""module y1 {
+  namespace "urn:example:y1";
+  prefix y1;
+
+  container c1 {
+    list single {
+      key "name";
+      leaf name {
+        type string;
+      }
+    }
+    list multi {
+      key "k1 k2";
+      leaf k1 {
+        type string;
+      }
+      leaf k2 {
+        type string;
+      }
+    }
+  }
+}"""
+
+    s = yang.compile([y1])
+
+    try:
+        resolve_json_path(s, ["y1:c1", "single"])
+        testing.error("Should have raised ValueError for missing keyed list segment")
+    except ValueError as e:
+        testing.assertIn("Missing list key values", e.error_message)
+
+    try:
+        resolve_json_path(s, ["y1:c1", "multi", "item1"])
+        testing.error("Should have raised ValueError for incomplete list key tuple")
+    except ValueError as e:
+        testing.assertIn("expected 2 value(s), got 1", e.error_message)
+
 
 def _test_identityref():
     # Extended test case from https://github.com/CESNET/libyang/issues/1009
