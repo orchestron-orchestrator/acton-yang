@@ -878,7 +878,7 @@ class DNodeInner(DNode):
         res.append("")
 
 
-        if isinstance(self, DRoot) and len(self.rpcs) > 0:
+        if isinstance(self, DRoot):
             # First generate data classes for RPC input/output
             for rpc in self.rpcs:
                 # Generate adata classes for DInput, DOutput, but override:
@@ -891,6 +891,8 @@ class DNodeInner(DNode):
             # TODO: unique safe name for RPC function!
             # Generate rpc_root actor
             res.append("actor rpc_root(tp: yang.gdata.TreeProvider):")
+            if len(self.rpcs) == 0:
+                res.append("    pass")
             for rpc in self.rpcs:
                 input_node = rpc.input
                 output_node = rpc.output
@@ -11089,4 +11091,3 @@ def escape_as_fstr(s: str) -> str:
     copy_until(b, s_len)
 
     return "".join(parts)
-
