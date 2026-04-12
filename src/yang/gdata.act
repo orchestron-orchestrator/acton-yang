@@ -3011,47 +3011,90 @@ def _patch_rec(old: Node, p: ?Node, path: list[_PathElement]) -> ?Node:
 
 
 def patch(old: Node, p: ?Node) -> ?Node:
+    # TODO: Accept None as old tree so callers merging from an empty base do
+    # not need to synthesize Container({}) first.
     return _patch_rec(old, p, [])
 
 
 SUB_ON_CHANGE = "on_change"
 SUB_PERIODIC = "periodic"
 
-class SubscriptionOpts(object):
-    """Subscription options for TreeProvider.subscribe."""
-    mode: str
-    period: ?u64 # nanoseconds; 0 means as fast as possible
+def _normalize_period(period: ?value) -> ?u64:
+    if period is not None:
+        if isinstance(period, float):
+            if period < 0.0:
+                raise ValueError("period (seconds) must be non-negative")
+            return u64(period * 1000000000.0)
+        if isinstance(period, u64):
+            return period
+        if isinstance(period, int):
+            if period < 0:
+                raise ValueError("period (nanoseconds) must be non-negative")
+            return u64(period)
+        raise ValueError("period must be float seconds or integer nanoseconds")
+    return None
 
-    def __init__(self, mode: str=SUB_PERIODIC, period: ?u64=None):
-        self.mode = mode
-        self.period = period
-        self._validate()
+class SubscriptionSpec(value):
+    """Declarative subscription specification."""
+    filt: ?FNode
+    period: ?u64 # normalized to nanoseconds; 0 means as fast as possible
 
-    def _validate(self):
-        if self.mode not in {SUB_ON_CHANGE, SUB_PERIODIC}:
-            raise ValueError("Unknown subscription mode: {self.mode}")
-        if self.mode == SUB_PERIODIC:
-            if self.period is None:
-                raise ValueError("period (nanoseconds) is required for periodic subscriptions")
-        elif self.period is not None:
-            raise ValueError("period (nanoseconds) is only valid for periodic subscriptions")
+    def __init__(self, filt: ?FNode, period: ?value=None):
+        # TODO: Accept a real union type here once Acton supports it. Today
+        # value is the only way to express "float seconds or integer
+        # nanoseconds" in one parameter.
+        self.filt = filt
+        self.period = _normalize_period(period)
+
+    def __str__(self) -> str:
+        filt = self.filt
+        filt_str = filt.prsrc(deterministic=True) if filt is not None else "None"
+        period_str = str(self.period) if self.period is not None else "None"
+        return "SubscriptionSpec(period={period_str}, filt={filt_str})"
+
+    def __repr__(self) -> str:
+        return str(self)
 
 
-class SubscriptionHandle(object):
-    """Handle returned by subscribe() for cancellation."""
-    id: int
-    @property
-    cancel: proc() -> None
+extension SubscriptionSpec(Hashable):
+    def __eq__(self, other: SubscriptionSpec) -> bool:
+        if self.period != other.period:
+            return False
+        if self.filt is None:
+            return other.filt is None
+        if other.filt is None:
+            return False
+        return self.filt == other.filt
 
-    def __init__(self, id: int, cancel: proc() -> None):
-        self.id = id
-        self.cancel = cancel
-
+    def hash(self, hasher):
+        period = self.period
+        if period is not None:
+            "some".hash(hasher)
+            period.hash(hasher)
+        else:
+            "none".hash(hasher)
+        filt = self.filt
+        if filt is not None:
+            "some".hash(hasher)
+            filt.prsrc(deterministic=True).hash(hasher)
+        else:
+            "none".hash(hasher)
 
 class TreeProvider(object):
+    """Imperative transport interface for RPCs and owner-scoped subscriptions."""
     rpc: proc(action(?Node, ?Exception) -> None, Node) -> None
     rpc_xml: proc(action(?xml.Node, ?Exception) -> None, xml.Node) -> None
-    subscribe: proc(action(?Node, ?Exception) -> None, ?FNode, SubscriptionOpts) -> SubscriptionHandle
+    declare_subscriptions: proc(str, action(?Node, ?Exception) -> None, set[SubscriptionSpec]) -> None
+    remove_subscriptions: proc(str) -> None
+
+
+actor SubscriptionManager(tp: TreeProvider, owner_id: str, on_update: action(?Node, ?Exception) -> None):
+    """Declarative subscription owner that reconciles desired subscriptions."""
+    def declare(want: set[SubscriptionSpec]):
+        tp.declare_subscriptions(owner_id, on_update, want)
+
+    def close():
+        tp.remove_subscriptions(owner_id)
 
 
 def _node_match(n: xml.Node, name: str, ns: ?str) -> bool:
@@ -5203,6 +5246,21 @@ def _test_serialization_roundtrip_list():
     ], ns=ns_list, module="list", user_order=True)
 
     return _serde_roundtrip_json(original)
+
+
+def _test_subscription_spec_period_float_seconds():
+    spec = SubscriptionSpec(None, period=0.05)
+    testing.assertEqual(spec.period, u64(50000000))
+
+
+def _test_subscription_spec_period_int_nanoseconds():
+    spec = SubscriptionSpec(None, period=50000000)
+    testing.assertEqual(spec.period, u64(50000000))
+
+
+def _test_subscription_spec_default_on_change():
+    spec = SubscriptionSpec(None)
+    testing.assertEqual(spec.period, None)
 
 
 def _test_serialization_roundtrip_leaflist():

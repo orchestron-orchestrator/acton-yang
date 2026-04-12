@@ -22,8 +22,12 @@ class MockTreeProviderSuccess(yang.gdata.TreeProvider):
             yang.gdata.Id("http://example.com/yangrpc", "outoo"): yang.gdata.Leaf("string", "Hello from RPC!")
         }, ns="http://example.com/yangrpc", module="yangrpc")
         cb(output_gdata, None)
-    proc def subscribe(self, cb: action(?yang.gdata.Node, ?Exception) -> None, filt: ?yang.gdata.FNode, opts: yang.gdata.SubscriptionOpts) -> yang.gdata.SubscriptionHandle:
-        return yang.gdata.SubscriptionHandle(0, lambda: None)
+
+    proc def declare_subscriptions(self, owner_id: str, cb: action(?yang.gdata.Node, ?Exception) -> None, want: set[yang.gdata.SubscriptionSpec]):
+        pass
+
+    proc def remove_subscriptions(self, owner_id: str):
+        pass
 
 
 class MockTreeProviderError(yang.gdata.TreeProvider):
@@ -37,8 +41,12 @@ class MockTreeProviderError(yang.gdata.TreeProvider):
 
     proc def rpc(self, cb: action(?yang.gdata.Node, ?Exception) -> None, rpc: yang.gdata.Node):
         cb(None, ValueError("RPC execution failed"))
-    proc def subscribe(self, cb: action(?yang.gdata.Node, ?Exception) -> None, filt: ?yang.gdata.FNode, opts: yang.gdata.SubscriptionOpts) -> yang.gdata.SubscriptionHandle:
-        return yang.gdata.SubscriptionHandle(0, lambda: None)
+
+    proc def declare_subscriptions(self, owner_id: str, cb: action(?yang.gdata.Node, ?Exception) -> None, want: set[yang.gdata.SubscriptionSpec]):
+        pass
+
+    proc def remove_subscriptions(self, owner_id: str):
+        pass
 
 
 class MockTreeProviderEmpty(yang.gdata.TreeProvider):
@@ -56,8 +64,12 @@ class MockTreeProviderEmpty(yang.gdata.TreeProvider):
     proc def rpc(self, cb: action(?yang.gdata.Node, ?Exception) -> None, rpc: yang.gdata.Node):
         output_gdata = yang.gdata.Container({}, ns="http://example.com/yangrpc", module="yangrpc")
         cb(output_gdata, None)
-    proc def subscribe(self, cb: action(?yang.gdata.Node, ?Exception) -> None, filt: ?yang.gdata.FNode, opts: yang.gdata.SubscriptionOpts) -> yang.gdata.SubscriptionHandle:
-        return yang.gdata.SubscriptionHandle(0, lambda: None)
+
+    proc def declare_subscriptions(self, owner_id: str, cb: action(?yang.gdata.Node, ?Exception) -> None, want: set[yang.gdata.SubscriptionSpec]):
+        pass
+
+    proc def remove_subscriptions(self, owner_id: str):
+        pass
 
 
 actor _test_rpc_foo_success(t: testing.AsyncT):
