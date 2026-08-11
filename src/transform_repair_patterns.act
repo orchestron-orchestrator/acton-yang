@@ -38,17 +38,17 @@ mut def repair_patterns(node: yschema.SchemaNode) -> None:
                 pattern.value = replacement_pattern_str
 
         # Recurse into union alternatives
-        for alt_type in t.type_:
+        for alt_type in t.type:
             repair_type(alt_type)
 
     # For types, replace known broken pattern expressions
     for n in transform_utils.collect_snodes(node):
         if isinstance(n, yschema.Leaf):
-            repair_type(n.type_)
+            repair_type(n.type)
         elif isinstance(n, yschema.LeafList):
-            repair_type(n.type_)
+            repair_type(n.type)
         elif isinstance(n, yschema.Typedef):
-            repair_type(n.type_)
+            repair_type(n.type)
 
 
 def _test_repair_patterns_augment_action_input():
@@ -88,5 +88,5 @@ def _test_repair_patterns_augment_action_input():
                 if isinstance(act_input, yschema.Input):
                     leaf = act_input.get("remote-file")
                     if isinstance(leaf, yschema.Leaf):
-                        repaired = leaf.type_.pattern[0].value
+                        repaired = leaf.type.pattern[0].value
     testing.assertEqual(repaired, r"[0-9a-zA-Z_\.\-/]+")

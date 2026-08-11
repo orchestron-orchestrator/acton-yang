@@ -111,8 +111,8 @@ def parse_modules(yang_sources: Iterable[yschema.Statement]) -> NameRevMap[ysche
     # merge submodules into their main module
     for _n, (_r, m) in modules:
         combined_import_prefixes: NameRevMap[str] = NameRevMap()
-        for import_ in m.import_:
-            combined_import_prefixes.add(import_.module, import_.revision_date, import_.prefix)
+        for import in m.import:
+            combined_import_prefixes.add(import.module, import.revision_date, import.prefix)
 
         for include in m.include:
             try:
@@ -130,7 +130,7 @@ def parse_modules(yang_sources: Iterable[yschema.Statement]) -> NameRevMap[ysche
                 if submod.belongs_to.prefix != m.prefix:
                     prefix_remaps[submod.belongs_to.prefix] = m.prefix
 
-                for sub_import in submod.import_:
+                for sub_import in submod.import:
                     try:
                         import_prefix = combined_import_prefixes.get(sub_import.module, sub_import.revision_date)
                     except KeyError:
@@ -155,7 +155,7 @@ def parse_modules(yang_sources: Iterable[yschema.Statement]) -> NameRevMap[ysche
                                                         ns=sub_import.ns,
                                                         parent=m)
 
-                        m.import_.append(new_import)
+                        m.import.append(new_import)
                     else:
                         # Case 2: Same module already imported by parent (or another submodule)
                         if sub_import.prefix != import_prefix:
@@ -201,7 +201,7 @@ def parse_modules(yang_sources: Iterable[yschema.Statement]) -> NameRevMap[ysche
                     m.deviation.append(remapped_dev)
 
                 # Update extension nodes
-                for ext in submod.extension_:
+                for ext in submod.extension:
                     # Set parent attribute
                     ext.parent = m
 
@@ -212,7 +212,7 @@ def parse_modules(yang_sources: Iterable[yschema.Statement]) -> NameRevMap[ysche
                     for old_pfx, new_pfx in prefix_remaps.items():
                         ext.remap_prefix_references(old_pfx, new_pfx)
 
-                m.extension_.extend(submod.extension_)
+                m.extension.extend(submod.extension)
 
                 # discard organization
                 # discard reference
@@ -273,7 +273,7 @@ def compile_modules(modules: NameRevMap[yschema.Module]) -> list[yschema.Module]
                 except KeyError:
                     pass # Import either already processed, missing or cyclic
                 else:
-                    build_stack.append((imported_module, list(imported_module.import_)))
+                    build_stack.append((imported_module, list(imported_module.import)))
             else:
                 try:
                     mc = m.compile(ctx)
@@ -286,7 +286,7 @@ def compile_modules(modules: NameRevMap[yschema.Module]) -> list[yschema.Module]
                         raise ValueError(m.name + " - Compile - Failed: not a module")
         elif len(modules) > 0:
             m = modules.pop_any()
-            build_stack.append((m, list(m.import_)))
+            build_stack.append((m, list(m.import)))
         else:
             break
 

@@ -135,12 +135,15 @@ _builtin_types = {
 }
 
 # These are reserved keywords in the acton language, so we must avoid generating
-# identifiers with these names.
+# identifiers with these names. The soft keywords "actor", "class", "extension",
+# "from", "import", "protocol" and "type" are deliberately absent: they are only
+# keywords when they start a declaration or an import, so they are valid as
+# attribute, argument and local names.
 _reserved_keywords = {
-    "False","None","NotImplemented","Self","True","action","actor","after","and","as",
-    "assert","async","await","break","class","continue","def","del","elif","else",
-    "except","extension","finally","for","from","if","import","in","is","isinstance",
-    "lambda","mut","not","or","pass","proc","protocol","pure","raise","return","self","try",
+    "False","None","NotImplemented","Self","True","action","after","and","as",
+    "assert","async","await","break","continue","def","del","elif","else",
+    "except","finally","for","if","in","is","isinstance",
+    "lambda","mut","not","or","pass","proc","pure","raise","return","self","try",
     "var","while","with","yield","_"
     }
 
@@ -1357,16 +1360,16 @@ class DModule(DNodeInner):
     augment: list[Augment]
     contact: ?str
     deviation: list[str]
-    extension_: list[Extension]
+    extension: list[Extension]
     feature: list[Feature]
     identity: list[Identity]
-    import_: list[Import]
+    import: list[Import]
     include: list[Include]
     organization: ?str
     revision: list[Revision]
     yang_version: float
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension_=[], feature=[], identity=[], import_=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension=[], feature=[], identity=[], import=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
         self.module = module
         self.name = name
         self.gname = "Container"
@@ -1383,10 +1386,10 @@ class DModule(DNodeInner):
         self.augment = []
         self.contact = contact
         self.deviation = deviation
-        self.extension_ = extension_
+        self.extension = extension
         self.feature = feature
         self.identity = identity
-        self.import_ = import_
+        self.import = import
         self.include = include
         self.organization = organization
         self.reference = reference
@@ -1405,10 +1408,10 @@ class DModule(DNodeInner):
             ("augment", self.augment),
             ("contact", self.contact),
             ("deviation", self.deviation),
-            ("extension_", self.extension_),
+            ("extension", self.extension),
             ("feature", self.feature),
             ("identity", self.identity),
-            ("import_", self.import_),
+            ("import", self.import),
             ("include", self.include),
             ("organization", self.organization),
             ("reference", self.reference),
@@ -2846,7 +2849,7 @@ class DTypeResolver(object):
     def _resolve(self, t: ResolvedType, context: DTypeContext):
         if t.name == "union":
             self.builtin_type = t.name
-            for alt_type in t.type_:
+            for alt_type in t.type:
                 if isinstance(alt_type, ResolvedType):
                     alt_dtype = DType.from_resolved_type(alt_type, context)
                     if isinstance(alt_dtype, DTypeUnion):
@@ -2872,7 +2875,7 @@ class DTypeResolver(object):
                 if base_typedef.units is not None and self.units is None:
                     self.units = base_typedef.units
                 # recurse into base typedef
-                base_typedef_type = base_typedef.type_
+                base_typedef_type = base_typedef.type
                 if isinstance(base_typedef_type, ResolvedType):
                     self._resolve(base_typedef_type, context)
                 else:
@@ -3679,7 +3682,7 @@ class SchemaNode(object):
             if isinstance(t, ResolvedType):
                 base_typedef = t.resolved_base_typedef
                 if base_typedef is not None:
-                    return is_identityref_type(base_typedef.type_)
+                    return is_identityref_type(base_typedef.type)
             return False
 
         # Skip if we have already resolved this (=already normalized)
@@ -3804,9 +3807,9 @@ class SchemaNode(object):
                         node_prefix += "o"
             if isinstance(node, Leaf):
                 optional = "?" if node.mandatory == False else ""
-                res.append("{node_prefix} {node.name}{optional} {node.type_.name}")
+                res.append("{node_prefix} {node.name}{optional} {node.type.name}")
             elif isinstance(node, LeafList):
-                res.append("{node_prefix} {node.name}* {node.type_.name}")
+                res.append("{node_prefix} {node.name}* {node.type.name}")
             elif isinstance(node, Container):
                 presence = node.presence
                 res.append("{node_prefix} {node.name}{'!' if presence is not None else ''}")
@@ -3923,7 +3926,7 @@ class Ext(SchemaNode):
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         ext_module = self.get_module_by_prefix(self.prefix, context)
-        for ext in ext_module.extension_:
+        for ext in ext_module.extension:
             if ext.name == self.name:
                 if ext.argument is not None and self.arg is None:
                     raise ValueError("Extension {self.prefix}:{self.name} does not accept an argument")
@@ -4150,7 +4153,7 @@ def _attr_name(name: str):
         i += 1
         if i == len(name):
             break
-    if res in {"extension", "import", "range", "type"}:
+    if res == "range":
         res = res + "_"
 
     return res

@@ -4,8 +4,8 @@ class ResolvedType(Type):
     resolved_base_typedef: ?Typedef
     resolved_path: ?xpath.AbsoluteLocationPath
 
-    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None, resolved_path: ?xpath.AbsoluteLocationPath=None):
-        Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, require_instance, type_, exts, parent, mod, ns, pfx)
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None, resolved_path: ?xpath.AbsoluteLocationPath=None):
+        Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, require_instance, type, exts, parent, mod, ns, pfx)
         self.resolved_base_typedef = resolved_base_typedef
         self.resolved_path = resolved_path
         path = self.path
@@ -31,7 +31,7 @@ class ResolvedType(Type):
                    pattern=self.pattern,
                    range_=self.range_,
                    require_instance=self.require_instance,
-                   type_=self.type_,
+                   type=self.type,
                    exts=self.exts,
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
@@ -84,14 +84,14 @@ class ResolvedType(Type):
         # Resolve base
         _resolved_base_typedef = self.resolved_base_typedef
         if _resolved_base_typedef is not None:
-            _base_type = _resolved_base_typedef.type_
+            _base_type = _resolved_base_typedef.type
             if isinstance(_base_type, ResolvedType):
                 _base_type.resolve_leafref_path(xpath_context_node)
             else:
                 raise ValueError("Expected ResolvedType")
 
         # Resolve union members
-        for alt_type in self.type_:
+        for alt_type in self.type:
             if isinstance(alt_type, ResolvedType):
                 alt_type.resolve_leafref_path(xpath_context_node)
             else:
@@ -161,7 +161,7 @@ extension ResolvedType(Hashable):
             and self.pattern == other.pattern \
             and self.range_ == other.range_ \
             and self.require_instance == other.require_instance \
-            and self.type_ == other.type_ \
+            and self.type == other.type \
             and self.resolved_path == other.resolved_path
 
     def hash(self, hasher):
@@ -210,7 +210,7 @@ extension ResolvedType(Hashable):
         _require_instance = self.require_instance
         if _require_instance is not None:
             _require_instance.hash(hasher)
-        for alt_type in self.type_:
+        for alt_type in self.type:
             if isinstance(alt_type, ResolvedType):
                 alt_type.hash(hasher)
         _resolved_path = self.resolved_path
