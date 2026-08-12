@@ -63,7 +63,7 @@
 #
 #   Module("foo", namespace="http://example.com/foo", prefix="f", children=[
 #     Container("c1", children=[
-#       Leaf("l1", type_="string")
+#       Leaf("l1", type="string")
 #     ])
 #   ])
 #
@@ -483,9 +483,9 @@ class DNode(object):
                 node_prefix += "o"
             if isinstance(node, DLeaf):
                 optional = "?" if node.mandatory == False else ""
-                res.append("{node_prefix} {node.name}{optional} {node.type_.format_short_hint()}")
+                res.append("{node_prefix} {node.name}{optional} {node.type.format_short_hint()}")
             elif isinstance(node, DLeafList):
-                res.append("{node_prefix} {node.name}* {node.type_.format_short_hint()}")
+                res.append("{node_prefix} {node.name}* {node.type.format_short_hint()}")
             elif isinstance(node, DContainer):
                 res.append("{node_prefix} {node.name}{'!' if node.presence else ''}")
             elif isinstance(node, DList):
@@ -679,7 +679,7 @@ class DNodeInner(DNode):
             elif isinstance(child, DLeaf):
                 child_default = child.default
                 if not loose and child_default is not None:
-                    child_type = child.type_
+                    child_type = child.type
                     if isinstance(child_type, DTypeIdentityref):
                         root = spath[0]
                         if isinstance(root, DRoot):
@@ -825,7 +825,7 @@ class DNodeInner(DNode):
                     arg = usname(child)
                     arg_type = yang_leaf_to_acton_arg_type(child, list_keys(self), loose)
                     if arg in list_key_args:
-                        list_key_types[arg] = child.type_
+                        list_key_types[arg] = child.type
                         list_args_req.append(arg)
                         list_args_req_sig.append("{arg}: {arg_type}")
                         continue
@@ -1072,11 +1072,11 @@ class DNodeLeaf(DNode):
     if_feature: list[str]
     must: list[DMust]
     status: ?str
-    type_: DType
+    type: DType
     when: ?str
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
-        self.type_.resolve_references(root, spath + [self], allow_failure)
+        self.type.resolve_references(root, spath + [self], allow_failure)
 
 class DAction(DNodeInner):
     if_feature: list[str]
@@ -1477,7 +1477,7 @@ class DLeaf(DNodeLeaf):
     mandatory: bool
     units: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: DType, units=None, when=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type: DType, units=None, when=None, exts=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1491,7 +1491,7 @@ class DLeaf(DNodeLeaf):
         self.must = must
         self.reference = reference
         self.status = status
-        self.type_ = type_
+        self.type = type
         self.units = units
         self.when = when
         self.exts = exts
@@ -1519,7 +1519,7 @@ class DLeaf(DNodeLeaf):
             ("must", self.must),
             ("reference", self.reference),
             ("status", self.status),
-            ("type_", self.type_),
+            ("type", self.type),
             ("units", self.units),
             ("when", self.when),
             ("exts", self.exts),
@@ -1533,7 +1533,7 @@ class DLeafList(DNodeLeaf):
     ordered_by: str
     units: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: DType, units=None, when=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type: DType, units=None, when=None, exts=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1549,7 +1549,7 @@ class DLeafList(DNodeLeaf):
         self.ordered_by = ordered_by
         self.reference = reference
         self.status = status
-        self.type_ = type_
+        self.type = type
         self.units = units
         self.when = when
         self.exts = exts
@@ -1570,7 +1570,7 @@ class DLeafList(DNodeLeaf):
             ("ordered_by", self.ordered_by),
             ("reference", self.reference),
             ("status", self.status),
-            ("type_", self.type_),
+            ("type", self.type),
             ("units", self.units),
             ("when", self.when),
             ("exts", self.exts),
@@ -2273,14 +2273,14 @@ class DTypeContext(object):
     def __init__(self):
         self.cache = {}
 
-    def try_get_cached_dtype(self, type_: ResolvedType) -> ?DType:
+    def try_get_cached_dtype(self, type: ResolvedType) -> ?DType:
         try:
-            return self.cache[type_]
+            return self.cache[type]
         except KeyError:
             return None
 
-    def set_cached_dtype(self, type_: ResolvedType, dtype: DType):
-        self.cache[type_] = dtype
+    def set_cached_dtype(self, type: ResolvedType, dtype: DType):
+        self.cache[type] = dtype
 
 class DType(object):
     name: str
@@ -2303,13 +2303,13 @@ class DType(object):
         self.default = default
 
     @staticmethod
-    def from_resolved_type(type_: ResolvedType, context: DTypeContext) -> DType:
-        cached_dtype = context.try_get_cached_dtype(type_)
+    def from_resolved_type(type: ResolvedType, context: DTypeContext) -> DType:
+        cached_dtype = context.try_get_cached_dtype(type)
         if cached_dtype is not None:
             return cached_dtype
-        resolver = DTypeResolver.resolve(type_, context)
+        resolver = DTypeResolver.resolve(type, context)
         dtype = DType.from_resolver(resolver)
-        context.set_cached_dtype(type_, dtype)
+        context.set_cached_dtype(type, dtype)
         return dtype
 
     @staticmethod
@@ -2340,7 +2340,7 @@ class DType(object):
             return DTypeBits.from_resolver(resolver)
         elif resolver.builtin_type == "instance-identifier":
             return DTypeInstanceIdentifier.from_resolver(resolver)
-        raise ValueError("Unable to resolve type ({resolver.type_}) into builtin base-type")
+        raise ValueError("Unable to resolve type ({resolver.type}) into builtin base-type")
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         pass
@@ -2375,7 +2375,7 @@ class DTypeBinary(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBinary:
-        t = resolver.type_
+        t = resolver.type
         return DTypeBinary(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.length)
 
     def validate_value(self, val: value) -> bool:
@@ -2407,7 +2407,7 @@ class DTypeBits(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBits:
-        t = resolver.type_
+        t = resolver.type
         return DTypeBits(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.bits)
 
     def validate_value(self, val: value) -> bool:
@@ -2446,7 +2446,7 @@ class DTypeBoolean(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBoolean:
-        t = resolver.type_
+        t = resolver.type
         return DTypeBoolean(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default)
 
     def validate_value(self, val: value) -> bool:
@@ -2468,9 +2468,9 @@ class DTypeDecimal64(DType):
     def from_resolver(resolver: DTypeResolver) -> DTypeDecimal64:
         _fraction_digits = resolver.fraction_digits
         if _fraction_digits is not None:
-            t = resolver.type_
+            t = resolver.type
             return DTypeDecimal64(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, _fraction_digits, resolver.decimal_ranges)
-        raise ValueError("Missing required fraction-digits for decimal64 type \"{resolver.type_.name}\"")
+        raise ValueError("Missing required fraction-digits for decimal64 type \"{resolver.type.name}\"")
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, Decimal):
@@ -2502,7 +2502,7 @@ class DTypeEmpty(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeEmpty:
-        t = resolver.type_
+        t = resolver.type
         return DTypeEmpty(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default)
 
     def validate_value(self, val: value) -> bool:
@@ -2523,7 +2523,7 @@ class DTypeEnum(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeEnum:
-        t = resolver.type_
+        t = resolver.type
         return DTypeEnum(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.enum_name_to_val)
 
     def validate_value(self, val: value) -> bool:
@@ -2549,11 +2549,11 @@ class DTypeIdentityref(DType):
         identity_bases = []
         for base in resolver.identity_bases:
             maybe_prefix, name = split_prefix_name(base)
-            prefix = maybe_prefix if maybe_prefix is not None else resolver.type_.get_prefix()
+            prefix = maybe_prefix if maybe_prefix is not None else resolver.type.get_prefix()
             # Create temporary DIdentity instances to be completed and replaced by resolve_references
             identity_base = DIdentity("", "", prefix, name, [])
             identity_bases.append(identity_base)
-        t = resolver.type_
+        t = resolver.type
         return DTypeIdentityref(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, identity_bases, [])
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
@@ -2590,7 +2590,7 @@ class DTypeInstanceIdentifier(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeInstanceIdentifier:
-        t = resolver.type_
+        t = resolver.type
         _require_instance = resolver.require_instance
         return DTypeInstanceIdentifier(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, _require_instance is not None and _require_instance)
 
@@ -2625,7 +2625,7 @@ class DTypeIntegerSigned(DTypeInteger[int]):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerSigned:
-        t = resolver.type_
+        t = resolver.type
         return DTypeIntegerSigned(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.int_ranges)
 
     def validate_value(self, val: value) -> bool:
@@ -2643,7 +2643,7 @@ class DTypeIntegerUnsigned(DTypeInteger[u64]):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerUnsigned:
-        t = resolver.type_
+        t = resolver.type
         return DTypeIntegerUnsigned(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.u64_ranges)
 
     def validate_value(self, val: value) -> bool:
@@ -2669,13 +2669,13 @@ class DTypeLeafref(DType):
     def from_resolver(resolver: DTypeResolver) -> DTypeLeafref:
         _path = resolver.path
         if _path is not None:
-            t = resolver.type_
+            t = resolver.type
             _require_instance = resolver.require_instance
             # target_type is either passed to __init__ if we're restoring an
             # already resolved leafref, or it is set in resolve_references.
             _target_type = None
             return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, _target_type, resolver.default, _path, _require_instance is not None and _require_instance)
-        raise ValueError("Type {resolver.type_.name}{" of base-type leafref" if resolver.type_.name != "leafref" else ""} requires path restriction")
+        raise ValueError("Type {resolver.type.name}{" of base-type leafref" if resolver.type.name != "leafref" else ""} requires path restriction")
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         n: DNode = root
@@ -2697,7 +2697,7 @@ class DTypeLeafref(DType):
             else:
                 raise NotImplementedError("{get_path(spath)}: Leafref path: {self.path}, expected NodeTestStep only")
         if isinstance(n, DNodeLeaf):
-            self.target_type = n.type_
+            self.target_type = n.type
         else:
             raise ValueError("{get_path(spath)}: Leafref path: {self.path}, does not refer to a leaf or leaf-list")
 
@@ -2737,7 +2737,7 @@ class DTypeString(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeString:
-        t = resolver.type_
+        t = resolver.type
         return DTypeString(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.length, resolver.patterns)
 
     def validate_value(self, val: value) -> bool:
@@ -2779,7 +2779,7 @@ class DTypeUnion(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeUnion:
-        t = resolver.type_
+        t = resolver.type
         return DTypeUnion(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.alt_types)
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
@@ -2799,7 +2799,7 @@ class DTypeUnion(DType):
         return ["types: [{" OR ".join([t.format_hint() for t in self.types])}]"]
 
 class DTypeResolver(object):
-    type_: ResolvedType
+    type: ResolvedType
     builtin_type: str
     identity_bases: list[str] # RFC7950: "An identityref cannot be restricted."
     bits: dict[str, int] # # Assume only allowed in the type "bits" statement with no further restrictions in base-type chain
@@ -2819,8 +2819,8 @@ class DTypeResolver(object):
     reference: ?str # sub-type overrides base-type
     units: ?str # sub-type overrides base-type
 
-    def __init__(self, type_: ResolvedType):
-        self.type_ = type_
+    def __init__(self, type: ResolvedType):
+        self.type = type
         self.builtin_type = ""
         self.identity_bases = []
         self.bits = {}
@@ -2841,9 +2841,9 @@ class DTypeResolver(object):
         self.units = None
 
     @staticmethod
-    def resolve(type_: ResolvedType, context: DTypeContext) -> DTypeResolver:
-        r = DTypeResolver(type_)
-        r._resolve(type_, context)
+    def resolve(type: ResolvedType, context: DTypeContext) -> DTypeResolver:
+        r = DTypeResolver(type)
+        r._resolve(type, context)
         return r
 
     def _resolve(self, t: ResolvedType, context: DTypeContext):
@@ -3669,7 +3669,7 @@ class SchemaNode(object):
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find identity '{name}' in module '{self.get_module_name()}'")
 
-    def qualify_identityref_default(self, type_: Type, resolved_type: Type, default: str, context: Context) -> str:
+    def qualify_identityref_default(self, type: Type, resolved_type: Type, default: str, context: Context) -> str:
         """Normalize an identityref default to the origin module's prefix
 
         Like identity bases, an identityref default gets appended the prefix of
@@ -3686,7 +3686,7 @@ class SchemaNode(object):
             return False
 
         # Skip if we have already resolved this (=already normalized)
-        if isinstance(type_, ResolvedType) or not is_identityref_type(resolved_type):
+        if isinstance(type, ResolvedType) or not is_identityref_type(resolved_type):
             return default
         try:
             identity = self.get_identity(default, context)
@@ -4256,7 +4256,7 @@ def is_optional_arg_yang_leaf(leaf: DNodeLeaf, key_names: ?list[str], loose: boo
 def yang_leaf_to_acton_type(leaf: DNodeLeaf, key_names: ?list[str], loose: bool=False) -> str:
     optional = is_optional_yang_leaf(leaf, key_names, loose)
     optional_str = "?" if optional else ""
-    t = yang_type_to_acton_type(leaf.type_)
+    t = yang_type_to_acton_type(leaf.type)
     return optional_str + t
 
 def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, key_names: ?list[str], loose: bool=False) -> str:
@@ -4265,7 +4265,7 @@ def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, key_names: ?list[str], loose: b
         if leaf.default is not None:
             optional = True
     optional_str = "?" if optional else ""
-    t = yang_type_to_acton_type(leaf.type_)
+    t = yang_type_to_acton_type(leaf.type)
     return optional_str + t
 
 def taker_name(n: DNode, key_names: ?list[str], loose: bool=False) -> str:
@@ -4286,17 +4286,17 @@ def taker_name(n: DNode, key_names: ?list[str], loose: bool=False) -> str:
     if isinstance(n, DLeaf):
         optional = is_optional_arg_yang_leaf(n, key_names, loose)
         optional_str = "opt_" if optional else ""
-        if n.type_.builtin_type == "empty":
+        if n.type.builtin_type == "empty":
             return taker_prefix + optional_str + "empty"
-        return taker_prefix + optional_str + set_to_bits(yang_type_to_acton_type(n.type_))
+        return taker_prefix + optional_str + set_to_bits(yang_type_to_acton_type(n.type))
     if isinstance(n, DLeafList):
         optional = loose or n.min_elements == 0
         optional_str = "opt_" if optional else ""
-        return taker_prefix + optional_str + set_to_bits(yang_type_to_acton_type(n.type_)) + "s"
+        return taker_prefix + optional_str + set_to_bits(yang_type_to_acton_type(n.type)) + "s"
     raise ValueError("unreachable - unknown node type {type(n)}")
 
 def yang_leaflist_to_acton_type(leaf: DLeafList) -> str:
-    t = yang_type_to_acton_type(leaf.type_)
+    t = yang_type_to_acton_type(leaf.type)
     return "list[{t}]"
 
 
