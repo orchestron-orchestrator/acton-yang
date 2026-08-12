@@ -154,11 +154,11 @@ extension xml.Node (YangData):
         maybe_node = ygdata.get_xml_opt_child(self, schema.name, schema.namespace if ns_qualified else None)
         if maybe_node is not None:
             op = _get_netconf_operation(maybe_node)
-            tv = try_parse_xml_value(maybe_node.text, schema, schema.type_, new_path, maybe_node.nsdefs, root)
+            tv = try_parse_xml_value(maybe_node.text, schema, schema.type, new_path, maybe_node.nsdefs, root)
             if tv is not None:
                 return (op=op, t=tv.t, val=tv.val)
-            # TODO: schema.type_.name may not be correct (union), but it's going away soon ...
-            return (op=op, t=schema.type_.name, val=None)
+            # TODO: schema.type.name may not be correct (union), but it's going away soon ...
+            return (op=op, t=schema.type.name, val=None)
         else:
             return None
 
@@ -170,12 +170,12 @@ extension xml.Node (YangData):
             if isinstance(child, xml.Node):
                 op = _get_netconf_operation(child)
                 text_value = child.text
-                tv = try_parse_xml_value(text_value, schema, schema.type_, new_path, child.nsdefs, root)
+                tv = try_parse_xml_value(text_value, schema, schema.type, new_path, child.nsdefs, root)
                 if tv is not None:
                     values.append((op=op, t=tv.t, val=tv.val))
                 else:
-                    # TODO: schema.type_.name may not be correct (union), but it's going away soon ...
-                    values.append((op=op, t=schema.type_.name, val=None))
+                    # TODO: schema.type.name may not be correct (union), but it's going away soon ...
+                    values.append((op=op, t=schema.type.name, val=None))
         return values
 
 
@@ -287,7 +287,7 @@ def _filter_value_match(root: yschema.DRoot, schema_leaf: yschema.DNodeLeaf, xml
     text_val = expect(text, "filter value")
     if "*" in text_val:
         return ygdata.VWildcard(text_val)
-    tv = try_parse_xml_value(text_val, schema_leaf, schema_leaf.type_, spath, xml_leaf.nsdefs, root)
+    tv = try_parse_xml_value(text_val, schema_leaf, schema_leaf.type, spath, xml_leaf.nsdefs, root)
     if tv is not None:
         return tv.val
     return None

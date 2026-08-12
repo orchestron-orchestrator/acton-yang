@@ -699,12 +699,12 @@ def _test_quote():
     y = yparser.parse(ys, strict_quoting=False)
     return y.prsrc()
 
-def get_builtin_type(type_: yschema.Type) -> yschema.ResolvedType:
-    if isinstance(type_, yschema.ResolvedType):
-        resolved_base_typedef = type_.resolved_base_typedef
+def get_builtin_type(type: yschema.Type) -> yschema.ResolvedType:
+    if isinstance(type, yschema.ResolvedType):
+        resolved_base_typedef = type.resolved_base_typedef
         if resolved_base_typedef is not None:
-            return get_builtin_type(resolved_base_typedef.type_)
-        return type_
+            return get_builtin_type(resolved_base_typedef.type)
+        return type
     else:
         return testing.error("Expected ResolvedType instance")
 
@@ -733,13 +733,13 @@ def _test_compile_type1():
 
     l1 = nc.get("c1").get("l1")
     if isinstance(l1, yschema.Leaf):
-        testing.assertEqual(get_builtin_type(l1.type_).name, "string")
+        testing.assertEqual(get_builtin_type(l1.type).name, "string")
     else:
         testing.error("Expected Leaf instance")
 
     ll1 = nc.get("c1").get("ll1")
     if isinstance(ll1, yschema.LeafList):
-        testing.assertEqual(get_builtin_type(ll1.type_).name, "string")
+        testing.assertEqual(get_builtin_type(ll1.type).name, "string")
     else:
         testing.error("Expected LeafList instance")
 
@@ -773,13 +773,13 @@ def _test_compile_type2():
 
     l1 = nc.get("c1").get("l1")
     if isinstance(l1, yschema.Leaf):
-        testing.assertEqual(get_builtin_type(l1.type_).name, "string")
+        testing.assertEqual(get_builtin_type(l1.type).name, "string")
     else:
         testing.error("Expected Leaf instance")
 
     ll1 = nc.get("c1").get("ll1")
     if isinstance(ll1, yschema.LeafList):
-        testing.assertEqual(get_builtin_type(ll1.type_).name, "string")
+        testing.assertEqual(get_builtin_type(ll1.type).name, "string")
     else:
         testing.error("Expected LeafList instance")
 
@@ -813,11 +813,11 @@ def _test_compile_type3():
 
     l1 = nc.get("c1").get("l1")
     if isinstance(l1, yschema.Leaf):
-        l1_type = get_builtin_type(l1.type_)
+        l1_type = get_builtin_type(l1.type)
         testing.assertEqual(l1_type.name, "union")
-        testing.assertEqual(len(l1_type.type_), 2)
-        testing.assertEqual(get_builtin_type(l1_type.type_[0]).name, "string")
-        testing.assertEqual(get_builtin_type(l1_type.type_[1]).name, "string")
+        testing.assertEqual(len(l1_type.type), 2)
+        testing.assertEqual(get_builtin_type(l1_type.type[0]).name, "string")
+        testing.assertEqual(get_builtin_type(l1_type.type[1]).name, "string")
     else:
         testing.error("Expected Leaf instance")
 
@@ -852,7 +852,7 @@ def _test_compile_type_in_imported_module():
 
     l1 = nc_bar.get("c1").get("l1")
     if isinstance(l1, yschema.Leaf):
-        testing.assertEqual(get_builtin_type(l1.type_).name, "string")
+        testing.assertEqual(get_builtin_type(l1.type).name, "string")
     else:
         testing.error("Expected Leaf instance")
 
@@ -2562,7 +2562,7 @@ def _test_prdaclass_strict_list_p_container_with_mandatory_leaf():
     src = root.prdaclass(top=False, root_path=["foo:l1"])
     return src
 
-def _test_prdaclass_keyword_name_import():
+def _test_prdaclass_acton_keyword_names():
     ys_foo = r"""module foo {
     yang-version "1.1";
     namespace "http://example.com/foo";
@@ -2574,13 +2574,31 @@ def _test_prdaclass_keyword_name_import():
         leaf for {
             type string;
         }
-        leaf import {
-            type string;
-        }
         leaf in {
             type string;
         }
         leaf with {
+            type string;
+        }
+        leaf actor {
+            type string;
+        }
+        leaf class {
+            type string;
+        }
+        leaf extension {
+            type string;
+        }
+        leaf from {
+            type string;
+        }
+        leaf import {
+            type string;
+        }
+        leaf protocol {
+            type string;
+        }
+        leaf type {
             type string;
         }
     }
@@ -3267,7 +3285,7 @@ def _test_identityref():
 
     # Verify the leaf has the correct type
     if isinstance(active_protocol, yschema.DLeaf):
-        testing.assertEqual(active_protocol.type_.builtin_type, "identityref")
+        testing.assertEqual(active_protocol.type.builtin_type, "identityref")
     else:
         testing.error("Expected DLeaf instance")
 

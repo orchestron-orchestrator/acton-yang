@@ -353,7 +353,7 @@ def edit_to_gdata(root: yschema.DRoot, e: Edit) -> gdata.Node:
         n = len(pe)
         llnode = pe[n - 1].node
         if isinstance(llnode, yschema.DLeafList):
-            parsed = try_parse_xml_value(uri.unquote(raw_value), llnode, llnode.type_, pe, [], root)
+            parsed = try_parse_xml_value(uri.unquote(raw_value), llnode, llnode.type, pe, [], root)
             if parsed is not None:
                 if rop == OP_REMOVE:
                     entry: gdata.LeafListEntry = gdata.LeafListEntryRemove(parsed.val)
@@ -385,7 +385,7 @@ def edit_to_gdata(root: yschema.DRoot, e: Edit) -> gdata.Node:
         inner: gdata.Node = gdata.Absent()
         if rop != OP_REMOVE:
             v = e.value!   # merge/create/replace require a value (RFC 8072 §2.5)
-            parsed = try_parse_xml_value(v.text, terminal, terminal.type_, pe, v.nsdefs, root)
+            parsed = try_parse_xml_value(v.text, terminal, terminal.type, pe, v.nsdefs, root)
             if parsed is not None:
                 inner = gdata.Leaf(parsed.val, ns=lns, module=lmod)
             else:

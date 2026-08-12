@@ -59,7 +59,7 @@
 #
 #   Module("foo", namespace="http://example.com/foo", prefix="f", children=[
 #     Container("c1", children=[
-#       Leaf("l1", type_="string")
+#       Leaf("l1", type="string")
 #     ])
 #   ])
 #
@@ -131,12 +131,15 @@ _builtin_types = {
 }
 
 # These are reserved keywords in the acton language, so we must avoid generating
-# identifiers with these names.
+# identifiers with these names. The soft keywords "actor", "class", "extension",
+# "from", "import", "protocol" and "type" are deliberately absent: they are only
+# keywords when they start a declaration or an import, so they are valid as
+# attribute, argument and local names.
 _reserved_keywords = {
-    "False","None","NotImplemented","Self","True","action","actor","after","and","as",
-    "assert","async","await","break","class","continue","def","del","elif","else",
-    "except","extension","finally","for","from","if","import","in","is","isinstance",
-    "lambda","mut","not","or","pass","proc","protocol","pure","raise","return","self","try",
+    "False","None","NotImplemented","Self","True","action","after","and","as",
+    "assert","async","await","break","continue","def","del","elif","else",
+    "except","finally","for","if","in","is","isinstance",
+    "lambda","mut","not","or","pass","proc","pure","raise","return","self","try",
     "var","while","with","yield","_"
     }
 
@@ -476,9 +479,9 @@ class DNode(object):
                 node_prefix += "o"
             if isinstance(node, DLeaf):
                 optional = "?" if node.mandatory == False else ""
-                res.append("{node_prefix} {node.name}{optional} {node.type_.format_short_hint()}")
+                res.append("{node_prefix} {node.name}{optional} {node.type.format_short_hint()}")
             elif isinstance(node, DLeafList):
-                res.append("{node_prefix} {node.name}* {node.type_.format_short_hint()}")
+                res.append("{node_prefix} {node.name}* {node.type.format_short_hint()}")
             elif isinstance(node, DContainer):
                 res.append("{node_prefix} {node.name}{'!' if node.presence else ''}")
             elif isinstance(node, DList):
@@ -672,7 +675,7 @@ class DNodeInner(DNode):
             elif isinstance(child, DLeaf):
                 child_default = child.default
                 if not loose and child_default is not None:
-                    child_type = child.type_
+                    child_type = child.type
                     if isinstance(child_type, DTypeIdentityref):
                         root = spath[0]
                         if isinstance(root, DRoot):
@@ -818,7 +821,7 @@ class DNodeInner(DNode):
                     arg = usname(child)
                     arg_type = yang_leaf_to_acton_arg_type(child, list_keys(self), loose)
                     if arg in list_key_args:
-                        list_key_types[arg] = child.type_
+                        list_key_types[arg] = child.type
                         list_args_req.append(arg)
                         list_args_req_sig.append("{arg}: {arg_type}")
                         continue
@@ -1065,11 +1068,11 @@ class DNodeLeaf(DNode):
     if_feature: list[str]
     must: list[DMust]
     status: ?str
-    type_: DType
+    type: DType
     when: ?str
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
-        self.type_.resolve_references(root, spath + [self], allow_failure)
+        self.type.resolve_references(root, spath + [self], allow_failure)
 
 class DAction(DNodeInner):
     if_feature: list[str]
@@ -1353,16 +1356,16 @@ class DModule(DNodeInner):
     augment: list[Augment]
     contact: ?str
     deviation: list[str]
-    extension_: list[Extension]
+    extension: list[Extension]
     feature: list[Feature]
     identity: list[Identity]
-    import_: list[Import]
+    import: list[Import]
     include: list[Include]
     organization: ?str
     revision: list[Revision]
     yang_version: float
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension_=[], feature=[], identity=[], import_=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, yang_version: ?float, description: ?str=None, contact=None, deviation=[], extension=[], feature=[], identity=[], import=[], include=[], organization=None, reference=None, revision=[], exts=[], children=[]):
         self.module = module
         self.name = name
         self.gname = "Container"
@@ -1379,10 +1382,10 @@ class DModule(DNodeInner):
         self.augment = []
         self.contact = contact
         self.deviation = deviation
-        self.extension_ = extension_
+        self.extension = extension
         self.feature = feature
         self.identity = identity
-        self.import_ = import_
+        self.import = import
         self.include = include
         self.organization = organization
         self.reference = reference
@@ -1401,10 +1404,10 @@ class DModule(DNodeInner):
             ("augment", self.augment),
             ("contact", self.contact),
             ("deviation", self.deviation),
-            ("extension_", self.extension_),
+            ("extension", self.extension),
             ("feature", self.feature),
             ("identity", self.identity),
-            ("import_", self.import_),
+            ("import", self.import),
             ("include", self.include),
             ("organization", self.organization),
             ("reference", self.reference),
@@ -1470,7 +1473,7 @@ class DLeaf(DNodeLeaf):
     mandatory: bool
     units: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type_: DType, units=None, when=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], mandatory=False, must=[], reference=None, status=None, type: DType, units=None, when=None, exts=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1484,7 +1487,7 @@ class DLeaf(DNodeLeaf):
         self.must = must
         self.reference = reference
         self.status = status
-        self.type_ = type_
+        self.type = type
         self.units = units
         self.when = when
         self.exts = exts
@@ -1512,7 +1515,7 @@ class DLeaf(DNodeLeaf):
             ("must", self.must),
             ("reference", self.reference),
             ("status", self.status),
-            ("type_", self.type_),
+            ("type", self.type),
             ("units", self.units),
             ("when", self.when),
             ("exts", self.exts),
@@ -1526,7 +1529,7 @@ class DLeafList(DNodeLeaf):
     ordered_by: str
     units: ?str
 
-    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type_: DType, units=None, when=None, exts=[]):
+    def __init__(self, module: str, namespace: str, prefix: str, name: str, config: bool, description: ?str=None, default=None, if_feature=[], max_elements: ?int=None, min_elements=0, must=[], ordered_by="system", reference=None, status=None, type: DType, units=None, when=None, exts=[]):
         self.module = module
         self.namespace = namespace
         self.prefix = prefix
@@ -1542,7 +1545,7 @@ class DLeafList(DNodeLeaf):
         self.ordered_by = ordered_by
         self.reference = reference
         self.status = status
-        self.type_ = type_
+        self.type = type
         self.units = units
         self.when = when
         self.exts = exts
@@ -1563,7 +1566,7 @@ class DLeafList(DNodeLeaf):
             ("ordered_by", self.ordered_by),
             ("reference", self.reference),
             ("status", self.status),
-            ("type_", self.type_),
+            ("type", self.type),
             ("units", self.units),
             ("when", self.when),
             ("exts", self.exts),
@@ -2266,14 +2269,14 @@ class DTypeContext(object):
     def __init__(self):
         self.cache = {}
 
-    def try_get_cached_dtype(self, type_: ResolvedType) -> ?DType:
+    def try_get_cached_dtype(self, type: ResolvedType) -> ?DType:
         try:
-            return self.cache[type_]
+            return self.cache[type]
         except KeyError:
             return None
 
-    def set_cached_dtype(self, type_: ResolvedType, dtype: DType):
-        self.cache[type_] = dtype
+    def set_cached_dtype(self, type: ResolvedType, dtype: DType):
+        self.cache[type] = dtype
 
 class DType(object):
     name: str
@@ -2296,13 +2299,13 @@ class DType(object):
         self.default = default
 
     @staticmethod
-    def from_resolved_type(type_: ResolvedType, context: DTypeContext) -> DType:
-        cached_dtype = context.try_get_cached_dtype(type_)
+    def from_resolved_type(type: ResolvedType, context: DTypeContext) -> DType:
+        cached_dtype = context.try_get_cached_dtype(type)
         if cached_dtype is not None:
             return cached_dtype
-        resolver = DTypeResolver.resolve(type_, context)
+        resolver = DTypeResolver.resolve(type, context)
         dtype = DType.from_resolver(resolver)
-        context.set_cached_dtype(type_, dtype)
+        context.set_cached_dtype(type, dtype)
         return dtype
 
     @staticmethod
@@ -2333,7 +2336,7 @@ class DType(object):
             return DTypeBits.from_resolver(resolver)
         elif resolver.builtin_type == "instance-identifier":
             return DTypeInstanceIdentifier.from_resolver(resolver)
-        raise ValueError("Unable to resolve type ({resolver.type_}) into builtin base-type")
+        raise ValueError("Unable to resolve type ({resolver.type}) into builtin base-type")
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         pass
@@ -2368,7 +2371,7 @@ class DTypeBinary(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBinary:
-        t = resolver.type_
+        t = resolver.type
         return DTypeBinary(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.length)
 
     def validate_value(self, val: value) -> bool:
@@ -2400,7 +2403,7 @@ class DTypeBits(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBits:
-        t = resolver.type_
+        t = resolver.type
         return DTypeBits(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.bits)
 
     def validate_value(self, val: value) -> bool:
@@ -2439,7 +2442,7 @@ class DTypeBoolean(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeBoolean:
-        t = resolver.type_
+        t = resolver.type
         return DTypeBoolean(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default)
 
     def validate_value(self, val: value) -> bool:
@@ -2461,9 +2464,9 @@ class DTypeDecimal64(DType):
     def from_resolver(resolver: DTypeResolver) -> DTypeDecimal64:
         _fraction_digits = resolver.fraction_digits
         if _fraction_digits is not None:
-            t = resolver.type_
+            t = resolver.type
             return DTypeDecimal64(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, _fraction_digits, resolver.decimal_ranges)
-        raise ValueError("Missing required fraction-digits for decimal64 type \"{resolver.type_.name}\"")
+        raise ValueError("Missing required fraction-digits for decimal64 type \"{resolver.type.name}\"")
 
     def validate_value(self, val: value) -> bool:
         if isinstance(val, Decimal):
@@ -2495,7 +2498,7 @@ class DTypeEmpty(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeEmpty:
-        t = resolver.type_
+        t = resolver.type
         return DTypeEmpty(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default)
 
     def validate_value(self, val: value) -> bool:
@@ -2516,7 +2519,7 @@ class DTypeEnum(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeEnum:
-        t = resolver.type_
+        t = resolver.type
         return DTypeEnum(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.enum_name_to_val)
 
     def validate_value(self, val: value) -> bool:
@@ -2542,11 +2545,11 @@ class DTypeIdentityref(DType):
         identity_bases = []
         for base in resolver.identity_bases:
             maybe_prefix, name = split_prefix_name(base)
-            prefix = maybe_prefix if maybe_prefix is not None else resolver.type_.get_prefix()
+            prefix = maybe_prefix if maybe_prefix is not None else resolver.type.get_prefix()
             # Create temporary DIdentity instances to be completed and replaced by resolve_references
             identity_base = DIdentity("", "", prefix, name, [])
             identity_bases.append(identity_base)
-        t = resolver.type_
+        t = resolver.type
         return DTypeIdentityref(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, identity_bases, [])
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
@@ -2583,7 +2586,7 @@ class DTypeInstanceIdentifier(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeInstanceIdentifier:
-        t = resolver.type_
+        t = resolver.type
         _require_instance = resolver.require_instance
         return DTypeInstanceIdentifier(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, _require_instance is not None and _require_instance)
 
@@ -2618,7 +2621,7 @@ class DTypeIntegerSigned(DTypeInteger[int]):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerSigned:
-        t = resolver.type_
+        t = resolver.type
         return DTypeIntegerSigned(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.int_ranges)
 
     def validate_value(self, val: value) -> bool:
@@ -2636,7 +2639,7 @@ class DTypeIntegerUnsigned(DTypeInteger[u64]):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeIntegerUnsigned:
-        t = resolver.type_
+        t = resolver.type
         return DTypeIntegerUnsigned(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.u64_ranges)
 
     def validate_value(self, val: value) -> bool:
@@ -2662,13 +2665,13 @@ class DTypeLeafref(DType):
     def from_resolver(resolver: DTypeResolver) -> DTypeLeafref:
         _path = resolver.path
         if _path is not None:
-            t = resolver.type_
+            t = resolver.type
             _require_instance = resolver.require_instance
             # target_type is either passed to __init__ if we're restoring an
             # already resolved leafref, or it is set in resolve_references.
             _target_type = None
             return DTypeLeafref(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, _target_type, resolver.default, _path, _require_instance is not None and _require_instance)
-        raise ValueError("Type {resolver.type_.name}{" of base-type leafref" if resolver.type_.name != "leafref" else ""} requires path restriction")
+        raise ValueError("Type {resolver.type.name}{" of base-type leafref" if resolver.type.name != "leafref" else ""} requires path restriction")
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
         n: DNode = root
@@ -2690,7 +2693,7 @@ class DTypeLeafref(DType):
             else:
                 raise NotImplementedError("{get_path(spath)}: Leafref path: {self.path}, expected NodeTestStep only")
         if isinstance(n, DNodeLeaf):
-            self.target_type = n.type_
+            self.target_type = n.type
         else:
             raise ValueError("{get_path(spath)}: Leafref path: {self.path}, does not refer to a leaf or leaf-list")
 
@@ -2730,7 +2733,7 @@ class DTypeString(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeString:
-        t = resolver.type_
+        t = resolver.type
         return DTypeString(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.length, resolver.patterns)
 
     def validate_value(self, val: value) -> bool:
@@ -2772,7 +2775,7 @@ class DTypeUnion(DType):
 
     @staticmethod
     def from_resolver(resolver: DTypeResolver) -> DTypeUnion:
-        t = resolver.type_
+        t = resolver.type
         return DTypeUnion(t.name, resolver.description, resolver.reference, resolver.units, [ext.to_dext() for ext in t.exts], resolver.builtin_type, resolver.default, resolver.alt_types)
 
     def resolve_references(self, root: DRoot, spath: list[DNode], allow_failure: ?list[str]):
@@ -2792,7 +2795,7 @@ class DTypeUnion(DType):
         return ["types: [{" OR ".join([t.format_hint() for t in self.types])}]"]
 
 class DTypeResolver(object):
-    type_: ResolvedType
+    type: ResolvedType
     builtin_type: str
     identity_bases: list[str] # RFC7950: "An identityref cannot be restricted."
     bits: dict[str, int] # # Assume only allowed in the type "bits" statement with no further restrictions in base-type chain
@@ -2812,8 +2815,8 @@ class DTypeResolver(object):
     reference: ?str # sub-type overrides base-type
     units: ?str # sub-type overrides base-type
 
-    def __init__(self, type_: ResolvedType):
-        self.type_ = type_
+    def __init__(self, type: ResolvedType):
+        self.type = type
         self.builtin_type = ""
         self.identity_bases = []
         self.bits = {}
@@ -2834,15 +2837,15 @@ class DTypeResolver(object):
         self.units = None
 
     @staticmethod
-    def resolve(type_: ResolvedType, context: DTypeContext) -> DTypeResolver:
-        r = DTypeResolver(type_)
-        r._resolve(type_, context)
+    def resolve(type: ResolvedType, context: DTypeContext) -> DTypeResolver:
+        r = DTypeResolver(type)
+        r._resolve(type, context)
         return r
 
     def _resolve(self, t: ResolvedType, context: DTypeContext):
         if t.name == "union":
             self.builtin_type = t.name
-            for alt_type in t.type_:
+            for alt_type in t.type:
                 if isinstance(alt_type, ResolvedType):
                     alt_dtype = DType.from_resolved_type(alt_type, context)
                     if isinstance(alt_dtype, DTypeUnion):
@@ -2868,7 +2871,7 @@ class DTypeResolver(object):
                 if base_typedef.units is not None and self.units is None:
                     self.units = base_typedef.units
                 # recurse into base typedef
-                base_typedef_type = base_typedef.type_
+                base_typedef_type = base_typedef.type
                 if isinstance(base_typedef_type, ResolvedType):
                     self._resolve(base_typedef_type, context)
                 else:
@@ -3662,7 +3665,7 @@ class SchemaNode(object):
                 raise ValueError("Recursion limit reached")
         raise ValueError("Unable to find identity '{name}' in module '{self.get_module_name()}'")
 
-    def qualify_identityref_default(self, type_: Type, resolved_type: Type, default: str, context: Context) -> str:
+    def qualify_identityref_default(self, type: Type, resolved_type: Type, default: str, context: Context) -> str:
         """Normalize an identityref default to the origin module's prefix
 
         Like identity bases, an identityref default gets appended the prefix of
@@ -3675,11 +3678,11 @@ class SchemaNode(object):
             if isinstance(t, ResolvedType):
                 base_typedef = t.resolved_base_typedef
                 if base_typedef is not None:
-                    return is_identityref_type(base_typedef.type_)
+                    return is_identityref_type(base_typedef.type)
             return False
 
         # Skip if we have already resolved this (=already normalized)
-        if isinstance(type_, ResolvedType) or not is_identityref_type(resolved_type):
+        if isinstance(type, ResolvedType) or not is_identityref_type(resolved_type):
             return default
         try:
             identity = self.get_identity(default, context)
@@ -3800,9 +3803,9 @@ class SchemaNode(object):
                         node_prefix += "o"
             if isinstance(node, Leaf):
                 optional = "?" if node.mandatory == False else ""
-                res.append("{node_prefix} {node.name}{optional} {node.type_.name}")
+                res.append("{node_prefix} {node.name}{optional} {node.type.name}")
             elif isinstance(node, LeafList):
-                res.append("{node_prefix} {node.name}* {node.type_.name}")
+                res.append("{node_prefix} {node.name}* {node.type.name}")
             elif isinstance(node, Container):
                 presence = node.presence
                 res.append("{node_prefix} {node.name}{'!' if presence is not None else ''}")
@@ -3919,7 +3922,7 @@ class Ext(SchemaNode):
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         ext_module = self.get_module_by_prefix(self.prefix, context)
-        for ext in ext_module.extension_:
+        for ext in ext_module.extension:
             if ext.name == self.name:
                 if ext.argument is not None and self.arg is None:
                     raise ValueError("Extension {self.prefix}:{self.name} does not accept an argument")
@@ -4146,7 +4149,7 @@ def _attr_name(name: str):
         i += 1
         if i == len(name):
             break
-    if res in {"extension", "import", "range", "type"}:
+    if res == "range":
         res = res + "_"
 
     return res
@@ -4249,7 +4252,7 @@ def is_optional_arg_yang_leaf(leaf: DNodeLeaf, key_names: ?list[str], loose: boo
 def yang_leaf_to_acton_type(leaf: DNodeLeaf, key_names: ?list[str], loose: bool=False) -> str:
     optional = is_optional_yang_leaf(leaf, key_names, loose)
     optional_str = "?" if optional else ""
-    t = yang_type_to_acton_type(leaf.type_)
+    t = yang_type_to_acton_type(leaf.type)
     return optional_str + t
 
 def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, key_names: ?list[str], loose: bool=False) -> str:
@@ -4258,7 +4261,7 @@ def yang_leaf_to_acton_arg_type(leaf: DNodeLeaf, key_names: ?list[str], loose: b
         if leaf.default is not None:
             optional = True
     optional_str = "?" if optional else ""
-    t = yang_type_to_acton_type(leaf.type_)
+    t = yang_type_to_acton_type(leaf.type)
     return optional_str + t
 
 def taker_name(n: DNode, key_names: ?list[str], loose: bool=False) -> str:
@@ -4279,17 +4282,17 @@ def taker_name(n: DNode, key_names: ?list[str], loose: bool=False) -> str:
     if isinstance(n, DLeaf):
         optional = is_optional_arg_yang_leaf(n, key_names, loose)
         optional_str = "opt_" if optional else ""
-        if n.type_.builtin_type == "empty":
+        if n.type.builtin_type == "empty":
             return taker_prefix + optional_str + "empty"
-        return taker_prefix + optional_str + set_to_bits(yang_type_to_acton_type(n.type_))
+        return taker_prefix + optional_str + set_to_bits(yang_type_to_acton_type(n.type))
     if isinstance(n, DLeafList):
         optional = loose or n.min_elements == 0
         optional_str = "opt_" if optional else ""
-        return taker_prefix + optional_str + set_to_bits(yang_type_to_acton_type(n.type_)) + "s"
+        return taker_prefix + optional_str + set_to_bits(yang_type_to_acton_type(n.type)) + "s"
     raise ValueError("unreachable - unknown node type {type(n)}")
 
 def yang_leaflist_to_acton_type(leaf: DLeafList) -> str:
-    t = yang_type_to_acton_type(leaf.type_)
+    t = yang_type_to_acton_type(leaf.type)
     return "list[{t}]"
 
 
@@ -4618,15 +4621,15 @@ extension SchemaNode (Eq):
         elif isinstance(self, Input) and isinstance(other, Input):
             return self.must == other.must
         elif isinstance(self, Leaf) and isinstance(other, Leaf):
-            return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.mandatory == other.mandatory and self.must == other.must and self.reference == other.reference and self.status == other.status and self.type_ == other.type_ and self.units == other.units and self.when == other.when
+            return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.mandatory == other.mandatory and self.must == other.must and self.reference == other.reference and self.status == other.status and self.type == other.type and self.units == other.units and self.when == other.when
         elif isinstance(self, LeafList) and isinstance(other, LeafList):
-            return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.max_elements == other.max_elements and self.min_elements == other.min_elements and self.must == other.must and self.ordered_by == other.ordered_by and self.reference == other.reference and self.status == other.status and self.type_ == other.type_ and self.units == other.units and self.when == other.when
+            return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.max_elements == other.max_elements and self.min_elements == other.min_elements and self.must == other.must and self.ordered_by == other.ordered_by and self.reference == other.reference and self.status == other.status and self.type == other.type and self.units == other.units and self.when == other.when
         elif isinstance(self, Length) and isinstance(other, Length):
             return self.value == other.value and self.description == other.description and self.error_app_tag == other.error_app_tag and self.error_message == other.error_message and self.reference == other.reference
         elif isinstance(self, List) and isinstance(other, List):
             return self.name == other.name and self.config == other.config and self.description == other.description and self.if_feature == other.if_feature and self.key == other.key and self.max_elements == other.max_elements and self.min_elements == other.min_elements and self.must == other.must and self.ordered_by == other.ordered_by and self.reference == other.reference and self.status == other.status and self.unique == other.unique and self.when == other.when
         elif isinstance(self, Module) and isinstance(other, Module):
-            return self.name == other.name and self.augment == other.augment and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension_ == other.extension_ and self.feature == other.feature and self.import_ == other.import_ and self.include == other.include and self.namespace == other.namespace and self.organization == other.organization and self.prefix == other.prefix and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
+            return self.name == other.name and self.augment == other.augment and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension == other.extension and self.feature == other.feature and self.import == other.import and self.include == other.include and self.namespace == other.namespace and self.organization == other.organization and self.prefix == other.prefix and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
         elif isinstance(self, Must) and isinstance(other, Must):
             return self.condition == other.condition and self.description == other.description and self.error_app_tag == other.error_app_tag and self.error_message == other.error_message and self.reference == other.reference
         elif isinstance(self, Notification) and isinstance(other, Notification):
@@ -4644,11 +4647,11 @@ extension SchemaNode (Eq):
         elif isinstance(self, Rpc) and isinstance(other, Rpc):
             return self.name == other.name and self.description == other.description and self.if_feature == other.if_feature and self.reference == other.reference and self.status == other.status
         elif isinstance(self, Submodule) and isinstance(other, Submodule):
-            return self.name == other.name and self.augment == other.augment and self.belongs_to == other.belongs_to and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension_ == other.extension_ and self.feature == other.feature and self.import_ == other.import_ and self.include == other.include and self.organization == other.organization and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
+            return self.name == other.name and self.augment == other.augment and self.belongs_to == other.belongs_to and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension == other.extension and self.feature == other.feature and self.import == other.import and self.include == other.include and self.organization == other.organization and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
         elif isinstance(self, Type) and isinstance(other, Type):
-            return self.name == other.name and self.base == other.base and self.bit == other.bit and self.enum == other.enum and self.fraction_digits == other.fraction_digits and self.length == other.length and self.path == other.path and self.pattern == other.pattern and self.range_ == other.range_ and self.require_instance == other.require_instance and self.type_ == other.type_
+            return self.name == other.name and self.base == other.base and self.bit == other.bit and self.enum == other.enum and self.fraction_digits == other.fraction_digits and self.length == other.length and self.path == other.path and self.pattern == other.pattern and self.range_ == other.range_ and self.require_instance == other.require_instance and self.type == other.type
         elif isinstance(self, Typedef) and isinstance(other, Typedef):
-            return self.name == other.name and self.default == other.default and self.description == other.description and self.reference == other.reference and self.status == other.status and self.type_ == other.type_ and self.units == other.units
+            return self.name == other.name and self.default == other.default and self.description == other.description and self.reference == other.reference and self.status == other.status and self.type == other.type and self.units == other.units
         elif isinstance(self, Uses) and isinstance(other, Uses):
             return self.name == other.name and self.augment == other.augment and self.description == other.description and self.if_feature == other.if_feature and self.reference == other.reference and self.refine == other.refine and self.status == other.status and self.when == other.when
         return False
@@ -6929,7 +6932,7 @@ class Leaf(SchemaNodeOuter):
     https://tools.ietf.org/html/rfc7950#section-7.6.2
     """
     name: str
-    type_: Type
+    type: Type
     config: ?bool
     default: ?str
     description: ?str
@@ -6941,7 +6944,7 @@ class Leaf(SchemaNodeOuter):
     units: ?str
     when: ?str
 
-    def __init__(self, name: str, type_: Type, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, mod=None, ns=None, pfx=None):
+    def __init__(self, name: str, type: Type, config: ?bool=None, default: ?str=None, description: ?str=None, if_feature: list[str]=[], mandatory: ?bool=None, must: list[Must]=[], reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, mod=None, ns=None, pfx=None):
         self.parent = parent
         new_mod = mod
         new_ns = ns
@@ -6965,7 +6968,7 @@ class Leaf(SchemaNodeOuter):
         self.must = must
         self.reference = reference
         self.status = status
-        self.type_ = type_
+        self.type = type
         self.units = units
         self.when = when
         self.exts = exts
@@ -6982,20 +6985,20 @@ class Leaf(SchemaNodeOuter):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.type_.parent = self
-        n_mod = self.type_.mod
+        self.type.parent = self
+        n_mod = self.type.mod
         if n_mod is None:
-            self.type_.mod = self.mod
-        n_ns = self.type_.ns
+            self.type.mod = self.mod
+        n_ns = self.type.ns
         if n_ns is None:
-            self.type_.ns = self.ns
-        n_pfx = self.type_.pfx
+            self.type.ns = self.ns
+        n_pfx = self.type.pfx
         if n_pfx is None:
-            self.type_.pfx = self.pfx
+            self.type.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
-            ("type", self.type_),
+            ("type", self.type),
             ("config", self.config),
             ("default", self.default),
             ("description", self.description),
@@ -7035,11 +7038,11 @@ class Leaf(SchemaNodeOuter):
         self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        resolved_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
+        resolved_type = self.type.resolve_type(context, new_mod, new_ns, new_pfx)
 
         new_default = self.default
         if new_default is not None:
-            new_default = self.qualify_identityref_default(self.type_, resolved_type, new_default, context)
+            new_default = self.qualify_identityref_default(self.type, resolved_type, new_default, context)
 
         new = Leaf(self.name,
                    config=self.config,
@@ -7050,7 +7053,7 @@ class Leaf(SchemaNodeOuter):
                    must=self.must,
                    reference=self.reference,
                    status=self.status,
-                   type_=resolved_type,
+                   type=resolved_type,
                    units=self.units,
                    when=self.when,
                    exts=self.compile_exts(context),
@@ -7063,10 +7066,10 @@ class Leaf(SchemaNodeOuter):
         return new
 
     mut def resolve_compiled_schema_path_dependencies(self):
-        self.type_.resolve_compiled_schema_path_dependencies()
+        self.type.resolve_compiled_schema_path_dependencies()
 
     def to_dnode(self, context: DTypeContext) -> DLeaf:
-        dtype = self.type_.to_dtype(context)
+        dtype = self.type.to_dtype(context)
 
         new_default = self.default
         if new_default is None:
@@ -7091,7 +7094,7 @@ class Leaf(SchemaNodeOuter):
             must=[m.to_dmust() for m in self.must],
             reference=self.reference,
             status=self.status,
-            type_=dtype,
+            type=dtype,
             units=new_units,
             when=self.when,
             exts=[ext.to_dext() for ext in self.exts]
@@ -7105,7 +7108,7 @@ class Leaf(SchemaNodeOuter):
         self.pfx = new_pfx
         self.mod = new_mod
 
-        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
+        self.type.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
@@ -7113,14 +7116,14 @@ class Leaf(SchemaNodeOuter):
         for ext in self.exts:
             ext.remap_prefix_references(old_pfx, new_pfx)
 
-        if self.type_.name == 'identityref':
+        if self.type.name == 'identityref':
             self_default = self.default
             if self_default is not None:
                 self.default = remap_path_prefix(self_default, old_pfx, new_pfx)
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = remap_path_prefix(must.condition, old_pfx, new_pfx)
-        self.type_.remap_prefix_references(old_pfx, new_pfx)
+        self.type.remap_prefix_references(old_pfx, new_pfx)
         self_when = self.when
         if self_when is not None:
             self.when = remap_path_prefix(self_when, old_pfx, new_pfx)
@@ -7139,7 +7142,7 @@ class Leaf(SchemaNodeOuter):
 
 extension Leaf (Ord):
     def __eq__(self, other: Leaf):
-        return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.mandatory == other.mandatory and self.must == other.must and self.reference == other.reference and self.status == other.status and self.type_ == other.type_ and self.units == other.units and self.when == other.when
+        return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.mandatory == other.mandatory and self.must == other.must and self.reference == other.reference and self.status == other.status and self.type == other.type and self.units == other.units and self.when == other.when
 
     def __lt__(a, b):
         return a.name < b.name
@@ -7150,7 +7153,7 @@ class LeafList(SchemaNodeOuter):
     https://tools.ietf.org/html/rfc7950#section-7.7.3
     """
     name: str
-    type_: Type
+    type: Type
     config: ?bool
     default: list[str]
     description: ?str
@@ -7164,7 +7167,7 @@ class LeafList(SchemaNodeOuter):
     units: ?str
     when: ?str
 
-    def __init__(self, name: str, type_: Type, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, mod=None, ns=None, pfx=None):
+    def __init__(self, name: str, type: Type, config: ?bool=None, default: list[str]=[], description: ?str=None, if_feature: list[str]=[], max_elements: ?str=None, min_elements: ?str=None, must: list[Must]=[], ordered_by: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, when: ?str=None, exts=[], parent=None, mod=None, ns=None, pfx=None):
         self.parent = parent
         new_mod = mod
         new_ns = ns
@@ -7190,7 +7193,7 @@ class LeafList(SchemaNodeOuter):
         self.ordered_by = ordered_by
         self.reference = reference
         self.status = status
-        self.type_ = type_
+        self.type = type
         self.units = units
         self.when = when
         self.exts = exts
@@ -7207,20 +7210,20 @@ class LeafList(SchemaNodeOuter):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        self.type_.parent = self
-        n_mod = self.type_.mod
+        self.type.parent = self
+        n_mod = self.type.mod
         if n_mod is None:
-            self.type_.mod = self.mod
-        n_ns = self.type_.ns
+            self.type.mod = self.mod
+        n_ns = self.type.ns
         if n_ns is None:
-            self.type_.ns = self.ns
-        n_pfx = self.type_.pfx
+            self.type.ns = self.ns
+        n_pfx = self.type.pfx
         if n_pfx is None:
-            self.type_.pfx = self.pfx
+            self.type.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
-            ("type", self.type_),
+            ("type", self.type),
             ("config", self.config),
             ("default", self.default),
             ("description", self.description),
@@ -7264,9 +7267,9 @@ class LeafList(SchemaNodeOuter):
         self.exts.extend(refine.compile_exts(context))
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
-        resolved_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
+        resolved_type = self.type.resolve_type(context, new_mod, new_ns, new_pfx)
 
-        new_default = [self.qualify_identityref_default(self.type_, resolved_type, d, context) for d in self.default]
+        new_default = [self.qualify_identityref_default(self.type, resolved_type, d, context) for d in self.default]
 
         new = LeafList(self.name,
                        config=self.config,
@@ -7279,7 +7282,7 @@ class LeafList(SchemaNodeOuter):
                        ordered_by=self.ordered_by,
                        reference=self.reference,
                        status=self.status,
-                       type_=resolved_type,
+                       type=resolved_type,
                        units=self.units,
                        when=self.when,
                        exts=self.compile_exts(context),
@@ -7292,7 +7295,7 @@ class LeafList(SchemaNodeOuter):
         return new
 
     mut def resolve_compiled_schema_path_dependencies(self):
-        self.type_.resolve_compiled_schema_path_dependencies()
+        self.type.resolve_compiled_schema_path_dependencies()
 
     def get_max_elements(self) -> ?int:
         selfmax_elements = self.max_elements
@@ -7307,7 +7310,7 @@ class LeafList(SchemaNodeOuter):
         return 0
 
     def to_dnode(self, context: DTypeContext) -> DLeafList:
-        dtype = self.type_.to_dtype(context)
+        dtype = self.type.to_dtype(context)
 
         new_units = self.units
         if new_units is None:
@@ -7328,7 +7331,7 @@ class LeafList(SchemaNodeOuter):
             ordered_by=self.ordered_by,
             reference=self.reference,
             status=self.status,
-            type_=dtype,
+            type=dtype,
             units=new_units,
             when=self.when,
             exts=[ext.to_dext() for ext in self.exts]
@@ -7342,7 +7345,7 @@ class LeafList(SchemaNodeOuter):
         self.pfx = new_pfx
         self.mod = new_mod
 
-        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
+        self.type.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
@@ -7350,12 +7353,12 @@ class LeafList(SchemaNodeOuter):
         for ext in self.exts:
             ext.remap_prefix_references(old_pfx, new_pfx)
 
-        if self.type_.name == 'identityref':
+        if self.type.name == 'identityref':
             self.default = [remap_path_prefix(d, old_pfx, new_pfx) for d in self.default]
         self.if_feature = [remap_path_prefix(f, old_pfx, new_pfx) for f in self.if_feature]
         for must in self.must:
             must.condition = remap_path_prefix(must.condition, old_pfx, new_pfx)
-        self.type_.remap_prefix_references(old_pfx, new_pfx)
+        self.type.remap_prefix_references(old_pfx, new_pfx)
         self_when = self.when
         if self_when is not None:
             self.when = remap_path_prefix(self_when, old_pfx, new_pfx)
@@ -7374,7 +7377,7 @@ class LeafList(SchemaNodeOuter):
 
 extension LeafList (Ord):
     def __eq__(self, other: LeafList):
-        return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.max_elements == other.max_elements and self.min_elements == other.min_elements and self.must == other.must and self.ordered_by == other.ordered_by and self.reference == other.reference and self.status == other.status and self.type_ == other.type_ and self.units == other.units and self.when == other.when
+        return self.name == other.name and self.config == other.config and self.default == other.default and self.description == other.description and self.if_feature == other.if_feature and self.max_elements == other.max_elements and self.min_elements == other.min_elements and self.must == other.must and self.ordered_by == other.ordered_by and self.reference == other.reference and self.status == other.status and self.type == other.type and self.units == other.units and self.when == other.when
 
     def __lt__(a, b):
         return a.name < b.name
@@ -7711,7 +7714,7 @@ class Module(SchemaNodeInner):
     yang_version: float
     namespace: str
     prefix: str
-    import_: list[Import]
+    import: list[Import]
     include: list[Include]
     organization: ?str
     contact: ?str
@@ -7720,10 +7723,10 @@ class Module(SchemaNodeInner):
     revision: list[Revision]
     augment: list[Augment]
     deviation: list[str]
-    extension_: list[Extension]
+    extension: list[Extension]
     feature: list[Feature]
 
-    def __init__(self, name: str, namespace: str, prefix: str, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, mod=None, ns=None, pfx=None):
+    def __init__(self, name: str, namespace: str, prefix: str, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension: list[Extension]=[], feature: list[Feature]=[], import: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, mod=None, ns=None, pfx=None):
         self.parent = parent
         new_mod = mod
         new_ns = ns
@@ -7743,9 +7746,9 @@ class Module(SchemaNodeInner):
         self.contact = contact
         self.description = description
         self.deviation = deviation
-        self.extension_ = extension_
+        self.extension = extension
         self.feature = feature
-        self.import_ = import_
+        self.import = import
         self.include = include
         self.namespace = namespace
         self.organization = organization
@@ -7768,7 +7771,7 @@ class Module(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        for n in self.extension_:
+        for n in self.extension:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -7790,7 +7793,7 @@ class Module(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        for n in self.import_:
+        for n in self.import:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -7840,7 +7843,7 @@ class Module(SchemaNodeInner):
             ("yang-version", self.yang_version),
             ("namespace", self.namespace),
             ("prefix", self.prefix),
-            ("import", self.import_),
+            ("import", self.import),
             ("include", self.include),
             ("organization", self.organization),
             ("contact", self.contact),
@@ -7849,7 +7852,7 @@ class Module(SchemaNodeInner):
             ("revision", self.revision),
             ("augment", self.augment),
             ("deviation", self.deviation),
-            ("extension", self.extension_),
+            ("extension", self.extension),
             ("feature", self.feature),
             ("exts", self.exts),
         ]
@@ -7864,7 +7867,7 @@ class Module(SchemaNodeInner):
         self.exts.extend(refine.compile_exts(context))
 
     def get_import_by_prefix(self, prefix: str) -> Import:
-        for imp in self.import_:
+        for imp in self.import:
             if imp.prefix == prefix:
                 return imp
         raise ValueError("No import with prefix {prefix} in module {self.name}")
@@ -7920,15 +7923,15 @@ class Module(SchemaNodeInner):
 
     def get_remap_imports(self, context: Context) -> ?list[(orig: str, alias: str)]:
         remaps = []
-        for import_ in self.import_:
+        for import in self.import:
             try:
-                imported_module = context.get_module(import_.module, import_.revision_date)
+                imported_module = context.get_module(import.module, import.revision_date)
             except ValueError as e:
                 # TODO: missing module is an error
                 print(e.error_message, err=True)
             else:
-                if import_.prefix != imported_module.prefix:
-                    remaps.append((orig=imported_module.prefix, alias=import_.prefix))
+                if import.prefix != imported_module.prefix:
+                    remaps.append((orig=imported_module.prefix, alias=import.prefix))
         return remaps if len(remaps) > 0 else None
 
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
@@ -7937,7 +7940,7 @@ class Module(SchemaNodeInner):
                      yang_version=self.yang_version,
                      namespace=self.namespace,
                      prefix=self.prefix,
-                     import_=self.import_,
+                     import=self.import,
                      include=self.include,
                      organization=self.organization,
                      contact=self.contact,
@@ -7946,7 +7949,7 @@ class Module(SchemaNodeInner):
                      revision=self.revision,
                      augment=self.augment,
                      deviation=self.deviation,
-                     extension_=self.extension_,
+                     extension=self.extension,
                      feature=self.feature,
                      exts=self.compile_exts(context))
         self.expand_children(context, new, new_mod, new_ns, new_pfx, remap_imports)
@@ -7999,7 +8002,7 @@ extension Module (Hashable):
             "".hash(hasher)
 
     def __eq__(self, other: Module):
-        return self.name == other.name and self.augment == other.augment and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension_ == other.extension_ and self.feature == other.feature and self.import_ == other.import_ and self.include == other.include and self.namespace == other.namespace and self.organization == other.organization and self.prefix == other.prefix and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
+        return self.name == other.name and self.augment == other.augment and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension == other.extension and self.feature == other.feature and self.import == other.import and self.include == other.include and self.namespace == other.namespace and self.organization == other.organization and self.prefix == other.prefix and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
 
 extension Module (Ord):
     def __lt__(a, b):
@@ -9031,7 +9034,7 @@ class Submodule(SchemaNodeInner):
     """
     name: str
     yang_version: float
-    import_: list[Import]
+    import: list[Import]
     include: list[Include]
     organization: ?str
     contact: ?str
@@ -9041,10 +9044,10 @@ class Submodule(SchemaNodeInner):
     belongs_to: BelongsTo
     augment: list[Augment]
     deviation: list[str]
-    extension_: list[Extension]
+    extension: list[Extension]
     feature: list[Feature]
 
-    def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension_: list[Extension]=[], feature: list[Feature]=[], import_: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, mod=None, ns=None, pfx=None):
+    def __init__(self, name: str, belongs_to: BelongsTo, yang_version: float=1.1, augment: list[Augment]=[], contact: ?str=None, description: ?str=None, deviation: list[str]=[], extension: list[Extension]=[], feature: list[Feature]=[], import: list[Import]=[], include: list[Include]=[], organization: ?str=None, reference: ?str=None, revision: list[Revision]=[], exts=[], children=[], parent=None, mod=None, ns=None, pfx=None):
         self.parent = parent
         new_mod = mod
         new_ns = ns
@@ -9065,9 +9068,9 @@ class Submodule(SchemaNodeInner):
         self.contact = contact
         self.description = description
         self.deviation = deviation
-        self.extension_ = extension_
+        self.extension = extension
         self.feature = feature
-        self.import_ = import_
+        self.import = import
         self.include = include
         self.organization = organization
         self.reference = reference
@@ -9098,7 +9101,7 @@ class Submodule(SchemaNodeInner):
         n_pfx = self.belongs_to.pfx
         if n_pfx is None:
             self.belongs_to.pfx = self.pfx
-        for n in self.extension_:
+        for n in self.extension:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -9120,7 +9123,7 @@ class Submodule(SchemaNodeInner):
             n_pfx = n.pfx
             if n_pfx is None:
                 n.pfx = self.pfx
-        for n in self.import_:
+        for n in self.import:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -9168,7 +9171,7 @@ class Submodule(SchemaNodeInner):
     def get_attrs(self) -> list[(str, ?value)]:
         return [
             ("yang-version", self.yang_version),
-            ("import", self.import_),
+            ("import", self.import),
             ("include", self.include),
             ("organization", self.organization),
             ("contact", self.contact),
@@ -9178,7 +9181,7 @@ class Submodule(SchemaNodeInner):
             ("belongs-to", self.belongs_to),
             ("augment", self.augment),
             ("deviation", self.deviation),
-            ("extension", self.extension_),
+            ("extension", self.extension),
             ("feature", self.feature),
             ("exts", self.exts),
         ]
@@ -9207,7 +9210,7 @@ class Submodule(SchemaNodeInner):
     def compile(self, context: Context, new_mod: ?str=None, new_ns: ?str=None, new_pfx: ?str=None):
         new = Submodule(self.name,
                         yang_version=self.yang_version,
-                        import_=self.import_,
+                        import=self.import,
                         include=self.include,
                         organization=self.organization,
                         contact=self.contact,
@@ -9217,7 +9220,7 @@ class Submodule(SchemaNodeInner):
                         belongs_to=self.belongs_to,
                         augment=self.augment,
                         deviation=self.deviation,
-                        extension_=self.extension_,
+                        extension=self.extension,
                         feature=self.feature,
                         exts=self.compile_exts(context))
         self.expand_children(context, new, new_mod, new_ns, new_pfx)
@@ -9261,7 +9264,7 @@ class Submodule(SchemaNodeInner):
 
 extension Submodule (Ord):
     def __eq__(self, other: Submodule):
-        return self.name == other.name and self.augment == other.augment and self.belongs_to == other.belongs_to and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension_ == other.extension_ and self.feature == other.feature and self.import_ == other.import_ and self.include == other.include and self.organization == other.organization and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
+        return self.name == other.name and self.augment == other.augment and self.belongs_to == other.belongs_to and self.contact == other.contact and self.description == other.description and self.deviation == other.deviation and self.extension == other.extension and self.feature == other.feature and self.import == other.import and self.include == other.include and self.organization == other.organization and self.reference == other.reference and self.revision == other.revision and self.yang_version == other.yang_version
 
     def __lt__(a, b):
         return a.name < b.name
@@ -9281,9 +9284,9 @@ class Type(SchemaNodeOuter):
     pattern: list[Pattern]
     range_: ?Range
     require_instance: ?bool
-    type_: list[Type]
+    type: list[Type]
 
-    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None):
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None):
         self.parent = parent
         new_mod = mod
         new_ns = ns
@@ -9308,7 +9311,7 @@ class Type(SchemaNodeOuter):
         self.pattern = pattern
         self.range_ = range_
         self.require_instance = require_instance
-        self.type_ = type_
+        self.type = type
         self.exts = exts
         for n in self.exts:
             n.parent = self
@@ -9369,7 +9372,7 @@ class Type(SchemaNodeOuter):
             n_pfx = self_range_.pfx
             if n_pfx is None:
                 self_range_.pfx = self.pfx
-        for n in self.type_:
+        for n in self.type:
             n.parent = self
             n_mod = n.mod
             if n_mod is None:
@@ -9392,7 +9395,7 @@ class Type(SchemaNodeOuter):
             ("pattern", self.pattern),
             ("range", self.range_),
             ("require-instance", self.require_instance),
-            ("type", self.type_),
+            ("type", self.type),
             ("exts", self.exts),
         ]
 
@@ -9421,10 +9424,10 @@ class Type(SchemaNodeOuter):
 
             elif self.name == "union":
                 # Resolve union types
-                resolved_union_types = [ut.resolve_type(context, new_mod, new_ns, new_pfx, recursion_level + 1, top_name) for ut in self.type_]
+                resolved_union_types = [ut.resolve_type(context, new_mod, new_ns, new_pfx, recursion_level + 1, top_name) for ut in self.type]
                 return ResolvedType(self.name,
                         base=self.base,
-                        type_=resolved_union_types,
+                        type=resolved_union_types,
                         exts=self.compile_exts(context),
                         mod=self.mod,
                         ns=self.ns,
@@ -9442,7 +9445,7 @@ class Type(SchemaNodeOuter):
                     pattern=self.pattern,
                     range_=self.range_,
                     require_instance=self.require_instance,
-                    type_=self.type_,
+                    type=self.type,
                     exts=self.compile_exts(context),
                     mod=self.mod,
                     ns=self.ns,
@@ -9470,7 +9473,7 @@ class Type(SchemaNodeOuter):
                 pattern=self.pattern,
                 range_=self.range_,
                 require_instance=self.require_instance,
-                type_=self.type_,
+                type=self.type,
                 exts=self.compile_exts(context),
                 mod=self.mod,
                 ns=self.ns,
@@ -9493,7 +9496,7 @@ class Type(SchemaNodeOuter):
         self.pfx = new_pfx
         self.mod = new_mod
 
-        for nested_type in self.type_:
+        for nested_type in self.type:
             nested_type.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
@@ -9507,7 +9510,7 @@ class Type(SchemaNodeOuter):
         if self_path is not None:
             self.path = remap_path_prefix(self_path, old_pfx, new_pfx)
         self.name = remap_path_prefix(self.name, old_pfx, new_pfx)
-        for nested_type in self.type_:
+        for nested_type in self.type:
             nested_type.remap_prefix_references(old_pfx, new_pfx)
 
     def __str__(self):
@@ -9524,7 +9527,7 @@ class Type(SchemaNodeOuter):
 
 extension Type (Ord):
     def __eq__(self, other: Type):
-        return self.name == other.name and self.base == other.base and self.bit == other.bit and self.enum == other.enum and self.fraction_digits == other.fraction_digits and self.length == other.length and self.path == other.path and self.pattern == other.pattern and self.range_ == other.range_ and self.require_instance == other.require_instance and self.type_ == other.type_
+        return self.name == other.name and self.base == other.base and self.bit == other.bit and self.enum == other.enum and self.fraction_digits == other.fraction_digits and self.length == other.length and self.path == other.path and self.pattern == other.pattern and self.range_ == other.range_ and self.require_instance == other.require_instance and self.type == other.type
 
     def __lt__(a, b):
         return a.name < b.name
@@ -9535,14 +9538,14 @@ class Typedef(SchemaNodeOuter):
     https://tools.ietf.org/html/rfc7950#section-7.3.1
     """
     name: str
-    type_: Type
+    type: Type
     default: ?str
     description: ?str
     reference: ?str
     status: ?str
     units: ?str
 
-    def __init__(self, name: str, type_: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], parent=None, mod=None, ns=None, pfx=None):
+    def __init__(self, name: str, type: Type, default: ?str=None, description: ?str=None, reference: ?str=None, status: ?str=None, units: ?str=None, exts=[], parent=None, mod=None, ns=None, pfx=None):
         self.parent = parent
         new_mod = mod
         new_ns = ns
@@ -9562,25 +9565,25 @@ class Typedef(SchemaNodeOuter):
         self.description = description
         self.reference = reference
         self.status = status
-        self.type_ = type_
+        self.type = type
         self.units = units
         self.exts = exts
         for n in self.exts:
             n.parent = self
-        self.type_.parent = self
-        n_mod = self.type_.mod
+        self.type.parent = self
+        n_mod = self.type.mod
         if n_mod is None:
-            self.type_.mod = self.mod
-        n_ns = self.type_.ns
+            self.type.mod = self.mod
+        n_ns = self.type.ns
         if n_ns is None:
-            self.type_.ns = self.ns
-        n_pfx = self.type_.pfx
+            self.type.ns = self.ns
+        n_pfx = self.type.pfx
         if n_pfx is None:
-            self.type_.pfx = self.pfx
+            self.type.pfx = self.pfx
 
     def get_attrs(self) -> list[(str, ?value)]:
         return [
-            ("type", self.type_),
+            ("type", self.type),
             ("default", self.default),
             ("description", self.description),
             ("reference", self.reference),
@@ -9607,18 +9610,18 @@ class Typedef(SchemaNodeOuter):
         if recursion_level >= RECURSION_LIMIT:
             raise ValueError("Recursion limit reached for typedef {top_name}")
 
-        resolved_base_type = self.type_.resolve_type(context, new_mod, new_ns, new_pfx)
+        resolved_base_type = self.type.resolve_type(context, new_mod, new_ns, new_pfx)
 
         new_default = self.default
         if new_default is not None:
-            new_default = self.qualify_identityref_default(self.type_, resolved_base_type, new_default, context)
+            new_default = self.qualify_identityref_default(self.type, resolved_base_type, new_default, context)
 
         new = Typedef(self.name,
                       default=new_default,
                       description=self.description,
                       reference=self.reference,
                       status=self.status,
-                      type_=resolved_base_type,
+                      type=resolved_base_type,
                       units=self.units,
                       exts=self.compile_exts(context))
 
@@ -9636,7 +9639,7 @@ class Typedef(SchemaNodeOuter):
         self.pfx = new_pfx
         self.mod = new_mod
 
-        self.type_.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
+        self.type.update_namespace_qualifiers(new_ns, new_pfx, new_mod)
 
     def remap_prefix_references(self, old_pfx: str, new_pfx: str) -> None:
         """Remaps prefix references (in paths, defaults, ...) to true module prefix.
@@ -9644,11 +9647,11 @@ class Typedef(SchemaNodeOuter):
         for ext in self.exts:
             ext.remap_prefix_references(old_pfx, new_pfx)
 
-        if self.type_.name == 'identityref':
+        if self.type.name == 'identityref':
             self_default = self.default
             if self_default is not None:
                 self.default = remap_path_prefix(self_default, old_pfx, new_pfx)
-        self.type_.remap_prefix_references(old_pfx, new_pfx)
+        self.type.remap_prefix_references(old_pfx, new_pfx)
 
     def __str__(self):
         return "Typedef {self.name}"
@@ -9664,7 +9667,7 @@ class Typedef(SchemaNodeOuter):
 
 extension Typedef (Ord):
     def __eq__(self, other: Typedef):
-        return self.name == other.name and self.default == other.default and self.description == other.description and self.reference == other.reference and self.status == other.status and self.type_ == other.type_ and self.units == other.units
+        return self.name == other.name and self.default == other.default and self.description == other.description and self.reference == other.reference and self.status == other.status and self.type == other.type and self.units == other.units
 
     def __lt__(a, b):
         return a.name < b.name
@@ -10734,7 +10737,7 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
                      must=take_musts(ss),
                      reference=take_opt_str(ss, "reference"),
                      status=take_opt_str(ss, "status"),
-                     type_=take_type(ss),
+                     type=take_type(ss),
                      units=take_opt_str(ss, "units"),
                      when=take_opt_str(ss, "when"),
                      exts=take_exts(ss),
@@ -10758,7 +10761,7 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
                          ordered_by=take_opt_str(ss, "ordered-by"),
                          reference=take_opt_str(ss, "reference"),
                          status=take_opt_str(ss, "status"),
-                         type_=take_type(ss),
+                         type=take_type(ss),
                          units=take_opt_str(ss, "units"),
                          when=take_opt_str(ss, "when"),
                          exts=take_exts(ss),
@@ -10815,9 +10818,9 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
                        contact=take_opt_str(ss, "contact"),
                        description=take_opt_str(ss, "description"),
                        deviation=take_strlist(ss, "deviation"),
-                       extension_=take_extensions(ss),
+                       extension=take_extensions(ss),
                        feature=take_features(ss),
-                       import_=take_imports(ss),
+                       import=take_imports(ss),
                        include=take_includes(ss),
                        namespace=take_str(ss, "namespace"),
                        organization=take_opt_str(ss, "organization"),
@@ -10967,9 +10970,9 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
                           contact=take_opt_str(ss, "contact"),
                           description=take_opt_str(ss, "description"),
                           deviation=take_strlist(ss, "deviation"),
-                          extension_=take_extensions(ss),
+                          extension=take_extensions(ss),
                           feature=take_features(ss),
-                          import_=take_imports(ss),
+                          import=take_imports(ss),
                           include=take_includes(ss),
                           organization=take_opt_str(ss, "organization"),
                           reference=take_opt_str(ss, "reference"),
@@ -10996,7 +10999,7 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
                      pattern=take_patterns(ss),
                      range_=take_opt_range(ss),
                      require_instance=take_opt_bool(ss, "require-instance"),
-                     type_=take_types(ss),
+                     type=take_types(ss),
                      exts=take_exts(ss),
                      parent=parent
                      )
@@ -11012,7 +11015,7 @@ def stmt_to_snode(stmt: Statement, parent: ?SchemaNode=None) -> SchemaNode:
                         description=take_opt_str(ss, "description"),
                         reference=take_opt_str(ss, "reference"),
                         status=take_opt_str(ss, "status"),
-                        type_=take_type(ss),
+                        type=take_type(ss),
                         units=take_opt_str(ss, "units"),
                         exts=take_exts(ss),
                         parent=parent
@@ -11047,8 +11050,8 @@ class ResolvedType(Type):
     resolved_base_typedef: ?Typedef
     resolved_path: ?xpath.AbsoluteLocationPath
 
-    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type_: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None, resolved_path: ?xpath.AbsoluteLocationPath=None):
-        Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, require_instance, type_, exts, parent, mod, ns, pfx)
+    def __init__(self, name: str, base: list[str]=[], bit: list[Bit]=[], enum: list[Enum]=[], fraction_digits: ?int=None, length: ?Length=None, path: ?str=None, pattern: list[Pattern]=[], range_: ?Range=None, require_instance: ?bool=None, type: list[Type]=[], exts=[], parent=None, mod=None, ns=None, pfx=None, resolved_base_typedef=None, resolved_path: ?xpath.AbsoluteLocationPath=None):
+        Type.__init__(self, name, base, bit, enum, fraction_digits, length, path, pattern, range_, require_instance, type, exts, parent, mod, ns, pfx)
         self.resolved_base_typedef = resolved_base_typedef
         self.resolved_path = resolved_path
         path = self.path
@@ -11074,7 +11077,7 @@ class ResolvedType(Type):
                    pattern=self.pattern,
                    range_=self.range_,
                    require_instance=self.require_instance,
-                   type_=self.type_,
+                   type=self.type,
                    exts=self.exts,
                    mod=new_mod if new_mod is not None else self.mod,
                    ns=new_ns if new_ns is not None else self.ns,
@@ -11127,14 +11130,14 @@ class ResolvedType(Type):
         # Resolve base
         _resolved_base_typedef = self.resolved_base_typedef
         if _resolved_base_typedef is not None:
-            _base_type = _resolved_base_typedef.type_
+            _base_type = _resolved_base_typedef.type
             if isinstance(_base_type, ResolvedType):
                 _base_type.resolve_leafref_path(xpath_context_node)
             else:
                 raise ValueError("Expected ResolvedType")
 
         # Resolve union members
-        for alt_type in self.type_:
+        for alt_type in self.type:
             if isinstance(alt_type, ResolvedType):
                 alt_type.resolve_leafref_path(xpath_context_node)
             else:
@@ -11204,7 +11207,7 @@ extension ResolvedType(Hashable):
             and self.pattern == other.pattern \
             and self.range_ == other.range_ \
             and self.require_instance == other.require_instance \
-            and self.type_ == other.type_ \
+            and self.type == other.type \
             and self.resolved_path == other.resolved_path
 
     def hash(self, hasher):
@@ -11253,7 +11256,7 @@ extension ResolvedType(Hashable):
         _require_instance = self.require_instance
         if _require_instance is not None:
             _require_instance.hash(hasher)
-        for alt_type in self.type_:
+        for alt_type in self.type:
             if isinstance(alt_type, ResolvedType):
                 alt_type.hash(hasher)
         _resolved_path = self.resolved_path
