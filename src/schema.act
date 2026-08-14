@@ -862,10 +862,10 @@ class DNodeInner(DNode):
             breaker_name, breaker_idx = next_breaker_name(breaker_idx)
             res.append("{breaker_name}: None = None")
             if key_impl_eq:
-                key_expr = "e.{list_key_args[0]}" if single_key else as_tuple(["e.{k}" for k in list_key_args])
+                match_expr = "e.{list_key_args[0]} == k" if single_key else " and ".join(["e.{k} == k.{k}" for k in list_key_args])
                 res.append("class {pname()}(yadata.MKeyedList[{key_type}, {pname()}_entry]):")
                 res.append("    mut def __init__(self, elements: list[{pname()}_entry]=[]) -> None:")
-                res.append("        yadata.MKeyedList.__init__(self, lambda e: {key_expr}, elements)")
+                res.append("        yadata.MKeyedList.__init__(self, lambda e, k: {match_expr}, elements)")
             else:
                 res.append("class {pname()}(yadata.MList[{pname()}_entry]):")
                 res.append("    mut def __init__(self, elements: list[{pname()}_entry]=[]) -> None:")
