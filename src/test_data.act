@@ -1510,6 +1510,13 @@ def _test_identityref():
     except YangValidationError as e:
         testing.assertEqual(str(e), "Invalid value at /le3: 'id8' - expected identityref with bases: ['aa:id8']")
 
+    # Spaces in values
+    xml_in = xml.decode("""<data><le2 xmlns="urn:cesent:mod1" xmlns:aa="urn:cesent:mod1">         aa:id8          </le2></data>""")
+    gd = from_xml(s, xml_in)
+    exp = ygdata.Container({
+        ygdata.Id("urn:cesent:mod1", "le2"): ygdata.Leaf(Identityref('id8', ns='urn:cesent:mod1', mod='mod1', pfx='aa'), ns='urn:cesent:mod1', module='mod1')
+    })
+    testing.assertEqual(exp.prsrc(), gd.prsrc())
 
 def _test_xml_path_basic():
     """Test basic XML path navigation, mirrors _test_json_path_basic"""
