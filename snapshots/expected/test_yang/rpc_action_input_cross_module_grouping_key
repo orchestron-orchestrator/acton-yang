@@ -163,10 +163,10 @@ class svc__register__input(yadata.MNode):
 actor rpc_root(tp: ygdata.TreeProvider):
     register: action(cb: action(?Exception) -> None, inp: ?svc__register__input) -> None
     def register(cb, inp):
-        rpc_xml = xml.Node('register', nsdefs=[(None, 'urn:example:svc')])
+        rpc_input = ygdata.Container()
         if inp is not None:
-            gdata_inp = yadata.from_adata(SRC_DNODE, inp, False, ["svc:register", "input"])
-            rpc_xml.children.extend(gdata_inp.to_xml())
-        tp.rpc_xml(lambda _, err: cb(err), rpc_xml)
+            rpc_input = yadata.from_adata(SRC_DNODE, inp, False, ["svc:register", "input"])
+        rpc_gdata = ygdata.Container({ygdata.Id('urn:example:svc', 'register'): rpc_input})
+        tp.rpc(lambda _, err: cb(err), rpc_gdata)
 
 

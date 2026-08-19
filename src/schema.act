@@ -1030,29 +1030,28 @@ class DNodeInner(DNode):
                 res.append("    {name}: action({params}) -> None")
                 res.append("    def {name}({argnames}):")
 
-                # Generate callback wrapper for parsing RPC output XML -> gdata -> adata
+                # Generate callback wrapper converting RPC output gdata -> adata
                 if output_node is not None:
-                    res.append("        def cb_wrap(res: ?xml.Node, err: ?Exception):")
+                    res.append("        def cb_wrap(res: ?ygdata.Node, err: ?Exception):")
                     res.append("            if res is not None:")
-                    res.append('                gdata_res = yxml.from_xml(SRC_DNODE, res, {loose}, ["{rpc.module}:{rpc.name}", "output"])')
-                    res.append("                adata_res = {get_path_name(spath + [rpc, output_node])}.from_gdata(gdata_res)")
+                    res.append("                adata_res = {get_path_name(spath + [rpc, output_node])}.from_gdata(res)")
                     res.append("                cb(adata_res, err)")
                     res.append("            else:")
                     res.append("                cb(None, err)")
                     res.append("")
 
-                # Generate RPC XML, add input
-                res.append("        rpc_xml = xml.Node({repr(rpc.name)}, nsdefs=[(None, {repr(rpc.namespace)})])")
+                # Build the RPC gdata root container, rpc_input is empty for no input
+                res.append("        rpc_input = ygdata.Container()")
                 if input_node is not None:
                     res.append("        if inp is not None:")
-                    res.append('            gdata_inp = yadata.from_adata(SRC_DNODE, inp, {loose}, ["{rpc.module}:{rpc.name}", "input"])')
-                    res.append('            rpc_xml.children.extend(gdata_inp.to_xml())')
+                    res.append('            rpc_input = yadata.from_adata(SRC_DNODE, inp, {loose}, ["{rpc.module}:{rpc.name}", "input"])')
+                res.append("        rpc_gdata = ygdata.Container({{ygdata.Id({repr(rpc.namespace)}, {repr(rpc.name)}): rpc_input}})")
 
-                # Call tp.rpc_xml with appropriate callback
+                # Call tp.rpc with appropriate callback
                 if output_node is not None:
-                    res.append("        tp.rpc_xml(cb_wrap, rpc_xml)")
+                    res.append("        tp.rpc(cb_wrap, rpc_gdata)")
                 else:
-                    res.append("        tp.rpc_xml(lambda _, err: cb(err), rpc_xml)")
+                    res.append("        tp.rpc(lambda _, err: cb(err), rpc_gdata)")
                 res.append("")
 
             res.append("")
