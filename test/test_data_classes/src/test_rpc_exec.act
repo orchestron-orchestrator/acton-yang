@@ -10,16 +10,9 @@ class MockTreeProviderSuccess(ygdata.TreeProvider):
     def __init__(self):
         pass
 
-    proc def rpc_xml(self, cb: action(?xml.Node, ?Exception) -> None, xml_rpc: xml.Node):
-        # Return a successful response with output data
-        xml_response = xml.Node("rpc-reply", [(None, "urn:ietf:params:xml:ns:netconf:base:1.0")], children=[
-            xml.Node("outoo", [(None, "http://example.com/yangrpc")], text="Hello from RPC!")
-        ])
-        cb(xml_response, None)
-
     proc def rpc(self, cb: action(?ygdata.Node, ?Exception) -> None, rpc: ygdata.Node):
         output_gdata = ygdata.Container({
-            ygdata.Id("http://example.com/yangrpc", "outoo"): ygdata.Leaf("string", "Hello from RPC!")
+            ygdata.Id("http://example.com/yangrpc", "outoo"): ygdata.Leaf("Hello from RPC!")
         }, ns="http://example.com/yangrpc", module="yangrpc")
         cb(output_gdata, None)
 
@@ -35,10 +28,6 @@ class MockTreeProviderError(ygdata.TreeProvider):
     def __init__(self):
         pass
 
-    proc def rpc_xml(self, cb: action(?xml.Node, ?Exception) -> None, xml_rpc: xml.Node):
-        # Return an error
-        cb(None, ValueError("RPC execution failed"))
-
     proc def rpc(self, cb: action(?ygdata.Node, ?Exception) -> None, rpc: ygdata.Node):
         cb(None, ValueError("RPC execution failed"))
 
@@ -53,13 +42,6 @@ class MockTreeProviderEmpty(ygdata.TreeProvider):
     """Mock TreeProvider that returns empty output"""
     def __init__(self):
         pass
-
-    proc def rpc_xml(self, cb: action(?xml.Node, ?Exception) -> None, xml_rpc: xml.Node):
-        # Return a response with no output data
-        xml_response = xml.Node("rpc-reply", [(None, "urn:ietf:params:xml:ns:netconf:base:1.0")], children=[
-            xml.Node("ok")
-        ])
-        cb(xml_response, None)
 
     proc def rpc(self, cb: action(?ygdata.Node, ?Exception) -> None, rpc: ygdata.Node):
         output_gdata = ygdata.Container({}, ns="http://example.com/yangrpc", module="yangrpc")

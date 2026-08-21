@@ -187,18 +187,17 @@ class foo__reset__output(yadata.MNode):
 actor rpc_root(tp: ygdata.TreeProvider):
     reset: action(cb: action(?foo__reset__output, ?Exception) -> None, inp: ?foo__reset__input) -> None
     def reset(cb, inp):
-        def cb_wrap(res: ?xml.Node, err: ?Exception):
+        def cb_wrap(res: ?ygdata.Node, err: ?Exception):
             if res is not None:
-                gdata_res = yxml.from_xml(SRC_DNODE, res, False, ["foo:reset", "output"])
-                adata_res = foo__reset__output.from_gdata(gdata_res)
+                adata_res = foo__reset__output.from_gdata(res)
                 cb(adata_res, err)
             else:
                 cb(None, err)
 
-        rpc_xml = xml.Node('reset', nsdefs=[(None, 'http://example.com/foo')])
+        rpc_input = ygdata.Container()
         if inp is not None:
-            gdata_inp = yadata.from_adata(SRC_DNODE, inp, False, ["foo:reset", "input"])
-            rpc_xml.children.extend(gdata_inp.to_xml())
-        tp.rpc_xml(cb_wrap, rpc_xml)
+            rpc_input = yadata.from_adata(SRC_DNODE, inp, False, ["foo:reset", "input"])
+        rpc_gdata = ygdata.Container({ygdata.Id('http://example.com/foo', 'reset'): rpc_input})
+        tp.rpc(cb_wrap, rpc_gdata)
 
 
