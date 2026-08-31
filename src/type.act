@@ -322,7 +322,9 @@ def _test_decimal():
 
     testing.assertTrue(Decimal.parse("3.14") > Decimal.parse("3.139"))
 
-    testing.assertTrue(Decimal.parse("55.7") > Decimal.parse("-92233720368547759.92"))
+    # The decimal64 bounds for 2 fraction-digits, an int64 significand scaled
+    # by 10**-2, per RFC 7950 9.3.4
+    testing.assertTrue(Decimal.parse("55.7") > Decimal.parse("-92233720368547758.08"))
     testing.assertTrue(Decimal.parse("55.7") < Decimal.parse("92233720368547758.07"))
 
 def _test_decimal_hash_eq():
@@ -374,7 +376,7 @@ def _test_ranges_decimal():
     testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.1")))
     testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.2")))
     testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.3")))
-    testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("-92233720368547759.92"), Decimal.parse("92233720368547758.07"))]), Decimal.parse("55.7")))
+    testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("-92233720368547758.08"), Decimal.parse("92233720368547758.07"))]), Decimal.parse("55.7")))
     testing.assertFalse(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.099999")))
     testing.assertFalse(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.300001")))
 
