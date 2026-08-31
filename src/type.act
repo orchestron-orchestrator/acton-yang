@@ -75,21 +75,25 @@ class Decimal(object):
         divider = 10**-self.exponent
         return Decimal(self.significand % divider, self.exponent)
 
-# Pending https://github.com/actonlang/acton/issues/1126
-# extension Decimal(Hashable):
-#     def __eq__(self, other: Decimal) -> bool:
-#         exponent_diff = self.exponent - other_exponent
-#         if exponent_diff == 0
-#             return self.significand == other.significand
-#         if exponent_diff > 0:
-#             return self.significand * 10**exponent_diff == other.significand
-#         return self.significand == other.significand * 10**(-exponent_diff)
+    def canonical(self) -> (bigint, bigint):
+        """The (significand, exponent) shared by all equal Decimals
 
-#     def hash(self, hasher):
-#         self.significand.hash(hasher)
-#         self.exponent.hash(hasher)
+        __eq__ realigns exponents, so the same value has many representations:
+        3.14 is (314, -2) but also (3140, -3). Folding trailing zeros of the
+        significand into the exponent picks one of them, which is what hash()
+        needs. Zero is realigned to exponent 0, since Decimal(0, e) is equal for
+        every e.
+        """
+        s = self.significand
+        e = self.exponent
+        if s == 0:
+            return (s, bigint(0))
+        while s % 10 == 0:
+            s //= 10
+            e += 1
+        return (s, e)
 
-extension Decimal(Ord):
+extension Decimal(Eq):
     def __eq__(self, other: Decimal) -> bool:
         exponent_diff = self.exponent - other.exponent
         if exponent_diff == 0:
@@ -98,6 +102,8 @@ extension Decimal(Ord):
             return self.significand * 10**exponent_diff == other.significand
         return self.significand == other.significand * 10**(-exponent_diff)
 
+
+extension Decimal(Ord):
     def __lt__(self, other):
         exponent_diff = self.exponent - other.exponent
         if exponent_diff == 0:
@@ -105,6 +111,13 @@ extension Decimal(Ord):
         if exponent_diff > 0:
             return self.significand * 10**exponent_diff < other.significand
         return self.significand < other.significand * 10**(-exponent_diff)
+
+
+extension Decimal(Hashable):
+    def hash(self, h):
+        s, e = self.canonical()
+        s.hash(h)
+        e.hash(h)
 
 # -------------------------------------------------------------------------------
 
@@ -311,6 +324,33 @@ def _test_decimal():
 
     testing.assertTrue(Decimal.parse("55.7") > Decimal.parse("-92233720368547759.92"))
     testing.assertTrue(Decimal.parse("55.7") < Decimal.parse("92233720368547758.07"))
+
+def _test_decimal_hash_eq():
+    """Equal Decimals must hash equally, whatever scale they are written at"""
+    equal_pairs = [
+        (Decimal(1, 0), Decimal(10, -1)),               # 1 == 1.0
+        (Decimal(-1, 0), Decimal(-10, -1)),             # -1 == -1.0
+        (Decimal(314, -2), Decimal(3140, -3)),          # 3.14
+        (Decimal(0, 5), Decimal(0, -3)),                # zero at any exponent
+        (Decimal(42, 0), Decimal(42000, -3)),
+        (Decimal(5, 1), Decimal(50, 0)),                # 50, no fraction at all
+        (Decimal.parse("3.14"), Decimal.parse("3.140")),
+    ]
+    for a, b in equal_pairs:
+        testing.assertEqual(a, b)
+        testing.assertEqual(hash(a), hash(b))
+        # A Decimal is its own key, so dict lookups cross scales too
+        testing.assertEqual({a: "v"}.get(b), "v")
+
+    # Unequal Decimals are still told apart, which hashing alone does not do
+    testing.assertNotEqual(Decimal(1, 0), Decimal(10, 0))
+    testing.assertNotEqual(Decimal(1, 0), Decimal(1, -1))
+    # Colliding hashes are legal, and bigint's currently drops the sign, so
+    # every d/-d pair collides. __eq__ still has to keep them apart.
+    d = {Decimal(1, 0): "pos", Decimal(-1, 0): "neg"}
+    testing.assertEqual(len(d), 2)
+    testing.assertEqual(d.get(Decimal(10, -1)), "pos")
+    testing.assertEqual(d.get(Decimal(-10, -1)), "neg")
 
 def _test_decimal_fail():
     try:
