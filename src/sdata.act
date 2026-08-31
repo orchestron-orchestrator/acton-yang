@@ -61,6 +61,15 @@ def _filt_for_segments(segments: list[SubscriptionPath], tail_children: ?list[yg
     return child
 
 
+def _mk_spec(filt: ?ygdata.FNode, period: ?value) -> ygdata.SubscriptionSpec:
+    """Build a spec, picking the delivery mode from period.
+
+    A spec without a period has nothing to poll, so it is an on-change
+    subscription; a spec with one is periodic.
+    """
+    return ygdata.SubscriptionSpec(filt, period=period, on_change=period is None)
+
+
 class SubscriptionNode(value):
     _path: ?SubscriptionPath
 
@@ -95,12 +104,12 @@ class SubscriptionNode(value):
         merged_children = ygdata.filter_merge_list(rel_children)
         path = self._path
         if path is not None:
-            return ygdata.SubscriptionSpec(path.filt(tail_children=merged_children), period=period)
-        return ygdata.SubscriptionSpec(ygdata.FNode(children=merged_children), period=period)
+            return _mk_spec(path.filt(tail_children=merged_children), period)
+        return _mk_spec(ygdata.FNode(children=merged_children), period)
 
     def _subscribe_select(self, select: list[SubscriptionNode], period: ?value=None) -> ygdata.SubscriptionSpec:
         if len(select) == 0:
-            return ygdata.SubscriptionSpec(self.filt(), period=period)
+            return _mk_spec(self.filt(), period)
         rel_children: list[ygdata.FNode] = []
         for child in select:
             child_path = child._path
@@ -145,7 +154,7 @@ class SubscriptionNode(value):
         if depth is not None:
             actual_select.extend(self._depth_select(depth))
         if len(actual_select) == 0:
-            return ygdata.SubscriptionSpec(self.filt(), period=period)
+            return _mk_spec(self.filt(), period)
         return self._subscribe_select(actual_select, period=period)
 
     def subscribe(self, select: ?list[SubscriptionNode]=None, depth: ?int=None, period: ?value=None) -> ygdata.SubscriptionSpec:

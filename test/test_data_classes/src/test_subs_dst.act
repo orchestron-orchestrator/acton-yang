@@ -94,6 +94,21 @@ class MockSubscriptionTreeProvider(gdata.TreeProvider):
                 self.callbacks[owner_id](data, None)
 
 
+def _test_subscribe_mode_follows_period():
+    """A spec with a period is periodic; a spec without one has nothing to poll,
+    so it asks for on-change delivery."""
+    clock = ft_oper.subs.system_state.clock
+    periodic = clock.subscribe(period=0.05)
+    on_change = clock.subscribe()
+
+    testing.assertEqual(periodic.on_change, False, "a period means periodic")
+    testing.assertEqual(periodic.period == u64(50000000), True, "period in nanoseconds")
+    testing.assertEqual(on_change.on_change, True, "no period means on-change")
+    testing.assertEqual(on_change.period is None, True, "on-change carries no period")
+    # Only the delivery mode differs; both select the same data.
+    testing.assertEqual(periodic.filt == on_change.filt, True, "same filter either way")
+
+
 actor _test_subs_dst_grouping(t: testing.AsyncT):
     var declared = 0
     var state_root: ?ft_oper.root = None
