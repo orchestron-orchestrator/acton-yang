@@ -14,11 +14,20 @@ class Decimal(object):
         self.exponent = exponent
 
     def __str__(self):
-        s = str(self.integral_part())
-        if self.exponent < 0:
-            f = self.fractional_part()
-            s = s + "." + to_n_dec_str(f.significand, int(-f.exponent))
-        return s
+        # Build from the digits rather than from integral_part()/fractional_part(),
+        # so that a negative value does not carry its sign into both halves.
+        t = str(self.significand)
+        neg = t.startswith("-")
+        digits = t[1:] if neg else t
+        e = self.exponent
+        if e >= 0:
+            res = digits + "0" * int(e)
+        else:
+            n = int(-e)
+            digits = digits.zfill(n + 1)
+            cut = len(digits) - n
+            res = digits[:cut] + "." + digits[cut:]
+        return "-" + res if neg else res
 
     def __repr__(self):
         # return "Decimal({repr(self.significand)}, {repr(self.exponent)})"
@@ -304,11 +313,6 @@ def try_parse_float_parts(s: str) -> ?(bigint, bigint):
 
     return (significand, exp)
 
-def to_n_dec_str(v: bigint, min_digits: int) -> str:
-    s = str(v)
-    leading_zero_count = min_digits - len(s)
-    return "0" * leading_zero_count + s if leading_zero_count > 0 else s
-
 # -------------------------------------------------------------------------------
 
 def _test_decimal():
@@ -366,6 +370,16 @@ def _test_decimal_positive_exponent():
     testing.assertEqual(Decimal(5, 1).to_float(), 50.0)
     testing.assertEqual(Decimal(314, -2).to_float(), 3.14)
     testing.assertEqual(Decimal(42, 0).to_float(), 42.0)
+
+def _test_decimal_str():
+    testing.assertEqual(str(Decimal(314, -2)), "3.14")
+    testing.assertEqual(str(Decimal(-314, -2)), "-3.14")
+    testing.assertEqual(str(Decimal(1001, -3)), "1.001")
+    testing.assertEqual(str(Decimal(-1001, -3)), "-1.001")
+    testing.assertEqual(str(Decimal(-1, -2)), "-0.01")
+    testing.assertEqual(str(Decimal(0, -2)), "0.00")
+    testing.assertEqual(str(Decimal(42, 0)), "42")
+    testing.assertEqual(str(Decimal(-42, 0)), "-42")
 
 def _test_decimal_fail():
     try:
