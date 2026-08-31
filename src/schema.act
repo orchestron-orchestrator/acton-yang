@@ -2451,10 +2451,10 @@ class DTypeBoolean(DType):
         return "DTypeBoolean({self.format_common_params()})"
 
 class DTypeDecimal64(DType):
-    fraction_digits: bigint
+    fraction_digits: int
     ranges: ?Ranges[Decimal]
 
-    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, fraction_digits: bigint, ranges: ?Ranges[Decimal]):
+    def __init__(self, name: str, description: ?str, reference: ?str, units: ?str, exts: list[DExt], builtin_type: str, default: ?value, fraction_digits: int, ranges: ?Ranges[Decimal]):
         DType.__init__(self, name, description, reference, units, exts, builtin_type, default)
         self.fraction_digits = fraction_digits
         self.ranges = ranges
@@ -2800,7 +2800,7 @@ class DTypeResolver(object):
     bits: dict[str, int] # # Assume only allowed in the type "bits" statement with no further restrictions in base-type chain
     enum_name_to_val: dict[str, int] # May be restricted to subset only
     enum_val_to_name: dict[int, str]
-    fraction_digits: ?bigint # Assume only allowed in the type "decimal64" statement with no further restrictions in base-type chain
+    fraction_digits: ?int # Assume only allowed in the type "decimal64" statement with no further restrictions in base-type chain
     length: ?Ranges[int] # May be restricted to sub-ranges only
     path: ?xpath.AbsoluteLocationPath # Assume only allowed in the type "leafref" statement, with no further restrictions in base-type chain
     patterns: list[YangPattern] # A value must match patterns in type and base-types chain
@@ -2961,7 +2961,7 @@ class DTypeResolver(object):
             if _fraction_digits is not None:
                 if self.fraction_digits is not None:
                     raise ValueError("The fraction-digits of a base-type may not be redefined in sub-type\"{t.name}\"")
-                self.fraction_digits = bigint(_fraction_digits)
+                self.fraction_digits = int(_fraction_digits)
 
             # length
             _length = t.length
@@ -3013,9 +3013,7 @@ class DTypeResolver(object):
                 if fraction_digits is not None:
                     if fraction_digits < 1 or fraction_digits > 18:
                         raise ValueError("Invalid fraction-digits value, must be between 1 and 18 inclusivly")
-                    # self.decimal_ranges = Ranges([(Decimal(bigint(-9223372036854775808), -fraction_digits), Decimal(9223372036854775807, -fraction_digits))])
-                    # Workaround https://github.com/actonlang/acton/issues/2545
-                    self.decimal_ranges = Ranges([(Decimal(-92233720368547758080//10, -fraction_digits), Decimal(9223372036854775807, -fraction_digits))])
+                    self.decimal_ranges = Ranges([Decimal.decimal64_range(fraction_digits)])
             # range
             _range = t.range_
             if _range is not None:
