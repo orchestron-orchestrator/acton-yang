@@ -60,7 +60,7 @@ class Identityref:
         raise ValueError("Invalid identityref format: {val}")
 
 
-extension Identityref (Ord):
+extension Identityref (Eq):
     def __eq__(self, other: Identityref) -> bool:
         self_ns = self.ns
         self_mod = self.mod
@@ -70,5 +70,16 @@ extension Identityref (Ord):
         other_pfx = other.pfx
         return self.val == other.val and self_ns == other_ns and self_mod == other_mod and self_pfx == other_pfx
 
+
+extension Identityref (Ord):
     def __lt__(self, other: Identityref) -> bool:
         return self.val < other.val
+
+
+extension Identityref (Hashable):
+    def hash(self, h):
+        # Every field __eq__ compares, in a fixed order
+        self.val.hash(h)
+        self.ns.hash(h)
+        self.mod.hash(h)
+        self.pfx.hash(h)
