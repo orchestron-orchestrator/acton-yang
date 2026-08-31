@@ -63,11 +63,14 @@ class Decimal(object):
             return Decimal(self.significand * 10**exponent_diff, new_exponent)
 
     def to_float(self) -> float:
-        return float(self.significand) / 10**(float(self.exponent if self.exponent > 0 else -self.exponent))
+        e = self.exponent
+        if e >= 0:
+            return float(self.significand) * 10.0**float(e)
+        return float(self.significand) / 10.0**float(-e)
 
     def integral_part(self) -> bigint:
         if self.exponent >= 0:
-            return self.significand
+            return self.significand * 10**self.exponent
         else:
             return self.significand // 10**-self.exponent
 
@@ -353,6 +356,16 @@ def _test_decimal_hash_eq():
     testing.assertEqual(len(d), 2)
     testing.assertEqual(d.get(Decimal(10, -1)), "pos")
     testing.assertEqual(d.get(Decimal(-10, -1)), "neg")
+
+def _test_decimal_positive_exponent():
+    """A positive exponent scales the value up; it is not ignored"""
+    testing.assertEqual(Decimal(5, 1).integral_part(), 50)
+    testing.assertEqual(Decimal(42, 0).integral_part(), 42)
+    testing.assertEqual(Decimal(314, -2).integral_part(), 3)
+    testing.assertEqual(str(Decimal(5, 1)), "50")
+    testing.assertEqual(Decimal(5, 1).to_float(), 50.0)
+    testing.assertEqual(Decimal(314, -2).to_float(), 3.14)
+    testing.assertEqual(Decimal(42, 0).to_float(), 42.0)
 
 def _test_decimal_fail():
     try:
