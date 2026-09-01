@@ -17,17 +17,34 @@ class MNode(object):
 
 
 class MList[T(MNode)](MNode):
-    elements: list[T]
+    """List of YANG list entries
+
+    _elements is the list's own. Read it through iteration and len(), and
+    change it through append() or the Indexed protocol of the keyed
+    subclasses, which keep their lookup index in step with it.
+    """
+    _elements: list[T]
     mut def __init__(self, elements: list[T]) -> None:
-        self.elements = elements
+        self._elements = elements
 
     mut def append(self, e: T) -> None:
-        self.elements.append(e)
+        self._elements.append(e)
 
 
-extension MList[T(MNode)](Iterable[T]):
+extension MList[T(MNode)](Collection[T]):
     def __iter__(self) -> Iterator[T]:
-        return self.elements.__iter__()
+        return self._elements.__iter__()
+
+    @staticmethod
+    def __fromiter__(iterable):
+        # Collection asks for this, but a generated list class is only ever
+        # built from its own entries by its own __init__. The parameter is
+        # deliberately unannotated: Iterable[T] does not unify with the
+        # protocol's static signature (NameRevMap in lib.act does the same).
+        raise NotImplementedError("MList.__fromiter__")
+
+    def __len__(self) -> int:
+        return len(self._elements)
 
 
 class MEqKeyedList[K(Eq), T(MNode)](MList[T]):
@@ -38,8 +55,8 @@ class MEqKeyedList[K(Eq), T(MNode)](MList[T]):
     compared but not hashed, which today means bits (set[str]); anything
     Hashable gets MKeyedList and its index instead. Both share this class's
     Indexed protocol, which finds, replaces and deletes through _position(),
-    append() and _reindex(), so a subclass that keeps extra bookkeeping only
-    has to override those.
+    append() and _reindex(); overriding those three is how MKeyedList keeps
+    its index in step.
     """
     @property
     _key_of: pure(T) -> K
@@ -49,21 +66,21 @@ class MEqKeyedList[K(Eq), T(MNode)](MList[T]):
         self._key_of = key_of
 
     pure def _position(self, key: K) -> ?int:
-        """Position in elements of the first element with this key, or None"""
-        for i, e in enumerate(self.elements):
+        """Position in _elements of the first element with this key, or None"""
+        for i, e in enumerate(self._elements):
             if self._key_of(e) == key:
                 return i
         return None
 
     mut def _reindex(self) -> None:
-        """Called after elements changed shape under __setitem__/__delitem__"""
+        """Called after _elements changed shape under __setitem__/__delitem__"""
         pass
 
     pure def get(self, key: K) -> ?T:
         i = self._position(key)
         if i is None:
             return None
-        return self.elements[i!]
+        return self._elements[i!]
 
 
 extension MEqKeyedList[K(Eq), T(MNode)](Indexed[K, T]):
@@ -78,7 +95,7 @@ extension MEqKeyedList[K(Eq), T(MNode)](Indexed[K, T]):
         if i is None:
             self.append(n)
             return
-        self.elements[i!] = n
+        self._elements[i!] = n
         if self._key_of(n) != key:
             # n carries a different key than the element it replaced
             self._reindex()
@@ -87,7 +104,7 @@ extension MEqKeyedList[K(Eq), T(MNode)](Indexed[K, T]):
         i = self._position(key)
         if i is None:
             raise KeyError(key)
-        del self.elements[i!]
+        del self._elements[i!]
         # Everything after i shifted down
         self._reindex()
 
@@ -100,15 +117,16 @@ class MKeyedList[K(Hashable), T(MNode)](MEqKeyedList[K, T]):
     that are not Acton "value" and that are Hashable, since keys are used to
     index the elements.
 
-    Lookups go through that index rather than scanning elements, which makes
-    keeping the two in step this list's job: change elements through append(),
-    __setitem__() and __delitem__(). Three things put the index out of step
-    without it noticing, and a lookup then answers from stale positions:
-    assigning to elements or to a position in it; changing a key leaf of an
-    element already held; and holding on to the list passed to __init__() and
-    changing that afterwards. Note that a stale index does not merely fail to
-    find an entry, it can hand back the element that used to carry the key,
-    where a scan would have reported it missing.
+    Lookups go through that index rather than scanning _elements, and append(),
+    __setitem__() and __delitem__() keep the two in step. The underscore is a
+    convention the compiler does not enforce, so three things a caller can
+    still do put the index out of step without it noticing, and a lookup then
+    answers from stale positions: changing _elements, or a position in it,
+    directly; changing a key leaf of an element already held; and holding on
+    to the list passed to __init__() and changing that afterwards. Note that a
+    stale index does not merely fail to find an entry, it can hand back the
+    element that used to carry the key, where a scan would have reported it
+    missing.
     """
     _index: dict[K, int]
 
@@ -118,9 +136,9 @@ class MKeyedList[K(Hashable), T(MNode)](MEqKeyedList[K, T]):
         self._reindex()
 
     mut def _reindex(self) -> None:
-        """Rebuild the key index from elements"""
+        """Rebuild the key index from _elements"""
         index = {}
-        for i, e in enumerate(self.elements):
+        for i, e in enumerate(self._elements):
             k = self._key_of(e)
             # On duplicate keys the first element wins, like a scan would
             if k not in index:
@@ -133,8 +151,8 @@ class MKeyedList[K(Hashable), T(MNode)](MEqKeyedList[K, T]):
     mut def append(self, e: T) -> None:
         k = self._key_of(e)
         if k not in self._index:
-            self._index[k] = len(self.elements)
-        self.elements.append(e)
+            self._index[k] = len(self._elements)
+        self._elements.append(e)
 
 
 extension MNode (YangData):
