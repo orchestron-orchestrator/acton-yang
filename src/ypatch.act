@@ -332,7 +332,10 @@ def edit_to_gdata(root: yschema.DRoot, e: Edit) -> gdata.Node:
                 inner = gdata.List(fq_list_keys(s), [gdata.Container(element_children)],
                                    user_order(s.ordered_by), ns=sns, module=smod)
             else:
-                inner = gdata.Container({fqname(child_node): inner}, ns=sns, module=smod)
+                # Carry the schema presence: gdata.patch takes a container whose
+                # presence differs from the datastore as a schema mismatch.
+                spresence = s.presence if isinstance(s, yschema.DContainer) else False
+                inner = gdata.Container({fqname(child_node): inner}, presence=spresence, ns=sns, module=smod)
         return inner
 
     def resolve_leaflist(segs: list[str]) -> ?list[PathElement]:

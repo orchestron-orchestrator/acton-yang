@@ -227,6 +227,31 @@ def _test_roundtrip_list_entry_added():
     _roundtrip(s, old, new, "patch must create the key-only rtr2 entry")
 
 
+_presence_schema = r"""module pcmod {
+  namespace "http://example.com/pcmod";
+  prefix pc;
+  container c {
+    leaf x { type string; }
+    container pcnt {
+      presence "an empty container that is config of its own";
+      leaf y { type string; }
+    }
+  }
+}
+"""
+
+
+def _test_roundtrip_leaf_below_presence_container():
+    """A leaf below a presence container round-trips. The rebuilt ancestor must
+    carry the schema presence, or gdata.patch reads it as a schema mismatch."""
+    s = yang.compile([_presence_schema])
+    old = r"""<data><c xmlns="http://example.com/pcmod"><pcnt><y>a</y></pcnt></c></data>"""
+    new = r"""<data><c xmlns="http://example.com/pcmod"><pcnt><y>b</y></pcnt></c></data>"""
+    edits = ypatch.diff_to_edits(gdata.diff(from_xml(s, xml.decode(old)), from_xml(s, xml.decode(new))))
+    _expect_one(edits, ypatch.OP_MERGE, "/pcmod:c/pcnt/y", "b")
+    _roundtrip(s, old, new, "a leaf below a presence container must round-trip")
+
+
 _leaflist_schema = r"""module llmod {
   namespace "http://example.com/llmod";
   prefix ll;

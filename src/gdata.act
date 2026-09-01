@@ -1284,6 +1284,8 @@ extension Node(Eq):
             return False
 
         if isinstance(self, Container) and isinstance(other, Container):
+            if self.presence != other.presence:
+                return False
             if set(self.children.keys()) != set(other.children.keys()):
                 return False
             for key in self.children.keys():
@@ -2165,6 +2167,8 @@ def _merge_rec(a: Node, b: Node, path: list[_PathElement]) -> Node:
         return result
 
     if isinstance(a, Container) and isinstance(b, Container):
+        if a.presence != b.presence:
+            raise ValueError("Cannot merge containers with different presence at {_format_gdata_path(path)}")
         # Merge keyed children similarly to Container
         new_children = merge_keyed_children(a.children, b.children)
         return Container(children=new_children, presence=a.presence, ns=a.ns, module=a.module)
@@ -2488,6 +2492,8 @@ def _diff_rec(old: ?Node, new: Node, path: list[_PathElement]) -> ?Node:
     # Diff logic for each node type
 
     if isinstance(old, Container) and isinstance(new, Container):
+        if old.presence != new.presence:
+            raise ValueError("Cannot diff containers with different presence at {_format_gdata_path(path)}")
         diff_children = diff_keyed_children(old.children, new.children)
         if diff_children is None:
             return None
@@ -2982,24 +2988,15 @@ def _patch_rec(old: ?Node, p: ?Node, path: list[_PathElement]) -> ?Node:
             return Leaf(p.val, ns=p.ns, module=p.module)
         if isinstance(p, Create):
             empty = Container({}, presence=p.presence, ns=p.ns, module=p.module)
-            patch_cnt = Container(p.children, ns=p.ns, module=p.module)
-            res = _patch_rec(empty, patch_cnt, path)
-            if res is None and p.presence:
-                return Container({}, presence=True, ns=p.ns, module=p.module)
-            return res
+            patch_cnt = Container(p.children, presence=p.presence, ns=p.ns, module=p.module)
+            return _patch_rec(empty, patch_cnt, path)
         if isinstance(p, Replace):
             empty = Container({}, presence=p.presence, ns=p.ns, module=p.module)
-            patch_cnt = Container(p.children, ns=p.ns, module=p.module)
-            res = _patch_rec(empty, patch_cnt, path)
-            if res is None and p.presence:
-                return Container({}, presence=True, ns=p.ns, module=p.module)
-            return res
+            patch_cnt = Container(p.children, presence=p.presence, ns=p.ns, module=p.module)
+            return _patch_rec(empty, patch_cnt, path)
         if isinstance(p, Container):
             empty = Container({}, presence=p.presence, ns=p.ns, module=p.module)
-            res = _patch_rec(empty, p, path)
-            if res is None and p.presence:
-                return Container({}, presence=True, ns=p.ns, module=p.module)
-            return res
+            return _patch_rec(empty, p, path)
         if isinstance(p, List):
             return _patch_rec(List(p.keys, elements=[], user_order=p.user_order, ns=p.ns, module=p.module), p, path)
         if isinstance(p, LeafList):
@@ -3036,15 +3033,15 @@ def _patch_rec(old: ?Node, p: ?Node, path: list[_PathElement]) -> ?Node:
         # Replace ignores old contents and applies patch to an empty base
         if isinstance(old, Container):
             empty_cnt = Container({}, presence=old.presence, ns=old.ns, module=old.module)
-            patch_cnt = Container(p.children, ns=p.ns, module=p.module)
-            res = _patch_rec(empty_cnt, patch_cnt, path)
-            if res is None and old.presence:
-                return Container({}, presence=old.presence, ns=old.ns, module=old.module)
-            return res
+            patch_cnt = Container(p.children, presence=p.presence, ns=p.ns, module=p.module)
+            return _patch_rec(empty_cnt, patch_cnt, path)
         # Replace on other node types is not expected at this point
         raise ValueError("Unhandled node type in patch at {_format_gdata_path(path)}: {type(p)}")
 
     elif isinstance(old, Container) and isinstance(p, Container):
+        if old.presence != p.presence:
+            raise ValueError("Cannot patch containers with different presence at {_format_gdata_path(path)}")
+
         # Start with old children
         new_children: dict[Id, Node] = {}
         for key in old.children:
@@ -3070,7 +3067,9 @@ def _patch_rec(old: ?Node, p: ?Node, path: list[_PathElement]) -> ?Node:
                     new_children[key] = res
 
         # No need to remove unchanged nodes; they are already in new_children
-        if len(new_children) == 0:
+        # An empty presence container stays: it is a config statement of its own,
+        # and only an explicit remove or delete takes it away.
+        if len(new_children) == 0 and not old.presence:
             return None
         return Container(children=new_children, presence=old.presence, ns=old.ns, module=old.module)
 
@@ -3568,6 +3567,40 @@ def _test_merge_leaf_conflict():
     except ValueError as e:
         testing.assertEqual("Cannot merge leaves with different values at /a: 1 != 2", e.error_message)
 
+def _test_merge_presence_mismatch():
+    """Both trees come from the same schema, so a container is a presence
+    container in both or in neither. A mix is a schema mismatch, not something to
+    reconcile.
+    """
+    y1 = Container({
+        Id("", "pc"): Container({
+            Id("", "a"): Leaf(u64(1))
+        })
+    })
+    y2 = Container({
+        Id("", "pc"): Container({
+            Id("", "b"): Leaf(u64(2))
+        }, presence=True)
+    })
+
+    try:
+        merge(y1, y2)
+        testing.assertFalse(True, "Expected ValueError but merge succeeded")
+    except ValueError as e:
+        testing.assertEqual("Cannot merge containers with different presence at /pc", e.error_message)
+
+def _test_eq_container_presence():
+    """A presence container is not equal to a plain one. The two serialize
+    differently and a presence container is a config statement of its own.
+    """
+    testing.assertNotEqual(Container({}), Container({}, presence=True))
+    testing.assertEqual(Container({}, presence=True), Container({}, presence=True))
+
+    plain = Container({Id("", "a"): Leaf(u64(1))})
+    pres = Container({Id("", "a"): Leaf(u64(1))}, presence=True)
+    testing.assertNotEqual(plain, pres)
+    testing.assertEqual(pres, Container({Id("", "a"): Leaf(u64(1))}, presence=True))
+
 def _test_eq_list():
     l1 = List([Id("", "name")], [
         Container({
@@ -3640,6 +3673,51 @@ def _test_diff_no_change():
 
     d = diff(old, new)
     testing.assertEqual(d, None)
+
+def _test_diff_presence_mismatch():
+    """Both trees come from the same schema, so a presence change at one path is
+    a schema mismatch. diff refuses it rather than inventing a delta for it.
+    """
+    plain = Container({
+        Id(NS_acme, "pc"): Container({}, ns="http://example.com/acme", module="acme")
+    }, ns="http://example.com/acme", module="acme")
+
+    pres = Container({
+        Id(NS_acme, "pc"): Container({}, presence=True, ns="http://example.com/acme", module="acme")
+    }, ns="http://example.com/acme", module="acme")
+
+    try:
+        diff(plain, pres)
+        testing.assertFalse(True, "Expected ValueError but diff succeeded")
+    except ValueError as e:
+        testing.assertEqual("Cannot diff containers with different presence at /pc", e.error_message)
+
+    try:
+        diff(pres, plain)
+        testing.assertFalse(True, "Expected ValueError but diff succeeded")
+    except ValueError as e:
+        testing.assertEqual("Cannot diff containers with different presence at /pc", e.error_message)
+
+def _test_diff_presence_container_added():
+    """A presence container the old tree does not have is an ordinary addition:
+    it comes through whole, and patch re-creates it.
+    """
+    old = Container({
+        Id(NS_acme, "a"): Leaf(u64(1))
+    }, ns="http://example.com/acme", module="acme")
+
+    new = Container({
+        Id(NS_acme, "a"): Leaf(u64(1)),
+        Id(NS_acme, "pc"): Container({}, presence=True, ns="http://example.com/acme", module="acme")
+    }, ns="http://example.com/acme", module="acme")
+
+    exp = Container({
+        Id(NS_acme, "pc"): Container({}, presence=True, ns="http://example.com/acme", module="acme")
+    }, ns="http://example.com/acme", module="acme")
+
+    d = diff(old, new)
+    testing.assertEqual(d, exp)
+    testing.assertEqual(patch(old, d), new)
 
 def _test_diff_leaf_change():
     """Only one leaf changes its value. We expect diff to return a container
@@ -4330,6 +4408,77 @@ def _test_patch_replace_presence_container_missing():
     })
 
     testing.assertEqual(res!.prsrc(deterministic=True), exp.prsrc(deterministic=True))
+
+def _test_patch_presence_mismatch():
+    """The patch tree comes from the same schema as the datastore, so a container
+    is a presence container in both or in neither. A mix is a schema mismatch.
+    """
+    old = Container({
+        Id("", "pc"): Container({
+            Id("", "a"): Leaf(u64(1))
+        }, presence=True)
+    })
+
+    p = Container({
+        Id("", "pc"): Container({
+            Id("", "a"): Leaf(u64(2))
+        })
+    })
+
+    try:
+        patch(old, p)
+        testing.assertFalse(True, "Expected ValueError but patch succeeded")
+    except ValueError as e:
+        testing.assertEqual("Cannot patch containers with different presence at /pc", e.error_message)
+
+def _test_patch_presence_container_last_child_removed():
+    """Removing the last child of a presence container leaves the empty
+    container, since it is a config statement of its own. Only an explicit remove
+    or delete takes it away. A plain container has nothing left to hold and goes.
+    """
+    old = Container({
+        Id("", "pc"): Container({
+            Id("", "a"): Leaf(u64(1))
+        }, presence=True),
+        Id("", "c"): Container({
+            Id("", "a"): Leaf(u64(1))
+        })
+    })
+
+    p = Container({
+        Id("", "pc"): Container({
+            Id("", "a"): Absent()
+        }, presence=True),
+        Id("", "c"): Container({
+            Id("", "a"): Absent()
+        })
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "pc"): Container({}, presence=True)
+    })
+
+    testing.assertEqual(res, exp)
+
+def _test_patch_replace_presence_container_existing():
+    """Replace empties a presence container but keeps the container itself."""
+    old = Container({
+        Id("", "pc"): Container({
+            Id("", "a"): Leaf(u64(1))
+        }, presence=True)
+    })
+
+    p = Container({
+        Id("", "pc"): Replace({}, presence=True)
+    })
+
+    res = patch(old, p)
+    exp = Container({
+        Id("", "pc"): Container({}, presence=True)
+    })
+
+    testing.assertEqual(res, exp)
 
 def _test_patch_delete_container_missing_error():
     old = Container({
