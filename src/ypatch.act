@@ -209,6 +209,19 @@ def diff_to_edits(d: ?gdata.Node) -> list[Edit]:
             return frags[0]
         return None
 
+    def presence_value_elem(name: gdata.Id, node: gdata.Container) -> ?xml.Node:
+        # Render an empty presence container as the value of its own merge, e.g.
+        # <pc/>. Force the element's own namespace the way entry_value_elem does,
+        # so the <value> fragment is self-contained anydata.
+        ns = node.ns
+        if ns is None and name.q != "":
+            ns = name.q
+        cnt = gdata.Container({}, presence=True, ns=ns, module=node.module)
+        frags = gdata.Container({name: cnt}).to_xml(deterministic=True)
+        if len(frags) > 0:
+            return frags[0]
+        return None
+
     def walk_node(name: gdata.Id, node: gdata.Node, target: str) -> None:
         if isinstance(node, gdata.Absent):
             acc.append((op=OP_REMOVE, target=target, value=None))
@@ -236,7 +249,14 @@ def diff_to_edits(d: ?gdata.Node) -> list[Edit]:
                         # on replay — its key only rides in the selector.
                         acc.append((op=OP_MERGE, target=sel, value=entry_value_elem(name, node, elem)))
         elif isinstance(node, gdata.Container):
+            before = len(acc)
             walk_children(node, target, set())
+            if len(acc) == before and node.presence:
+                # Childless presence container: the container itself is the change,
+                # so emit a merge at its own target. Without it the container would
+                # never be created on replay — the same reason a key-only list
+                # entry above gets one.
+                acc.append((op=OP_MERGE, target=target, value=presence_value_elem(name, node)))
 
     def walk_children(node: gdata.Node, target: str, skip_keys: set[gdata.Id]) -> None:
         # skip_keys: an enclosing list entry's key leaves — their values are already

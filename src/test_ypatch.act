@@ -95,6 +95,26 @@ def _test_diff_list_entry_added():
         testing.error("expected an entry value element")
 
 
+def _test_diff_presence_container_added():
+    """A new empty presence container -> one merge at the container target (with
+    the empty container element as value), so it is created on replay. Without it
+    the container has no children to walk and would vanish from the edits."""
+    old = gdata.Container({gdata.Id(NS, "c"): gdata.Container({}, ns=NS)})
+    new = gdata.Container({gdata.Id(NS, "c"): gdata.Container({
+        gdata.Id(NS, "pc"): gdata.Container({}, presence=True, ns=NS)}, ns=NS)})
+    edits = ypatch.diff_to_edits(gdata.diff(old, new))
+    testing.assertEqual(len(edits), 1, "expected 1 presence-container edit")
+    e = edits[0]
+    testing.assertEqual(e.operation, ypatch.OP_MERGE, "presence container -> merge")
+    testing.assertEqual(e.target, "/c/pc", "presence container target")
+    v = e.value
+    if v is not None:
+        testing.assertEqual(v.tag, "pc", "value is the empty container element")
+        testing.assertEqual(len(v.children), 0, "value element has no children")
+    else:
+        testing.error("expected a presence container value element")
+
+
 def _test_diff_identical():
     """No change -> no edits (diff is None)."""
     edits = ypatch.diff_to_edits(gdata.diff(_netinfra("a", False), _netinfra("a", False)))
@@ -239,6 +259,18 @@ _presence_schema = r"""module pcmod {
   }
 }
 """
+
+
+def _test_roundtrip_presence_container_added():
+    """A new empty presence container round-trips and is re-created. It has no
+    children to walk, so without an edit of its own it would silently vanish."""
+    s = yang.compile([_presence_schema])
+    old = r"""<data><c xmlns="http://example.com/pcmod"><x>a</x></c></data>"""
+    new = r"""<data><c xmlns="http://example.com/pcmod"><x>a</x><pcnt/></c></data>"""
+    edits = ypatch.diff_to_edits(gdata.diff(from_xml(s, xml.decode(old)), from_xml(s, xml.decode(new))))
+    testing.assertEqual(len(edits), 1, "expected 1 presence-container edit")
+    testing.assertEqual(edits[0].target, "/pcmod:c/pcnt", "presence container target")
+    _roundtrip(s, old, new, "patch must create the empty presence container")
 
 
 def _test_roundtrip_leaf_below_presence_container():
