@@ -184,7 +184,10 @@ def _from_unwrapped_body[A(YangData)](root: yschema.DRoot, data: ?A, type_narrow
         maybe_ns = _set_ns(i) and s.namespace != ""
 
         if isinstance(s, yschema.DNodeInner) and (isinstance(s, yschema.DRoot) or isinstance(s, yschema.DContainer)):
-            inner = ygdata.Container({fqname(child_node): inner}, ns=s.namespace if maybe_ns else None, module=s.module if maybe_ns else None)
+            # Carry the schema presence: ygdata.patch takes a container whose
+            # presence differs from the datastore as a schema mismatch.
+            spresence = s.presence if isinstance(s, yschema.DContainer) else False
+            inner = ygdata.Container({fqname(child_node): inner}, presence=spresence, ns=s.namespace if maybe_ns else None, module=s.module if maybe_ns else None)
 
         elif isinstance(s, yschema.DList):
             ancestor_keys = path_elements[i].keys
