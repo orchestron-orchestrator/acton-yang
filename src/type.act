@@ -4,26 +4,81 @@ import testing
 SIGNED_INT_TYPES = {"int8", "int16", "int32", "int64"}
 UNSIGNED_INT_TYPES = {"uint8", "uint16", "uint32", "uint64"}
 
+MAX_INT = 9223372036854775807
+MIN_INT = -9223372036854775807 - 1
+# 10**19 already exceeds an int, so no shift beyond this can fit one
+MAX_POW10 = 18
+# Decimal holds decimal64, whose exponent is -fraction-digits, i.e. -18..0. The
+# bound is far looser than that, and only keeps exponent arithmetic in range.
+MAX_EXPONENT = 1000
+
+
+def _int_repr(v: int) -> str:
+    """repr of an int, in a form that can be written back as Acton source
+
+    MIN_INT has no literal form, since 9223372036854775808 is itself out of
+    range. https://github.com/actonlang/acton/issues/2545
+    """
+    if v == MIN_INT:
+        return "{MIN_INT + 1} - 1"
+    return str(v)
+
+
+def _mul_pow10(s: int, k: int) -> ?int:
+    """s * 10**k, or None when the product does not fit an int
+
+    k must not be negative.
+    """
+    if s == 0:
+        return 0
+    if k == 0:
+        return s
+    if k > MAX_POW10 or s == MIN_INT:
+        return None
+    m = -s if s < 0 else s
+    p = 10**k
+    # A negative product may reach MIN_INT, one past -MAX_INT, but only if 10**k
+    # divides 2**63. It does not for k > 0, so this bound is exact either way.
+    if m > MAX_INT // p:
+        return None
+    return s * p
+
+
+def _div_pow10(s: int, k: int) -> int:
+    """s // 10**k, truncated toward zero. k must not be negative."""
+    if k == 0:
+        return s
+    if k > MAX_POW10:
+        return 0 # |s| < 10**19, so the quotient truncates to zero
+    return s // 10**k
+
 
 class Decimal(object):
-    significand: bigint
-    exponent: bigint
+    significand: int
+    exponent: int
 
-    def __init__(self, significand: bigint, exponent: bigint):
+    def __init__(self, significand: int, exponent: int):
         self.significand = significand
         self.exponent = exponent
 
     def __str__(self):
-        s = str(self.integral_part())
-        if self.exponent < 0:
-            f = self.fractional_part()
-            s = s + "." + to_n_dec_str(f.significand, int(-f.exponent))
-        return s
+        # Build from the digits rather than from integral_part()/fractional_part(),
+        # so that a negative value does not carry its sign into both halves.
+        t = str(self.significand)
+        neg = t.startswith("-")
+        digits = t[1:] if neg else t
+        e = self.exponent
+        if e >= 0:
+            res = digits + "0" * e
+        else:
+            n = -e
+            digits = digits.zfill(n + 1)
+            cut = len(digits) - n
+            res = digits[:cut] + "." + digits[cut:]
+        return "-" + res if neg else res
 
     def __repr__(self):
-        # return "Decimal({repr(self.significand)}, {repr(self.exponent)})"
-        # Workaround https://github.com/actonlang/acton/issues/2545
-        return "Decimal(bigint(\"{repr(self.significand)}\"), bigint(\"{repr(self.exponent)}\"))"
+        return "Decimal({_int_repr(self.significand)}, {_int_repr(self.exponent)})"
 
     @staticmethod
     def try_parse(s: str) -> ?Decimal:
@@ -40,42 +95,71 @@ class Decimal(object):
             return d
         raise ValueError("Unable to parse as decimal: \"{s}\"")
 
-    def try_lossless_realign(self, new_exponent: bigint) -> ?Decimal:
+    def try_lossless_realign(self, new_exponent: int) -> ?Decimal:
         exponent_diff = self.exponent - new_exponent
         if exponent_diff == 0:
             return self
         elif exponent_diff < 0:
-            divider = 10**-exponent_diff
+            k = -exponent_diff
+            if k > MAX_POW10:
+                # Only zero survives a shift this large without losing digits
+                return Decimal(0, new_exponent) if self.significand == 0 else None
+            divider = 10**k
             if self.significand % divider == 0:
                 return Decimal(self.significand // divider, new_exponent)
             else:
                 return None # Would lose precision
         else: # alignment > 0:
-            return Decimal(self.significand * 10**exponent_diff, new_exponent)
+            v = _mul_pow10(self.significand, exponent_diff)
+            if v is None:
+                return None # Outside the int range at the new exponent
+            return Decimal(v!, new_exponent)
 
-    def lossy_realign(self, new_exponent: bigint) -> Decimal:
+    def lossy_realign(self, new_exponent: int) -> Decimal:
         exponent_diff = self.exponent - new_exponent
         if exponent_diff == 0:
             return self
         elif exponent_diff < 0:
-            return Decimal(self.significand // 10**-exponent_diff, new_exponent)
+            return Decimal(_div_pow10(self.significand, -exponent_diff), new_exponent)
         else: # alignment > 0:
-            return Decimal(self.significand * 10**exponent_diff, new_exponent)
+            v = _mul_pow10(self.significand, exponent_diff)
+            if v is None:
+                raise ValueError("{self} does not fit an int at exponent {new_exponent}")
+            return Decimal(v!, new_exponent)
 
     def to_float(self) -> float:
-        return float(self.significand) / 10**(float(self.exponent if self.exponent > 0 else -self.exponent))
+        e = self.exponent
+        if e >= 0:
+            return float(self.significand) * 10.0**float(e)
+        return float(self.significand) / 10.0**float(-e)
 
-    def integral_part(self) -> bigint:
-        if self.exponent >= 0:
-            return self.significand
-        else:
-            return self.significand // 10**-self.exponent
+    def integral_part(self) -> int:
+        e = self.exponent
+        if e >= 0:
+            v = _mul_pow10(self.significand, e)
+            if v is None:
+                raise ValueError("Integral part of {self} does not fit an int")
+            return v!
+        return _div_pow10(self.significand, -e)
 
     def fractional_part(self) -> Decimal:
-        divider = 10**-self.exponent
-        return Decimal(self.significand % divider, self.exponent)
+        e = self.exponent
+        if e >= 0:
+            return Decimal(0, e)
+        k = -e
+        if k > MAX_POW10:
+            return self # |significand| < 10**19, so all of it is fractional
+        return Decimal(self.significand % 10**k, e)
 
-    def canonical(self) -> (bigint, bigint):
+    @staticmethod
+    def decimal64_range(fraction_digits: int) -> (Decimal, Decimal):
+        """The decimal64 value space for these fraction-digits
+
+        RFC 7950 9.3.4: an int64 significand scaled by 10**-fraction-digits.
+        """
+        return (Decimal(MIN_INT, -fraction_digits), Decimal(MAX_INT, -fraction_digits))
+
+    def canonical(self) -> (int, int):
         """The (significand, exponent) shared by all equal Decimals
 
         __eq__ realigns exponents, so the same value has many representations:
@@ -87,7 +171,7 @@ class Decimal(object):
         s = self.significand
         e = self.exponent
         if s == 0:
-            return (s, bigint(0))
+            return (s, 0)
         while s % 10 == 0:
             s //= 10
             e += 1
@@ -99,8 +183,12 @@ extension Decimal(Eq):
         if exponent_diff == 0:
             return self.significand == other.significand
         if exponent_diff > 0:
-            return self.significand * 10**exponent_diff == other.significand
-        return self.significand == other.significand * 10**(-exponent_diff)
+            v = _mul_pow10(self.significand, exponent_diff)
+            # A realignment that leaves the int range cannot equal a significand
+            # that is still inside it
+            return v is not None and v! == other.significand
+        v = _mul_pow10(other.significand, -exponent_diff)
+        return v is not None and self.significand == v!
 
 
 extension Decimal(Ord):
@@ -109,8 +197,16 @@ extension Decimal(Ord):
         if exponent_diff == 0:
             return self.significand < other.significand
         if exponent_diff > 0:
-            return self.significand * 10**exponent_diff < other.significand
-        return self.significand < other.significand * 10**(-exponent_diff)
+            v = _mul_pow10(self.significand, exponent_diff)
+            if v is not None:
+                return v! < other.significand
+            # self realigns past the int range while other stays inside it, so
+            # the sign of self decides
+            return self.significand < 0
+        v = _mul_pow10(other.significand, -exponent_diff)
+        if v is not None:
+            return self.significand < v!
+        return other.significand > 0
 
 
 extension Decimal(Hashable):
@@ -262,16 +358,18 @@ class RangesBuilder[T(Ord)](Ranges[T]):
 
 # -------------------------------------------------------------------------------
 
-def try_parse_float_parts(s: str) -> ?(bigint, bigint):
+def try_parse_float_parts(s: str) -> ?(int, int):
     s = s.strip(" \t\n")
 
     p = s.split('e', -1)
     plen = len(p)
-    exp: bigint = 0
+    exp: int = 0
     if plen == 2:
         try:
-            exp = bigint(p[1])
+            exp = int(p[1])
         except ValueError:
+            return None
+        if exp > MAX_EXPONENT or exp < -MAX_EXPONENT:
             return None
     elif plen != 1:
         return None
@@ -279,11 +377,11 @@ def try_parse_float_parts(s: str) -> ?(bigint, bigint):
     f = p[0].split(".", -1)
     flen = len(f)
 
-    significand: bigint = bigint(0)
+    significand: int = 0
 
     if flen == 1:
         try:
-            significand = bigint(f[0])
+            significand = int(f[0])
         except ValueError:
             return None
     elif flen == 2:
@@ -292,19 +390,14 @@ def try_parse_float_parts(s: str) -> ?(bigint, bigint):
         if not fp.isdecimal():
             return None
         try:
-            significand = bigint(ip + fp)
+            significand = int(ip + fp)
         except ValueError:
             return None
-        exp -= bigint(len(fp))
+        exp -= len(fp)
     else:
         return None
 
     return (significand, exp)
-
-def to_n_dec_str(v: bigint, min_digits: int) -> str:
-    s = str(v)
-    leading_zero_count = min_digits - len(s)
-    return "0" * leading_zero_count + s if leading_zero_count > 0 else s
 
 # -------------------------------------------------------------------------------
 
@@ -322,7 +415,7 @@ def _test_decimal():
 
     testing.assertTrue(Decimal.parse("3.14") > Decimal.parse("3.139"))
 
-    testing.assertTrue(Decimal.parse("55.7") > Decimal.parse("-92233720368547759.92"))
+    testing.assertTrue(Decimal.parse("55.7") > Decimal.parse("-92233720368547758.08"))
     testing.assertTrue(Decimal.parse("55.7") < Decimal.parse("92233720368547758.07"))
 
 def _test_decimal_hash_eq():
@@ -345,12 +438,103 @@ def _test_decimal_hash_eq():
     # Unequal Decimals are still told apart, which hashing alone does not do
     testing.assertNotEqual(Decimal(1, 0), Decimal(10, 0))
     testing.assertNotEqual(Decimal(1, 0), Decimal(1, -1))
-    # Colliding hashes are legal, and bigint's currently drops the sign, so
-    # every d/-d pair collides. __eq__ still has to keep them apart.
+    # Colliding hashes are legal, so __eq__ has to keep unequal values apart
+    # on its own.
     d = {Decimal(1, 0): "pos", Decimal(-1, 0): "neg"}
     testing.assertEqual(len(d), 2)
     testing.assertEqual(d.get(Decimal(10, -1)), "pos")
     testing.assertEqual(d.get(Decimal(-10, -1)), "neg")
+
+def _test_decimal_positive_exponent():
+    """A positive exponent scales the value up; it is not ignored"""
+    testing.assertEqual(Decimal(5, 1).integral_part(), 50)
+    testing.assertEqual(Decimal(42, 0).integral_part(), 42)
+    testing.assertEqual(Decimal(314, -2).integral_part(), 3)
+    testing.assertEqual(str(Decimal(5, 1)), "50")
+    testing.assertEqual(Decimal(5, 1).to_float(), 50.0)
+    testing.assertEqual(Decimal(314, -2).to_float(), 3.14)
+    testing.assertEqual(Decimal(42, 0).to_float(), 42.0)
+
+def _test_decimal_str():
+    """Formatting, including the negatives that integral/fractional splitting broke"""
+    testing.assertEqual(str(Decimal(314, -2)), "3.14")
+    testing.assertEqual(str(Decimal(-314, -2)), "-3.14")
+    testing.assertEqual(str(Decimal(1001, -3)), "1.001")
+    testing.assertEqual(str(Decimal(-1001, -3)), "-1.001")
+    testing.assertEqual(str(Decimal(-1, -2)), "-0.01")
+    testing.assertEqual(str(Decimal(0, -2)), "0.00")
+    testing.assertEqual(str(Decimal(42, 0)), "42")
+    testing.assertEqual(str(Decimal(-42, 0)), "-42")
+    testing.assertEqual(str(Decimal(5, 1)), "50")
+    testing.assertEqual(str(Decimal(MIN_INT, -2)), "-92233720368547758.08")
+    testing.assertEqual(str(Decimal(MAX_INT, -2)), "92233720368547758.07")
+
+def _test_decimal_repr_roundtrip():
+    """repr must stay writable as Acton source, MIN_INT included"""
+    testing.assertEqual(repr(Decimal(314, -2)), "Decimal(314, -2)")
+    testing.assertEqual(repr(Decimal(MIN_INT, -2)), "Decimal(-9223372036854775807 - 1, -2)")
+
+def _test_decimal_compare_past_int_range():
+    """Realigning to compare can leave the int range; the result must still be right
+
+    Both of these are legal decimal64: 9.223372036854775807 has fraction-digits
+    18 with the significand at the int64 limit, 9.5 has fraction-digits 1.
+    Comparing them realigns 95 by 10**17 = 9.5e18, past the int64 maximum.
+    """
+    a = Decimal(MAX_INT, -18)   # 9.223372036854775807
+    b = Decimal(95, -1)         # 9.5
+    testing.assertTrue(a < b)
+    testing.assertFalse(b < a)
+    testing.assertNotEqual(a, b)
+
+    # ... and the same on the negative side
+    na = Decimal(MIN_INT, -18)
+    nb = Decimal(-95, -1)
+    testing.assertTrue(nb < na)
+    testing.assertFalse(na < nb)
+    testing.assertNotEqual(na, nb)
+
+    # A shift far past any int stays consistent both ways
+    huge = Decimal(7, 100)
+    testing.assertTrue(b < huge)
+    testing.assertFalse(huge < b)
+    testing.assertNotEqual(huge, b)
+
+def _test_decimal_parse_out_of_range():
+    """int cannot hold what falls outside the decimal64 value space"""
+    # One past the decimal64 minimum for fraction-digits 2
+    testing.assertNone(Decimal.try_parse("-92233720368547758.09"))
+    testing.assertNone(Decimal.try_parse("99999999999999999999"))
+    testing.assertNone(Decimal.try_parse("1e99999999999999999999"))
+    testing.assertNone(Decimal.try_parse("1e100000"))
+    # The bounds themselves still parse
+    testing.assertEqual(Decimal.parse("-92233720368547758.08"), Decimal(MIN_INT, -2))
+    testing.assertEqual(Decimal.parse("92233720368547758.07"), Decimal(MAX_INT, -2))
+
+def _test_decimal_parts():
+    """integral_part/fractional_part follow the truncating division of int"""
+    testing.assertEqual(Decimal(314, -2).integral_part(), 3)
+    testing.assertEqual(Decimal(-314, -2).integral_part(), -3)
+    testing.assertEqual(Decimal(314, -2).fractional_part(), Decimal(14, -2))
+    testing.assertEqual(Decimal(-314, -2).fractional_part(), Decimal(-14, -2))
+    testing.assertEqual(Decimal(5, 1).integral_part(), 50)
+    testing.assertEqual(Decimal(42, 0).integral_part(), 42)
+    testing.assertEqual(Decimal(5, 1).to_float(), 50.0)
+    testing.assertEqual(Decimal(314, -2).to_float(), 3.14)
+
+def _test_decimal64_range():
+    lo, hi = Decimal.decimal64_range(2)
+    testing.assertEqual(lo, Decimal(MIN_INT, -2))
+    testing.assertEqual(hi, Decimal(MAX_INT, -2))
+    testing.assertTrue(Ranges.match(Ranges([Decimal.decimal64_range(2)]), Decimal(557, -1)))
+
+def _test_decimal_realign():
+    testing.assertEqual(Decimal(314, -2).try_lossless_realign(-3), Decimal(3140, -3))
+    testing.assertNone(Decimal(314, -2).try_lossless_realign(-1))
+    # 9.3 has no decimal64 form at fraction-digits 18: 93 * 10**17 leaves the range
+    testing.assertNone(Decimal(93, -1).try_lossless_realign(-18))
+    # ... while 9.0 does
+    testing.assertEqual(Decimal(90, -1).try_lossless_realign(-18), Decimal(9000000000000000000, -18))
 
 def _test_decimal_fail():
     try:
@@ -374,7 +558,7 @@ def _test_ranges_decimal():
     testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.1")))
     testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.2")))
     testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.3")))
-    testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("-92233720368547759.92"), Decimal.parse("92233720368547758.07"))]), Decimal.parse("55.7")))
+    testing.assertTrue(Ranges.match(Ranges([(Decimal.parse("-92233720368547758.08"), Decimal.parse("92233720368547758.07"))]), Decimal.parse("55.7")))
     testing.assertFalse(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.099999")))
     testing.assertFalse(Ranges.match(Ranges([(Decimal.parse("1.1"), Decimal.parse("1.3"))]), Decimal.parse("1.300001")))
 
