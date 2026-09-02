@@ -1297,10 +1297,10 @@ extension Node(Eq):
             return vals_equal(self.val, other.val)
 
         if isinstance(self, CreateLeaf) and isinstance(other, CreateLeaf):
-            return True
+            return vals_equal(self.val, other.val)
 
         if isinstance(self, ReplaceLeaf) and isinstance(other, ReplaceLeaf):
-            return True
+            return vals_equal(self.val, other.val)
 
         if isinstance(self, LeafList) and isinstance(other, LeafList):
             if len(self.entries) != len(other.entries):
@@ -3600,6 +3600,48 @@ def _test_eq_container_presence():
     pres = Container({Id("", "a"): Leaf(u64(1))}, presence=True)
     testing.assertNotEqual(plain, pres)
     testing.assertEqual(pres, Container({Id("", "a"): Leaf(u64(1))}, presence=True))
+
+def _test_eq_create_leaf():
+    """A CreateLeaf carries a value, so two of them are equal only when the
+    values are. A CreateLeaf is also not the same node as a ReplaceLeaf or as a
+    plain Leaf with the same value.
+    """
+    testing.assertEqual(CreateLeaf(u64(1)), CreateLeaf(u64(1)))
+    testing.assertNotEqual(CreateLeaf(u64(1)), CreateLeaf(u64(2)))
+    testing.assertEqual(CreateLeaf("a"), CreateLeaf("a"))
+    testing.assertNotEqual(CreateLeaf("a"), CreateLeaf("b"))
+
+    testing.assertNotEqual(CreateLeaf(u64(1)), ReplaceLeaf(u64(1)))
+    testing.assertNotEqual(CreateLeaf(u64(1)), Leaf(u64(1)))
+
+    testing.assertNotEqual(CreateLeaf(u64(1), ns=NS_acme), CreateLeaf(u64(1)))
+
+def _test_eq_replace_leaf():
+    """A ReplaceLeaf carries a value, so two of them are equal only when the
+    values are.
+    """
+    testing.assertEqual(ReplaceLeaf(u64(1)), ReplaceLeaf(u64(1)))
+    testing.assertNotEqual(ReplaceLeaf(u64(1)), ReplaceLeaf(u64(2)))
+    testing.assertEqual(ReplaceLeaf("a"), ReplaceLeaf("a"))
+    testing.assertNotEqual(ReplaceLeaf("a"), ReplaceLeaf("b"))
+
+    testing.assertNotEqual(ReplaceLeaf(u64(1)), Leaf(u64(1)))
+
+    testing.assertNotEqual(ReplaceLeaf(u64(1), ns=NS_acme), ReplaceLeaf(u64(1)))
+
+def _test_eq_leaf_wrappers_in_container():
+    """The container branch walks into its children, so a differing wrapped leaf
+    value makes the two containers differ too.
+    """
+    c1 = Container({Id("", "a"): CreateLeaf(u64(1))})
+    c2 = Container({Id("", "a"): CreateLeaf(u64(2))})
+    testing.assertEqual(c1, Container({Id("", "a"): CreateLeaf(u64(1))}))
+    testing.assertNotEqual(c1, c2)
+
+    r1 = Container({Id("", "a"): ReplaceLeaf(u64(1))})
+    r2 = Container({Id("", "a"): ReplaceLeaf(u64(2))})
+    testing.assertEqual(r1, Container({Id("", "a"): ReplaceLeaf(u64(1))}))
+    testing.assertNotEqual(r1, r2)
 
 def _test_eq_list():
     l1 = List([Id("", "name")], [
