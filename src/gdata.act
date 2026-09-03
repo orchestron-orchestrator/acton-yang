@@ -2971,6 +2971,142 @@ def prune(data: ?Node, filt: FNode) -> ?Node:
     return None
 
 
+def value_match_intersects(a: ?value, b: ?value) -> bool:
+    """Return True when two filter value matches can match the same value.
+
+    A missing match constrains nothing, so it is compatible with anything. Two
+    wildcards are reported as compatible without comparing their patterns:
+    deciding whether two wildcards share a matching value is not worth it here,
+    and reporting them as disjoint is the one wrong answer a caller has no way
+    to recover from.
+    """
+    if a is not None and b is not None:
+        if isinstance(a, ValueMatch):
+            if isinstance(b, ValueMatch):
+                return True
+            return _match_value(a, b)
+        if isinstance(b, ValueMatch):
+            return _match_value(b, a)
+        return vals_equal(a, b)
+    return True
+
+
+def _filter_child_constrains_only(f: FNode) -> bool:
+    """Return True when a filter child can only constrain the node above it.
+
+    A child carrying a value match but no children of its own is either a leaf
+    content match - which selects nothing itself, and lets its parent select
+    its whole subtree - or a leaf-list value match, which selects just those
+    entries. The schema is not available here to tell the two apart, so it
+    reads as the constraint: that keeps the parent's selection as wide as it
+    can be.
+    """
+    return f.value_match is not None and len(f.children) == 0
+
+
+def _filter_children_named(children: list[FNode]) -> dict[Id, list[FNode]]:
+    """Group filter children by name, dropping unnamed ones.
+
+    Same-name siblings are alternatives - filter evaluation ORs them - so they
+    stay together in one group.
+    """
+    groups: dict[Id, list[FNode]] = {}
+    for child in children:
+        name = child.name
+        if name is not None:
+            if name in groups:
+                groups[name].append(child)
+            else:
+                groups[name] = [child]
+    return groups
+
+
+def _fnode_lists_intersect(a: list[FNode], b: list[FNode]) -> bool:
+    """Return True when some pair across two filter node lists can overlap."""
+    for an in a:
+        for bn in b:
+            if _fnode_intersects(an, bn):
+                return True
+    return False
+
+
+def _fnode_constraints_intersect(a: FNode, b: FNode) -> bool:
+    """Return True when the constraints on two filter heads can hold together.
+
+    Constraints on the same name are alternatives, so one compatible pair is
+    enough; a name constrained on one side only is unconstrained on the other,
+    and cannot rule the overlap out.
+    """
+    b_groups = _filter_children_named([c for c in b.children if _filter_child_constrains_only(c)])
+    if len(b_groups) == 0:
+        return True
+    a_groups = _filter_children_named([c for c in a.children if _filter_child_constrains_only(c)])
+    for name, alist in a_groups.items():
+        if name in b_groups:
+            if not _fnode_lists_intersect(alist, b_groups[name]):
+                return False
+    return True
+
+
+def _fnode_intersects(a: FNode, b: FNode) -> bool:
+    """Return True when two filter nodes at the same tree position can overlap.
+
+    Heads must agree on name and value match, the constraints below them must
+    be satisfiable together, and - once both sides narrow the selection to
+    named children - some pair of those children must overlap in turn. A side
+    that selects no particular child selects its whole subtree, which overlaps
+    whatever the other side selects there.
+    """
+    if a.name is not None and b.name is not None:
+        if a.name != b.name:
+            return False
+    if not value_match_intersects(a.value_match, b.value_match):
+        return False
+    if not _fnode_constraints_intersect(a, b):
+        return False
+    a_selection = [c for c in a.children if not _filter_child_constrains_only(c)]
+    b_selection = [c for c in b.children if not _filter_child_constrains_only(c)]
+    if len(a_selection) == 0 or len(b_selection) == 0:
+        return True
+    return _fnode_lists_intersect(a_selection, b_selection)
+
+
+def _as_root_filter(f: FNode) -> FNode:
+    """Lift a named filter into the unnamed root filter that carries it."""
+    if f.name is None:
+        return f
+    return FNode(children=[f])
+
+
+def filter_intersects(a: ?FNode, b: ?FNode) -> bool:
+    """Return True when two filters can select overlapping data.
+
+    Answers "is it worth reading this tree" without a tree to read: a data
+    change described as a filter (the path that changed) against the filter of
+    a subscription tells the subscription whether the change can matter to it.
+    An unfiltered side (None, or a root filter with no children) selects
+    everything and always overlaps.
+
+    The answer is one-sided on purpose: True means "cannot prove disjoint", so
+    a caller that resamples on True resamples more often than strictly needed,
+    but never skips a change it should have seen. False is only returned when
+    the filters name different children, or constrain the same child to values
+    that cannot both hold.
+
+    Two effects of filter evaluation are deliberately not modeled: list keys
+    are added back to a selected element, so a filter selecting only keys
+    reaches data outside the keys it names; and a missing child drops the
+    whole container the filter asked for, so a selection can appear or vanish
+    because of a node the filter never named. Both make the *contents* of a
+    selection depend on data outside it without moving the selection itself,
+    which is why a caller comparing a changed path against a filter wants the
+    path of the whole subtree that changed, not of the individual leaf.
+    """
+    if a is not None and b is not None:
+        return _fnode_intersects(_as_root_filter(a), _as_root_filter(b))
+    return True
+
+
 # TODO: Can we make patch return a Node instead of ?Node?
 def _patch_rec(old: ?Node, p: ?Node, path: list[_PathElement]) -> ?Node:
     if p is None:
@@ -5836,6 +5972,142 @@ def _test_prune_named_root_filter():
             Id(NS_acme, "l2"): Leaf(u64(2)),
         }, ns=NS_acme, module="acme").prsrc(deterministic=True)
     )
+
+
+def _a(n: str) -> Id:
+    return Id(NS_acme, n)
+
+
+def _test_filter_intersects_unfiltered_matches_anything():
+    """A filter that selects everything overlaps every other filter."""
+    named = FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")])
+    testing.assertEqual(filter_intersects(None, named), True)
+    testing.assertEqual(filter_intersects(named, None), True)
+    # The root filter with no children is the unfiltered whole tree.
+    testing.assertEqual(filter_intersects(FNode(), named), True)
+    testing.assertEqual(filter_intersects(named, FNode()), True)
+
+
+def _test_filter_intersects_different_top_level_nodes():
+    """Filters under different top-level nodes cannot select the same data."""
+    devices = FNode(children=[FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")])])
+    services = FNode(children=[FNode(_a("service"))])
+    testing.assertEqual(filter_intersects(devices, services), False)
+    testing.assertEqual(filter_intersects(services, devices), False)
+
+
+def _test_filter_intersects_named_and_root_form_agree():
+    """A named filter and the same filter under a root wrapper are equivalent."""
+    named = FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")])
+    rooted = FNode(children=[FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")])])
+    other = FNode(_a("service"))
+    testing.assertEqual(filter_intersects(named, rooted), True)
+    testing.assertEqual(filter_intersects(named, other), False)
+    testing.assertEqual(filter_intersects(rooted, other), False)
+
+
+def _test_filter_intersects_list_keys():
+    """Two different keys of the same list select different elements."""
+    ce1 = FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")])
+    ce2 = FNode(_a("device"), children=[FNode(_a("name"), value_match="ce2")])
+    testing.assertEqual(filter_intersects(ce1, ce1), True)
+    testing.assertEqual(filter_intersects(ce1, ce2), False)
+
+
+def _test_filter_intersects_multi_key_list():
+    """A compound key only rules the overlap out when a key value differs."""
+    a = FNode(_a("iface"), children=[
+        FNode(_a("name"), value_match="eth0"),
+        FNode(_a("vlan"), value_match=u64(100)),
+    ])
+    same = FNode(_a("iface"), children=[
+        FNode(_a("name"), value_match="eth0"),
+        FNode(_a("vlan"), value_match=u64(100)),
+    ])
+    other_vlan = FNode(_a("iface"), children=[
+        FNode(_a("name"), value_match="eth0"),
+        FNode(_a("vlan"), value_match=u64(200)),
+    ])
+    partial = FNode(_a("iface"), children=[FNode(_a("name"), value_match="eth0")])
+    testing.assertEqual(filter_intersects(a, same), True)
+    testing.assertEqual(filter_intersects(a, other_vlan), False)
+    # A filter that constrains fewer keys is wider, so it still overlaps.
+    testing.assertEqual(filter_intersects(a, partial), True)
+
+
+def _test_filter_intersects_alternative_keys():
+    """Same-name siblings are alternatives: one compatible key is enough."""
+    changed = FNode(_a("device"), children=[FNode(_a("name"), value_match="ce2")])
+    ce1_ce2 = FNode(children=[
+        FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")]),
+        FNode(_a("device"), children=[FNode(_a("name"), value_match="ce2")]),
+    ])
+    ce1_ce3 = FNode(children=[
+        FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")]),
+        FNode(_a("device"), children=[FNode(_a("name"), value_match="ce3")]),
+    ])
+    testing.assertEqual(filter_intersects(changed, ce1_ce2), True)
+    testing.assertEqual(filter_intersects(changed, ce1_ce3), False)
+
+
+def _test_filter_intersects_wildcard_value():
+    """A wildcard overlaps the values it matches, and nothing else."""
+    prefix = FNode(_a("device"), children=[FNode(_a("name"), value_match=VWildcard("ce*"))])
+    ce1 = FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")])
+    pe1 = FNode(_a("device"), children=[FNode(_a("name"), value_match="pe1")])
+    testing.assertEqual(filter_intersects(prefix, ce1), True)
+    testing.assertEqual(filter_intersects(ce1, prefix), True)
+    testing.assertEqual(filter_intersects(prefix, pe1), False)
+    # Two patterns are not compared against each other.
+    testing.assertEqual(filter_intersects(prefix, FNode(_a("device"), children=[
+        FNode(_a("name"), value_match=VWildcard("pe*")),
+    ])), True)
+
+
+def _test_filter_intersects_selection_depth():
+    """A filter selecting a whole subtree overlaps any selection inside it."""
+    element = FNode(_a("device"), children=[FNode(_a("name"), value_match="ce1")])
+    config = FNode(_a("device"), children=[
+        FNode(_a("name"), value_match="ce1"),
+        FNode(_a("config")),
+    ])
+    deep = FNode(_a("device"), children=[
+        FNode(_a("name"), value_match="ce1"),
+        FNode(_a("config"), children=[FNode(_a("hostname"))]),
+    ])
+    testing.assertEqual(filter_intersects(element, config), True)
+    testing.assertEqual(filter_intersects(element, deep), True)
+    testing.assertEqual(filter_intersects(config, deep), True)
+
+
+def _test_filter_intersects_sibling_selections():
+    """Sibling subtrees of the same element do not overlap."""
+    config = FNode(_a("device"), children=[
+        FNode(_a("name"), value_match="ce1"),
+        FNode(_a("config")),
+    ])
+    oper = FNode(_a("device"), children=[
+        FNode(_a("name"), value_match="ce1"),
+        FNode(_a("oper")),
+    ])
+    oper_ce2 = FNode(_a("device"), children=[
+        FNode(_a("name"), value_match="ce2"),
+        FNode(_a("oper")),
+    ])
+    testing.assertEqual(filter_intersects(config, oper), False)
+    testing.assertEqual(filter_intersects(config, oper_ce2), False)
+
+
+def _test_filter_intersects_leaf_content_match_is_not_narrowing():
+    """A value match on its own constrains, and leaves the selection whole.
+
+    Filter evaluation cannot tell a leaf content match from a leaf-list value
+    match without a schema, and a leaf content match selects its parent's
+    whole subtree - so the wider reading wins and the overlap stands.
+    """
+    conditional = FNode(children=[FNode(_a("hostname"), value_match="foo")])
+    elsewhere = FNode(children=[FNode(_a("interfaces"))])
+    testing.assertEqual(filter_intersects(conditional, elsewhere), True)
 
 
 def _serde_roundtrip_json(node: Node) -> str:
