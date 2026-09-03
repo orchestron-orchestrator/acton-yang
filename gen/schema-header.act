@@ -106,6 +106,12 @@ MAX_LENGTH_STMT = 9223372036854775807 # Maximum supported by len(str) should be 
 MAX_ENUM_VALUE = 2147483647 # RFC7950 9.6.4.2
 MAX_BIT_POSITION = 4294967295 # RFC7950 9.7.4.2
 
+# Acton types from yang_typename_to_acton_type() that cannot be dict keys, so
+# a list keyed by one of them cannot use the indexed MKeyedList. set[str] (bits)
+# is Eq and gets the scanning MEqKeyedList; "value" (unions) has no Eq at all
+# and gets a plain MList with a generated get().
+NON_HASHABLE_ACTON_TYPES = {"value", "set[str]"}
+
 def _yind(n):
     return "  " * n
 
@@ -841,14 +847,20 @@ class DNodeInner(DNode):
                         list_args_req.append(arg)
                         list_args_req_sig.append("{arg}: {pname(child)}")
 
-            # Lists whose key leaves all map to concrete Acton types (not value,
-            # concrete types/tuples where Eq is (automatically) implemented)
+            # Lists whose key leaves all map to Hashable Acton types (concrete
+            # types/tuples where Hashable is (automatically) implemented)
             # subclass MKeyedList[K, T], where K is the Acton type for the key
-            # (scalar value or tuple) and T is the adata entry type.
-            # If any of the keys maps to Acton value type, we must use MList[T]
-            # and generate the .get() method here, and also lose out on Indexed[K, T] protocol.
+            # (scalar value or tuple) and T is the adata entry type. MKeyedList
+            # keeps a dict[K, int] index, so the key has to be usable as a dict
+            # key, not just comparable. Keys that are Eq but not Hashable (bits)
+            # subclass MEqKeyedList[K, T] instead, which finds by scanning but
+            # offers the same get() and Indexed[K, T] protocol.
+            # If any of the keys maps to Acton value type (unions), we must use
+            # MList[T] and generate the .get() method here, and also lose out on
+            # Indexed[K, T] protocol.
             key_acton_types = [yang_type_to_acton_type(list_key_types[k]) for k in list_key_args]
             key_impl_eq = len(list_key_args) > 0 and "value" not in key_acton_types
+            key_impl_hash = key_impl_eq and all(map(lambda t: t not in NON_HASHABLE_ACTON_TYPES, key_acton_types))
 
             single_key = len(list_key_args) == 1
             def as_tuple(parts: list[str]) -> str:
@@ -866,14 +878,15 @@ class DNodeInner(DNode):
             breaker_name, breaker_idx = next_breaker_name(breaker_idx)
             res.append("{breaker_name}: None = None")
             if key_impl_eq:
-                match_expr = "e.{list_key_args[0]} == k" if single_key else " and ".join(["e.{k} == k.{k}" for k in list_key_args])
-                res.append("class {pname()}(yadata.MKeyedList[{key_type}, {pname()}_entry]):")
+                key_expr = "e.{list_key_args[0]}" if single_key else as_tuple(["{k}=e.{k}" for k in list_key_args])
+                base = "MKeyedList" if key_impl_hash else "MEqKeyedList"
+                res.append("class {pname()}(yadata.{base}[{key_type}, {pname()}_entry]):")
                 res.append("    mut def __init__(self, elements: list[{pname()}_entry]=[]) -> None:")
-                res.append("        yadata.MKeyedList.__init__(self, lambda e, k: {match_expr}, elements)")
+                res.append("        yadata.{base}.__init__(self, lambda e: {key_expr}, elements)")
             else:
                 res.append("class {pname()}(yadata.MList[{pname()}_entry]):")
                 res.append("    mut def __init__(self, elements: list[{pname()}_entry]=[]) -> None:")
-                res.append("        self.elements = elements")
+                res.append("        self._elements = elements")
             res.append("")
 
             # .get(key) returns the entry matching the key, or None. We generate
@@ -940,7 +953,7 @@ class DNodeInner(DNode):
                 res.append("        {unpack_key(key_param)}")
             list_params_str = ", ".join(["{arg}={arg}" for arg in list_args_req + list_args_opt])
             res.append("        res = {pname()}_entry({list_params_str})")
-            res.append("        self.elements.append(res)")
+            res.append("        self._append(res)")
             res.append("        return res")
             res.append("")
 

@@ -2,6 +2,7 @@
 import diff
 import file
 import testing
+import time
 import std.json as json
 import std.xml as xml
 
@@ -398,7 +399,7 @@ def _test_foo_from_xml_li_union():
     gd2 = yxml.from_xml(yang_foo.SRC_DNODE, xml_in)
     root = yang_foo_root.from_gdata(gd2)
 
-    li1 = root.li_union.elements[0]
+    li1 = list(root.li_union)[0]
     testing.assertEqual(li1.k1, "first")
     k2 = li1.k2
     if isinstance(k2, int):
@@ -408,7 +409,7 @@ def _test_foo_from_xml_li_union():
 #        testing.error("k2 in gdata is not an int, actual type: {type(k2)}")
     testing.assertEqual(li1.k3, "Hello Acton 🫡".encode())
 
-    li2 = root.li_union.elements[1]
+    li2 = list(root.li_union)[1]
     testing.assertEqual(li2.k1, "second")
     k2 = li2.k2
     if isinstance(k2, str):
@@ -417,7 +418,7 @@ def _test_foo_from_xml_li_union():
         testing.error("k2 in gdata is not a str, actual type: {type(k2)}")
     testing.assertEqual(li1.k3, "Hello Acton 🫡".encode())
 
-    li3 = root.li_union.elements[2]
+    li3 = list(root.li_union)[2]
     testing.assertEqual(li3.k1, "third")
     li3_k2 = li3.k2
     if isinstance(li3_k2, bytes):
@@ -480,6 +481,138 @@ def _test_list_indexed():
     del r.c1.li["b"]
     testing.assertNone(r.c1.li.get("b"))
 
+def _test_list_create_scale():
+    """create() must not rescan the list, so building one stays linear
+
+    A scanning create() took ~54 s for this at 50k entries (four times longer
+    per doubling), against tens of milliseconds through the key index. The bound
+    is loose enough to survive a slow machine and still catch a return to O(N^2).
+    """
+    n = 50000
+    r = yang_foo_root()
+    sw = time.Stopwatch()
+    for i in range(n):
+        r.c1.li.create("dev{i}", val="{i}")
+    elapsed = sw.elapsed().to_float()
+    testing.assertEqual(len(r.c1.li), n)
+    entry = r.c1.li.get("dev{n - 1}")
+    testing.assertNotNone(entry)
+    if elapsed > 2.0:
+        testing.error("building {n} entries took {elapsed} s, expected linear scaling")
+
+def _test_list_duplicate_keys():
+    """get() returns the first element with the key, as a scan would"""
+    first = yang_foo.foo__c1__li_entry(name="a", val="1")
+    li = yang_foo.foo__c1__li(elements=[first, yang_foo.foo__c1__li_entry(name="a", val="2")])
+
+    found = li.get("a")
+    testing.assertNotNone(found)
+    if found is not None:
+        testing.assertEqual(found.val, "1")
+
+    del li["a"]
+    remaining = li.get("a")
+    testing.assertNotNone(remaining)
+    if remaining is not None:
+        testing.assertEqual(remaining.val, "2")
+
+def _test_list_create_keeps_index():
+    """create() is the key-derived adder and keeps the index in step"""
+    r = yang_foo_root()
+    r.c1.li.create("a", val="1")
+    r.c1.li.create("b", val="2")
+
+    found = r.c1.li.get("b")
+    testing.assertNotNone(found)
+    if found is not None:
+        testing.assertEqual(found.val, "2")
+
+    # create() finds the entry already there rather than adding a second "b"
+    again = r.c1.li.create("b", val="22")
+    testing.assertEqual(again.val, "22")
+    testing.assertEqual(len(r.c1.li), 2)
+
+def _test_list_delete_shifts_positions():
+    """Deleting an element moves every later one, so the index has to be rebuilt"""
+    r = yang_foo_root()
+    r.c1.li.create("a", val="1")
+    r.c1.li.create("b", val="2")
+    r.c1.li.create("c", val="3")
+
+    del r.c1.li["a"]
+    # Both of these sat after the deleted element
+    testing.assertEqual(r.c1.li["b"].val, "2")
+    testing.assertEqual(r.c1.li["c"].val, "3")
+
+    # ... and the positions still hold for entries added afterwards
+    r.c1.li.create("d", val="4")
+    del r.c1.li["c"]
+    testing.assertEqual(r.c1.li["b"].val, "2")
+    testing.assertEqual(r.c1.li["d"].val, "4")
+    testing.assertEqual(len(r.c1.li), 2)
+
+def _test_list_delete_missing():
+    """Deleting a key that is not there raises rather than deleting something else"""
+    r = yang_foo_root()
+    r.c1.li.create("a", val="1")
+    try:
+        del r.c1.li["missing"]
+        testing.error("Expected KeyError deleting an absent key")
+    except KeyError:
+        pass
+    testing.assertEqual(len(r.c1.li), 1)
+
+def _test_list_setitem_absent_key():
+    """Assigning an unknown key appends, and the entry is then findable"""
+    r = yang_foo_root()
+    r.c1.li.create("a", val="1")
+
+    r.c1.li["b"] = yang_foo.foo__c1__li_entry(name="b", val="2")
+    testing.assertEqual(len(r.c1.li), 2)
+    testing.assertEqual(r.c1.li["b"].val, "2")
+
+    # Appending after a delete, so positions come from a rebuilt index
+    del r.c1.li["a"]
+    r.c1.li["c"] = yang_foo.foo__c1__li_entry(name="c", val="3")
+    testing.assertEqual(r.c1.li["b"].val, "2")
+    testing.assertEqual(r.c1.li["c"].val, "3")
+
+def _test_list_compound_key_mutations():
+    """create(), __setitem__() and delete on a compound-key list"""
+    r = yang_foo_root()
+    li1 = r.nested.f_inner.li1.create("l1")
+    li1.li2.create(("a", "1"), baz="one")
+    li1.li2.create(("a", "2"), baz="two")
+    li1.li2.create(("a", "3"), baz="three")
+
+    testing.assertEqual(li1.li2[(key1="a", key2="2")].baz, "two")
+
+    del li1.li2[(key1="a", key2="1")]
+    # Both of these sat after the deleted element
+    testing.assertEqual(li1.li2[(key1="a", key2="2")].baz, "two")
+    testing.assertEqual(li1.li2[(key1="a", key2="3")].baz, "three")
+
+    li1.li2[(key1="a", key2="2")] = yang_foo.foo__nested__f_inner__li1__li2_entry(key1="a", key2="2", baz="TWO")
+    testing.assertEqual(li1.li2[(key1="a", key2="2")].baz, "TWO")
+    testing.assertEqual(len(li1.li2), 2)
+
+def _test_list_setitem_other_key():
+    """Assigning an entry that carries a different key is refused"""
+    r = yang_foo_root()
+    r.c1.li.create("a", val="1")
+    r.c1.li.create("b", val="2")
+
+    try:
+        r.c1.li["a"] = yang_foo.foo__c1__li_entry(name="c", val="3")
+        testing.error("Expected exception on key mismatch")
+    except ValueError:
+        pass
+
+    # The list is as it was
+    testing.assertEqual(r.c1.li["a"].val, "1")
+    testing.assertEqual(r.c1.li["b"].val, "2")
+    testing.assertEqual(len(r.c1.li), 2)
+
 def _test_list_multi_key():
     r = yang_foo_root()
     li1_e = r.nested.f_inner.li1.create("l1")
@@ -495,6 +628,62 @@ def _test_list_multi_key():
     testing.assertEqual(li1_e.li2[(key1="a", key2="1")].baz, "one")
     del li1_e.li2[(key1="a", key2="1")]
     testing.assertNone(li1_e.li2.get((key1="a", key2="1")))
+
+def _test_list_decimal_key():
+    """decimal64 keys index by value, so scale does not matter"""
+    r = yang_foo_root()
+    r.li_decimal.create(Decimal.parse("1.0"), val="one")
+    r.li_decimal.create(Decimal.parse("2.500"), val="two and a half")
+
+    # Same values written at a different scale still find their entry
+    found = r.li_decimal.get(Decimal.parse("1"))
+    testing.assertNotNone(found)
+    if found is not None:
+        testing.assertEqual(found.val, "one")
+    testing.assertEqual(r.li_decimal[Decimal.parse("2.5")].val, "two and a half")
+
+    # ... and create() updates rather than adding a second entry for 1.0
+    r.li_decimal.create(Decimal.parse("1.000"), val="still one")
+    testing.assertEqual(len(r.li_decimal), 2)
+    testing.assertEqual(r.li_decimal[Decimal.parse("1.0")].val, "still one")
+
+    testing.assertNone(r.li_decimal.get(Decimal.parse("3.0")))
+
+    del r.li_decimal[Decimal.parse("1")]
+    testing.assertNone(r.li_decimal.get(Decimal.parse("1.0")))
+    testing.assertEqual(len(r.li_decimal), 1)
+
+def _test_list_bits_key():
+    """bits keys compare but cannot hash, so the list scans and still has Indexed"""
+    r = yang_foo_root()
+    r.li_bits.create({"one"}, val="1")
+    r.li_bits.create({"one", "two"}, val="12")
+    r.li_bits.create({"three"}, val="3")
+
+    # Set equality, so member order in the literal is irrelevant
+    found = r.li_bits.get({"two", "one"})
+    testing.assertNotNone(found)
+    if found is not None:
+        testing.assertEqual(found.val, "12")
+    testing.assertNone(r.li_bits.get({"two"}))
+
+    # create() finds the existing entry rather than adding a second one
+    r.li_bits.create({"one"}, val="one")
+    testing.assertEqual(len(r.li_bits), 3)
+
+    # The Indexed protocol, which the plain MList fallback does not offer
+    testing.assertEqual(r.li_bits[{"one"}].val, "one")
+    r.li_bits[{"three"}] = yang_foo.foo__li_bits_entry(k1={"three"}, val="33")
+    testing.assertEqual(r.li_bits[{"three"}].val, "33")
+    del r.li_bits[{"one"}]
+    testing.assertNone(r.li_bits.get({"one"}))
+    testing.assertEqual(r.li_bits[{"one", "two"}].val, "12")
+    testing.assertEqual(len(r.li_bits), 2)
+    try:
+        del r.li_bits[{"one"}]
+        testing.error("Expected KeyError deleting an absent bits key")
+    except KeyError:
+        pass
 
 def _test_list_get_union_key():
     r = yang_foo_root()

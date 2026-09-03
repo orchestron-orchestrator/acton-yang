@@ -62,7 +62,7 @@ class foo__l1_entry(yadata.MNode):
 _breaker2: None = None
 class foo__l1(yadata.MKeyedList[(name: str, id: str), foo__l1_entry]):
     mut def __init__(self, elements: list[foo__l1_entry]=[]) -> None:
-        yadata.MKeyedList.__init__(self, lambda e, k: e.name == k.name and e.id == k.id, elements)
+        yadata.MKeyedList.__init__(self, lambda e: (name=e.name, id=e.id), elements)
 
     mut def create(self, key: (name: str, id: str), other: ?str=None) -> foo__l1_entry:
         e = self.get(key)
@@ -72,7 +72,7 @@ class foo__l1(yadata.MKeyedList[(name: str, id: str), foo__l1_entry]):
             return e
         (name=name, id=id) = key
         res = foo__l1_entry(name=name, id=id, other=other)
-        self.elements.append(res)
+        self._append(res)
         return res
 
     @staticmethod

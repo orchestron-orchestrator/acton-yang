@@ -1717,6 +1717,51 @@ type string;
     root = yang.compile([ys])
     return root.prdaclass()
 
+def _test_prdaclass_decimal64_list_key():
+    """decimal64 is Hashable, so its list gets the indexed MKeyedList"""
+    ys = r"""module foo {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+
+  container c1 {
+    list l1 {
+      key "k1";
+      leaf k1 {
+        type decimal64 {
+          fraction-digits 2;
+        }
+      }
+    }
+  }
+}
+"""
+    root = yang.compile([ys])
+    return root.prdaclass()
+
+def _test_prdaclass_bits_list_key():
+    """bits maps to set[str], which is Eq but not Hashable, so this list scans through MEqKeyedList"""
+    ys = r"""module foo {
+  yang-version "1.1";
+  namespace "http://example.com/foo";
+  prefix "foo";
+
+  container c1 {
+    list l1 {
+      key "k1";
+      leaf k1 {
+        type bits {
+          bit one;
+          bit two;
+        }
+      }
+    }
+  }
+}
+"""
+    root = yang.compile([ys])
+    return root.prdaclass()
+
 def _test_prdaclass_identityref_list_key():
     ys = r"""module foo {
   yang-version "1.1";

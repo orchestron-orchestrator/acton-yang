@@ -15,38 +15,18 @@ from yang.type import Decimal, Ranges
 
 
 
-_base_foo_id1: DIdentity = DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1', base=[])
-_base_foo_id2: DIdentity = DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id2', base=[_base_foo_id1])
-_identities: list[DIdentity] = [
-    _base_foo_id1,
-    _base_foo_id2,
-]
-
-
-# Identityref constants
-foo_id1: Identityref = Identityref('id1', ns='http://example.com/foo', mod='foo', pfx='foo')
-foo_id2: Identityref = Identityref('id2', ns='http://example.com/foo', mod='foo', pfx='foo')
+_identities: list[DIdentity] = []
 
 
 SRC_DNODE_CHILD_0: DContainer = DContainer(module='foo', namespace='http://example.com/foo', prefix='foo', name='c1', config=True, presence=False, children=[
-    DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', key=[
-'k1',
-'k2'
-        ], config=True, min_elements=0, ordered_by='system', children=[
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k1', config=True, mandatory=False, type=DTypeString(name='string', description=None, reference=None, exts=[], builtin_type='string', default=None, length=None, patterns=[])),
-        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k2', config=True, mandatory=False, type=DTypeIdentityref(name='identityref', description=None, reference=None, exts=[], builtin_type='identityref', default=None, identity_bases=[_base_foo_id1], identities=_identities))
+    DList(module='foo', namespace='http://example.com/foo', prefix='foo', name='l1', key=['k1'], config=True, min_elements=0, ordered_by='system', children=[
+        DLeaf(module='foo', namespace='http://example.com/foo', prefix='foo', name='k1', config=True, mandatory=False, type=DTypeDecimal64(name='decimal64', description=None, reference=None, exts=[], builtin_type='decimal64', default=None, fraction_digits=2, ranges=Ranges([(Decimal(-9223372036854775807 - 1, -2), Decimal(9223372036854775807, -2))])))
     ])
 ])
 
-SRC_DNODE_IDENTITY_0: DIdentity = DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1')
-
-SRC_DNODE_IDENTITY_1: DIdentity = DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id2', base=[
-        DIdentity(module='foo', namespace='http://example.com/foo', prefix='foo', name='id1')
-    ])
-
 SRC_DNODE: DRoot = DRoot(
     children=[SRC_DNODE_CHILD_0],
-    identities=[SRC_DNODE_IDENTITY_0, SRC_DNODE_IDENTITY_1],
+    identities=[],
     rpcs=[],
     module_metadata={'http://example.com/foo':('foo', None)},
 )
@@ -56,35 +36,33 @@ NS_foo: str = 'http://example.com/foo'
 
 _breaker1: None = None
 class foo__c1__l1_entry(yadata.MNode):
-    k1: str
-    k2: Identityref
+    k1: Decimal
 
-    mut def __init__(self, k1: str, k2: Identityref) -> None:
+    mut def __init__(self, k1: Decimal) -> None:
         self.k1 = k1
-        self.k2 = k2
 
     mut def to_gdata(self) -> ygdata.Node:
         return yadata.from_adata(SRC_DNODE, self, loose=False, root_path=['foo:c1', 'l1'])
 
     @staticmethod
     mut def from_gdata(n: ygdata.Node) -> foo__c1__l1_entry:
-        return foo__c1__l1_entry(k1=n.get_str(ygdata.Id(NS_foo, 'k1')), k2=n.get_Identityref(ygdata.Id(NS_foo, 'k2')))
+        return foo__c1__l1_entry(k1=n.get_Decimal(ygdata.Id(NS_foo, 'k1')))
 
     mut def copy(self) -> foo__c1__l1_entry:
         """Create a deep copy of this adata object"""
         return foo__c1__l1_entry.from_gdata(self.to_gdata())
 
 _breaker2: None = None
-class foo__c1__l1(yadata.MKeyedList[(k1: str, k2: Identityref), foo__c1__l1_entry]):
+class foo__c1__l1(yadata.MKeyedList[Decimal, foo__c1__l1_entry]):
     mut def __init__(self, elements: list[foo__c1__l1_entry]=[]) -> None:
-        yadata.MKeyedList.__init__(self, lambda e: (k1=e.k1, k2=e.k2), elements)
+        yadata.MKeyedList.__init__(self, lambda e: e.k1, elements)
 
-    mut def create(self, key: (k1: str, k2: Identityref)) -> foo__c1__l1_entry:
+    mut def create(self, key: Decimal) -> foo__c1__l1_entry:
         e = self.get(key)
         if e is not None:
             return e
-        (k1=k1, k2=k2) = key
-        res = foo__c1__l1_entry(k1=k1, k2=k2)
+        k1 = key
+        res = foo__c1__l1_entry(k1=k1)
         self._append(res)
         return res
 
