@@ -516,26 +516,21 @@ def _test_list_duplicate_keys():
     if remaining is not None:
         testing.assertEqual(remaining.val, "2")
 
-def _test_list_append():
-    """append() keeps the index in step, which is the path create() takes"""
+def _test_list_create_keeps_index():
+    """create() is the key-derived adder and keeps the index in step"""
     r = yang_foo_root()
     r.c1.li.create("a", val="1")
-    r.c1.li.append(yang_foo.foo__c1__li_entry(name="b", val="2"))
+    r.c1.li.create("b", val="2")
 
     found = r.c1.li.get("b")
     testing.assertNotNone(found)
     if found is not None:
         testing.assertEqual(found.val, "2")
 
-    # create() finds the appended entry rather than adding a second "b"
+    # create() finds the entry already there rather than adding a second "b"
     again = r.c1.li.create("b", val="22")
     testing.assertEqual(again.val, "22")
     testing.assertEqual(len(r.c1.li), 2)
-
-    # An appended duplicate key does not displace the element already there
-    r.c1.li.append(yang_foo.foo__c1__li_entry(name="a", val="shadowed"))
-    testing.assertEqual(r.c1.li["a"].val, "1")
-    testing.assertEqual(len(r.c1.li), 3)
 
 def _test_list_delete_shifts_positions():
     """Deleting an element moves every later one, so the index has to be rebuilt"""
@@ -583,11 +578,11 @@ def _test_list_setitem_absent_key():
     testing.assertEqual(r.c1.li["c"].val, "3")
 
 def _test_list_compound_key_mutations():
-    """append(), __setitem__() and delete on a compound-key list"""
+    """create(), __setitem__() and delete on a compound-key list"""
     r = yang_foo_root()
     li1 = r.nested.f_inner.li1.create("l1")
     li1.li2.create(("a", "1"), baz="one")
-    li1.li2.append(yang_foo.foo__nested__f_inner__li1__li2_entry(key1="a", key2="2", baz="two"))
+    li1.li2.create(("a", "2"), baz="two")
     li1.li2.create(("a", "3"), baz="three")
 
     testing.assertEqual(li1.li2[(key1="a", key2="2")].baz, "two")
@@ -602,19 +597,21 @@ def _test_list_compound_key_mutations():
     testing.assertEqual(len(li1.li2), 2)
 
 def _test_list_setitem_other_key():
-    """Assigning an entry that carries a different key re-keys that position"""
+    """Assigning an entry that carries a different key is refused"""
     r = yang_foo_root()
     r.c1.li.create("a", val="1")
     r.c1.li.create("b", val="2")
 
-    r.c1.li["a"] = yang_foo.foo__c1__li_entry(name="c", val="3")
-    testing.assertNone(r.c1.li.get("a"))
-    found = r.c1.li.get("c")
-    testing.assertNotNone(found)
-    if found is not None:
-        testing.assertEqual(found.val, "3")
-    # "b" moved neither position nor key
+    try:
+        r.c1.li["a"] = yang_foo.foo__c1__li_entry(name="c", val="3")
+        testing.error("Expected exception on key mismatch")
+    except ValueError:
+        pass
+
+    # The list is as it was
+    testing.assertEqual(r.c1.li["a"].val, "1")
     testing.assertEqual(r.c1.li["b"].val, "2")
+    testing.assertEqual(len(r.c1.li), 2)
 
 def _test_list_multi_key():
     r = yang_foo_root()

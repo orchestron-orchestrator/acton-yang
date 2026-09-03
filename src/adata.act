@@ -17,17 +17,14 @@ class MNode(object):
 
 
 class MList[T(MNode)](MNode):
-    """List of YANG list entries
-
-    _elements is the list's own. Read it through iteration and len(), and
-    change it through append() or the Indexed protocol of the keyed
-    subclasses, which keep their lookup index in step with it.
-    """
+    """List of YANG list entries"""
+    # _elements is internal and may only be updated via the generated create()
+    # method or the Indexed protocol in MKeyedList
     _elements: list[T]
     mut def __init__(self, elements: list[T]) -> None:
         self._elements = elements
 
-    mut def append(self, e: T) -> None:
+    mut def _append(self, e: T) -> None:
         self._elements.append(e)
 
 
@@ -37,10 +34,10 @@ extension MList[T(MNode)](Collection[T]):
 
     @staticmethod
     def __fromiter__(iterable):
-        # Collection asks for this, but a generated list class is only ever
-        # built from its own entries by its own __init__. The parameter is
+        # The Collection protocol needs this, but a generated list class is only
+        # ever built from its own entries by its own __init__. The parameter is
         # deliberately unannotated: Iterable[T] does not unify with the
-        # protocol's static signature (NameRevMap in lib.act does the same).
+        # protocol's static signature
         raise NotImplementedError("MList.__fromiter__")
 
     def __len__(self) -> int:
@@ -53,10 +50,7 @@ class MEqKeyedList[K(Eq), T(MNode)](MList[T]):
     K is the Acton type of the scalar key leaf, or a tuple of the key leaf types
     for lists with compound keys. This is the base for keys that can be
     compared but not hashed, which today means bits (set[str]); anything
-    Hashable gets MKeyedList and its index instead. Both share this class's
-    Indexed protocol, which finds, replaces and deletes through _position(),
-    append() and _reindex(); overriding those three is how MKeyedList keeps
-    its index in step.
+    Hashable gets MKeyedList and its index instead.
     """
     @property
     _key_of: pure(T) -> K
@@ -65,6 +59,8 @@ class MEqKeyedList[K(Eq), T(MNode)](MList[T]):
         MList.__init__(self, elements)
         self._key_of = key_of
 
+    # get() and the Indexed protocol go through _position(), _append() and
+    # _reindex(); MKeyedList overrides those three to answer from its index
     pure def _position(self, key: K) -> ?int:
         """Position in _elements of the first element with this key, or None"""
         for i, e in enumerate(self._elements):
@@ -73,14 +69,13 @@ class MEqKeyedList[K(Eq), T(MNode)](MList[T]):
         return None
 
     mut def _reindex(self) -> None:
-        """Called after _elements changed shape under __setitem__/__delitem__"""
+        """Called after _elements changed shape under __delitem__"""
         pass
 
     pure def get(self, key: K) -> ?T:
         i = self._position(key)
-        if i is None:
-            return None
-        return self._elements[i!]
+        if i is not None:
+            return self._elements[i]
 
 
 extension MEqKeyedList[K(Eq), T(MNode)](Indexed[K, T]):
@@ -91,14 +86,14 @@ extension MEqKeyedList[K(Eq), T(MNode)](Indexed[K, T]):
         raise KeyError(key)
 
     mut def __setitem__(self, key: K, n: T) -> None:
+        nkey = self._key_of(n)
+        if nkey != key:
+            raise ValueError("cannot assign entry keyed {nkey} at key {key}; delete and re-create to change a key")
         i = self._position(key)
         if i is None:
-            self.append(n)
+            self._append(n)
             return
         self._elements[i!] = n
-        if self._key_of(n) != key:
-            # n carries a different key than the element it replaced
-            self._reindex()
 
     mut def __delitem__(self, key: K) -> None:
         i = self._position(key)
@@ -112,22 +107,10 @@ extension MEqKeyedList[K(Eq), T(MNode)](Indexed[K, T]):
 class MKeyedList[K(Hashable), T(MNode)](MEqKeyedList[K, T]):
     """List with (compound) key of Acton type K, found through an index
 
-    K is the Acton type of the scalar key leaf, or a tuple of the key leaf types
-    for lists with compound keys. In any case, this only matches for key types
-    that are not Acton "value" and that are Hashable, since keys are used to
-    index the elements.
-
-    Lookups go through that index rather than scanning _elements, and append(),
-    __setitem__() and __delitem__() keep the two in step. The underscore is a
-    convention the compiler does not enforce, so three things a caller can
-    still do put the index out of step without it noticing, and a lookup then
-    answers from stale positions: changing _elements, or a position in it,
-    directly; changing a key leaf of an element already held; and holding on
-    to the list passed to __init__() and changing that afterwards. Note that a
-    stale index does not merely fail to find an entry, it can hand back the
-    element that used to carry the key, where a scan would have reported it
-    missing.
+    Lookups go through a dict[K, int] rather than scanning, so K has to be
+    Hashable in addition to the restrictions in MEqKeyedList.
     """
+    # position of the key in MList._elements
     _index: dict[K, int]
 
     mut def __init__(self, key_of: pure(T) -> K, elements: list[T]) -> None:
@@ -148,7 +131,7 @@ class MKeyedList[K(Hashable), T(MNode)](MEqKeyedList[K, T]):
     pure def _position(self, key: K) -> ?int:
         return self._index.get(key)
 
-    mut def append(self, e: T) -> None:
+    mut def _append(self, e: T) -> None:
         k = self._key_of(e)
         if k not in self._index:
             self._index[k] = len(self._elements)
