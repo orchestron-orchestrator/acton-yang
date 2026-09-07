@@ -1,4 +1,4 @@
-SubscriptionSpec(period=1000000000, on_change=False, filt=FNode(Id('http://example.com/filter-test', 'interfaces'), [FNode(Id('http://example.com/filter-test', 'interface'), [FNode(Id('http://example.com/filter-test', 'name'), 'eth0'), FNode(Id('http://example.com/filter-test', 'name')), FNode(Id('http://example.com/filter-test', 'description')), FNode(Id('http://example.com/filter-test', 'type')), FNode(Id('http://example.com/filter-test', 'enabled')), FNode(Id('http://example.com/filter-test', 'admin-status')), FNode(Id('http://example.com/filter-test', 'oper-status')), FNode(Id('http://example.com/filter-test', 'last-change')), FNode(Id('http://example.com/filter-test', 'statistics'), [FNode(Id('http://example.com/filter-test', 'in-octets')), FNode(Id('http://example.com/filter-test', 'out-octets'))]), FNode(Id('http://example.com/filter-test', 'ipv4'), [FNode(Id('http://example.com/filter-test', 'mtu'))]), FNode(Id('http://example.com/filter-test', 'ipv6'), [FNode(Id('http://example.com/filter-test', 'mtu'))])])]))
+SubscriptionSpec(period=1000000000, on_change=False, filt=FNode(Id('http://example.com/filter-test', 'interfaces'), [FNode(Id('http://example.com/filter-test', 'interface'), [FNode(Id('http://example.com/filter-test', 'name'), 'eth0'), FNode(Id('http://example.com/filter-test', 'name')), FNode(Id('http://example.com/filter-test', 'description')), FNode(Id('http://example.com/filter-test', 'type')), FNode(Id('http://example.com/filter-test', 'enabled')), FNode(Id('http://example.com/filter-test', 'admin-status')), FNode(Id('http://example.com/filter-test', 'oper-status')), FNode(Id('http://example.com/filter-test', 'last-change')), FNode(Id('http://example.com/filter-test', 'statistics'), [FNode(Id('http://example.com/filter-test', 'in-octets')), FNode(Id('http://example.com/filter-test', 'out-octets'))]), FNode(Id('http://example.com/filter-test', 'ipv4'), [FNode(Id('http://example.com/filter-test', 'mtu'))]), FNode(Id('http://example.com/filter-test', 'ipv6'), [FNode(Id('http://example.com/filter-test', 'mtu'))]), FNode(Id('http://example.com/filter-test', 'address'), [FNode(Id('http://example.com/filter-test', 'ip')), FNode(Id('http://example.com/filter-test', 'prefix-length'))])])]))
 
 NETCONF XML subtree filter:
 <interfaces xmlns="http://example.com/filter-test">
@@ -21,6 +21,10 @@ NETCONF XML subtree filter:
     <ipv6>
       <mtu/>
     </ipv6>
+    <address>
+      <ip/>
+      <prefix-length/>
+    </address>
   </interface>
 </interfaces>
 
@@ -29,6 +33,12 @@ Container({
   Id('http://example.com/filter-test', 'interfaces'): Container({
     Id('http://example.com/filter-test', 'interface'): List([Id('http://example.com/filter-test', 'name')], elements=[
       Container({
+        Id('http://example.com/filter-test', 'address'): List([Id('http://example.com/filter-test', 'ip')], elements=[
+          Container({
+            Id('http://example.com/filter-test', 'ip'): Leaf('10.0.0.1'),
+            Id('http://example.com/filter-test', 'prefix-length'): Leaf(u64(24))
+          })
+        ]),
         Id('http://example.com/filter-test', 'admin-status'): Leaf('up'),
         Id('http://example.com/filter-test', 'description'): Leaf('Uplink'),
         Id('http://example.com/filter-test', 'enabled'): Leaf(True),
@@ -48,6 +58,12 @@ Container({
         Id('http://example.com/filter-test', 'type'): Leaf('ethernetCsmacd')
       }),
       Container({
+        Id('http://example.com/filter-test', 'address'): List([Id('http://example.com/filter-test', 'ip')], elements=[
+          Container({
+            Id('http://example.com/filter-test', 'ip'): Leaf('10.0.0.2'),
+            Id('http://example.com/filter-test', 'prefix-length'): Leaf(u64(25))
+          })
+        ]),
         Id('http://example.com/filter-test', 'admin-status'): Leaf('down'),
         Id('http://example.com/filter-test', 'description'): Leaf('Server'),
         Id('http://example.com/filter-test', 'enabled'): Leaf(False),
@@ -74,6 +90,10 @@ Filtered data XML:
 <interfaces xmlns="http://example.com/filter-test">
   <interface>
     <name>eth0</name>
+    <address>
+      <ip>10.0.0.1</ip>
+      <prefix-length>24</prefix-length>
+    </address>
     <admin-status>up</admin-status>
     <description>Uplink</description>
     <enabled>true</enabled>
@@ -93,6 +113,10 @@ Filtered data XML:
   </interface>
   <interface>
     <name>eth1</name>
+    <address>
+      <ip>10.0.0.2</ip>
+      <prefix-length>25</prefix-length>
+    </address>
     <admin-status>down</admin-status>
     <description>Server</description>
     <enabled>false</enabled>

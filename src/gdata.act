@@ -3227,26 +3227,32 @@ def _normalize_period(period: ?value) -> ?u64:
 class SubscriptionSpec(value):
     """Declarative subscription specification.
 
-    A spec is periodic (period set) or on-change (on_change=True) — distinct delivery
-    modes, so two specs with the same filter but different modes compare and hash
-    unequal."""
+    A spec is periodic (period set) or on-change (no period). `root` is where
+    its deliveries are rooted: None for the top of the tree, or a path of
+    nodes down from the top, one per level and without predicates, for one
+    delivery per instance of the node at its end. A destination stamps its
+    root on the specs it delivers."""
     filt: ?FNode
     period: ?u64 # normalized to nanoseconds; 0 means as fast as possible
     on_change: bool # on-change delivery (RFC 8641) instead of periodic
+    root: ?FNode
 
-    def __init__(self, filt: ?FNode, period: ?value=None, on_change: bool=False):
+    def __init__(self, filt: ?FNode, period: ?value=None, on_change: bool=False, root: ?FNode=None):
         # TODO: Accept a real union type here once Acton supports it. Today
         # value is the only way to express "float seconds or integer
         # nanoseconds" in one parameter.
         self.filt = filt
         self.period = _normalize_period(period)
         self.on_change = on_change
+        self.root = root
 
     def __str__(self) -> str:
         filt = self.filt
         filt_str = filt.prsrc(deterministic=True) if filt is not None else "None"
         period_str = str(self.period) if self.period is not None else "None"
-        return "SubscriptionSpec(period={period_str}, on_change={self.on_change}, filt={filt_str})"
+        root = self.root
+        root_str = ", root=" + root.prsrc(deterministic=True) if root is not None else ""
+        return "SubscriptionSpec(period={period_str}, on_change={self.on_change}, filt={filt_str}{root_str})"
 
     def __repr__(self) -> str:
         return str(self)
@@ -3258,9 +3264,7 @@ extension SubscriptionSpec(Hashable):
             return False
         if self.period != other.period:
             return False
-        if self.filt is None:
-            return other.filt is None
-        if other.filt is None:
+        if self.root != other.root:
             return False
         return self.filt == other.filt
 
@@ -3272,6 +3276,9 @@ extension SubscriptionSpec(Hashable):
             period.hash(hasher)
         else:
             "none".hash(hasher)
+        root = self.root
+        if root is not None:
+            root.prsrc(deterministic=True).hash(hasher)
         filt = self.filt
         if filt is not None:
             "some".hash(hasher)
@@ -3279,16 +3286,161 @@ extension SubscriptionSpec(Hashable):
         else:
             "none".hash(hasher)
 
-class Dst(object):
-    """Destination for merged subscription delivery."""
-    @property
-    on_update: action(?Node, ?Exception) -> None
+def _root_names(root: FNode) -> list[Id]:
+    if root.value_match is not None:
+        raise ValueError("a destination root cannot match a value")
+    if len(root.children) > 1:
+        raise ValueError("a destination root is one node per level")
+    names: list[Id] = []
+    n = root.name
+    if n is not None:
+        names.append(n)
+    if len(root.children) == 1:
+        names.extend(_root_names(root.children[0]))
+    return names
 
-    def __init__(self, on_update: action(?Node, ?Exception) -> None):
+def root_names(root: ?FNode) -> list[Id]:
+    """The node names down a destination's root: one node per level, no
+    predicates. An empty list is the top of the tree."""
+    if root is not None:
+        names = _root_names(root)
+        if len(names) == 0:
+            raise ValueError("a destination root names no node")
+        return names
+    return []
+
+def check_rooted(filt: ?FNode, names: list[Id]) -> None:
+    """A filter served to a rooted destination must lead down to the root's
+    node, or end above it and so select all below."""
+    branches: list[FNode] = []
+    if filt is not None:
+        if filt.name is None:
+            branches = filt.children
+        else:
+            branches = [filt]
+    for name in names:
+        sel = [b for b in branches if b.value_match is None]
+        if len(sel) == 0:
+            return
+        if len(sel) > 1:
+            raise ValueError("a rooted destination's filters must start at its root")
+        n = sel[0].name
+        if n is not None:
+            if n != name:
+                raise ValueError("a rooted destination's filters must start at its root, not at {n}")
+        else:
+            raise ValueError("a rooted destination's filters must start at its root")
+        branches = sel[0].children
+
+
+def _key_str(keys: dict[Id, Node]) -> str:
+    parts: list[str] = []
+    for v in keys.values():
+        if isinstance(v, Leaf):
+            parts.append(yang_str(v.val).replace("\\", "\\\\").replace(",", "\\,").replace("/", "\\/"))
+    return ",".join(parts)
+
+def _entry_keys(lst: List, e: Node) -> dict[Id, Node]:
+    keys: dict[Id, Node] = {}
+    for k in lst.keys:
+        if k in e.children:
+            keys[k] = e.children[k]
+    return keys
+
+def instances(tree: ?Node, names: list[Id]) -> list[(str, Node, Node)]:
+    """Every instance of the node at the end of names below tree, each as a
+    key that tells instances apart, a spine, and the instance: the spine is
+    a tree from the top that holds only the path down to that one instance,
+    every list on the way holding one entry with its keys."""
+    return _instances(tree, names, "")
+
+def _instances(tree: ?Node, names: list[Id], above: str) -> list[(str, Node, Node)]:
+    res: list[(str, Node, Node)] = []
+    if tree is not None:
+        if isinstance(tree, List):
+            if len(tree.keys) == 0:
+                raise ValueError("a destination cannot be rooted at or below a keyless list")
+            for e in tree.elements:
+                keys = _entry_keys(tree, e)
+                key = above + _key_str(keys)
+                if len(names) == 0:
+                    res.append((key, List(tree.keys, [e], ns=tree.ns, module=tree.module), e))
+                else:
+                    for i in _instances(e.children.get(names[0]), names[1:], key + "/"):
+                        children = dict(keys.items())
+                        children[names[0]] = i.1
+                        entry = Container(children, ns=e.ns, module=e.module)
+                        res.append((i.0, List(tree.keys, [entry], ns=tree.ns, module=tree.module), i.2))
+        elif len(names) == 0:
+            res.append((above, tree, tree))
+        else:
+            for i in _instances(tree.children.get(names[0]), names[1:], above):
+                res.append((i.0, Container({names[0]: i.1}, ns=tree.ns, module=tree.module), i.2))
+    return res
+
+def gone(spine: Node, names: list[Id]) -> ?Node:
+    """The spine with its instance gone: an Absent with its keys in place of
+    a list entry, nothing in place of a container."""
+    if isinstance(spine, List):
+        if len(spine.elements) == 1:
+            e = spine.elements[0]
+            keys = _entry_keys(spine, e)
+            if len(names) == 0:
+                return List(spine.keys, [Absent(keys)], ns=spine.ns, module=spine.module)
+            children = dict(keys.items())
+            child = e.children.get(names[0])
+            if child is not None:
+                below = gone(child, names[1:])
+                if below is not None:
+                    children[names[0]] = below
+            return List(spine.keys, [Container(children, ns=e.ns, module=e.module)], ns=spine.ns, module=spine.module)
+        return spine
+    if len(names) == 0:
+        return None
+    children: dict[Id, Node] = {}
+    child = spine.children.get(names[0])
+    if child is not None:
+        below = gone(child, names[1:])
+        if below is not None:
+            children[names[0]] = below
+    return Container(children, ns=spine.ns, module=spine.module)
+
+
+class Dst(object):
+    """Destination for subscription delivery.
+
+    Rooted at the top (root None) the callback receives one merged tree per
+    delivery. Rooted at a node, given as a path of nodes down from the top,
+    it receives one tree per instance of that node, from the top down to
+    that one instance: every list on the way holds one entry with its keys,
+    and the instance is there as it is after a change, an Absent holding
+    its keys where a list entry is gone, or missing where a container is
+    gone. `on_update` is what the provider calls: the consumer's action,
+    or the lambda a generated dst wraps around it that first converts the
+    tree, so nothing stands between provider and consumer.
+    """
+    # TODO: on_update should be an action. A generated dst wraps the
+    # consumer's action in a lambda that first converts the tree, and the
+    # compiler types that lambda as a proc: outside an actor only the bare
+    # `lambda n, err: cb(n, err)` passes as an action, and inside an actor a
+    # lambda may not call a mut function such as from_gdata. This looks like
+    # a compiler limitation. Until a lambda that computes before its action
+    # call can be an action, a provider calls a proc, which an action fits.
+    @property
+    on_update: proc(?Node, ?Exception) -> None
+    root: ?FNode
+
+    def __init__(self, on_update: proc(?Node, ?Exception) -> None, root: ?FNode=None):
         self.on_update = on_update
+        self.root = root
 
     def deliver(self, want: set[SubscriptionSpec]) -> Delivery:
-        return Delivery(self, want)
+        """The specs to serve here, rooted where this destination is. A bad
+        root, or a filter that does not lead to it, fails here."""
+        names = root_names(self.root)
+        for s in want:
+            check_rooted(s.filt, names)
+        return Delivery(self, {SubscriptionSpec(s.filt, period=s.period, on_change=s.on_change, root=self.root) for s in want})
 
 
 class Delivery(object):
@@ -3327,44 +3479,93 @@ extension Delivery(Hashable):
 
 
 class TreeProvider(object):
-    """Imperative transport interface for RPCs and owner-scoped subscriptions."""
+    """Imperative transport interface for RPCs and owner-scoped subscriptions.
+    The last argument of declare_subscriptions is called once with the owner
+    id after the owner's first pass: the initial data has all been sent. Its
+    data callback is a proc for the reason given at Dst.on_update."""
     rpc: proc(action(?Node, ?Exception) -> None, Node) -> None
-    declare_subscriptions: proc(str, action(?Node, ?Exception) -> None, set[SubscriptionSpec]) -> None
+    declare_subscriptions: proc(str, proc(?Node, ?Exception) -> None, set[SubscriptionSpec], ?action(str) -> None) -> None
     remove_subscriptions: proc(str) -> None
 
 
+actor _Syncing():
+    """Counts the first passes of a manager's deliveries. A declaration waits
+    for the deliveries new in it and for those still pending from before,
+    and its synced fires once none of those is pending."""
+    var pending: set[str] = set()
+    var waiting: set[str] = set()
+    var notify: ?action() -> None = None
+
+    def declare(new_ids: set[str], all_ids: set[str], on_all: ?action() -> None) -> None:
+        for i in new_ids:
+            pending.add(i)
+        waiting = set()
+        for i in all_ids:
+            if i in pending:
+                waiting.add(i)
+        notify = on_all
+        _check()
+
+    def done(i: str) -> None:
+        pending.discard(i)
+        _check()
+
+    def forget(i: str) -> None:
+        pending.discard(i)
+        waiting.discard(i)
+        _check()
+
+    def _check() -> None:
+        n = notify
+        if n is not None:
+            if len(waiting & pending) == 0:
+                notify = None
+                n()
+
+
 class SubscriptionManager(object):
-    """Declarative subscription owner that reconciles destination-bound subscriptions."""
+    """Declarative subscription owner that reconciles destination-bound
+    subscriptions. `declare` replaces the whole set; its `synced` is called
+    once, when every delivery of that set has had its first pass."""
     tp: TreeProvider
     owner_id: str
     child_owner_ids: dict[Delivery, str]
     next_child_ix: int
+    syncing: _Syncing
 
     def __init__(self, tp: TreeProvider, owner_id: str):
         self.tp = tp
         self.owner_id = owner_id
         self.child_owner_ids = {}
         self.next_child_ix = 0
+        self.syncing = _Syncing()
 
-    def declare(self, want: set[Delivery]):
+    def declare(self, want: set[Delivery], synced: ?action() -> None=None):
         stale_deliveries = [delivery for delivery in self.child_owner_ids.keys() if delivery not in want]
         for delivery in stale_deliveries:
             self.tp.remove_subscriptions(self.child_owner_ids[delivery])
+            self.syncing.forget(self.child_owner_ids[delivery])
             del self.child_owner_ids[delivery]
 
+        new_ids: set[str] = set()
+        all_ids: set[str] = set()
         for delivery in want:
-            try:
-                actual_owner_id = self.child_owner_ids[delivery]
-            except KeyError:
-                actual_owner_id = "{self.owner_id}:{self.next_child_ix}"
+            if delivery not in self.child_owner_ids:
+                self.child_owner_ids[delivery] = "{self.owner_id}:{self.next_child_ix}"
                 self.next_child_ix += 1
-                self.child_owner_ids[delivery] = actual_owner_id
-            self.tp.declare_subscriptions(actual_owner_id, delivery.dst.on_update, delivery.want)
+                new_ids.add(self.child_owner_ids[delivery])
+            all_ids.add(self.child_owner_ids[delivery])
+        # The counter learns of the declaration before any provider is asked,
+        # so no first pass can be reported before it is expected.
+        self.syncing.declare(new_ids, all_ids, synced)
+        for delivery in want:
+            self.tp.declare_subscriptions(self.child_owner_ids[delivery], delivery.dst.on_update, delivery.want, self.syncing.done)
 
     def close(self):
         child_deliveries = [delivery for delivery in self.child_owner_ids.keys()]
         for delivery in child_deliveries:
             self.tp.remove_subscriptions(self.child_owner_ids[delivery])
+            self.syncing.forget(self.child_owner_ids[delivery])
             del self.child_owner_ids[delivery]
 
 
