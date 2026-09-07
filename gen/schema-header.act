@@ -2029,22 +2029,40 @@ class DRoot(DNodeInner):
         res.extend(inner)
         if include_subs:
             res.append("")
+            res.append("def _at(n: ?ygdata.Node, name: ygdata.Id) -> ?ygdata.Node:")
+            res.append('    """The child name of n on a delivery\'s spine, if there."""')
+            res.append("    if n is not None:")
+            res.append("        return n.children.get(name)")
+            res.append("    return None")
+            res.append("")
+            res.append("def _one(n: ?ygdata.Node, what: str) -> ygdata.Node:")
+            res.append('    """The one entry of a list on a delivery\'s spine."""')
+            res.append("    if isinstance(n, ygdata.List):")
+            res.append("        if len(n.elements) == 1:")
+            res.append("            return n.elements[0]")
+            res.append('    raise ValueError("a rooted delivery without its " + what + " entry")')
+            res.append("")
+            res.append("def _present(n: ?ygdata.Node) -> ?ygdata.Node:")
+            res.append('    """An instance that is there: not missing, not an Absent."""')
+            res.append("    if n is not None:")
+            res.append("        if not isinstance(n, ygdata.Absent):")
+            res.append("            return n")
+            res.append("    return None")
+            res.append("")
             subs_classes, _breaker_idx = self._prsubsclasses(breaker_idx=_breaker_idx)
             res.extend(subs_classes)
-            res.append("actor DstAdapter(cb: action(?root, ?Exception) -> None):")
-            res.append("    on_update: action(?ygdata.Node, ?Exception) -> None")
-            res.append("    def on_update(n: ?ygdata.Node, err: ?Exception) -> None:")
-            res.append("        if err is not None:")
-            res.append("            cb(None, err)")
-            res.append("            return")
-            res.append("        if n is not None:")
-            res.append("            cb(root.from_gdata(n), None)")
-            res.append("            return")
+            res.append("proc def _deliver_root(cb: action(?root, ?Exception) -> None, n: ?ygdata.Node, err: ?Exception) -> None:")
+            res.append("    if err is not None:")
+            res.append("        cb(None, err)")
+            res.append("    elif n is not None:")
+            res.append("        cb(root.from_gdata(n), None)")
+            res.append("    else:")
             res.append("        cb(None, None)")
             res.append("")
-            res.append("proc def dst(cb: action(?root, ?Exception) -> None) -> ygdata.Dst:")
-            res.append("    adapter = DstAdapter(cb)")
-            res.append("    return ygdata.Dst(adapter.on_update)")
+            res.append("def dst(cb: action(?root, ?Exception) -> None) -> ygdata.Dst:")
+            res.append('    """A destination at the top of the tree: cb gets the whole subscribed')
+            res.append('    tree on every delivery."""')
+            res.append("    return ygdata.Dst(lambda n, err: _deliver_root(cb, n, err))")
             res.append("")
 
         return "\n".join(res)
@@ -2110,12 +2128,105 @@ class DRoot(DNodeInner):
             res = []
             inner = inner_children(node)
             selectables = selectable_children(node)
+            # A destination is rooted at a container or a keyed list; below a
+            # keyless list an instance could not be told apart.
+            rootable = True
+            for above in spath[1:len(spath) - 1]:
+                if isinstance(above, DList) and len(above.key) == 0:
+                    rootable = False
             for child in inner:
                 child_res, breaker_idx = emit_node(spath + [child], breaker_idx)
                 res.extend(child_res)
 
             unique_namer = UniqueNamer(node)
-            reserved_names = {"subscribe", "filt", "entry", "_segments", "_direct_children"}
+            reserved_names = {"subscribe", "filt", "entry", "dst", "_segments", "_direct_children"}
+
+            def key_fields() -> list[(str, str)]:
+                """The keys of every list on the way down, named list_key."""
+                fields: list[(str, str)] = []
+                for level in spath[1:]:
+                    if isinstance(level, DList):
+                        for key_name in level.key:
+                            key_leaf = list_key_child(level, key_name)
+                            fields.append((safe_name(level.name) + "_" + safe_name(key_name), yang_leaf_to_acton_arg_type(key_leaf, list_keys(level), loose=False)))
+                return fields
+
+            def keys_type() -> str:
+                parts: list[str] = []
+                for f in key_fields():
+                    parts.append(f.0 + ": " + f.1)
+                return "(" + ", ".join(parts) + ")"
+
+            def instance_class() -> str:
+                return cached_path_name(spath) + ("_entry" if isinstance(node, DList) else "")
+
+            def dst_cb_type() -> str:
+                if len(key_fields()) > 0:
+                    return "action(?" + keys_type() + ", ?" + instance_class() + ", ?Exception) -> None"
+                return "action(?" + instance_class() + ", ?Exception) -> None"
+
+            def emit_dst(res: list[str], node: DNodeInner):
+                """A destination rooted at this node: a function that walks a
+                delivery's spine from the top, takes the keys of every list on
+                the way as a named tuple, converts the instance with its class,
+                and calls the callback with the keys, the instance and the
+                error. A conversion that fails goes to the callback as an
+                error."""
+                pname = cached_path_name(spath)
+                cls = instance_class()
+                has_keys = len(key_fields()) > 0
+                res.append("proc def {pname}_deliver(cb: {dst_cb_type()}, n: ?ygdata.Node, err: ?Exception) -> None:")
+                if has_keys:
+                    res.append("    keys: ?{keys_type()} = None")
+                res.append("    inst: ?{cls} = None")
+                res.append("    if n is not None:")
+                res.append("        try:")
+                at: str = "n"
+                key_exprs: list[str] = []
+                for i in range(1, len(spath)):
+                    level = spath[i]
+                    node_id = "ygdata.Id(NS_{safe_name(level.module)}, '{level.name}')"
+                    if isinstance(level, DList):
+                        vn = "e{i}"
+                        res.append("            {vn} = _one(_at({at}, {node_id}), '{level.name}')")
+                        for key_name in level.key:
+                            key_leaf = list_key_child(level, key_name)
+                            key_exprs.append("{safe_name(level.name)}_{safe_name(key_name)}={vn}.{taker_name(key_leaf, list_keys(level), loose=False)}(ygdata.Id(NS_{safe_name(key_leaf.module)}, '{key_leaf.name}'))")
+                        at = vn
+                    else:
+                        vn = "c{i}"
+                        res.append("            {vn} = _at({at}, {node_id})")
+                        at = vn
+                if has_keys:
+                    res.append("            keys = ({', '.join(key_exprs)})")
+                res.append("            here = _present({at})")
+                res.append("            if here is not None:")
+                res.append("                inst = {cls}.from_gdata(here)")
+                res.append("        except Exception as e:")
+                if has_keys:
+                    res.append("            cb(None, None, e)")
+                else:
+                    res.append("            cb(None, e)")
+                res.append("            return")
+                if has_keys:
+                    res.append("    cb(keys, inst, err)")
+                else:
+                    res.append("    cb(inst, err)")
+                res.append("")
+
+            def emit_dst_method(res: list[str], node: DNodeInner):
+                pname = cached_path_name(spath)
+                what = "entry" if isinstance(node, DList) else "container"
+                res.append("    def dst(self, cb: {dst_cb_type()}) -> ygdata.Dst:")
+                res.append('        """A destination rooted here: cb gets, one instance at a time,')
+                if len(key_fields()) > 0:
+                    res.append('        the keys of the lists on the way down, this {what} as it is')
+                    res.append('        after a change or None when it is gone, and an error."""')
+                else:
+                    res.append('        this {what} as it is after a change or None when it is gone,')
+                    res.append('        and an error."""')
+                res.append("        return ygdata.Dst(lambda n, err: {pname}_deliver(cb, n, err), root=self.filt())")
+                res.append("")
 
             def usname(n: DNode) -> str:
                 name = unique_namer.unique_safe_name(n.name, n.prefix)
@@ -2132,6 +2243,8 @@ class DRoot(DNodeInner):
             if isinstance(node, DRoot) or isinstance(node, DContainer):
                 breaker_name, breaker_idx = next_breaker_name(breaker_idx)
                 res.append("{breaker_name}: None = None")
+                if isinstance(node, DContainer) and rootable:
+                    emit_dst(res, node)
                 res.append("class {subs_path_name(spath)}(SubscriptionNode):")
                 for child in selectables:
                     child_type = subs_path_name(spath + [child]) if isinstance(child, DNodeInner) else "SubscriptionNode"
@@ -2150,6 +2263,8 @@ class DRoot(DNodeInner):
                     res.append("        direct: list[SubscriptionNode] = []")
                 res.append("        return direct")
                 res.append("")
+                if isinstance(node, DContainer) and rootable:
+                    emit_dst_method(res, node)
                 return (res, breaker_idx)
 
             if isinstance(node, DList):
@@ -2177,6 +2292,8 @@ class DRoot(DNodeInner):
 
                 breaker_name, breaker_idx = next_breaker_name(breaker_idx)
                 res.append("{breaker_name}: None = None")
+                if len(node.key) > 0 and rootable:
+                    emit_dst(res, node)
                 res.append("class {subs_path_name(spath)}(SubscriptionNode):")
                 for child in selectables:
                     child_type = subs_path_name(spath + [child]) if isinstance(child, DNodeInner) else "SubscriptionNode"
@@ -2201,6 +2318,8 @@ class DRoot(DNodeInner):
                     res.append("        base_path = self._path!.parent")
                     res.append("        return {subs_entry_path_name(spath)}(SubscriptionPath(ygdata.Id(NS_{safe_name(node.module)}, '{node.name}'), predicates=predicates, parent=base_path))")
                     res.append("")
+                    if rootable:
+                        emit_dst_method(res, node)
                 res.append("    pure def _direct_children(self) -> list[SubscriptionNode]:")
                 if len(selectables) > 0:
                     res.append("        direct: list[SubscriptionNode] = [{', '.join(['self.{usname(child)}' for child in selectables])}]")
@@ -2216,30 +2335,6 @@ class DRoot(DNodeInner):
         res.append("{root_const_name}: root_subs = root_subs()")
         res.append("")
         return (res, breaker_idx)
-
-    def prsubstree(self, root_const_name: str="subs") -> str:
-        res = []
-        res.append("import yang.gdata as ygdata")
-        res.append("from yang.sdata import SubscriptionPath, SubscriptionNode")
-        res.append("from yang.identityref import Identityref")
-        res.append("from yang.type import Decimal")
-        res.append("")
-        res.append("# == This file is generated ==")
-        res.append("")
-        res.extend(["NS_{safe_name(self.module_metadata[ns].module)} = {repr(ns)}" for ns in sorted(self.module_metadata.keys())])
-        res.append("")
-        subs_classes, _breaker_idx = self._prsubsclasses(root_const_name=root_const_name)
-        res.extend(subs_classes)
-        res.append("actor DstAdapter(cb: action(?ygdata.Node, ?Exception) -> None):")
-        res.append("    on_update: action(?ygdata.Node, ?Exception) -> None")
-        res.append("    def on_update(n: ?ygdata.Node, err: ?Exception) -> None:")
-        res.append("        cb(n, err)")
-        res.append("")
-        res.append("proc def dst(cb: action(?ygdata.Node, ?Exception) -> None) -> ygdata.Dst:")
-        res.append("    adapter = DstAdapter(cb)")
-        res.append("    return ygdata.Dst(adapter.on_update)")
-        res.append("")
-        return "\n".join(res)
 
 class DRpc(DNodeInner):
     if_feature: list[str]

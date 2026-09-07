@@ -64,7 +64,7 @@ class MockSubscriptionTreeProvider(gdata.TreeProvider):
     @property
     on_declared: action() -> None
     declared: dict[str, set[gdata.SubscriptionSpec]]
-    callbacks: dict[str, action(?gdata.Node, ?Exception) -> None]
+    callbacks: dict[str, proc(?gdata.Node, ?Exception) -> None]
 
     def __init__(self, on_declared: action() -> None):
         self.on_declared = on_declared
@@ -74,7 +74,7 @@ class MockSubscriptionTreeProvider(gdata.TreeProvider):
     proc def rpc(self, cb: action(?gdata.Node, ?Exception) -> None, rpc: gdata.Node):
         cb(None, ValueError("rpc is not used in this test"))
 
-    proc def declare_subscriptions(self, owner_id: str, cb: action(?gdata.Node, ?Exception) -> None, want: set[gdata.SubscriptionSpec]):
+    proc def declare_subscriptions(self, owner_id: str, cb: proc(?gdata.Node, ?Exception) -> None, want: set[gdata.SubscriptionSpec], synced: ?action(str) -> None):
         self.declared[owner_id] = want
         self.callbacks[owner_id] = cb
         self.on_declared()
