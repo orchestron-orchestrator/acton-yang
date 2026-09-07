@@ -28,6 +28,7 @@ def _sample_tree() -> gdata.Node:
     eth0.statistics.out_octets = u64(5678)
     eth0.ipv4.mtu = u64(1500)
     eth0.ipv6.mtu = u64(1500)
+    eth0.address.create("10.0.0.1", prefix_length=u64(24))
 
     eth1 = data.interfaces.interface.create(
         "eth1",
@@ -42,6 +43,7 @@ def _sample_tree() -> gdata.Node:
     eth1.statistics.out_octets = u64(84)
     eth1.ipv4.mtu = u64(9000)
     eth1.ipv6.mtu = u64(9000)
+    eth1.address.create("10.0.0.2", prefix_length=u64(25))
 
     return data.to_gdata()
 
@@ -65,11 +67,13 @@ class MockSubscriptionTreeProvider(gdata.TreeProvider):
     on_declared: action() -> None
     declared: dict[str, set[gdata.SubscriptionSpec]]
     callbacks: dict[str, proc(?gdata.Node, ?Exception) -> None]
+    synced: dict[str, action(str) -> None]
 
     def __init__(self, on_declared: action() -> None):
         self.on_declared = on_declared
         self.declared = {}
         self.callbacks = {}
+        self.synced = {}
 
     proc def rpc(self, cb: action(?gdata.Node, ?Exception) -> None, rpc: gdata.Node):
         cb(None, ValueError("rpc is not used in this test"))
@@ -77,6 +81,8 @@ class MockSubscriptionTreeProvider(gdata.TreeProvider):
     proc def declare_subscriptions(self, owner_id: str, cb: proc(?gdata.Node, ?Exception) -> None, want: set[gdata.SubscriptionSpec], synced: ?action(str) -> None):
         self.declared[owner_id] = want
         self.callbacks[owner_id] = cb
+        if synced is not None:
+            self.synced[owner_id] = synced
         self.on_declared()
 
     proc def remove_subscriptions(self, owner_id: str):
@@ -86,12 +92,32 @@ class MockSubscriptionTreeProvider(gdata.TreeProvider):
             del self.callbacks[owner_id]
 
     def deliver_all(self, data: gdata.Node):
+        """One tree per owner; an owner rooted at a node gets one instance at
+        a time, as a spine from the top, then synced, as a layer delivers."""
         for owner_id in [owner_id for owner_id in self.callbacks]:
             filt = _merged_filter(self.declared[owner_id])
-            if filt is not None:
-                self.callbacks[owner_id](gdata.filter(data, filt), None)
+            tree = gdata.filter(data, filt) if filt is not None else data
+            root: ?gdata.FNode = None
+            for spec in self.declared[owner_id]:
+                root = spec.root
+            names = gdata.root_names(root)
+            if len(names) > 0:
+                for i in gdata.instances(tree, names):
+                    self.callbacks[owner_id](i.1, None)
             else:
-                self.callbacks[owner_id](data, None)
+                self.callbacks[owner_id](tree, None)
+            if owner_id in self.synced:
+                self.synced[owner_id](owner_id)
+
+    def deliver_gone(self, owner_id: str, key: str):
+        """The instance with this key, as a layer reports it gone."""
+        root: ?gdata.FNode = None
+        for spec in self.declared[owner_id]:
+            root = spec.root
+        names = gdata.root_names(root)
+        for i in gdata.instances(_sample_tree(), names):
+            if i.0 == key:
+                self.callbacks[owner_id](gdata.gone(i.1, names), None)
 
 
 actor _test_subs_dst_grouping(t: testing.AsyncT):
@@ -180,3 +206,217 @@ actor _test_subs_dst_grouping(t: testing.AsyncT):
     }
 
     subs.declare(want)
+
+
+actor _test_subs_dst_rooted_at_list(t: testing.AsyncT):
+    """A destination rooted at a list gets one typed entry per delivery,
+    keyed first, None for an entry that is gone, and synced after the first
+    pass."""
+    var got: list[str] = []
+    var synced = False
+    var tp: ?MockSubscriptionTreeProvider = None
+
+    def on_iface(keys, iface, err):
+        if keys is not None:
+            if iface is not None:
+                status = iface.oper_status
+                got.append(keys.interface_name + "=" + (status if status is not None else "?"))
+            else:
+                got.append(keys.interface_name + " gone")
+                testing.assertEqual(got, ["eth0=up", "eth1=lower-layer-down", "eth1 gone"])
+                t.success()
+
+    def on_synced():
+        synced = True
+        testing.assertEqual(len(got), 2)
+        tp!.deliver_gone(next(iter(tp!.callbacks.keys())), "eth1")
+
+    def on_declared():
+        actual_tp = tp!
+        for want in actual_tp.declared.values():
+            for spec in want:
+                names = gdata.root_names(spec.root)
+                testing.assertEqual([n.name for n in names], ["interfaces", "interface"])
+        actual_tp.deliver_all(_sample_tree())
+
+    tp = MockSubscriptionTreeProvider(on_declared)
+    subs = gdata.SubscriptionManager(tp!, "test-owner")
+    ifaces = ft_oper.subs.interfaces.interface
+    subs.declare({
+        ifaces.dst(on_iface).deliver({ifaces.oper_status.subscribe(period=1.0)}),
+    }, synced=on_synced)
+
+
+actor _test_subs_dst_rooted_at_container(t: testing.AsyncT):
+    """A destination rooted at a container gets that container, typed."""
+    var tp: ?MockSubscriptionTreeProvider = None
+
+    def on_clock(clock, err):
+        testing.assertEqual(clock!.current_datetime, "2026-04-21T10:15:00Z")
+        t.success()
+
+    def on_declared():
+        tp!.deliver_all(_sample_tree())
+
+    tp = MockSubscriptionTreeProvider(on_declared)
+    subs = gdata.SubscriptionManager(tp!, "test-owner")
+    clock = ft_oper.subs.system_state.clock
+    subs.declare({clock.dst(on_clock).deliver({clock.subscribe(period=1.0)})})
+
+
+def _test_rooted_specs_are_distinct():
+    """The root is part of a spec's identity, so two destinations with the
+    same filters but different roots are declared apart."""
+    ifaces = ft_oper.subs.interfaces.interface
+    want = {ifaces.oper_status.subscribe(period=1.0)}
+    top = ft_oper.dst(lambda r, e: None).deliver(want)
+    rooted = ifaces.dst(lambda k, i, e: None).deliver(want)
+    testing.assertTrue(top != rooted)
+    testing.assertEqual(len({top, rooted}), 2)
+    for spec in rooted.want:
+        testing.assertEqual([n.name for n in gdata.root_names(spec.root)], ["interfaces", "interface"])
+
+
+actor _test_subs_dst_container_gone_is_none(t: testing.AsyncT):
+    """A destination rooted at a container hears None when the container is gone."""
+    var tp: ?MockSubscriptionTreeProvider = None
+    var seen = 0
+
+    def on_clock(clock, err):
+        seen += 1
+        if seen == 1:
+            testing.assertEqual(clock!.current_datetime, "2026-04-21T10:15:00Z")
+            tp!.deliver_gone(next(iter(tp!.callbacks.keys())), "")
+        elif clock is None:
+            t.success()
+        else:
+            t.failure(ValueError("expected None for the gone container"))
+
+    def on_declared():
+        tp!.deliver_all(_sample_tree())
+
+    tp = MockSubscriptionTreeProvider(on_declared)
+    subs = gdata.SubscriptionManager(tp!, "test-owner")
+    clock = ft_oper.subs.system_state.clock
+    subs.declare({clock.dst(on_clock).deliver({clock.subscribe(period=1.0)})})
+
+
+def _test_rooted_filters_must_lead_to_the_root():
+    """A filter handed to a rooted destination starts at its root, or ends
+    above it; anything else is refused when the delivery is built."""
+    sub = ft_oper.subs
+    ifaces = sub.interfaces.interface
+    dst = ifaces.dst(lambda k, i, e: None)
+    dst.deliver({ifaces.oper_status.subscribe(period=1.0)})
+    dst.deliver({ifaces.entry("eth0").subscribe(period=1.0)})
+    dst.deliver({sub.interfaces.subscribe(period=1.0)})
+    dst.deliver({gdata.SubscriptionSpec(None, period=1.0)})
+    try:
+        dst.deliver({sub.system_state.clock.subscribe(period=1.0)})
+    except ValueError:
+        pass
+    else:
+        raise ValueError("a filter beside the root was accepted")
+
+
+def _test_root_must_name_a_node():
+    """A root that names nothing is not the top of the tree in disguise."""
+    testing.assertEqual(len(gdata.root_names(None)), 0)
+    try:
+        gdata.root_names(gdata.FNode())
+    except ValueError:
+        pass
+    else:
+        raise ValueError("a nameless root was accepted")
+
+
+actor _test_subs_dst_rooted_below_a_list(t: testing.AsyncT):
+    """Rooted at a list below another list: every delivery carries the keys
+    of both lists, then the instance."""
+    var got: list[str] = []
+    var tp: ?MockSubscriptionTreeProvider = None
+
+    def on_address(keys, address, err):
+        if keys is not None:
+            if address is not None:
+                got.append(keys.interface_name + " " + keys.address_ip + " /" + str(address.prefix_length))
+            else:
+                got.append(keys.interface_name + " " + keys.address_ip + " gone")
+                testing.assertEqual(sorted(got), ["eth0 10.0.0.1 /24", "eth1 10.0.0.2 /25", "eth1 10.0.0.2 gone"])
+                t.success()
+
+    def on_synced():
+        testing.assertEqual(len(got), 2)
+        tp!.deliver_gone(next(iter(tp!.callbacks.keys())), "eth1/10.0.0.2")
+
+    def on_declared():
+        tp!.deliver_all(_sample_tree())
+
+    tp = MockSubscriptionTreeProvider(on_declared)
+    subs = gdata.SubscriptionManager(tp!, "test-owner")
+    addresses = ft_oper.subs.interfaces.interface.address
+    subs.declare({addresses.dst(on_address).deliver({addresses.subscribe(period=1.0)})}, synced=on_synced)
+
+
+def _test_spines_and_gone():
+    """An instance's spine holds the path from the top down to it alone, and
+    gone keeps the keys of every list on the way."""
+    names = [gdata.Id("http://example.com/filter-test", "interfaces"), gdata.Id("http://example.com/filter-test", "interface"), gdata.Id("http://example.com/filter-test", "address")]
+    found = gdata.instances(_sample_tree(), names)
+    testing.assertEqual(sorted([i.0 for i in found]), ["eth0/10.0.0.1", "eth1/10.0.0.2"])
+    for i in found:
+        spine = i.1
+        ifaces = spine.children[names[0]].children[names[1]]
+        testing.assertTrue(isinstance(ifaces, gdata.List))
+        if isinstance(ifaces, gdata.List):
+            testing.assertEqual(len(ifaces.elements), 1)
+            entry = ifaces.elements[0]
+            testing.assertEqual(sorted([k.name for k in entry.children.keys()]), ["address", "name"])
+        g = gdata.gone(spine, names)!
+        addr = g.children[names[0]].children[names[1]]
+        if isinstance(addr, gdata.List):
+            inner = addr.elements[0].children[names[2]]
+            if isinstance(inner, gdata.List):
+                testing.assertTrue(isinstance(inner.elements[0], gdata.Absent))
+
+
+actor _test_synced_covers_the_whole_declaration(t: testing.AsyncT):
+    """A declaration's synced fires once, after every delivery in it has had
+    its first pass, and not again for a declaration that adds nothing."""
+    var got = 0
+    var synced = 0
+    var delivered = False
+    var tp: ?MockSubscriptionTreeProvider = None
+    var subs: ?gdata.SubscriptionManager = None
+
+    def on_state(root: ?ft_oper.root, err: ?Exception):
+        got += 1
+
+    def on_iface(keys, iface, err):
+        got += 1
+
+    def on_synced():
+        synced += 1
+        testing.assertEqual(got, 3)              # the state tree and two interfaces
+        declare(on_synced_again)                 # the same set: nothing new to wait for
+
+    def on_synced_again():
+        testing.assertEqual(synced, 1)
+        testing.assertEqual(got, 3)              # nothing was delivered again
+        t.success()
+
+    def on_declared():
+        if len(tp!.declared) == 2 and not delivered:
+            delivered = True                     # a layer delivers a first pass once
+            tp!.deliver_all(_sample_tree())
+
+    def declare(on_all: action() -> None):
+        ifaces = ft_oper.subs.interfaces.interface
+        subs!.declare({
+            ft_oper.dst(on_state).deliver({ft_oper.subs.system_state.clock.subscribe(period=1.0)}),
+            ifaces.dst(on_iface).deliver({ifaces.oper_status.subscribe(period=1.0)}),
+        }, synced=on_all)
+
+    tp = MockSubscriptionTreeProvider(on_declared)
+    subs = gdata.SubscriptionManager(tp!, "test-owner")
+    declare(on_synced)
